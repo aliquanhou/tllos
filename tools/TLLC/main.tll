@@ -1,0 +1,83 @@
+// main.tll - tllc CLI entry point
+// TLL Compiler CLI - compile any .tll file to .tllbc
+
+from "./cli" import parseArgs
+from "./compiler_driver" import compileFile, checkFile, infoFile
+from "./formatter" import printHelp, printError, printCompileSuccess, printCheckSuccess, printInfo
+
+fn main() -> void {
+    // Get command-line arguments
+    // When run via tllvm: argv[0]=tllvm, argv[1]=tllc.tllbc, argv[2+]=args
+    // When run as standalone executable: argv[0]=tllc, argv[1+]=args
+    let argv = process.argv
+    let argc = arrays.length(argv)
+
+    // Determine starting index: skip tllvm and .tllbc if present
+    let startIdx = 1
+    if argc > 1 {
+        let arg1 = convert.toString(arrays.get(argv, 1))
+        if strings.endsWith(arg1, ".tllbc") {
+            startIdx = 2
+        }
+    }
+
+    // Build args list for parser
+    let args: list = []
+    let i = startIdx
+    while i < argc {
+        arrays.push(args, arrays.get(argv, i))
+        i = i + 1
+    }
+
+    let parsed = parseArgs(args)
+
+    if parsed["ok"] == false {
+        printError(convert.toString(parsed["error"]))
+        return
+    }
+
+    let cmd = parsed["command"]
+
+    if cmd == "help" {
+        printHelp()
+        return
+    }
+
+    if cmd == "compile" {
+        let input = convert.toString(parsed["input"])
+        let output = convert.toString(parsed["output"])
+        let result = compileFile(input, output)
+        if result["ok"] == false {
+            printError(convert.toString(result["error"]))
+            return
+        }
+        printCompileSuccess(input, output, result["functions"], result["constants"])
+        return
+    }
+
+    if cmd == "check" {
+        let input = convert.toString(parsed["input"])
+        let result = checkFile(input)
+        if result["ok"] == false {
+            printError(convert.toString(result["error"]))
+            return
+        }
+        printCheckSuccess(input, result["functions"], result["constants"])
+        return
+    }
+
+    if cmd == "info" {
+        let input = convert.toString(parsed["input"])
+        let result = infoFile(input)
+        if result["ok"] == false {
+            printError(convert.toString(result["error"]))
+            return
+        }
+        printInfo(input, result["program"])
+        return
+    }
+
+    printError("Unknown command: " + cmd)
+}
+
+main()

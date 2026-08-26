@@ -1,0 +1,91 @@
+// compiler_driver.tll - Compilation driver for tllc
+// Wraps the TLL compiler (linkAndCompile) with file I/O and error handling
+
+from "../../compiler/linker" import linkAndCompile
+
+// Compile a .tll file to .tllbc
+// Returns map: {ok, error, functions, constants, mainFunctionIndex, outputPath}
+fn compileFile(inputPath: string, outputPath: string) -> map {
+    let result = json.parse("{}")
+    result["ok"] = false
+
+    if !fs.exists(inputPath) {
+        result["error"] = "Input file not found: " + inputPath
+        return result
+    }
+
+    let bytecode = linkAndCompile(inputPath)
+
+    if bytecode.hasError == true {
+        result["error"] = convert.toString(bytecode.error)
+        return result
+    }
+
+    let fnCount = arrays.length(bytecode.functions)
+    let constCount = arrays.length(bytecode.constants)
+
+    // Serialize and write
+    let bytecodeJson = json.stringify(bytecode)
+    fs.writeFile(outputPath, bytecodeJson)
+
+    result["ok"] = true
+    result["functions"] = fnCount
+    result["constants"] = constCount
+    result["mainFunctionIndex"] = bytecode.mainFunctionIndex
+    result["outputPath"] = outputPath
+    result["size"] = strings.length(bytecodeJson)
+    return result
+}
+
+// Check a .tll file (compile without writing output)
+// Returns map: {ok, error, functions, constants}
+fn checkFile(inputPath: string) -> map {
+    let result = json.parse("{}")
+    result["ok"] = false
+
+    if !fs.exists(inputPath) {
+        result["error"] = "Input file not found: " + inputPath
+        return result
+    }
+
+    let bytecode = linkAndCompile(inputPath)
+
+    if bytecode.hasError == true {
+        result["error"] = convert.toString(bytecode.error)
+        return result
+    }
+
+    result["ok"] = true
+    result["functions"] = arrays.length(bytecode.functions)
+    result["constants"] = arrays.length(bytecode.constants)
+    result["mainFunctionIndex"] = bytecode.mainFunctionIndex
+    return result
+}
+
+// Read and inspect a .tllbc bytecode file
+// Returns map: {ok, error, program}
+fn infoFile(bytecodePath: string) -> map {
+    let result = json.parse("{}")
+    result["ok"] = false
+
+    if !fs.exists(bytecodePath) {
+        result["error"] = "Bytecode file not found: " + bytecodePath
+        return result
+    }
+
+    let source = fs.readFile(bytecodePath)
+    let program = json.parse(source)
+
+    if program["functions"] == null {
+        result["error"] = "Invalid bytecode format: missing 'functions'"
+        return result
+    }
+
+    result["ok"] = true
+    result["program"] = program
+    return result
+}
+
+export compileFile
+export checkFile
+export infoFile
