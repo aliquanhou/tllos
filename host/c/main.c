@@ -15,6 +15,7 @@
  *   tllvm (this) -> vm_run.tllbc -> TLL VM (vm.tll) -> user program
  */
 #include "tllvm.h"
+#include <time.h>
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
