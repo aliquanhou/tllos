@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  native-build-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup C compiler (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y gcc
+
+      - name: Setup C compiler (macOS)
+        if: runner.os == 'macOS'
+        run: brew install gcc
+
+      - name: Build Native Launcher (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          cd host/c
+          gcc -O2 -std=c99 -D_WIN32=0 -o tllvm main.c vm.c value.c json.c builtin.c
+          ./tllvm ../../tests/acceptance/01_hello.tllbc
+
+      - name: Build Native Launcher (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd host/c
+          cl /O2 /D_CRT_SECURE_NO_WARNINGS /Fe:tllvm.exe main.c vm.c value.c json.c builtin.c
+          .\tllvm.exe ..\..\tests\acceptance\01_hello.tllbc
+
+      - name: Verify bootstrap seed
+        run: |
+          test -f compiler/compiler.tllbc
+          test -f runtime/vm_run.tllbc
+
+      - name: Native self-host verification (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cd host/c
+          ./tllvm ../../compiler/compiler.tllbc
+          test -f ../../compiler/compiler_self_compiled.tllbc
