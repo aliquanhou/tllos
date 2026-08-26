@@ -24,8 +24,8 @@ fn resolveModulePath(currentFile: string, importPath: string) -> string {
     if strings.length(cleanPath) >= 2 && strings.substring(cleanPath, 0, 2) == "./" {
         cleanPath = strings.substring(cleanPath, 2, strings.length(cleanPath))
     }
-    // Handle ../ prefix (go up one directory)
-    if strings.length(cleanPath) >= 3 && strings.substring(cleanPath, 0, 3) == "../" {
+    // Handle ../ prefixes (go up one directory each, support nested ../../)
+    while strings.length(cleanPath) >= 3 && strings.substring(cleanPath, 0, 3) == "../" {
         cleanPath = strings.substring(cleanPath, 3, strings.length(cleanPath))
         let lastSlash = strings.lastIndexOf(dir, "/")
         if lastSlash >= 0 {
@@ -194,9 +194,6 @@ fn load(filePath: string) -> void {
         return
     }
     if isVisited(filePath) {
-        // Circular dependency: this module is already being processed.
-        // Per spec/MODULE.md section 2.2, circular imports are supported -
-        // all symbols are resolved after full linking in Phase 2/3.
         return
     }
     arrays.push(visitedFiles, filePath)

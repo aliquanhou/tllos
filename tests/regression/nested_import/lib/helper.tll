@@ -1,0 +1,11 @@
+// helper.tll - Helper module for nested import regression test
+fn getMessage() -> string {
+    return "nested import works"
+}
+
+fn add(a: int, b: int) -> int {
+    return a + b
+}
+
+export getMessage
+export add

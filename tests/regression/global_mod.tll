@@ -1,0 +1,18 @@
+// global_mod.tll - Test module with global variable
+let globalCounter: int = 0
+
+fn setCounter(v: int) -> void {
+    globalCounter = v
+}
+
+fn getCounter() -> int {
+    return globalCounter
+}
+
+fn incrementCounter() -> void {
+    globalCounter = globalCounter + 1
+}
+
+export setCounter
+export getCounter
+export incrementCounter

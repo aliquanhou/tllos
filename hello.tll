@@ -1,0 +1,6 @@
+// hello.tll - End-to-end test for tllc
+fn main() -> void {
+    io.println("Hello from TLL!")
+    io.println("tllc compile -> tllvm execute works!")
+}
+main()

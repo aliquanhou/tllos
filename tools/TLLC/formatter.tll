@@ -1,0 +1,74 @@
+// formatter.tll - User-readable output formatting for tllc
+
+fn printHelp() -> void {
+    io.println("tllc - TLL Compiler CLI v0.1.0")
+    io.println("")
+    io.println("Usage:")
+    io.println("  tllc help                 Show this help message")
+    io.println("  tllc compile <file.tll>   Compile a TLL source file")
+    io.println("  tllc compile <file> -o <out.tllbc>  Compile with custom output")
+    io.println("  tllc check <file.tll>     Type-check and compile, no output")
+    io.println("  tllc info <file.tllbc>    Show bytecode program information")
+    io.println("")
+    io.println("Commands:")
+    io.println("  help      Show help")
+    io.println("  compile   Compile .tll to .tllbc")
+    io.println("  check     Compile check (no output file)")
+    io.println("  info      Inspect .tllbc bytecode")
+}
+
+fn printError(msg: string) -> void {
+    io.println("")
+    io.println("=== ERROR ===")
+    io.println(msg)
+    io.println("")
+}
+
+fn printCompileSuccess(input: string, output: string, fnCount: int, constCount: int) -> void {
+    io.println("")
+    io.println("=== Compilation Successful ===")
+    io.println("Input:    " + input)
+    io.println("Output:   " + output)
+    io.println("Functions: " + convert.toString(fnCount))
+    io.println("Constants: " + convert.toString(constCount))
+    io.println("")
+}
+
+fn printCheckSuccess(input: string, fnCount: int, constCount: int) -> void {
+    io.println("")
+    io.println("=== Check Passed ===")
+    io.println("File:      " + input)
+    io.println("Functions: " + convert.toString(fnCount))
+    io.println("Constants: " + convert.toString(constCount))
+    io.println("")
+}
+
+fn printInfo(path: string, program: map) -> void {
+    io.println("")
+    io.println("=== Bytecode Info: " + path + " ===")
+    io.println("Functions:         " + convert.toString(arrays.length(program["functions"])))
+    io.println("Constants:         " + convert.toString(arrays.length(program["constants"])))
+    io.println("mainFunctionIndex: " + convert.toString(program["mainFunctionIndex"]))
+    io.println("globalCount:       " + convert.toString(program["globalCount"]))
+    let fns = program["functions"]
+    let i = 0
+    io.println("")
+    io.println("Functions:")
+    while i < arrays.length(fns) {
+        let func = arrays.get(fns, i)
+        let name = func["name"]
+        let params = func["paramCount"]
+        let instrs = func["instructionCount"]
+        io.println("  [" + convert.toString(i) + "] " + name
+            + " (params=" + convert.toString(params)
+            + ", instrs=" + convert.toString(instrs) + ")")
+        i = i + 1
+    }
+    io.println("")
+}
+
+export printHelp
+export printError
+export printCompileSuccess
+export printCheckSuccess
+export printInfo

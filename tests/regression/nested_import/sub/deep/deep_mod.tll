@@ -1,0 +1,14 @@
+// deep_mod.tll - Module in deep subdirectory that imports via ../../
+// This tests resolveModulePath with nested ../ prefixes
+from "../../lib/helper" import getMessage, add
+
+fn deepGetMessage() -> string {
+    return getMessage()
+}
+
+fn deepAdd(a: int, b: int) -> int {
+    return add(a, b)
+}
+
+export deepGetMessage
+export deepAdd
