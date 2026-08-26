@@ -1,0 +1,24 @@
+// test_process.tll - Test process.argv and process.exit
+fn main() -> void {
+    io.println("=== process API Test ===")
+
+    // Test process.argv
+    let argv = process.argv
+    let argc = arrays.length(argv)
+    io.println("argc: " + convert.toString(argc))
+    let i = 0
+    while i < argc {
+        io.println("  argv[" + convert.toString(i) + "] = " + convert.toString(arrays.get(argv, i)))
+        i = i + 1
+    }
+
+    // Test process.exit with code 42
+    io.println("")
+    io.println("Calling process.exit(42)...")
+    process.exit(42)
+
+    // This should not be reached
+    io.println("ERROR: should not reach here after exit")
+}
+
+main()
