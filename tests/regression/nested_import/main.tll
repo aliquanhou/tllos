@@ -1,0 +1,17 @@
+// test_nested_import.tll - Regression test for resolveModulePath nested ../ bug
+// Dogfooding Finding #1: resolveModulePath only handled one ../ prefix
+from "./sub/deep/deep_mod" import deepGetMessage, deepAdd
+
+fn main() -> void {
+    io.println("=== Nested Import Regression Test ===")
+    let msg = deepGetMessage()
+    io.println("Message: " + msg)
+    let sum = deepAdd(40, 2)
+    io.println("40 + 2 = " + convert.toString(sum))
+    if msg == "nested import works" && sum == 42 {
+        io.println("PASS: nested ../../ import resolved correctly")
+    } else {
+        io.println("FAIL: nested import did not work")
+    }
+}
+main()

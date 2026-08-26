@@ -1,0 +1,16 @@
+// test_global_main.tll - Test global variable across module boundary
+from "./global_mod" import setCounter, getCounter, incrementCounter
+
+fn main() -> void {
+    io.println("Initial: " + convert.toString(getCounter()))
+    setCounter(42)
+    io.println("After setCounter(42): " + convert.toString(getCounter()))
+    incrementCounter()
+    io.println("After increment: " + convert.toString(getCounter()))
+    if getCounter() == 43 {
+        io.println("PASS: global variable works across module boundary")
+    } else {
+        io.println("FAIL: expected 43, got " + convert.toString(getCounter()))
+    }
+}
+main()
