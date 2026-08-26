@@ -245,4 +245,10 @@ char *host_read_line(const char *prompt);
 char *host_read_file(const char *path);
 void host_write_file(const char *path, const char *content);
 
+/* Process API (P0-2.2) - command line arguments and exit */
+extern int tll_argc;
+extern char **tll_argv;
+extern int tll_exit_code;
+extern int tll_should_exit;
+
 #endif /* TLLVM_H */
