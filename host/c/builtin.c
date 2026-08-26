@@ -490,8 +490,12 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
                     for (int i = 0; i < arr->length; i++) {
                         if (depth > 0 && arr->items[i].type == TLL_ARRAY) {
                             TLLArray *inner = arr->items[i].as.array;
-                            for (int j = 0; j < inner->length; j++) array_push(result.as.array, inner->items[j]);
+                            for (int j = 0; j < inner->length; j++) {
+                                tll_value_incref(inner->items[j]);
+                                array_push(result.as.array, inner->items[j]);
+                            }
                         } else {
+                            tll_value_incref(arr->items[i]);
                             array_push(result.as.array, arr->items[i]);
                         }
                     }
@@ -502,7 +506,12 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
                 TLLValue val = (argCount>1)?args[1]:tll_null();
                 int start = (argCount>2)?(int)args[2].as.integer:0;
                 int end = (argCount>3)?(int)args[3].as.integer:(arr?arr->length:0);
-                if (arr) for (int i = start; i < end && i < arr->length; i++) arr->items[i] = val;
+                if (arr) for (int i = start; i < end && i < arr->length; i++) {
+                    tll_value_free(arr->items[i]);
+                    tll_value_incref(val);
+                    arr->items[i] = val;
+                }
+                tll_value_free(val); /* release parameter ownership */
                 return args[0];
             }
             case 71: { /* range */
