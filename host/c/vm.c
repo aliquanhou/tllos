@@ -200,7 +200,7 @@ static void do_call(TLLVM *vm, TLLFrame *frame, int resultReg, int fnIdx, int ar
 
 static void tll_vm_exec(TLLVM *vm) {
     int targetStack = (vm->invokeTargetStackSize < 0) ? 0 : vm->invokeTargetStackSize;
-    while (vm->callStackSize > targetStack) {
+    while (vm->callStackSize > targetStack && !tll_should_exit) {
         TLLFrame *frame = vm->callStack[vm->callStackSize - 1];
         if (frame->pc >= frame->function->instructionCount) {
             TLLFrame *f = pop_frame(vm);

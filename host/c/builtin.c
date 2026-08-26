@@ -693,6 +693,21 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
         return tll_null();
     }
 
+    /* process (120+) - P0-2.2 */
+    if (idx == 120) { /* process.exit(code) */
+        int code = (argCount > 0 && args[0].type == TLL_INT) ? (int)args[0].as.integer : 0;
+        tll_exit_code = code;
+        tll_should_exit = 1;
+        return tll_null();
+    }
+    if (idx == 121) { /* process.argv -> array of strings */
+        TLLValue arr = tll_array();
+        for (int i = 0; i < tll_argc; i++) {
+            array_push(arr.as.array, tll_string(tll_argv[i]));
+        }
+        return arr;
+    }
+
     fprintf(stderr, "tllvm: unknown builtin index %d\n", idx);
     return tll_null();
 }

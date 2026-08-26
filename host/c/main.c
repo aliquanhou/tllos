@@ -17,12 +17,22 @@
 #include "tllvm.h"
 #include <time.h>
 
+/* Process API globals (P0-2.2) */
+int tll_argc = 0;
+char **tll_argv = NULL;
+int tll_exit_code = 0;
+int tll_should_exit = 0;
+
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         fprintf(stderr, "Usage: tllvm <file.tllbc>\n");
         fprintf(stderr, "TLL Native Launcher v1.1.0 - Bootstrap/Host layer only\n");
         return 1;
     }
+
+    /* Save command-line arguments for process.argv builtin */
+    tll_argc = argc;
+    tll_argv = argv;
 
     const char *filename = argv[1];
     TLLProgram *prog = tll_load_program(filename);
@@ -43,5 +53,5 @@ int main(int argc, char *argv[]) {
      * double-free issues with shared constant references. In a long-running
      * process this would need proper ownership tracking. */
 
-    return 0;
+    return tll_exit_code;
 }
