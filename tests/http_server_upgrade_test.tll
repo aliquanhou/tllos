@@ -1,0 +1,67 @@
+// HTTP Server upgrade test - P0-5
+fn handler(req) {
+    let path = req.path
+    let method = req.method
+
+    // Test query parsing: /search?q=test&page=2
+    if (path == "/search") {
+        let q = req.queryMap["q"]
+        let page = req.queryMap["page"]
+        return {
+            status: 200,
+            contentType: "application/json",
+            body: "{\"q\":\"" + q + "\",\"page\":\"" + page + "\"}"
+        }
+    }
+
+    // Test headers: /headers returns User-Agent
+    if (path == "/headers") {
+        let ua = req.headers["User-Agent"]
+        return {
+            status: 200,
+            contentType: "text/plain",
+            body: "User-Agent: " + ua
+        }
+    }
+
+    // Test custom response headers
+    if (path == "/custom-header") {
+        return {
+            status: 201,
+            contentType: "application/json",
+            headers: {
+                "X-Custom-Header": "TLL-OS",
+                "X-Request-Method": method
+            },
+            body: "{\"created\":true}"
+        }
+    }
+
+    // Test 404 status line (should be "404 Not Found", not "404 OK")
+    if (path == "/notfound") {
+        return {
+            status: 404,
+            contentType: "text/plain",
+            body: "This is a 404"
+        }
+    }
+
+    // Test POST method and body
+    if (path == "/echo" && method == "POST") {
+        return {
+            status: 200,
+            contentType: "text/plain",
+            body: "Echo: " + req.body
+        }
+    }
+
+    // Home
+    return {
+        status: 200,
+        contentType: "text/html",
+        body: "<h1>TLL HTTP Server Upgrade Test</h1><ul><li>/search?q=test&page=2</li><li>/headers</li><li>/custom-header</li><li>/notfound</li><li>/echo (POST)</li></ul>"
+    }
+}
+
+io.println("HTTP Server Upgrade Test on :8080")
+http.serve("0.0.0.0:8080", handler)

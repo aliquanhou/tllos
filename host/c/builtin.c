@@ -937,16 +937,70 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
                 req_buf[total_read] = '\0';
                 /* Parse request line */
                 char method[16] = "GET";
-                char path[1024] = "/";
+                char rawPath[1024] = "/";
                 char *line_end = strstr(req_buf, "\r\n");
                 if (line_end) {
                     *line_end = '\0';
-                    sscanf(req_buf, "%15s %1023s", method, path);
+                    sscanf(req_buf, "%15s %1023s", method, rawPath);
+                }
+                /* Parse path and query string */
+                char path[1024] = "/";
+                char query[1024] = "";
+                char *qmark = strchr(rawPath, '?');
+                if (qmark) {
+                    int plen = (int)(qmark - rawPath);
+                    if (plen > 1023) plen = 1023;
+                    strncpy(path, rawPath, plen); path[plen] = '\0';
+                    strncpy(query, qmark + 1, 1023); query[1023] = '\0';
+                } else {
+                    strncpy(path, rawPath, 1023); path[1023] = '\0';
                 }
                 /* Parse headers into map */
+                TLLValue headersMap = tll_map();
+                char *header_start = line_end ? line_end + 2 : req_buf;
+                char *header_end = strstr(header_start, "\r\n\r\n");
+                if (header_end) {
+                    char *line = header_start;
+                    while (line < header_end) {
+                        char *next_line = strstr(line, "\r\n");
+                        if (!next_line || next_line > header_end) break;
+                        *next_line = '\0';
+                        char *colon = strchr(line, ':');
+                        if (colon) {
+                            *colon = '\0';
+                            char *val = colon + 1;
+                            while (*val == ' ') val++;
+                            map_set(headersMap.as.map, line, tll_string(val));
+                        }
+                        line = next_line + 2;
+                    }
+                }
+                /* Parse query into map */
+                TLLValue queryMap = tll_map();
+                if (strlen(query) > 0) {
+                    char *q = query;
+                    while (*q) {
+                        char *amp = strchr(q, '&');
+                        if (amp) *amp = '\0';
+                        char *eq = strchr(q, '=');
+                        if (eq) {
+                            *eq = '\0';
+                            map_set(queryMap.as.map, q, tll_string(eq + 1));
+                        } else {
+                            map_set(queryMap.as.map, q, tll_string(""));
+                        }
+                        if (!amp) break;
+                        q = amp + 1;
+                    }
+                }
+                /* Build request map */
                 TLLValue reqMap = tll_map();
                 map_set(reqMap.as.map, "method", tll_string(method));
                 map_set(reqMap.as.map, "path", tll_string(path));
+                map_set(reqMap.as.map, "rawPath", tll_string(rawPath));
+                map_set(reqMap.as.map, "query", tll_string(query));
+                map_set(reqMap.as.map, "queryMap", queryMap);
+                map_set(reqMap.as.map, "headers", headersMap);
                 /* Parse body */
                 char *body_start = strstr(line_end ? line_end + 2 : req_buf, "\r\n\r\n");
                 if (body_start) {
@@ -965,6 +1019,7 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
                 int status = 200;
                 const char *body = "";
                 const char *content_type = "text/html; charset=utf-8";
+                TLLValue respHeaders = tll_null();
                 if (resp.type == TLL_MAP) {
                     TLLValue sv = map_get(resp.as.map, "status");
                     if (sv.type == TLL_INT) status = (int)sv.as.integer;
@@ -972,17 +1027,50 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
                     if (bv.type == TLL_STRING) body = bv.as.string;
                     TLLValue cv = map_get(resp.as.map, "contentType");
                     if (cv.type == TLL_STRING) content_type = cv.as.string;
+                    TLLValue hv = map_get(resp.as.map, "headers");
+                    if (hv.type == TLL_MAP) respHeaders = hv;
                 } else if (resp.type == TLL_STRING) {
                     body = resp.as.string;
                 }
-                resp_len = snprintf(resp_buf, sizeof(resp_buf),
-                    "HTTP/1.1 %d OK\r\n"
+                /* Status reason phrase */
+                const char *reason = "OK";
+                if (status == 201) reason = "Created";
+                else if (status == 204) reason = "No Content";
+                else if (status == 301) reason = "Moved Permanently";
+                else if (status == 302) reason = "Found";
+                else if (status == 400) reason = "Bad Request";
+                else if (status == 401) reason = "Unauthorized";
+                else if (status == 403) reason = "Forbidden";
+                else if (status == 404) reason = "Not Found";
+                else if (status == 405) reason = "Method Not Allowed";
+                else if (status == 500) reason = "Internal Server Error";
+                else if (status == 502) reason = "Bad Gateway";
+                else if (status == 503) reason = "Service Unavailable";
+                /* Build response headers */
+                int hdr_len = snprintf(resp_buf, sizeof(resp_buf),
+                    "HTTP/1.1 %d %s\r\n"
                     "Content-Type: %s\r\n"
                     "Content-Length: %d\r\n"
-                    "Connection: close\r\n"
-                    "\r\n"
-                    "%s",
-                    status, content_type, (int)strlen(body), body);
+                    "Connection: close\r\n",
+                    status, reason, content_type, (int)strlen(body));
+                /* Custom response headers */
+                if (respHeaders.type == TLL_MAP) {
+                    for (int b = 0; b < respHeaders.as.map->bucketCount; b++) {
+                        TLLMapEntry *e = respHeaders.as.map->buckets[b];
+                        while (e) {
+                            if (e->value.type == TLL_STRING) {
+                                hdr_len += snprintf(resp_buf + hdr_len, sizeof(resp_buf) - hdr_len,
+                                    "%s: %s\r\n", e->key, e->value.as.string);
+                            }
+                            e = e->next;
+                        }
+                    }
+                }
+                hdr_len += snprintf(resp_buf + hdr_len, sizeof(resp_buf) - hdr_len, "\r\n");
+                resp_len = hdr_len + (int)strlen(body);
+                if (resp_len < (int)sizeof(resp_buf)) {
+                    memcpy(resp_buf + hdr_len, body, strlen(body));
+                }
                 send(client_fd, resp_buf, resp_len, 0);
                 closesocket(client_fd);
             }
