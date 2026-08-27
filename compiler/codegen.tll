@@ -1343,6 +1343,15 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
     }
     if modName == "process" {
         if fnName == "exit" { return 120 }
+        if fnName == "argv" { return 121 }
+        if fnName == "env" { return 122 }
+    }
+    if modName == "time" {
+        if fnName == "now" { return 123 }
+        if fnName == "format" { return 124 }
+    }
+    if modName == "fs" {
+        if fnName == "mkdirAll" { return 125 }
     }
     return -1
 }

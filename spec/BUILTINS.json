@@ -1,9 +1,9 @@
 {
-  "version": "1.2",
+  "version": "1.3",
   "frozen": false,
   "note": "Genesis builtins 0-97 frozen at v1.1. P0-2 extensions 120+ are not frozen. Spec must match host/c/builtin.c exactly.",
-  "total_defined": 101,
-  "total_range": "0-97, 120-122",
+  "total_defined": 104,
+  "total_range": "0-97, 120-125",
   "modules": {
     "io": {
       "category": "host_abi",
@@ -129,20 +129,21 @@
         {"name": "isDir", "index": 87, "params": ["string"], "return": "bool"},
         {"name": "fileSize", "index": 88, "params": ["string"], "return": "int"},
         {"name": "copyFile", "index": 89, "params": ["string", "string"], "return": "void"},
-        {"name": "rename", "index": 90, "params": ["string", "string"], "return": "void"}
+        {"name": "rename", "index": 90, "params": ["string", "string"], "return": "void"},
+        {"name": "mkdirAll", "index": 125, "params": ["string"], "return": "void"}
       ]
     },
     "http": {
       "category": "host_abi",
-      "status": "stub",
-      "note": "HTTP builtins return null in bootstrap mode. Full implementation planned for P0-2.8.",
+      "status": "partial",
+      "note": "http.get (91) implemented via WinINet (Windows) / socket (POSIX). post/request/serve remain stub. encodeURI/decodeURI/parseJSON are pure string ops.",
       "functions": [
-        {"name": "get", "index": 91, "params": ["string"], "return": "map"},
-        {"name": "post", "index": 92, "params": ["string", "string"], "return": "map"},
-        {"name": "request", "index": 93, "params": ["map"], "return": "map"},
-        {"name": "serve", "index": 94, "params": ["string", "fn"], "return": "void"},
-        {"name": "encodeURI", "index": 95, "params": ["string"], "return": "string"},
-        {"name": "decodeURI", "index": 96, "params": ["string"], "return": "string"},
+        {"name": "get", "index": 91, "params": ["string"], "return": "map", "status": "implemented"},
+        {"name": "post", "index": 92, "params": ["string", "string"], "return": "map", "status": "stub"},
+        {"name": "request", "index": 93, "params": ["map"], "return": "map", "status": "stub"},
+        {"name": "serve", "index": 94, "params": ["string", "fn"], "return": "void", "status": "stub"},
+        {"name": "encodeURI", "index": 95, "params": ["string"], "return": "string", "status": "implemented"},
+        {"name": "decodeURI", "index": 96, "params": ["string"], "return": "string", "status": "implemented"},
         {"name": "parseJSON", "index": 97, "params": ["string"], "return": "map"}
       ]
     },
@@ -154,6 +155,15 @@
         {"name": "exit", "index": 120, "params": ["int?"], "return": "void"},
         {"name": "argv", "index": 121, "params": [], "return": "array<string>"},
         {"name": "env", "index": 122, "params": [], "return": "map<string,string>"}
+      ]
+    },
+    "time": {
+      "category": "host_abi",
+      "status": "p0_3_extension",
+      "note": "P0-3 time API. Not part of Genesis frozen ABI.",
+      "functions": [
+        {"name": "now", "index": 123, "params": [], "return": "int"},
+        {"name": "format", "index": 124, "params": ["int", "string"], "return": "string"}
       ]
     }
   },

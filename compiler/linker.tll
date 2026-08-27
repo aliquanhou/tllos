@@ -7,18 +7,24 @@ from "./codegen" import compile
 
 // ============ Path Resolution ============
 
-// Get directory from a file path
+// Get directory from a file path (handles both / and \ separators)
 fn getDir(filePath: string) -> string {
     let lastSlash = strings.lastIndexOf(filePath, "/")
-    if lastSlash < 0 {
+    let lastBackslash = strings.lastIndexOf(filePath, "\\")
+    let sep = lastSlash
+    if lastBackslash > sep {
+        sep = lastBackslash
+    }
+    if sep < 0 {
         return "."
     }
-    return strings.substring(filePath, 0, lastSlash)
+    return strings.substring(filePath, 0, sep)
 }
 
 // Resolve a module path relative to current file
 fn resolveModulePath(currentFile: string, importPath: string) -> string {
-    let dir = getDir(currentFile)
+    let normalizedFile = strings.replaceAll(currentFile, "\\", "/")
+    let dir = getDir(normalizedFile)
     let cleanPath = importPath
     // Handle ./ prefix
     if strings.length(cleanPath) >= 2 && strings.substring(cleanPath, 0, 2) == "./" {
@@ -143,7 +149,8 @@ fn isStdlibModule(modPath: string) -> bool {
 // Resolve a bare package specifier via node_modules-style lookup
 // Returns the resolved entry file path, or "" if not found
 fn resolvePackagePath(currentFile: string, packageName: string) -> string {
-    let dir = getDir(currentFile)
+    let normalizedFile = strings.replaceAll(currentFile, "\\", "/")
+    let dir = getDir(normalizedFile)
     // Walk up directory tree looking for node_modules/<packageName>/
     while true {
         let candidate = dir + "/node_modules/" + packageName
