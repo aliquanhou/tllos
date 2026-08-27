@@ -206,13 +206,30 @@ tllos/
 
 ## Native Bootstrap Verification
 
-TLL OS v1 verifies self-hosting deterministically:
+TLL OS verifies self-hosting deterministically:
 
-1. **Generation 1:** `tllvm` + `compiler.tllbc` → compiles `compiler.tll` → `compiler_v2.tllbc`
-2. **Generation 2:** `tllvm` + `compiler_v2.tllbc` → compiles `compiler.tll` → `compiler_v3.tllbc`
-3. **Determinism:** `SHA256(compiler_v2.tllbc) == SHA256(compiler_v3.tllbc)`
+1. **Generation 1:** seed compiler compiles `compiler.tll` → `compiler_self_compiled.tllbc`
+2. **Generation 2:** Gen1 compiler compiles `compiler.tll` → overwrites `compiler_self_compiled.tllbc`
+3. **Determinism:** `SHA256(Gen1) == SHA256(Gen2)`
+
+**Important:** The compiler reads source files relative to the current working directory.
+You MUST run self-host verification from the `compiler/` directory:
+
+```bash
+# From repository root:
+cd compiler
+../host/c/tllvm compiler.tllbc          # Generation 1
+sha256sum compiler_self_compiled.tllbc  # Record Gen1 hash
+../host/c/tllvm compiler_self_compiled.tllbc  # Generation 2
+sha256sum compiler_self_compiled.tllbc  # Must match Gen1
+```
+
+On Windows, use `..\host\c\tllvm.exe compiler.tllbc` and `Get-FileHash -Algorithm SHA256`.
 
 Both generations produce byte-identical output, proving the compiler is self-consistent.
+
+**Current deterministic hash (P0-2.4.1):**
+`623098D8246D6CB9A006364BFF6103DA340923F1A6888446EBFA390D74E30418`
 
 ---
 
