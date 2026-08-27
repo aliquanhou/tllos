@@ -1,0 +1,258 @@
+// TLL OS Shop - Dogfooding Project
+// A complete e-commerce application built entirely in TLL
+
+// === Product Database (in-memory) ===
+let products = [
+    {id: 1, name: "TLL Language Book", price: 49.99, stock: 100, desc: "Learn TLL from scratch", img: "📘"},
+    {id: 2, name: "Compiler T-Shirt", price: 29.99, stock: 50, desc: "100% cotton, compiler design", img: "👕"},
+    {id: 3, name: "VM Coffee Mug", price: 14.99, stock: 200, desc: "Stack-based brewing", img: "☕"},
+    {id: 4, name: "Bytecode Poster", price: 19.99, stock: 30, desc: "All 46 opcodes visualized", img: "🖼️"},
+    {id: 5, name: "Self-Host Sticker Pack", price: 9.99, stock: 500, desc: "5 stickers per pack", img: "🏷️"},
+    {id: 6, name: "Garbage Collector Plush", price: 39.99, stock: 25, desc: "Reference counting edition", img: "🧸"}
+]
+
+// === Cart (in-memory, session-like) ===
+let cart = []
+
+// === Orders ===
+let orders = []
+
+// === Helper: find product by id ===
+fn findProduct(id) {
+    let i = 0
+    while (i < arrays.len(products)) {
+        if (products[i].id == id) { return products[i] }
+        i = i + 1
+    }
+    return null
+}
+
+// === Helper: cart total ===
+fn cartTotal() {
+    let total = 0.0
+    let i = 0
+    while (i < arrays.len(cart)) {
+        total = total + cart[i].price * cart[i].qty
+        i = i + 1
+    }
+    return total
+}
+
+// === Helper: cart count ===
+fn cartCount() {
+    let count = 0
+    let i = 0
+    while (i < arrays.len(cart)) {
+        count = count + cart[i].qty
+        i = i + 1
+    }
+    return count
+}
+
+// === HTML Template: page layout ===
+fn layout(title, body) {
+    let count = cartCount()
+    return "<!DOCTYPE html><html><head><meta charset='utf-8'><title>" + title + "</title>"
+        + "<style>"
+        + "body{font-family:system-ui,sans-serif;margin:0;background:#f5f5f5}"
+        + "header{background:#1a1a2e;color:white;padding:1rem 2rem;display:flex;justify-content:space-between;align-items:center}"
+        + "header a{color:white;text-decoration:none;margin-left:1rem}"
+        + ".logo{font-size:1.5rem;font-weight:bold}"
+        + ".container{max-width:1200px;margin:2rem auto;padding:0 1rem}"
+        + ".grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:1.5rem}"
+        + ".card{background:white;border-radius:8px;padding:1.5rem;box-shadow:0 2px 8px rgba(0,0,0,0.1)}"
+        + ".card h3{margin:0 0 0.5rem 0}"
+        + ".price{color:#e94560;font-size:1.3rem;font-weight:bold}"
+        + ".btn{display:inline-block;background:#e94560;color:white;padding:0.5rem 1rem;border-radius:4px;text-decoration:none;border:none;cursor:pointer;font-size:1rem}"
+        + ".btn:hover{background:#c73e54}"
+        + ".btn-sm{padding:0.3rem 0.6rem;font-size:0.85rem}"
+        + "table{width:100%;border-collapse:collapse;background:white;border-radius:8px;overflow:hidden}"
+        + "th,td{padding:0.75rem;text-align:left;border-bottom:1px solid #eee}"
+        + "th{background:#1a1a2e;color:white}"
+        + ".total{text-align:right;font-size:1.3rem;font-weight:bold;margin-top:1rem}"
+        + ".empty{text-align:center;padding:3rem;color:#999}"
+        + ".success{background:#d4edda;color:#155724;padding:1rem;border-radius:4px;margin-bottom:1rem}"
+        + ".product-img{font-size:3rem;text-align:center;margin-bottom:1rem}"
+        + "</style></head><body>"
+        + "<header><div class='logo'>🛒 TLL OS Shop</div>"
+        + "<nav><a href='/'>Home</a><a href='/cart'>Cart (" + count + ")</a></nav></header>"
+        + "<div class='container'>" + body + "</div>"
+        + "</body></html>"
+}
+
+// === Route: Home / Product List ===
+fn handleHome() {
+    let cards = ""
+    let i = 0
+    while (i < arrays.len(products)) {
+        let p = products[i]
+        cards = cards + "<div class='card'><div class='product-img'>" + p.img + "</div>"
+            + "<h3>" + p.name + "</h3>"
+            + "<p>" + p.desc + "</p>"
+            + "<div class='price'>$" + math_round(p.price, 2) + "</div>"
+            + "<p style='color:#666;font-size:0.85rem'>Stock: " + p.stock + "</p>"
+            + "<a href='/product/" + p.id + "' class='btn btn-sm'>View</a> "
+            + "<a href='/add/" + p.id + "' class='btn btn-sm'>Add to Cart</a>"
+            + "</div>"
+        i = i + 1
+    }
+    return layout("TLL OS Shop - Home", "<h1>Products</h1><div class='grid'>" + cards + "</div>")
+}
+
+// === Route: Product Detail ===
+fn handleProduct(id) {
+    let p = findProduct(id)
+    if (p == null) {
+        return layout("Not Found", "<div class='empty'>Product not found</div>")
+    }
+    let body = "<div class='card' style='max-width:600px;margin:0 auto'>"
+        + "<div class='product-img' style='font-size:5rem'>" + p.img + "</div>"
+        + "<h1>" + p.name + "</h1>"
+        + "<p style='font-size:1.1rem;color:#666'>" + p.desc + "</p>"
+        + "<div class='price' style='font-size:2rem'>$" + math_round(p.price, 2) + "</div>"
+        + "<p>Stock: " + p.stock + " units</p>"
+        + "<a href='/add/" + p.id + "' class='btn'>Add to Cart</a> "
+        + "<a href='/' class='btn' style='background:#666'>Back</a>"
+        + "</div>"
+    return layout(p.name, body)
+}
+
+// === Route: Add to Cart ===
+fn handleAdd(id) {
+    let p = findProduct(id)
+    if (p == null) { return layout("Not Found", "<div class='empty'>Product not found</div>") }
+    // Check if already in cart
+    let found = 0
+    let i = 0
+    while (i < arrays.len(cart)) {
+        if (cart[i].id == id) {
+            cart[i].qty = cart[i].qty + 1
+            found = 1
+        }
+        i = i + 1
+    }
+    if (found == 0) {
+        arrays.push(cart, {id: p.id, name: p.name, price: p.price, qty: 1, img: p.img})
+    }
+    let body = "<div class='success'>Added " + p.name + " to cart!</div>"
+        + "<a href='/cart' class='btn'>View Cart</a> "
+        + "<a href='/' class='btn' style='background:#666'>Continue Shopping</a>"
+    return layout("Added to Cart", body)
+}
+
+// === Route: Cart ===
+fn handleCart() {
+    if (arrays.len(cart) == 0) {
+        return layout("Cart", "<div class='empty'><h2>Your cart is empty</h2><a href='/' class='btn'>Start Shopping</a></div>")
+    }
+    let rows = ""
+    let i = 0
+    while (i < arrays.len(cart)) {
+        let item = cart[i]
+        rows = rows + "<tr><td>" + item.img + " " + item.name + "</td>"
+            + "<td>$" + math_round(item.price, 2) + "</td>"
+            + "<td>" + item.qty + "</td>"
+            + "<td>$" + math_round(item.price * item.qty, 2) + "</td>"
+            + "<td><a href='/remove/" + item.id + "' class='btn btn-sm' style='background:#999'>Remove</a></td></tr>"
+        i = i + 1
+    }
+    let total = cartTotal()
+    let body = "<h1>Shopping Cart</h1>"
+        + "<table><thead><tr><th>Product</th><th>Price</th><th>Qty</th><th>Subtotal</th><th></th></tr></thead>"
+        + "<tbody>" + rows + "</tbody></table>"
+        + "<div class='total'>Total: $" + math_round(total, 2) + "</div>"
+        + "<div style='margin-top:1rem'><a href='/checkout' class='btn'>Proceed to Checkout</a> "
+        + "<a href='/' class='btn' style='background:#666'>Continue Shopping</a></div>"
+    return layout("Cart", body)
+}
+
+// === Route: Remove from Cart ===
+fn handleRemove(id) {
+    let newCart = []
+    let i = 0
+    while (i < arrays.len(cart)) {
+        if (cart[i].id != id) { arrays.push(newCart, cart[i]) }
+        i = i + 1
+    }
+    cart = newCart
+    return handleCart()
+}
+
+// === Route: Checkout ===
+fn handleCheckout() {
+    if (arrays.len(cart) == 0) {
+        return layout("Checkout", "<div class='empty'>Cart is empty</div>")
+    }
+    let total = cartTotal()
+    let orderId = arrays.len(orders) + 1000
+    // Create order
+    let orderItems = []
+    let i = 0
+    while (i < arrays.len(cart)) {
+        arrays.push(orderItems, cart[i])
+        i = i + 1
+    }
+    arrays.push(orders, {id: orderId, items: orderItems, total: total, status: "confirmed"})
+    // Clear cart
+    cart = []
+    let body = "<div class='card' style='max-width:600px;margin:0 auto;text-align:center'>"
+        + "<h1>🎉 Order Confirmed!</h1>"
+        + "<p style='font-size:1.2rem'>Order #" + orderId + "</p>"
+        + "<p style='font-size:1.5rem;color:#e94560;font-weight:bold'>Total: $" + math_round(total, 2) + "</p>"
+        + "<p>Thank you for your purchase! This is a demo store, no actual payment was processed.</p>"
+        + "<a href='/' class='btn'>Continue Shopping</a></div>"
+    return layout("Order Confirmed", body)
+}
+
+// === Router ===
+fn router(req) {
+    let path = req.path
+    io.eprintln("REQ: " + req.method + " " + path)
+
+    // Home
+    if (path == "/" || path == "") {
+        return {status: 200, contentType: "text/html; charset=utf-8", body: handleHome()}
+    }
+    // Product detail: /product/{id}
+    if (strings.startsWith(path, "/product/")) {
+        let idStr = strings.substring(path, 9, strings.len(path))
+        let id = convert.toInt(idStr)
+        return {status: 200, contentType: "text/html; charset=utf-8", body: handleProduct(id)}
+    }
+    // Add to cart: /add/{id}
+    if (strings.startsWith(path, "/add/")) {
+        let idStr = strings.substring(path, 5, strings.len(path))
+        let id = convert.toInt(idStr)
+        return {status: 200, contentType: "text/html; charset=utf-8", body: handleAdd(id)}
+    }
+    // Remove from cart: /remove/{id}
+    if (strings.startsWith(path, "/remove/")) {
+        let idStr = strings.substring(path, 8, strings.len(path))
+        let id = convert.toInt(idStr)
+        return {status: 200, contentType: "text/html; charset=utf-8", body: handleRemove(id)}
+    }
+    // Cart
+    if (path == "/cart") {
+        return {status: 200, contentType: "text/html; charset=utf-8", body: handleCart()}
+    }
+    // Checkout
+    if (path == "/checkout") {
+        return {status: 200, contentType: "text/html; charset=utf-8", body: handleCheckout()}
+    }
+    // API: products
+    if (path == "/api/products") {
+        return {status: 200, contentType: "application/json", body: json_stringify(products)}
+    }
+    // API: cart
+    if (path == "/api/cart") {
+        return {status: 200, contentType: "application/json", body: json_stringify({items: cart, total: cartTotal()})}
+    }
+    // 404
+    return {status: 404, contentType: "text/html; charset=utf-8", body: layout("404", "<div class='empty'><h1>404 - Page Not Found</h1><a href='/' class='btn'>Go Home</a></div>")}
+}
+
+// === Start Server ===
+io.println("=== TLL OS Shop ===")
+io.println("Products: " + arrays.len(products))
+io.println("Starting server on http://0.0.0.0:8080")
+http.serve("0.0.0.0:8080", router)
