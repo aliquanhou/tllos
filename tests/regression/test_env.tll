@@ -1,0 +1,41 @@
+// test_env.tll - Test process.env
+fn main() -> void {
+    io.println("=== process.env Test ===")
+
+    let env = process.env
+
+    // Test 1: existing variable (PATH is normalized to uppercase on Windows)
+    let path = env["PATH"]
+    if path != null {
+        io.println("PATH exists (length=" + convert.toString(strings.length(path)) + ")")
+    } else {
+        io.println("PATH not found")
+    }
+
+    // Test 2: non-existent variable returns null
+    let missing = env["TLL_NONEXISTENT_VAR_12345"]
+    if missing == null {
+        io.println("Non-existent var returns null: OK")
+    } else {
+        io.println("Non-existent var returns non-null: FAIL")
+    }
+
+    // Test 3: env map is not null
+    if env != null {
+        io.println("env map is not null: OK")
+    } else {
+        io.println("env map is null: FAIL")
+    }
+
+    // Test 4: TLL-specific test variable
+    let tllTest = env["TLL_TEST_VAR"]
+    if tllTest != null {
+        io.println("TLL_TEST_VAR = " + tllTest)
+    } else {
+        io.println("TLL_TEST_VAR not set (expected in manual run)")
+    }
+
+    io.println("=== process.env Test Complete ===")
+}
+
+main()

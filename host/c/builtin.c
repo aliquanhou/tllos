@@ -707,6 +707,26 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
         }
         return arr;
     }
+    if (idx == 122) { /* process.env -> map of environment variables */
+        TLLValue envMap = tll_map();
+        extern char **environ;
+        for (int i = 0; environ && environ[i]; i++) {
+            const char *eq = strchr(environ[i], '=');
+            if (eq && eq != environ[i]) {
+                int klen = (int)(eq - environ[i]);
+                char *key = (char*)malloc(klen + 1);
+                memcpy(key, environ[i], klen);
+                key[klen] = '\0';
+#ifdef _WIN32
+                /* Windows env vars are case-insensitive; normalize to uppercase */
+                for (int j = 0; j < klen; j++) key[j] = (char)toupper((unsigned char)key[j]);
+#endif
+                map_set(envMap.as.map, key, tll_string(eq + 1));
+                free(key);
+            }
+        }
+        return envMap;
+    }
 
     fprintf(stderr, "tllvm: unknown builtin index %d\n", idx);
     return tll_null();

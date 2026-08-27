@@ -1,67 +1,94 @@
 @echo off
 REM ============================================================
 REM TLL OS - Run All Tests (Windows)
-REM Runs all compiled .tllbc test files and reports results.
+REM Supports stdout comparison via .expected.txt files.
+REM Non-zero exit code: name test file exitN.tll (e.g. exit42.tll)
 REM Usage: scripts\run-tests.bat
 REM ============================================================
 setlocal enabledelayedexpansion
 
-set "REPO_ROOT=%~dp0.."
-set "TLLVM_EXE=%REPO_ROOT%\host\c\tllvm.exe"
+set "TLLVM_EXE=%~dp0..\host\c\tllvm.exe"
+set "TMPFILE=%~dp0..\.test_out.txt"
 
 echo === TLL OS Run Tests (Windows) ===
 echo.
 
-REM Ensure tllvm exists
 if not exist "%TLLVM_EXE%" (
     echo Building tllvm.exe first...
     call "%~dp0build.bat"
     if errorlevel 1 exit /b 1
 )
 
-set "TOTAL=0"
-set "PASSED=0"
-set "FAILED=0"
+set /a TOTAL=0
+set /a PASSED=0
+set /a FAILED=0
 
-REM Run acceptance tests
 echo --- Acceptance Tests ---
-for %%F in ("%REPO_ROOT%\tests\acceptance\*.tllbc") do (
-    if exist "%%F" (
+for %%F in ("%~dp0..\tests\acceptance\*.tllbc") do (
+    if /i "%%~xF"==".tllbc" (
         set /a TOTAL+=1
-        "%TLLVM_EXE%" "%%F" >nul 2>&1
-        if errorlevel 1 (
-            echo   FAIL: %%~nxF
+        set "EXPECTED=0"
+        set "NAME=%%~nF"
+        if not "!NAME:exit=!"=="!NAME!" set "EXPECTED=!NAME:exit=!"
+        "%TLLVM_EXE%" "%%F" >"%TMPFILE%" 2>&1
+        set "ACTUAL=!ERRORLEVEL!"
+        if not "!ACTUAL!"=="!EXPECTED!" (
+            echo   FAIL: %%~nxF ^(exit=!ACTUAL! expected=!EXPECTED!^)
             set /a FAILED+=1
         ) else (
-            echo   PASS: %%~nxF
-            set /a PASSED+=1
+            set "STDOUT_OK=1"
+            if exist "%%~dpnF.expected.txt" (
+                fc "%TMPFILE%" "%%~dpnF.expected.txt" >nul 2>&1
+                if not "!ERRORLEVEL!"=="0" set "STDOUT_OK=0"
+            )
+            if "!STDOUT_OK!"=="1" (
+                echo   PASS: %%~nxF
+                set /a PASSED+=1
+            ) else (
+                echo   FAIL: %%~nxF ^(stdout mismatch^)
+                set /a FAILED+=1
+            )
         )
     )
 )
 
-REM Run regression tests
 echo --- Regression Tests ---
-for %%F in ("%REPO_ROOT%\tests\regression\*.tllbc") do (
-    if exist "%%F" (
+for %%F in ("%~dp0..\tests\regression\*.tllbc") do (
+    if /i "%%~xF"==".tllbc" (
         set /a TOTAL+=1
-        "%TLLVM_EXE%" "%%F" >nul 2>&1
-        if errorlevel 1 (
-            echo   FAIL: %%~nxF
+        set "EXPECTED=0"
+        set "NAME=%%~nF"
+        if not "!NAME:exit=!"=="!NAME!" set "EXPECTED=!NAME:exit=!"
+        "%TLLVM_EXE%" "%%F" >"%TMPFILE%" 2>&1
+        set "ACTUAL=!ERRORLEVEL!"
+        if not "!ACTUAL!"=="!EXPECTED!" (
+            echo   FAIL: %%~nxF ^(exit=!ACTUAL! expected=!EXPECTED!^)
             set /a FAILED+=1
         ) else (
-            echo   PASS: %%~nxF
-            set /a PASSED+=1
+            set "STDOUT_OK=1"
+            if exist "%%~dpnF.expected.txt" (
+                fc "%TMPFILE%" "%%~dpnF.expected.txt" >nul 2>&1
+                if not "!ERRORLEVEL!"=="0" set "STDOUT_OK=0"
+            )
+            if "!STDOUT_OK!"=="1" (
+                echo   PASS: %%~nxF
+                set /a PASSED+=1
+            ) else (
+                echo   FAIL: %%~nxF ^(stdout mismatch^)
+                set /a FAILED+=1
+            )
         )
     )
 )
 
-REM Run regression test directories
-for /d %%D in ("%REPO_ROOT%\tests\regression\*") do (
+echo --- Regression Test Directories ---
+for /d %%D in ("%~dp0..\tests\regression\*") do (
     if exist "%%D\main.tllbc" (
         set /a TOTAL+=1
-        "%TLLVM_EXE%" "%%D\main.tllbc" >nul 2>&1
-        if errorlevel 1 (
-            echo   FAIL: %%~nxD\main.tllbc
+        "%TLLVM_EXE%" "%%D\main.tllbc" >"%TMPFILE%" 2>&1
+        set "ACTUAL=!ERRORLEVEL!"
+        if not "!ACTUAL!"=="0" (
+            echo   FAIL: %%~nxD\main.tllbc ^(exit=!ACTUAL!^)
             set /a FAILED+=1
         ) else (
             echo   PASS: %%~nxD\main.tllbc
@@ -70,18 +97,19 @@ for /d %%D in ("%REPO_ROOT%\tests\regression\*") do (
     )
 )
 
+if exist "%TMPFILE%" del "%TMPFILE%"
+
 echo.
 echo === Test Results ===
-echo Total:  !TOTAL!
-echo Passed: !PASSED!
-echo Failed: !FAILED!
+echo Total:  %TOTAL%
+echo Passed: %PASSED%
+echo Failed: %FAILED%
 echo.
 
-if !FAILED! gtr 0 (
+if %FAILED% gtr 0 (
     echo SOME TESTS FAILED
     exit /b 1
 ) else (
     echo ALL TESTS PASSED
     exit /b 0
 )
-endlocal

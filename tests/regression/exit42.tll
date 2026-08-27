@@ -1,0 +1,7 @@
+// test_exit_code.tll - Verify process.exit propagates non-zero exit code
+fn main() -> void {
+    io.println("about to exit with code 42")
+    process.exit(42)
+    io.println("ERROR: should not reach here")
+}
+main()
