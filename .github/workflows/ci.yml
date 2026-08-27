@@ -43,22 +43,37 @@ jobs:
           test -f compiler/compiler.tllbc
           test -f runtime/vm_run.tllbc
 
+      - name: ABI consistency check (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x scripts/check-abi.sh
+          scripts/check-abi.sh
+
+      - name: ABI consistency check (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: scripts\check-abi.bat
+
       - name: Native self-host verification (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
-          cd host/c
-          ./tllvm ../../compiler/compiler.tllbc
-          test -f ../../compiler/compiler_self_compiled.tllbc
-          rm -f ../../compiler/compiler_self_compiled.tllbc
+          cd compiler
+          ../host/c/tllvm compiler.tllbc
+          test -f compiler_self_compiled.tllbc
+          # Verify output is a real compiler (not empty stub)
+          SIZE=$(wc -c < compiler_self_compiled.tllbc)
+          test "$SIZE" -gt 100000
+          rm -f compiler_self_compiled.tllbc
 
       - name: Native self-host verification (Windows)
         if: runner.os == 'Windows'
         shell: cmd
         run: |
-          cd host\c
-          .\tllvm.exe ..\..\compiler\compiler.tllbc
-          if not exist ..\..\compiler\compiler_self_compiled.tllbc exit /b 1
-          del ..\..\compiler\compiler_self_compiled.tllbc
+          cd compiler
+          ..\host\c\tllvm.exe compiler.tllbc
+          if not exist compiler_self_compiled.tllbc exit /b 1
+          for %%A in (compiler_self_compiled.tllbc) do if %%~zA LSS 100000 exit /b 1
+          del compiler_self_compiled.tllbc
 
       - name: Bootstrap tllc (Linux/macOS)
         if: runner.os != 'Windows'
