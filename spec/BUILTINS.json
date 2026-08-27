@@ -1,21 +1,27 @@
 {
-  "version": "1.1",
-  "frozen": true,
+  "version": "1.2",
+  "frozen": false,
+  "note": "Genesis builtins 0-97 frozen at v1.1. P0-2 extensions 120+ are not frozen. Spec must match host/c/builtin.c exactly.",
+  "total_defined": 101,
+  "total_range": "0-97, 120-122",
   "modules": {
     "io": {
+      "category": "host_abi",
       "functions": [
         {"name": "println", "index": 0, "params": ["any"], "return": "void"},
         {"name": "print", "index": 1, "params": ["any"], "return": "void"},
-        {"name": "readLine", "index": 2, "params": [], "return": "string"}
+        {"name": "readLine", "index": 2, "params": ["string?"], "return": "string"}
       ]
     },
     "json": {
+      "category": "stdlib",
       "functions": [
         {"name": "parse", "index": 3, "params": ["string"], "return": "any"},
         {"name": "stringify", "index": 4, "params": ["any"], "return": "string"}
       ]
     },
     "math": {
+      "category": "stdlib",
       "functions": [
         {"name": "sqrt", "index": 5, "params": ["float"], "return": "float"},
         {"name": "abs", "index": 6, "params": ["number"], "return": "number"},
@@ -39,6 +45,7 @@
       ]
     },
     "strings": {
+      "category": "stdlib",
       "functions": [
         {"name": "length", "index": 24, "params": ["string"], "return": "int"},
         {"name": "toUpper", "index": 25, "params": ["string"], "return": "string"},
@@ -68,14 +75,15 @@
       ]
     },
     "arrays": {
+      "category": "stdlib",
       "note": "No 'set' function. Use direct index assignment: arr[idx] = val",
       "functions": [
         {"name": "length", "index": 49, "params": ["array"], "return": "int"},
         {"name": "get", "index": 50, "params": ["array", "int"], "return": "any"},
-        {"name": "push", "index": 51, "params": ["array", "any"], "return": "int"},
+        {"name": "push", "index": 51, "params": ["array", "any..."], "return": "int"},
         {"name": "pop", "index": 52, "params": ["array"], "return": "any"},
         {"name": "shift", "index": 53, "params": ["array"], "return": "any"},
-        {"name": "unshift", "index": 54, "params": ["array", "any"], "return": "int"},
+        {"name": "unshift", "index": 54, "params": ["array", "any..."], "return": "int"},
         {"name": "concat", "index": 55, "params": ["array", "array"], "return": "array"},
         {"name": "slice", "index": 56, "params": ["array", "int", "int"], "return": "array"},
         {"name": "includes", "index": 57, "params": ["array", "any"], "return": "bool"},
@@ -85,38 +93,71 @@
         {"name": "sort", "index": 61, "params": ["array"], "return": "array"},
         {"name": "filter", "index": 62, "params": ["array", "fn"], "return": "array"},
         {"name": "map", "index": 63, "params": ["array", "fn"], "return": "array"},
-        {"name": "reduce", "index": 64, "params": ["array", "fn", "any"], "return": "any"},
+        {"name": "reduce", "index": 64, "params": ["array", "fn", "any?"], "return": "any"},
         {"name": "forEach", "index": 65, "params": ["array", "fn"], "return": "void"},
         {"name": "find", "index": 66, "params": ["array", "fn"], "return": "any"},
         {"name": "some", "index": 67, "params": ["array", "fn"], "return": "bool"},
         {"name": "every", "index": 68, "params": ["array", "fn"], "return": "bool"},
-        {"name": "flat", "index": 69, "params": ["array"], "return": "array"},
-        {"name": "fill", "index": 70, "params": ["array", "any"], "return": "array"}
+        {"name": "flat", "index": 69, "params": ["array", "int?"], "return": "array"},
+        {"name": "fill", "index": 70, "params": ["array", "any", "int?", "int?"], "return": "array"},
+        {"name": "range", "index": 71, "params": ["int", "int", "int?"], "return": "array<int>"}
       ]
     },
     "convert": {
+      "category": "stdlib",
       "functions": [
-        {"name": "toString", "params": ["any"], "return": "string"},
-        {"name": "toInt", "params": ["any"], "return": "int"},
-        {"name": "toFloat", "params": ["any"], "return": "float"},
-        {"name": "toBool", "params": ["any"], "return": "bool"},
-        {"name": "typeOf", "params": ["any"], "return": "string"}
+        {"name": "toInt", "index": 72, "params": ["any"], "return": "int"},
+        {"name": "toFloat", "index": 73, "params": ["any"], "return": "float"},
+        {"name": "toString", "index": 74, "params": ["any"], "return": "string"},
+        {"name": "toBool", "index": 75, "params": ["any"], "return": "bool"},
+        {"name": "toChar", "index": 76, "params": ["int"], "return": "string"},
+        {"name": "charCode", "index": 77, "params": ["string"], "return": "int"},
+        {"name": "typeOf", "index": 78, "params": ["any"], "return": "string"}
       ]
     },
     "fs": {
+      "category": "host_abi",
       "functions": [
-        {"name": "readFile", "params": ["string"], "return": "string"},
-        {"name": "writeFile", "params": ["string", "string"], "return": "void"},
-        {"name": "readDir", "params": ["string"], "return": "array<string>"},
-        {"name": "stat", "params": ["string"], "return": "map"},
-        {"name": "exists", "params": ["string"], "return": "bool"}
+        {"name": "readFile", "index": 79, "params": ["string"], "return": "string"},
+        {"name": "writeFile", "index": 80, "params": ["string", "string"], "return": "void"},
+        {"name": "appendFile", "index": 81, "params": ["string", "string"], "return": "void"},
+        {"name": "exists", "index": 82, "params": ["string"], "return": "bool"},
+        {"name": "mkdir", "index": 83, "params": ["string"], "return": "void"},
+        {"name": "remove", "index": 84, "params": ["string"], "return": "void"},
+        {"name": "listDir", "index": 85, "params": ["string"], "return": "array<string>"},
+        {"name": "isFile", "index": 86, "params": ["string"], "return": "bool"},
+        {"name": "isDir", "index": 87, "params": ["string"], "return": "bool"},
+        {"name": "fileSize", "index": 88, "params": ["string"], "return": "int"},
+        {"name": "copyFile", "index": 89, "params": ["string", "string"], "return": "void"},
+        {"name": "rename", "index": 90, "params": ["string", "string"], "return": "void"}
       ]
     },
     "http": {
+      "category": "host_abi",
+      "status": "stub",
+      "note": "HTTP builtins return null in bootstrap mode. Full implementation planned for P0-2.8.",
       "functions": [
-        {"name": "get", "params": ["string"], "return": "map"},
-        {"name": "post", "params": ["string", "string"], "return": "map"}
+        {"name": "get", "index": 91, "params": ["string"], "return": "map"},
+        {"name": "post", "index": 92, "params": ["string", "string"], "return": "map"},
+        {"name": "request", "index": 93, "params": ["map"], "return": "map"},
+        {"name": "serve", "index": 94, "params": ["string", "fn"], "return": "void"},
+        {"name": "encodeURI", "index": 95, "params": ["string"], "return": "string"},
+        {"name": "decodeURI", "index": 96, "params": ["string"], "return": "string"},
+        {"name": "parseJSON", "index": 97, "params": ["string"], "return": "map"}
+      ]
+    },
+    "process": {
+      "category": "host_abi",
+      "status": "p0_2_extension",
+      "note": "P0-2 process API. Not part of Genesis frozen ABI.",
+      "functions": [
+        {"name": "exit", "index": 120, "params": ["int?"], "return": "void"},
+        {"name": "argv", "index": 121, "params": [], "return": "array<string>"},
+        {"name": "env", "index": 122, "params": [], "return": "map<string,string>"}
       ]
     }
+  },
+  "reserved": {
+    "agent_workflow": "98-119 (deferred)"
   }
 }

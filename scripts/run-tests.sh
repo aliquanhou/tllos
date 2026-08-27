@@ -34,9 +34,11 @@ run_test() {
     if [[ "$basename" == exit* ]]; then
         expected="${basename#exit}"
     fi
-    # Run test
+    # Run test (set +e to capture non-zero exit codes, then restore)
+    set +e
     "$TLLVM_EXE" "$tllbc" >"$TMPFILE" 2>&1
     local actual=$?
+    set -e
     if [ "$actual" != "$expected" ]; then
         echo "  FAIL: $display (exit=$actual expected=$expected)"
         FAILED=$((FAILED + 1))
