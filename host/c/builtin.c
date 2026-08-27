@@ -18,11 +18,72 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <direct.h>
-#include <winhttp.h>
-#pragma comment(lib, "winhttp.lib")
+/* Minimal WinHTTP declarations (TCC lacks winhttp.h) */
+#ifndef _WINHTTP_H_
+#define _WINHTTP_H_
+#define WINHTTP_ACCESS_TYPE_DEFAULT_PROXY 0
+#define WINHTTP_NO_PROXY_NAME NULL
+#define WINHTTP_NO_PROXY_BYPASS NULL
+#define WINHTTP_NO_ADDITIONAL_HEADERS NULL
+#define WINHTTP_NO_REQUEST_DATA NULL
+#define WINHTTP_NO_REFERER NULL
+#define WINHTTP_DEFAULT_ACCEPT_TYPES NULL
+#define WINHTTP_QUERY_STATUS_CODE 0x10000013
+#define WINHTTP_QUERY_FLAG_NUMBER 0x20000000
+#define WINHTTP_FLAG_SECURE 0x00800000
+typedef void* HINTERNET;
+typedef unsigned short INTERNET_PORT;
+WINBOOL WINAPI WinHttpCloseHandle(HINTERNET);
+HINTERNET WINAPI WinHttpOpen(LPCWSTR, DWORD, LPCWSTR, LPCWSTR, DWORD);
+HINTERNET WINAPI WinHttpConnect(HINTERNET, LPCWSTR, INTERNET_PORT, DWORD);
+HINTERNET WINAPI WinHttpOpenRequest(HINTERNET, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR*, DWORD);
+WINBOOL WINAPI WinHttpSendRequest(HINTERNET, LPCWSTR, DWORD, LPVOID, DWORD, DWORD, DWORD_PTR);
+WINBOOL WINAPI WinHttpReceiveResponse(HINTERNET, LPVOID);
+WINBOOL WINAPI WinHttpQueryHeaders(HINTERNET, DWORD, LPCWSTR, LPVOID, LPDWORD, LPDWORD);
+WINBOOL WINAPI WinHttpQueryDataAvailable(HINTERNET, LPDWORD);
+WINBOOL WINAPI WinHttpReadData(HINTERNET, LPVOID, DWORD, LPDWORD);
+#endif
+/* Minimal Winsock2 declarations (TCC lacks winsock2.h) */
+#ifndef _WINSOCK2_H_
+#define _WINSOCK2_H_
+typedef UINT_PTR SOCKET;
+#define INVALID_SOCKET (SOCKET)(~0)
+#define SOCKET_ERROR (-1)
+#define SOL_SOCKET 0xffff
+#define SO_REUSEADDR 0x0004
+#define AF_INET 2
+#define SOCK_STREAM 1
+#define IPPROTO_TCP 6
+typedef struct in_addr { unsigned long s_addr; } IN_ADDR;
+typedef struct sockaddr_in { short sin_family; unsigned short sin_port; IN_ADDR sin_addr; char sin_zero[8]; } SOCKADDR_IN;
+typedef struct sockaddr { unsigned short sa_family; char sa_data[14]; } SOCKADDR;
+typedef int socklen_t;
+typedef struct WSAData { WORD wVersion; WORD wHighVersion; char szDescription[257]; char szSystemStatus[129]; unsigned short iMaxSockets; unsigned short iMaxUdpDg; char *lpVendorInfo; } WSADATA;
+int PASCAL WSAStartup(WORD, WSADATA*);
+int PASCAL WSACleanup(void);
+SOCKET PASCAL socket(int, int, int);
+int PASCAL setsockopt(SOCKET, int, int, const char*, int);
+int PASCAL bind(SOCKET, const SOCKADDR*, int);
+int PASCAL listen(SOCKET, int);
+SOCKET PASCAL accept(SOCKET, SOCKADDR*, int*);
+int PASCAL recv(SOCKET, char*, int, int);
+int PASCAL send(SOCKET, const char*, int, int);
+int PASCAL closesocket(SOCKET);
+unsigned long PASCAL inet_addr(const char*);
+unsigned short PASCAL htons(unsigned short);
+#endif
+/* Libraries linked via build.bat (DLL paths for TCC) */
+/* Minimal winnls declarations (TCC lacks winnls.h) */
+#ifndef CP_UTF8
+#define CP_UTF8 65001
+#endif
+int WINAPI MultiByteToWideChar(UINT, DWORD, LPCCH, int, LPWSTR, int);
 #define CHDIR _chdir
 #define GETCWD _getcwd
 #else
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <dirent.h>
 #include <unistd.h>
 #define CHDIR chdir
@@ -798,8 +859,137 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
             WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession);
             return result;
         }
-        if (idx == 94) { /* http.serve - not yet implemented */
-            fprintf(stderr, "tllvm: http.serve not yet implemented\n");
+        if (idx == 94) { /* http.serve(addr, handler) - basic HTTP server (P0-4 dogfood) */
+            const char *addr = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "0.0.0.0:8080";
+            if (argCount < 2 || (args[1].type != TLL_FUNCTION && args[1].type != TLL_MAP)) {
+                fprintf(stderr, "tllvm: http.serve requires handler function\n");
+                return tll_null();
+            }
+            /* Parse host:port */
+            char host[256] = "0.0.0.0";
+            int port = 8080;
+            const char *colon = strrchr(addr, ':');
+            if (colon) {
+                int hlen = (int)(colon - addr);
+                if (hlen > 0 && hlen < 256) { strncpy(host, addr, hlen); host[hlen] = '\0'; }
+                port = atoi(colon + 1);
+            }
+#ifdef _WIN32
+            WSADATA wsa;
+            if (WSAStartup(MAKEWORD(2,2), &wsa) != 0) {
+                fprintf(stderr, "tllvm: WSAStartup failed\n");
+                return tll_null();
+            }
+#endif
+            SOCKET server_fd = socket(AF_INET, SOCK_STREAM, 0);
+            if (server_fd == INVALID_SOCKET) {
+                fprintf(stderr, "tllvm: socket failed\n");
+                return tll_null();
+            }
+            int opt = 1;
+            setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+            struct sockaddr_in address;
+            address.sin_family = AF_INET;
+            address.sin_addr.s_addr = inet_addr(host);
+            address.sin_port = htons(port);
+            if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
+                fprintf(stderr, "tllvm: bind failed on %s:%d\n", host, port);
+                closesocket(server_fd);
+                return tll_null();
+            }
+            if (listen(server_fd, 10) < 0) {
+                fprintf(stderr, "tllvm: listen failed\n");
+                closesocket(server_fd);
+                return tll_null();
+            }
+            fprintf(stderr, "tllvm: HTTP server listening on %s:%d\n", host, port);
+            /* Accept loop */
+            while (1) {
+                struct sockaddr_in client_addr;
+                socklen_t client_len = sizeof(client_addr);
+                SOCKET client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
+                if (client_fd == INVALID_SOCKET) continue;
+                /* Read request */
+                char req_buf[65536];
+                int total_read = 0;
+                while (total_read < (int)sizeof(req_buf) - 1) {
+                    int n = recv(client_fd, req_buf + total_read, sizeof(req_buf) - 1 - total_read, 0);
+                    if (n <= 0) break;
+                    total_read += n;
+                    req_buf[total_read] = '\0';
+                    /* Check for end of headers */
+                    if (strstr(req_buf, "\r\n\r\n") != NULL) {
+                        /* Check if we have Content-Length and full body */
+                        char *cl = strstr(req_buf, "Content-Length:");
+                        if (cl) {
+                            int content_len = atoi(cl + 15);
+                            char *body_start = strstr(req_buf, "\r\n\r\n");
+                            if (body_start) {
+                                body_start += 4;
+                                int body_read = total_read - (int)(body_start - req_buf);
+                                if (body_read >= content_len) break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                req_buf[total_read] = '\0';
+                /* Parse request line */
+                char method[16] = "GET";
+                char path[1024] = "/";
+                char *line_end = strstr(req_buf, "\r\n");
+                if (line_end) {
+                    *line_end = '\0';
+                    sscanf(req_buf, "%15s %1023s", method, path);
+                }
+                /* Parse headers into map */
+                TLLValue reqMap = tll_map();
+                map_set(reqMap.as.map, "method", tll_string(method));
+                map_set(reqMap.as.map, "path", tll_string(path));
+                /* Parse body */
+                char *body_start = strstr(line_end ? line_end + 2 : req_buf, "\r\n\r\n");
+                if (body_start) {
+                    body_start += 4;
+                    map_set(reqMap.as.map, "body", tll_string(body_start));
+                } else {
+                    map_set(reqMap.as.map, "body", tll_string(""));
+                }
+                /* Call TLL handler */
+                TLLValue handlerFn = args[1];
+                TLLValue handlerArgs[1] = { reqMap };
+                TLLValue resp = tll_vm_invoke(vm, handlerFn, handlerArgs, 1);
+                /* Build response */
+                char resp_buf[65536];
+                int resp_len = 0;
+                int status = 200;
+                const char *body = "";
+                const char *content_type = "text/html; charset=utf-8";
+                if (resp.type == TLL_MAP) {
+                    TLLValue sv = map_get(resp.as.map, "status");
+                    if (sv.type == TLL_INT) status = (int)sv.as.integer;
+                    TLLValue bv = map_get(resp.as.map, "body");
+                    if (bv.type == TLL_STRING) body = bv.as.string;
+                    TLLValue cv = map_get(resp.as.map, "contentType");
+                    if (cv.type == TLL_STRING) content_type = cv.as.string;
+                } else if (resp.type == TLL_STRING) {
+                    body = resp.as.string;
+                }
+                resp_len = snprintf(resp_buf, sizeof(resp_buf),
+                    "HTTP/1.1 %d OK\r\n"
+                    "Content-Type: %s\r\n"
+                    "Content-Length: %d\r\n"
+                    "Connection: close\r\n"
+                    "\r\n"
+                    "%s",
+                    status, content_type, (int)strlen(body), body);
+                send(client_fd, resp_buf, resp_len, 0);
+                closesocket(client_fd);
+            }
+            closesocket(server_fd);
+#ifdef _WIN32
+            WSACleanup();
+#endif
             return tll_null();
         }
         if (idx == 95) { /* http.encodeURI */

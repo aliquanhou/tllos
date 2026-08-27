@@ -1,0 +1,29 @@
+// Test HTTP server - P0-4 dogfooding
+fn handler(req) {
+    let path = req.path
+    let method = req.method
+    io.println("Request: " + method + " " + path)
+
+    if (path == "/") {
+        return {
+            status: 200,
+            contentType: "text/html; charset=utf-8",
+            body: "<html><body><h1>TLL OS Shop</h1><p>HTTP server working!</p></body></html>"
+        }
+    }
+    if (path == "/api/products") {
+        return {
+            status: 200,
+            contentType: "application/json",
+            body: "{\"products\":[{\"id\":1,\"name\":\"Test Product\",\"price\":99.99}]}"
+        }
+    }
+    return {
+        status: 404,
+        contentType: "text/plain",
+        body: "Not Found: " + path
+    }
+}
+
+io.println("Starting TLL HTTP server on :8080...")
+http.serve("0.0.0.0:8080", handler)
