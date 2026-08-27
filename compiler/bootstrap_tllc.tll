@@ -1,0 +1,48 @@
+// TLL Compiler - Bootstrap entry for tllc
+// This file is used temporarily by scripts/bootstrap-tllc to compile tllc.
+// It is identical to compiler.tll except main() compiles tools/TLLC/main.tll.
+
+from "./lexer" import tokenize
+from "./parser" import parse
+from "./typechecker" import check
+from "./codegen" import compile
+from "./linker" import linkAndCompile
+
+// Main compile function: source string -> bytecode program (as JSON string)
+export fn compileSource(source: string) -> string {
+    io.println("[Phase 1] Lexer: tokenizing...")
+    let tokens = tokenize(source)
+    io.println("[Phase 1] Lexer: done, tokens=" + convert.toString(arrays.length(tokens)))
+
+    io.println("[Phase 2] Parser: parsing...")
+    let ast = parse(tokens)
+    io.println("[Phase 2] Parser: done")
+
+    io.println("[Phase 3] TypeChecker: checking...")
+    let errors = check(ast)
+    io.println("[Phase 3] TypeChecker: done, errors=" + convert.toString(arrays.length(errors)))
+
+    io.println("[Phase 4] Codegen: compiling...")
+    let program = compile(ast)
+    io.println("[Phase 4] Codegen: done, functions=" + convert.toString(arrays.length(program.functions)))
+
+    io.println("[Phase 5] Serializing...")
+    let result = json.stringify(program)
+    io.println("[Phase 5] Serialization: done, length=" + convert.toString(strings.length(result)))
+    return result
+}
+
+// Bootstrap: compile tllc CLI
+fn main() -> void {
+    io.println("=== Bootstrap: compiling tllc ===")
+    let bytecode = linkAndCompile("../tools/TLLC/main.tll")
+    if bytecode.hasError == true {
+        io.println("COMPILATION FAILED: " + bytecode.error)
+        return
+    }
+    let bytecodeJson = json.stringify(bytecode)
+    fs.writeFile("../tools/TLLC/tllc.tllbc", bytecodeJson)
+    io.println("tllc.tllbc generated: " + convert.toString(strings.length(bytecodeJson)) + " bytes")
+}
+
+main()
