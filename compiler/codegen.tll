@@ -483,7 +483,7 @@ export fn compile(program: map) -> map {
     while mi < arrays.length(stmts) {
         let stmt = arrays.get(stmts, mi)
         let kind = stmt.kind
-        if kind != "Fn" && kind != "Import" && kind != "FromImport" && kind != "Export" {
+        if kind != "Fn" && kind != "Struct" && kind != "Import" && kind != "FromImport" && kind != "Export" {
             cg_compileStatement(stmt)
         }
         mi = mi + 1
@@ -1069,6 +1069,31 @@ fn cg_compileExpression(expr: map) -> int {
     }
     if kind == "Array" { return cg_compileArray(expr) }
     if kind == "Map" { return cg_compileMap(expr) }
+    if kind == "StructLiteral" {
+        // Struct literal: TypeName { field: value, ... }
+        // Compile as map with __struct field for type identification
+        let entryCount = arrays.length(expr.entries)
+        // Push __struct key
+        let k0 = cg_allocReg()
+        cg_emit(OP_LOAD_CONST, [k0, cg_addConstant("__struct")])
+        let v0 = cg_allocReg()
+        cg_emit(OP_LOAD_CONST, [v0, cg_addConstant(expr.structName)])
+        cg_emit(OP_PUSH, [k0])
+        cg_emit(OP_PUSH, [v0])
+        let ei = 0
+        while ei < entryCount {
+            let entry = arrays.get(expr.entries, ei)
+            let kReg = cg_allocReg()
+            cg_emit(OP_LOAD_CONST, [kReg, cg_addConstant(entry.key)])
+            let vReg = cg_compileExpression(entry.value)
+            cg_emit(OP_PUSH, [kReg])
+            cg_emit(OP_PUSH, [vReg])
+            ei = ei + 1
+        }
+        let reg = cg_allocReg()
+        cg_emit(OP_MAKE_MAP, [reg, entryCount + 1])
+        return reg
+    }
     if kind == "FnExpr" {
         // Anonymous function: register as function, create Function Value
         let anonName = "__anon_" + convert.toString(cg_anonCounter)

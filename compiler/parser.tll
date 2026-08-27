@@ -85,6 +85,7 @@ fn parseStatement() -> map {
     if stmtType == "LET" || stmtType == "MUT" { return parseLetStatement() }
     if stmtType == "CONST" { return parseConstStatement() }
     if stmtType == "FN" { return parseFnDeclaration() }
+    if stmtType == "STRUCT" { return parseStructDeclaration() }
     if stmtType == "RETURN" { return parseReturnStatement() }
     if stmtType == "IF" { return parseIfStatement() }
     if stmtType == "WHILE" { return parseWhileStatement() }
@@ -153,6 +154,32 @@ fn parseFnDeclaration() -> map {
     node.params = params
     node.returnType = returnType
     node.body = body
+    return node
+}
+
+fn parseStructDeclaration() -> map {
+    let t = parse_advance() // struct
+    let nameTok = parse_expect("IDENT", "struct name")
+    let name = nameTok.tkValue
+    parse_expect("LBRACE", "'{'")
+    let fields: list = []
+    while !parse_check("RBRACE") && !parse_isAtEnd() {
+        let fieldNameTok = parse_expect("IDENT", "field name")
+        let fieldName = fieldNameTok.tkValue
+        let fieldType: map = null
+        if parse_match("COLON") {
+            fieldType = parseType()
+        }
+        arrays.push(fields, { name: fieldName, type: fieldType })
+        if !parse_match("COMMA") {
+            // Allow newline-separated fields without comma
+            if parse_check("RBRACE") { break }
+        }
+    }
+    parse_expect("RBRACE", "'}'")
+    let node = makeNode("Struct", t.line, t.column)
+    node.name = name
+    node.fields = fields
     return node
 }
 
