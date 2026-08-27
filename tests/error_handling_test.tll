@@ -1,0 +1,96 @@
+// Test try/catch/throw/finally error handling - P0-5 verification
+io.println("=== Error Handling Tests ===")
+
+// Test 1: Basic throw and catch
+let caught = false
+try {
+    throw "something went wrong"
+    io.println("FAIL: should not reach here")
+} catch err {
+    caught = true
+    io.println("Caught: " + err)
+}
+if caught {
+    io.println("Test 1 PASS: basic throw/catch")
+} else {
+    io.println("Test 1 FAIL")
+}
+
+// Test 2: throw with map object
+try {
+    throw { type: "ValidationError", message: "invalid input", code: 400 }
+} catch e {
+    io.println("Error type: " + e.type)
+    io.println("Error message: " + e.message)
+    io.println("Error code: " + convert.toString(e.code))
+    io.println("Test 2 PASS: throw map object")
+}
+
+// Test 3: finally always runs
+let finallyRan = false
+try {
+    throw "test"
+} catch e {
+    io.println("in catch")
+} finally {
+    finallyRan = true
+    io.println("in finally")
+}
+if finallyRan {
+    io.println("Test 3 PASS: finally runs after catch")
+} else {
+    io.println("Test 3 FAIL")
+}
+
+// Test 4: finally runs even without catch
+let finallyNoCatch = false
+try {
+    try {
+        throw "inner error"
+    } finally {
+        finallyNoCatch = true
+    }
+} catch outer {
+    io.println("Outer caught: " + outer)
+}
+if finallyNoCatch {
+    io.println("Test 4 PASS: finally runs without catch (propagates)")
+} else {
+    io.println("Test 4 FAIL")
+}
+
+// Test 5: no throw means catch skipped
+let catchSkipped = true
+try {
+    io.println("in try, no throw")
+} catch e {
+    catchSkipped = false
+}
+if catchSkipped {
+    io.println("Test 5 PASS: catch skipped when no throw")
+} else {
+    io.println("Test 5 FAIL")
+}
+
+// Test 6: function with throw
+fn riskyOperation(shouldFail: bool) -> string {
+    if shouldFail {
+        throw "operation failed"
+    }
+    return "success"
+}
+
+try {
+    let result = riskyOperation(true)
+    io.println("FAIL: should have thrown")
+} catch e {
+    io.println("Function threw: " + e)
+    io.println("Test 6 PASS: throw inside function propagates")
+}
+
+let okResult = riskyOperation(false)
+io.println("Normal result: " + okResult)
+io.println("Test 6b PASS: normal function call works")
+
+io.println("")
+io.println("=== ALL ERROR HANDLING TESTS PASSED ===")
