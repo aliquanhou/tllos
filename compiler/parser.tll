@@ -28,6 +28,13 @@ fn parse_isAtEnd() -> bool {
     return t.tkType == "EOF"
 }
 
+fn parse_peekNext() -> map {
+    if parse_pos + 1 < arrays.length(parse_tokens) {
+        return arrays.get(parse_tokens, parse_pos + 1)
+    }
+    return arrays.get(parse_tokens, parse_pos)
+}
+
 fn parse_check(tkType: string) -> bool {
     if parse_isAtEnd() {
         return false
@@ -620,6 +627,51 @@ fn parseUnary() -> map {
 fn parsePostfix() -> map {
     let expr = parsePrimary()
     while true {
+        if expr.kind == "Ident" && parse_check("LBRACE") {
+            // Struct literal: TypeName { field: value, ... }
+            // Disambiguate from code block: require { IDENT : ... } pattern
+            let savedPos = parse_pos
+            parse_advance() // consume LBRACE tentatively
+            let isStructLiteral = false
+            if parse_check("IDENT") && parse_peekNext().tkType == "COLON" {
+                isStructLiteral = true
+            } else if parse_check("RBRACE") {
+                isStructLiteral = true // empty struct: TypeName {}
+            }
+            if !isStructLiteral {
+                parse_pos = savedPos // restore, let caller handle as code block
+            } else {
+                let t = parse_previous() // LBRACE
+                let entries: list = []
+                if !parse_check("RBRACE") {
+                    while true {
+                        let keyStr = ""
+                        if parse_check("IDENT") || parse_check("STRING") {
+                            let kt = parse_advance()
+                            keyStr = kt.tkValue
+                        } else {
+                            let keyExpr = parseExpression()
+                            keyStr = keyExpr.value
+                        }
+                        parse_expect("COLON", "':'")
+                        let valExpr = parseExpression()
+                        let entry = makeNode("Entry", 0, 0)
+                        entry.key = keyStr
+                        entry.value = valExpr
+                        arrays.push(entries, entry)
+                        if !parse_match("COMMA") {
+                            break
+                        }
+                    }
+                }
+                parse_expect("RBRACE", "'}'")
+                let node = makeNode("StructLiteral", t.line, t.column)
+                node.structName = expr.name
+                node.entries = entries
+                expr = node
+                continue
+            }
+        }
         if parse_match("LPAREN") {
             let t = parse_previous()
             let args = parseArgs()

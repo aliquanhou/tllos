@@ -1,0 +1,46 @@
+// Test Struct literal syntax - P0-5
+struct User {
+    name: string
+    age: int
+}
+
+let alice = User {
+    name: "Alice",
+    age: 18
+}
+
+io.println("User name: " + alice.name)
+io.println("User age: " + convert.toString(alice.age))
+
+alice.age = 19
+io.println("Updated age: " + convert.toString(alice.age))
+
+// Nested struct
+struct Point {
+    x: int
+    y: int
+}
+
+struct Rect {
+    origin: Point
+    width: int
+    height: int
+}
+
+let r = Rect {
+    origin: Point { x: 10, y: 20 },
+    width: 100,
+    height: 50
+}
+
+io.println("Rect origin.x: " + convert.toString(r.origin.x))
+io.println("Rect width: " + convert.toString(r.width))
+
+// Function taking struct
+fn printUser(u: User) -> void {
+    io.println("User: " + u.name + " (age " + convert.toString(u.age) + ")")
+}
+
+printUser(alice)
+
+io.println("ALL STRUCT TESTS PASSED")
