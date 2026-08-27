@@ -1,0 +1,24 @@
+// Product module - TLL OS Shop
+// Export product database and operations
+
+export let products = [
+    {id: 1, name: "TLL Language Book", price: 49.99, stock: 100, desc: "Learn TLL from scratch", img: "book"},
+    {id: 2, name: "Compiler T-Shirt", price: 29.99, stock: 50, desc: "100% cotton, compiler design", img: "shirt"},
+    {id: 3, name: "VM Coffee Mug", price: 14.99, stock: 200, desc: "Stack-based brewing", img: "mug"},
+    {id: 4, name: "Bytecode Poster", price: 19.99, stock: 30, desc: "All 46 opcodes visualized", img: "poster"},
+    {id: 5, name: "Self-Host Sticker Pack", price: 9.99, stock: 500, desc: "5 stickers per pack", img: "stickers"},
+    {id: 6, name: "Garbage Collector Plush", price: 39.99, stock: 25, desc: "Reference counting edition", img: "plush"}
+]
+
+export fn findProduct(id) {
+    let i = 0
+    while (i < arrays.length(products)) {
+        if (products[i].id == id) { return products[i] }
+        i = i + 1
+    }
+    return null
+}
+
+export fn productCount() {
+    return arrays.length(products)
+}

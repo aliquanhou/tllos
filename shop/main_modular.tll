@@ -1,0 +1,126 @@
+// TLL OS Shop - Modular version (P0-5 Module/Import dogfooding)
+from "./product" import products, findProduct, productCount
+from "./cart" import cart, addToCart, removeFromCart, cartTotal, cartCount, clearCart
+from "./templates" import layout, productCard
+
+// Orders (in-memory)
+let orders = []
+
+fn handleHome() {
+    let cards = ""
+    let i = 0
+    while (i < arrays.length(products)) {
+        cards = cards + productCard(products[i])
+        i = i + 1
+    }
+    return layout("TLL OS Shop - Home", "<h1>Products (" + convert.toString(productCount()) + ")</h1><div class='grid'>" + cards + "</div>")
+}
+
+fn handleProduct(id) {
+    let p = findProduct(id)
+    if (p == null) {
+        return layout("Not Found", "<div class='empty'>Product not found</div>")
+    }
+    let body = "<div class='card' style='max-width:600px;margin:0 auto'>"
+        + "<div class='product-img' style='font-size:5rem'>[" + p.img + "]</div>"
+        + "<h1>" + p.name + "</h1>"
+        + "<p style='font-size:1.1rem;color:#666'>" + p.desc + "</p>"
+        + "<div class='price' style='font-size:2rem'>$" + math.round(p.price) + "</div>"
+        + "<p>Stock: " + p.stock + " units</p>"
+        + "<a href='/add/" + p.id + "' class='btn'>Add to Cart</a> "
+        + "<a href='/' class='btn' style='background:#666'>Back</a>"
+        + "</div>"
+    return layout(p.name, body)
+}
+
+fn handleAdd(id) {
+    let p = findProduct(id)
+    if (p == null) { return layout("Not Found", "<div class='empty'>Product not found</div>") }
+    addToCart(p)
+    let body = "<div class='success'>Added " + p.name + " to cart!</div>"
+        + "<a href='/cart' class='btn'>View Cart</a> "
+        + "<a href='/' class='btn' style='background:#666'>Continue Shopping</a>"
+    return layout("Added to Cart", body)
+}
+
+fn handleCart() {
+    if (arrays.length(cart) == 0) {
+        return layout("Cart", "<div class='empty'><h2>Your cart is empty</h2><a href='/' class='btn'>Start Shopping</a></div>")
+    }
+    let rows = ""
+    let i = 0
+    while (i < arrays.length(cart)) {
+        let item = cart[i]
+        rows = rows + "<tr><td>[" + item.img + "] " + item.name + "</td>"
+            + "<td>$" + math.round(item.price) + "</td>"
+            + "<td>" + item.qty + "</td>"
+            + "<td>$" + math.round(item.price * item.qty) + "</td>"
+            + "<td><a href='/remove/" + item.id + "' class='btn btn-sm' style='background:#999'>Remove</a></td></tr>"
+        i = i + 1
+    }
+    let total = cartTotal()
+    let body = "<h1>Shopping Cart</h1>"
+        + "<table><thead><tr><th>Product</th><th>Price</th><th>Qty</th><th>Subtotal</th><th></th></tr></thead>"
+        + "<tbody>" + rows + "</tbody></table>"
+        + "<div class='total'>Total: $" + math.round(total) + "</div>"
+        + "<div style='margin-top:1rem'><a href='/checkout' class='btn'>Proceed to Checkout</a> "
+        + "<a href='/' class='btn' style='background:#666'>Continue Shopping</a></div>"
+    return layout("Cart", body)
+}
+
+fn handleRemove(id) {
+    removeFromCart(id)
+    return handleCart()
+}
+
+fn handleCheckout() {
+    if (arrays.length(cart) == 0) {
+        return layout("Checkout", "<div class='empty'>Cart is empty</div>")
+    }
+    let total = cartTotal()
+    let orderId = arrays.length(orders) + 1000
+    arrays.push(orders, {id: orderId, total: total, status: "confirmed"})
+    clearCart()
+    let body = "<div class='card' style='max-width:600px;margin:0 auto;text-align:center'>"
+        + "<h1>Order Confirmed!</h1>"
+        + "<p style='font-size:1.2rem'>Order #" + orderId + "</p>"
+        + "<p style='font-size:1.5rem;color:#e94560;font-weight:bold'>Total: $" + math.round(total) + "</p>"
+        + "<p>Thank you for your purchase! (Demo store, no actual payment)</p>"
+        + "<a href='/' class='btn'>Continue Shopping</a></div>"
+    return layout("Order Confirmed", body)
+}
+
+fn router(req) {
+    let path = req.path
+    if (path == "/" || path == "") {
+        return {status: 200, contentType: "text/html; charset=utf-8", body: handleHome()}
+    }
+    if (strings.startsWith(path, "/product/")) {
+        let id = convert.toInt(strings.substring(path, 9, strings.length(path)))
+        return {status: 200, contentType: "text/html; charset=utf-8", body: handleProduct(id)}
+    }
+    if (strings.startsWith(path, "/add/")) {
+        let id = convert.toInt(strings.substring(path, 5, strings.length(path)))
+        return {status: 200, contentType: "text/html; charset=utf-8", body: handleAdd(id)}
+    }
+    if (strings.startsWith(path, "/remove/")) {
+        let id = convert.toInt(strings.substring(path, 8, strings.length(path)))
+        return {status: 200, contentType: "text/html; charset=utf-8", body: handleRemove(id)}
+    }
+    if (path == "/cart") {
+        return {status: 200, contentType: "text/html; charset=utf-8", body: handleCart()}
+    }
+    if (path == "/checkout") {
+        return {status: 200, contentType: "text/html; charset=utf-8", body: handleCheckout()}
+    }
+    if (path == "/api/products") {
+        return {status: 200, contentType: "application/json", body: json.stringify(products)}
+    }
+    return {status: 404, contentType: "text/html; charset=utf-8", body: layout("404", "<div class='empty'><h1>404 - Not Found</h1><a href='/' class='btn'>Go Home</a></div>")}
+}
+
+io.println("=== TLL OS Shop (Modular) ===")
+io.println("Products: " + convert.toString(productCount()))
+io.println("Modules: product, cart, templates (imported)")
+io.println("Starting server on http://0.0.0.0:8080")
+http.serve("0.0.0.0:8080", router)

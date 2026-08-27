@@ -1,0 +1,43 @@
+// Templates module - TLL OS Shop
+from "./cart" import cartCount
+
+export fn layout(title, body) {
+    let count = cartCount()
+    return "<!DOCTYPE html><html><head><meta charset='utf-8'><title>" + title + "</title>"
+        + "<style>"
+        + "body{font-family:system-ui,sans-serif;margin:0;background:#f5f5f5}"
+        + "header{background:#1a1a2e;color:white;padding:1rem 2rem;display:flex;justify-content:space-between;align-items:center}"
+        + "header a{color:white;text-decoration:none;margin-left:1rem}"
+        + ".logo{font-size:1.5rem;font-weight:bold}"
+        + ".container{max-width:1200px;margin:2rem auto;padding:0 1rem}"
+        + ".grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:1.5rem}"
+        + ".card{background:white;border-radius:8px;padding:1.5rem;box-shadow:0 2px 8px rgba(0,0,0,0.1)}"
+        + ".card h3{margin:0 0 0.5rem 0}"
+        + ".price{color:#e94560;font-size:1.3rem;font-weight:bold}"
+        + ".btn{display:inline-block;background:#e94560;color:white;padding:0.5rem 1rem;border-radius:4px;text-decoration:none;border:none;cursor:pointer;font-size:1rem}"
+        + ".btn:hover{background:#c73e54}"
+        + ".btn-sm{padding:0.3rem 0.6rem;font-size:0.85rem}"
+        + "table{width:100%;border-collapse:collapse;background:white;border-radius:8px;overflow:hidden}"
+        + "th,td{padding:0.75rem;text-align:left;border-bottom:1px solid #eee}"
+        + "th{background:#1a1a2e;color:white}"
+        + ".total{text-align:right;font-size:1.3rem;font-weight:bold;margin-top:1rem}"
+        + ".empty{text-align:center;padding:3rem;color:#999}"
+        + ".success{background:#d4edda;color:#155724;padding:1rem;border-radius:4px;margin-bottom:1rem}"
+        + ".product-img{font-size:3rem;text-align:center;margin-bottom:1rem}"
+        + "</style></head><body>"
+        + "<header><div class='logo'>TLL OS Shop</div>"
+        + "<nav><a href='/'>Home</a><a href='/cart'>Cart (" + count + ")</a></nav></header>"
+        + "<div class='container'>" + body + "</div>"
+        + "</body></html>"
+}
+
+export fn productCard(p) {
+    return "<div class='card'><div class='product-img'>[" + p.img + "]</div>"
+        + "<h3>" + p.name + "</h3>"
+        + "<p>" + p.desc + "</p>"
+        + "<div class='price'>$" + math.round(p.price) + "</div>"
+        + "<p style='color:#666;font-size:0.85rem'>Stock: " + p.stock + "</p>"
+        + "<a href='/product/" + p.id + "' class='btn btn-sm'>View</a> "
+        + "<a href='/add/" + p.id + "' class='btn btn-sm'>Add to Cart</a>"
+        + "</div>"
+}
