@@ -1,8 +1,8 @@
 # TLL OS Builtins Specification
 
 **Version**: 1.2
-**Status**: Genesis 0-97 FROZEN; P0-2 extensions 120+ active
-**Total defined**: 101 builtins (idx 0-97, 120-122)
+**Status**: Genesis 0-97 FROZEN; P0-2 extensions 120-122 active; P0-3 extensions 123-125 active
+**Total defined**: 104 builtins (idx 0-97, 120-125)
 **Reserved**: 98-119 (agent/workflow, deferred)
 
 > This file is the canonical builtin ABI specification. It MUST match `host/c/builtin.c` exactly. Run `scripts/check-abi.sh` / `scripts\check-abi.bat` to verify consistency.
@@ -120,7 +120,7 @@
 | 77 | `convert.charCode` | `(s: string) -> int` |
 | 78 | `convert.typeOf` | `(v: any) -> string` |
 
-## fs (Host ABI) — idx 79-90
+## fs (Host ABI) — idx 79-90, 125
 
 | # | Name | Signature |
 |---|------|-----------|
@@ -136,20 +136,21 @@
 | 88 | `fs.fileSize` | `(path: string) -> int` |
 | 89 | `fs.copyFile` | `(src: string, dst: string) -> void` |
 | 90 | `fs.rename` | `(old: string, new: string) -> void` |
+| 125 | `fs.mkdirAll` | `(path: string) -> void` |
 
-## http (Host ABI) — idx 91-97 (STUB)
+## http (Host ABI) — idx 91-97 (PARTIAL)
 
-> HTTP builtins return `null` in bootstrap mode. Full implementation planned for P0-2.8.
+> `http.get` (91) implemented via WinINet (Windows) / socket (POSIX). `post`/`request`/`serve` remain stub. `encodeURI`/`decodeURI`/`parseJSON` are pure string operations.
 
-| # | Name | Signature |
-|---|------|-----------|
-| 91 | `http.get` | `(url: string) -> map` |
-| 92 | `http.post` | `(url: string, body: string) -> map` |
-| 93 | `http.request` | `(options: map) -> map` |
-| 94 | `http.serve` | `(addr: string, handler: fn) -> void` |
-| 95 | `http.encodeURI` | `(s: string) -> string` |
-| 96 | `http.decodeURI` | `(s: string) -> string` |
-| 97 | `http.parseJSON` | `(s: string) -> map` |
+| # | Name | Signature | Status |
+|---|------|-----------|--------|
+| 91 | `http.get` | `(url: string) -> map` | implemented |
+| 92 | `http.post` | `(url: string, body: string) -> map` | stub |
+| 93 | `http.request` | `(options: map) -> map` | stub |
+| 94 | `http.serve` | `(addr: string, handler: fn) -> void` | stub |
+| 95 | `http.encodeURI` | `(s: string) -> string` | implemented |
+| 96 | `http.decodeURI` | `(s: string) -> string` | implemented |
+| 97 | `http.parseJSON` | `(s: string) -> map` | implemented |
 
 ## process (Host ABI) — idx 120-122 (P0-2 extension)
 
@@ -175,6 +176,24 @@ User arguments start at index 2.
 - Sets VM exit flag and returns.
 - Native launcher propagates the exit code to the OS.
 - Default code is 0 if omitted.
+
+## time (Host ABI) — idx 123-124 (P0-3 extension)
+
+> P0-3 time API. Not part of Genesis frozen ABI (0-97).
+
+| # | Name | Signature |
+|---|------|-----------|
+| 123 | `time.now` | `() -> int` |
+| 124 | `time.format` | `(timestamp: int, format: string) -> string` |
+
+### time.now behavior
+- Returns Unix timestamp in seconds (integer).
+- Based on host system clock.
+
+### time.format behavior
+- Formats a Unix timestamp using strftime-style format string.
+- Common formats: `%Y-%m-%d %H:%M:%S`, `%Y-%m-%d`, `%H:%M:%S`.
+- Returns empty string on invalid input.
 
 ---
 

@@ -1,0 +1,60 @@
+// TLL HTTP Client - wraps http.get builtin with error handling
+
+export fn fetch(url: string) -> map {
+    let startTime = time.now()
+    let resp = http.get(url)
+    let elapsed = time.now() - startTime
+
+    let result: map = {}
+    result["url"] = url
+    result["ok"] = resp["ok"]
+    result["status"] = resp["status"]
+    result["elapsed_ms"] = elapsed * 1000
+
+    if resp["ok"] == true {
+        result["body"] = resp["body"]
+        result["body_length"] = strings.length(resp["body"])
+        let parsed = json.parse(resp["body"])
+        if parsed != null {
+            result["json"] = parsed
+            result["is_json"] = true
+        } else {
+            result["is_json"] = false
+        }
+    } else {
+        result["error"] = resp["error"]
+        result["body"] = ""
+        result["body_length"] = 0
+        result["is_json"] = false
+    }
+
+    return result
+}
+
+export fn fetchAndSave(url: string, outputPath: string) -> map {
+    let result = fetch(url)
+    if result["ok"] == true {
+        fs.writeFile(outputPath, result["body"])
+        result["saved_to"] = outputPath
+    }
+    return result
+}
+
+export fn printResponse(result: map) -> void {
+    io.println("")
+    io.println("=== HTTP Response ===")
+    io.println("URL:     " + result["url"])
+    io.println("Status:  " + convert.toString(result["status"]))
+    io.println("OK:      " + convert.toString(result["ok"]))
+    io.println("Time:    " + convert.toString(result["elapsed_ms"]) + "ms")
+    io.println("Length:  " + convert.toString(result["body_length"]) + " bytes")
+    io.println("JSON:    " + convert.toString(result["is_json"]))
+    if result["ok"] == false {
+        io.println("Error:   " + result["error"])
+    }
+    if result["saved_to"] != null {
+        io.println("Saved:   " + result["saved_to"])
+    }
+    io.println("======================")
+    io.println("")
+}

@@ -1,7 +1,7 @@
 # TLL OS Host ABI Specification
 
-**Version**: 1.2
-**Status**: Genesis 0-97 FROZEN; P0-2 extensions 120+ active
+**Version**: 1.3
+**Status**: Genesis 0-97 FROZEN; P0-2 extensions 120-122 active; P0-3 extensions 123-125 active
 
 ---
 
@@ -29,8 +29,10 @@ The Host ABI defines the interface between TLL VM implementations and the underl
 | `http` | 91-97 | 7 | **Host ABI** (stub in bootstrap) |
 | `agent`/`workflow` | 98-119 | 22 | Deferred |
 | `process` | 120-122 | 3 | **Host ABI** (P0-2 extension) |
+| `time` | 123-124 | 2 | **Host ABI** (P0-3 extension) |
+| `fs` mkdirAll | 125 | 1 | **Host ABI** (P0-3 extension) |
 
-**Host ABI total**: 25 builtins (io: 3, fs: 12, http: 7, process: 3)
+**Host ABI total**: 28 builtins (io: 3, fs: 13, http: 7, process: 3, time: 2)
 **Stdlib total**: 76 builtins (pure computation, can be implemented in TLL)
 
 ---
@@ -63,6 +65,7 @@ The Host ABI defines the interface between TLL VM implementations and the underl
 | 88 | `fs.fileSize` | `(path: string) -> int` | Get file size in bytes |
 | 89 | `fs.copyFile` | `(src: string, dst: string) -> void` | Copy file |
 | 90 | `fs.rename` | `(old: string, new: string) -> void` | Rename/move file |
+| 125 | `fs.mkdirAll` | `(path: string) -> void` | Create directory recursively (P0-3) |
 
 ---
 
@@ -104,6 +107,24 @@ User arguments start at index 2.
 - Sets VM exit flag and returns.
 - Native launcher propagates the exit code to the OS.
 - Default code is 0 if omitted.
+
+---
+
+## 6.1 time Module (Host ABI) — P0-3 extension
+
+| Index | Name | Signature | Description |
+|-------|------|-----------|-------------|
+| 123 | `time.now` | `() -> int` | Unix timestamp in seconds |
+| 124 | `time.format` | `(timestamp: int, format: string) -> string` | Format timestamp with strftime-style format |
+
+### time.now behavior
+- Returns integer Unix timestamp (seconds since epoch).
+- Based on host system clock.
+
+### time.format behavior
+- Uses host strftime (POSIX) / strftime_s (Windows).
+- Common formats: `%Y-%m-%d %H:%M:%S`, `%Y-%m-%d`, `%H:%M:%S`.
+- Returns empty string on invalid timestamp or format.
 
 ---
 

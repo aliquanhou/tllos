@@ -1,5 +1,5 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "TLL OS Host ABI Specification - The boundary between TLL Language Core and Host Platform",
   "principle": "Host ABI provides OS-level capabilities. Language-level computation (strings, arrays, math, json, convert) is stdlib, implemented in C for bootstrap but semantically pure-TLL.",
   "consistency_note": "This file MUST match host/c/builtin.c. Run scripts/check-abi.bat / scripts/check-abi.sh to verify.",
@@ -31,12 +31,13 @@
         {"index": 87, "name": "isDir", "params": ["path: string"], "returns": "bool", "host": true},
         {"index": 88, "name": "fileSize", "params": ["path: string"], "returns": "int", "host": true},
         {"index": 89, "name": "copyFile", "params": ["src: string", "dst: string"], "returns": "void", "host": true},
-        {"index": 90, "name": "rename", "params": ["old: string", "new: string"], "returns": "void", "host": true}
+        {"index": 90, "name": "rename", "params": ["old: string", "new: string"], "returns": "void", "host": true},
+        {"index": 125, "name": "mkdirAll", "params": ["path: string"], "returns": "void", "host": true, "status": "p0_3"}
       ]
     },
     "network": {
-      "description": "HTTP network operations (STUB in bootstrap, returns null)",
-      "status": "stub",
+      "description": "HTTP network operations (partial: get implemented, post/request/serve stub)",
+      "status": "partial",
       "functions": [
         {"index": 91, "name": "get", "params": ["url: string"], "returns": "map", "host": true},
         {"index": 92, "name": "post", "params": ["url: string", "body: string"], "returns": "map", "host": true},
@@ -54,6 +55,14 @@
         {"index": 120, "name": "exit", "params": ["code?: int"], "returns": "void", "host": true},
         {"index": 121, "name": "argv", "params": [], "returns": "array<string>", "host": true},
         {"index": 122, "name": "env", "params": [], "returns": "map<string,string>", "host": true}
+      ]
+    },
+    "time": {
+      "description": "Time operations (P0-3 extension, not Genesis frozen)",
+      "status": "implemented",
+      "functions": [
+        {"index": 123, "name": "now", "params": [], "returns": "int", "host": true},
+        {"index": 124, "name": "format", "params": ["timestamp: int", "format: string"], "returns": "string", "host": true}
       ]
     }
   },

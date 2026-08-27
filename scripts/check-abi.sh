@@ -28,10 +28,10 @@ if [ ! -f "$IMPL" ]; then
     exit 1
 fi
 
-# 3. Verify process builtins (120-122) exist in both spec and implementation
-echo "Checking process builtins (P0-2 extension)..."
+# 3. Verify process builtins (120-122) and P0-3 builtins (123-125) exist in both spec and implementation
+echo "Checking process builtins (P0-2 extension) and time/fs builtins (P0-3 extension)..."
 
-for idx in 120 121 122; do
+for idx in 120 121 122 123 124 125; do
     # Check spec
     if ! grep -q "\"index\": $idx" "$SPEC"; then
         echo "  FAIL: idx $idx missing from BUILTINS.json"
@@ -58,8 +58,8 @@ done
 # 5. Verify no unregistered builtin indices in implementation (beyond 122)
 echo "Checking for unregistered builtin indices..."
 MAX_IDX=$(grep -oP 'idx == \K[0-9]+' "$IMPL" | sort -n | tail -1 || echo "0")
-if [ "$MAX_IDX" -gt 122 ]; then
-    echo "  FAIL: builtin.c contains idx $MAX_IDX beyond spec max (122)"
+if [ "$MAX_IDX" -gt 125 ]; then
+    echo "  FAIL: builtin.c contains idx $MAX_IDX beyond spec max (125)"
     ERRORS=$((ERRORS + 1))
 fi
 

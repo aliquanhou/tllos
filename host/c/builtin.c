@@ -10,8 +10,31 @@
 
 #ifdef _WIN32
 #include <windows.h>
+/* WinINet is loaded dynamically to avoid compile-time dependency on wininet.h */
+typedef void* HINTERNET_DYNA;
+typedef HINTERNET_DYNA (__stdcall *InternetOpenA_t)(const char*, unsigned long, const char*, const char*, unsigned long);
+typedef HINTERNET_DYNA (__stdcall *InternetOpenUrlA_t)(HINTERNET_DYNA, const char*, const char*, unsigned long, unsigned long, unsigned long);
+typedef int (__stdcall *InternetReadFile_t)(HINTERNET_DYNA, void*, unsigned long, unsigned long*);
+typedef int (__stdcall *InternetCloseHandle_t)(HINTERNET_DYNA);
+typedef int (__stdcall *HttpQueryInfoA_t)(HINTERNET_DYNA, unsigned long, void*, unsigned long*, unsigned long*);
+#ifndef INTERNET_OPEN_TYPE_PRECONFIG
+#define INTERNET_OPEN_TYPE_PRECONFIG 0
+#endif
+#ifndef INTERNET_FLAG_RELOAD
+#define INTERNET_FLAG_RELOAD 0x80000000
+#endif
+#ifndef INTERNET_FLAG_NO_CACHE_WRITE
+#define INTERNET_FLAG_NO_CACHE_WRITE 0x04000000
+#endif
+#ifndef HTTP_QUERY_STATUS_CODE
+#define HTTP_QUERY_STATUS_CODE 19
+#endif
 #else
 #include <dirent.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <unistd.h>
 #endif
 
 /* === Helper: string operations === */
@@ -681,10 +704,248 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
         }
     }
 
-    /* http (91-97) - simplified for bootstrap */
+    /* http (91-97) - real implementation */
     if (idx >= 91 && idx <= 97) {
-        fprintf(stderr, "tllvm: http builtin %d not available in bootstrap mode\n", idx);
-        return tll_null();
+        if (idx == 91) { /* http.get(url) -> map{status, body, ok} */
+            const char *url = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
+            TLLValue result = tll_map();
+            if (strlen(url) == 0) {
+                map_set(result.as.map, "ok", tll_bool(0));
+                map_set(result.as.map, "status", tll_int(0));
+                map_set(result.as.map, "body", tll_string(""));
+                map_set(result.as.map, "error", tll_string("empty url"));
+                return result;
+            }
+#ifdef _WIN32
+            /* Dynamically load wininet.dll */
+            HMODULE hWinInet = LoadLibraryA("wininet.dll");
+            if (!hWinInet) {
+                map_set(result.as.map, "ok", tll_bool(0));
+                map_set(result.as.map, "status", tll_int(0));
+                map_set(result.as.map, "body", tll_string(""));
+                map_set(result.as.map, "error", tll_string("wininet.dll not found"));
+                return result;
+            }
+            InternetOpenA_t pInternetOpenA = (InternetOpenA_t)GetProcAddress(hWinInet, "InternetOpenA");
+            InternetOpenUrlA_t pInternetOpenUrlA = (InternetOpenUrlA_t)GetProcAddress(hWinInet, "InternetOpenUrlA");
+            InternetReadFile_t pInternetReadFile = (InternetReadFile_t)GetProcAddress(hWinInet, "InternetReadFile");
+            InternetCloseHandle_t pInternetCloseHandle = (InternetCloseHandle_t)GetProcAddress(hWinInet, "InternetCloseHandle");
+            HttpQueryInfoA_t pHttpQueryInfoA = (HttpQueryInfoA_t)GetProcAddress(hWinInet, "HttpQueryInfoA");
+            if (!pInternetOpenA || !pInternetOpenUrlA || !pInternetReadFile || !pInternetCloseHandle || !pHttpQueryInfoA) {
+                map_set(result.as.map, "ok", tll_bool(0));
+                map_set(result.as.map, "status", tll_int(0));
+                map_set(result.as.map, "body", tll_string(""));
+                map_set(result.as.map, "error", tll_string("wininet function lookup failed"));
+                FreeLibrary(hWinInet);
+                return result;
+            }
+            HINTERNET_DYNA hInternet = pInternetOpenA("tllvm/1.0", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+            if (!hInternet) {
+                map_set(result.as.map, "ok", tll_bool(0));
+                map_set(result.as.map, "status", tll_int(0));
+                map_set(result.as.map, "body", tll_string(""));
+                map_set(result.as.map, "error", tll_string("InternetOpen failed"));
+                FreeLibrary(hWinInet);
+                return result;
+            }
+            HINTERNET_DYNA hUrl = pInternetOpenUrlA(hInternet, url, NULL, 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0);
+            if (!hUrl) {
+                DWORD err = GetLastError();
+                char errbuf[256];
+                snprintf(errbuf, sizeof(errbuf), "InternetOpenUrl failed: %lu", err);
+                map_set(result.as.map, "ok", tll_bool(0));
+                map_set(result.as.map, "status", tll_int(0));
+                map_set(result.as.map, "body", tll_string(""));
+                map_set(result.as.map, "error", tll_string(errbuf));
+                pInternetCloseHandle(hInternet);
+                FreeLibrary(hWinInet);
+                return result;
+            }
+            /* Get status code */
+            char statusBuf[32] = {0};
+            DWORD statusLen = sizeof(statusBuf);
+            pHttpQueryInfoA(hUrl, HTTP_QUERY_STATUS_CODE, statusBuf, &statusLen, NULL);
+            int statusCode = atoi(statusBuf);
+            /* Read body */
+            char *body = (char*)malloc(4096);
+            int bodyCap = 4096, bodyLen = 0;
+            char readBuf[4096];
+            DWORD bytesRead = 0;
+            while (pInternetReadFile(hUrl, readBuf, sizeof(readBuf), &bytesRead) && bytesRead > 0) {
+                if (bodyLen + bytesRead > bodyCap) {
+                    bodyCap = bodyCap * 2 + bytesRead;
+                    body = (char*)realloc(body, bodyCap);
+                }
+                memcpy(body + bodyLen, readBuf, bytesRead);
+                bodyLen += bytesRead;
+            }
+            body[bodyLen] = '\0';
+            map_set(result.as.map, "ok", tll_bool(statusCode >= 200 && statusCode < 300));
+            map_set(result.as.map, "status", tll_int(statusCode));
+            map_set(result.as.map, "body", tll_string(body));
+            free(body);
+            pInternetCloseHandle(hUrl);
+            pInternetCloseHandle(hInternet);
+            FreeLibrary(hWinInet);
+            return result;
+#else
+            /* Linux: simple HTTP/1.0 GET via raw socket */
+            /* Parse URL: http://host:port/path */
+            const char *p = url;
+            if (strncmp(p, "http://", 7) == 0) p += 7;
+            else if (strncmp(p, "https://", 8) == 0) {
+                map_set(result.as.map, "ok", tll_bool(0));
+                map_set(result.as.map, "status", tll_int(0));
+                map_set(result.as.map, "body", tll_string(""));
+                map_set(result.as.map, "error", tll_string("https not supported on Linux (use http)"));
+                return result;
+            }
+            char host[256] = {0};
+            int port = 80;
+            const char *pathStart = strchr(p, '/');
+            const char *portStart = strchr(p, ':');
+            if (portStart && (!pathStart || portStart < pathStart)) {
+                int hostLen = (int)(portStart - p);
+                if (hostLen > 255) hostLen = 255;
+                memcpy(host, p, hostLen);
+                port = atoi(portStart + 1);
+            } else {
+                int hostLen = pathStart ? (int)(pathStart - p) : (int)strlen(p);
+                if (hostLen > 255) hostLen = 255;
+                memcpy(host, p, hostLen);
+            }
+            const char *path = pathStart ? pathStart : "/";
+            /* Resolve host */
+            struct hostent *he = gethostbyname(host);
+            if (!he) {
+                map_set(result.as.map, "ok", tll_bool(0));
+                map_set(result.as.map, "status", tll_int(0));
+                map_set(result.as.map, "body", tll_string(""));
+                map_set(result.as.map, "error", tll_string("DNS resolution failed"));
+                return result;
+            }
+            int sock = socket(AF_INET, SOCK_STREAM, 0);
+            if (sock < 0) {
+                map_set(result.as.map, "ok", tll_bool(0));
+                map_set(result.as.map, "status", tll_int(0));
+                map_set(result.as.map, "body", tll_string(""));
+                map_set(result.as.map, "error", tll_string("socket creation failed"));
+                return result;
+            }
+            struct sockaddr_in serv_addr;
+            memset(&serv_addr, 0, sizeof(serv_addr));
+            serv_addr.sin_family = AF_INET;
+            serv_addr.sin_port = htons(port);
+            memcpy(&serv_addr.sin_addr.s_addr, he->h_addr_list[0], he->h_length);
+            if (connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+                close(sock);
+                map_set(result.as.map, "ok", tll_bool(0));
+                map_set(result.as.map, "status", tll_int(0));
+                map_set(result.as.map, "body", tll_string(""));
+                map_set(result.as.map, "error", tll_string("connection failed"));
+                return result;
+            }
+            char request[1024];
+            snprintf(request, sizeof(request),
+                "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: tllvm/1.0\r\nConnection: close\r\n\r\n",
+                path, host);
+            send(sock, request, strlen(request), 0);
+            /* Read response */
+            char *resp = (char*)malloc(65536);
+            int respCap = 65536, respLen = 0;
+            char rbuf[4096];
+            int n;
+            while ((n = recv(sock, rbuf, sizeof(rbuf), 0)) > 0) {
+                if (respLen + n > respCap) {
+                    respCap = respCap * 2 + n;
+                    resp = (char*)realloc(resp, respCap);
+                }
+                memcpy(resp + respLen, rbuf, n);
+                respLen += n;
+            }
+            resp[respLen] = '\0';
+            close(sock);
+            /* Parse status code */
+            int statusCode = 0;
+            const char *sp = strchr(resp, ' ');
+            if (sp) statusCode = atoi(sp + 1);
+            /* Find body (after \r\n\r\n) */
+            const char *bodyStart = strstr(resp, "\r\n\r\n");
+            char *bodyStr = bodyStart ? (char*)(bodyStart + 4) : resp;
+            map_set(result.as.map, "ok", tll_bool(statusCode >= 200 && statusCode < 300));
+            map_set(result.as.map, "status", tll_int(statusCode));
+            map_set(result.as.map, "body", tll_string(bodyStr));
+            free(resp);
+            return result;
+#endif
+        }
+        /* http.post / http.request / http.serve / http.encodeURI / http.decodeURI / http.parseJSON */
+        if (idx == 92) { /* http.post(url, body) -> map */
+            /* Simplified: reuse GET infrastructure not available; return stub with error */
+            TLLValue r = tll_map();
+            map_set(r.as.map, "ok", tll_bool(0));
+            map_set(r.as.map, "status", tll_int(0));
+            map_set(r.as.map, "body", tll_string(""));
+            map_set(r.as.map, "error", tll_string("http.post not yet implemented"));
+            return r;
+        }
+        if (idx == 93) { /* http.request(options) -> map */
+            TLLValue r = tll_map();
+            map_set(r.as.map, "ok", tll_bool(0));
+            map_set(r.as.map, "status", tll_int(0));
+            map_set(r.as.map, "body", tll_string(""));
+            map_set(r.as.map, "error", tll_string("http.request not yet implemented"));
+            return r;
+        }
+        if (idx == 94) { /* http.serve(addr, handler) */
+            fprintf(stderr, "tllvm: http.serve not yet implemented\n");
+            return tll_null();
+        }
+        if (idx == 95) { /* http.encodeURI(s) */
+            const char *s = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
+            char *out = (char*)malloc(strlen(s) * 3 + 1);
+            int oi = 0;
+            for (int i = 0; s[i]; i++) {
+                unsigned char c = (unsigned char)s[i];
+                if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+                    (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
+                    out[oi++] = c;
+                } else {
+                    oi += snprintf(out + oi, 4, "%%%02X", c);
+                }
+            }
+            out[oi] = '\0';
+            TLLValue r = tll_string(out);
+            free(out);
+            return r;
+        }
+        if (idx == 96) { /* http.decodeURI(s) */
+            const char *s = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
+            char *out = (char*)malloc(strlen(s) + 1);
+            int oi = 0;
+            for (int i = 0; s[i]; i++) {
+                if (s[i] == '%' && s[i+1] && s[i+2]) {
+                    char hex[3] = {s[i+1], s[i+2], 0};
+                    out[oi++] = (char)strtol(hex, NULL, 16);
+                    i += 2;
+                } else if (s[i] == '+') {
+                    out[oi++] = ' ';
+                } else {
+                    out[oi++] = s[i];
+                }
+            }
+            out[oi] = '\0';
+            TLLValue r = tll_string(out);
+            free(out);
+            return r;
+        }
+        if (idx == 97) { /* http.parseJSON(s) -> map */
+            if (argCount > 0 && args[0].type == TLL_STRING) {
+                const char *p = args[0].as.string;
+                return tll_parse_json(&p);
+            }
+            return tll_null();
+        }
     }
 
     /* agent/workflow (98-119) - deferred */
@@ -726,6 +987,47 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
             }
         }
         return envMap;
+    }
+
+    /* time (123-124) - P0-3 extension */
+    if (idx == 123) { /* time.now() -> int (unix timestamp seconds) */
+        return tll_int((long long)time(NULL));
+    }
+    if (idx == 124) { /* time.format(ts, fmt) -> string */
+        long long ts = (argCount > 0 && args[0].type == TLL_INT) ? args[0].as.integer : 0;
+        const char *fmt = (argCount > 1 && args[1].type == TLL_STRING) ? args[1].as.string : "%Y-%m-%d %H:%M:%S";
+        time_t t = (time_t)ts;
+        struct tm *tm_info = localtime(&t);
+        if (!tm_info) return tll_string("");
+        char buf[256];
+        strftime(buf, sizeof(buf), fmt, tm_info);
+        return tll_string(buf);
+    }
+
+    /* fs extensions (125) - P0-3 */
+    if (idx == 125) { /* fs.mkdirAll(path) -> void (recursive mkdir) */
+        const char *path = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
+        if (strlen(path) == 0) return tll_null();
+        char *tmp = strdup(path);
+        int len = (int)strlen(tmp);
+        for (int i = 1; i < len; i++) {
+            if (tmp[i] == '/' || tmp[i] == '\\') {
+                tmp[i] = '\0';
+#ifdef _WIN32
+                mkdir(tmp);
+#else
+                mkdir(tmp, 0755);
+#endif
+                tmp[i] = (path[i] == '/') ? '/' : '\\';
+            }
+        }
+#ifdef _WIN32
+        mkdir(tmp);
+#else
+        mkdir(tmp, 0755);
+#endif
+        free(tmp);
+        return tll_null();
     }
 
     fprintf(stderr, "tllvm: unknown builtin index %d\n", idx);

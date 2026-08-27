@@ -1,0 +1,82 @@
+// tllhttp - TLL HTTP CLI Tool
+// Dogfooding project for P0-3: exercises process.argv, http.get, json, fs, time, strings, map, module, error handling
+
+from "./http_client" import fetch, fetchAndSave, printResponse
+
+fn printHelp() -> void {
+    io.println("tllhttp - TLL HTTP Client")
+    io.println("")
+    io.println("Usage:")
+    io.println("  tllhttp get <url>           Fetch URL and print response info")
+    io.println("  tllhttp get <url> -o <file> Fetch URL and save body to file")
+    io.println("  tllhttp help                Show this help")
+    io.println("")
+    io.println("Examples:")
+    io.println("  tllhttp get http://httpbin.org/get")
+    io.println("  tllhttp get http://example.com -o output.html")
+}
+
+fn main() -> void {
+    let argv = process.argv()
+    let argc = arrays.length(argv)
+
+    // argv[0] = tllvm path, argv[1] = bytecode path, argv[2+] = user args
+    if argc < 3 {
+        printHelp()
+        process.exit(1)
+    }
+
+    let command = argv[2]
+
+    if command == "help" {
+        printHelp()
+        process.exit(0)
+    }
+
+    if command == "get" {
+        if argc < 4 {
+            io.println("Error: get command requires a URL")
+            io.println("Usage: tllhttp get <url> [-o <file>]")
+            process.exit(1)
+        }
+
+        let url = argv[3]
+        let outputFile = ""
+        let i = 4
+        while i < argc {
+            if argv[i] == "-o" {
+                if i + 1 < argc {
+                    outputFile = argv[i + 1]
+                    i = i + 2
+                } else {
+                    io.println("Error: -o requires a filename")
+                    process.exit(1)
+                }
+            } else {
+                i = i + 1
+            }
+        }
+
+        io.println("Fetching: " + url)
+        let timestamp = time.format(time.now(), "%Y-%m-%d %H:%M:%S")
+        io.println("Started:  " + timestamp)
+
+        let result = fetch(url)
+        if strings.length(outputFile) > 0 {
+            result = fetchAndSave(url, outputFile)
+        }
+
+        printResponse(result)
+
+        if result["ok"] == false {
+            process.exit(1)
+        }
+        process.exit(0)
+    }
+
+    io.println("Unknown command: " + command)
+    io.println("Run 'tllhttp help' for usage.")
+    process.exit(1)
+}
+
+main()

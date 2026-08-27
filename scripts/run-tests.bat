@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 REM ============================================================
 REM TLL OS - Run All Tests (Windows)
 REM Supports stdout comparison via .expected.txt files.
@@ -85,14 +85,29 @@ echo --- Regression Test Directories ---
 for /d %%D in ("%~dp0..\tests\regression\*") do (
     if exist "%%D\main.tllbc" (
         set /a TOTAL+=1
+        set "EXPECT_ERROR=0"
+        if exist "%%D\test.json" (
+            findstr /c:"\"expectError\": true" "%%D\test.json" >nul 2>&1
+            if not errorlevel 1 set "EXPECT_ERROR=1"
+        )
         "%TLLVM_EXE%" "%%D\main.tllbc" >"%TMPFILE%" 2>&1
         set "ACTUAL=!ERRORLEVEL!"
-        if not "!ACTUAL!"=="0" (
-            echo   FAIL: %%~nxD\main.tllbc ^(exit=!ACTUAL!^)
-            set /a FAILED+=1
+        if "!EXPECT_ERROR!"=="1" (
+            if "!ACTUAL!"=="0" (
+                echo   FAIL: %%~nxD\main.tllbc ^(expected error, got exit 0^)
+                set /a FAILED+=1
+            ) else (
+                echo   PASS: %%~nxD\main.tllbc ^(error as expected^)
+                set /a PASSED+=1
+            )
         ) else (
-            echo   PASS: %%~nxD\main.tllbc
-            set /a PASSED+=1
+            if not "!ACTUAL!"=="0" (
+                echo   FAIL: %%~nxD\main.tllbc ^(exit=!ACTUAL!^)
+                set /a FAILED+=1
+            ) else (
+                echo   PASS: %%~nxD\main.tllbc
+                set /a PASSED+=1
+            )
         )
     )
 )
