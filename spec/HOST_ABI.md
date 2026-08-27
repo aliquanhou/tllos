@@ -82,13 +82,32 @@ The Host ABI defines the interface between TLL VM implementations and the underl
 
 ---
 
-## 6. process Module (Host ABI) — P0-2 extension
+## 6. process Module (Host ABI) — P0-2 + P0-3.1 extension
 
 | Index | Name | Signature | Description |
 |-------|------|-----------|-------------|
 | 120 | `process.exit` | `(code?: int) -> void` | Exit VM with status code |
 | 121 | `process.argv` | `() -> array<string>` | Command-line arguments |
 | 122 | `process.env` | `() -> map<string,string>` | Environment variables |
+| 127 | `process.cwd` | `() -> string` | Current working directory |
+| 128 | `process.chdir` | `(path: string) -> void` | Change working directory |
+| 131 | `process.platform` | `() -> string` | OS platform: "windows"/"linux"/"darwin" |
+
+## 6b. time Module (Host ABI) — P0-3.1
+
+| Index | Name | Signature | Description |
+|-------|------|-----------|-------------|
+| 123 | `time.now` | `() -> int` | Unix timestamp in seconds |
+| 124 | `time.nowMs` | `() -> int` | Unix timestamp in milliseconds |
+| 125 | `time.sleep` | `(ms: int) -> void` | Sleep for given milliseconds |
+| 126 | `time.date` | `() -> string` | Local date/time as "YYYY-MM-DD HH:MM:SS" |
+
+## 6c. io stderr (Host ABI) — P0-3.1
+
+| Index | Name | Signature | Description |
+|-------|------|-----------|-------------|
+| 129 | `io.eprint` | `(value: any) -> void` | Print to stderr (no newline) |
+| 130 | `io.eprintln` | `(value: any) -> void` | Print to stderr + newline |
 
 ### process.argv layout
 `[tllvm_path, bytecode_path, user_arg1, user_arg2, ...]`

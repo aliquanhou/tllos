@@ -1205,6 +1205,8 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
         if fnName == "println" { return 0 }
         if fnName == "print" { return 1 }
         if fnName == "readLine" { return 2 }
+        if fnName == "eprint" { return 129 }
+        if fnName == "eprintln" { return 130 }
     }
     if modName == "json" {
         if fnName == "parse" { return 3 }
@@ -1343,6 +1345,15 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
     }
     if modName == "process" {
         if fnName == "exit" { return 120 }
+        if fnName == "cwd" { return 127 }
+        if fnName == "chdir" { return 128 }
+        if fnName == "platform" { return 131 }
+    }
+    if modName == "time" {
+        if fnName == "now" { return 123 }
+        if fnName == "nowMs" { return 124 }
+        if fnName == "sleep" { return 125 }
+        if fnName == "date" { return 126 }
     }
     return -1
 }

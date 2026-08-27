@@ -10,8 +10,16 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <direct.h>
+#include <winhttp.h>
+#pragma comment(lib, "winhttp.lib")
+#define CHDIR _chdir
+#define GETCWD _getcwd
 #else
 #include <dirent.h>
+#include <unistd.h>
+#define CHDIR chdir
+#define GETCWD getcwd
 #endif
 
 /* === Helper: string operations === */
@@ -726,6 +734,80 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
             }
         }
         return envMap;
+    }
+
+    /* time (123-126) - P0-3.1 */
+    if (idx == 123) { /* time.now() -> int (unix seconds) */
+        return tll_int((long long)time(NULL));
+    }
+    if (idx == 124) { /* time.nowMs() -> int (unix milliseconds) */
+        struct timespec ts;
+#ifdef _WIN32
+        /* Windows: use GetSystemTimeAsFileTime for ms precision */
+        FILETIME ft;
+        GetSystemTimeAsFileTime(&ft);
+        ULARGE_INTEGER uli;
+        uli.LowPart = ft.dwLowDateTime;
+        uli.HighPart = ft.dwHighDateTime;
+        /* FILETIME is 100-ns intervals since 1601-01-01; convert to unix ms */
+        long long ms = (long long)(uli.QuadPart / 10000LL) - 11644473600000LL;
+        return tll_int(ms);
+#else
+        clock_gettime(CLOCK_REALTIME, &ts);
+        return tll_int((long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
+#endif
+    }
+    if (idx == 125) { /* time.sleep(ms) -> void */
+        int ms = (argCount > 0 && args[0].type == TLL_INT) ? (int)args[0].as.integer : 0;
+        if (ms > 0) {
+#ifdef _WIN32
+            Sleep(ms);
+#else
+            usleep(ms * 1000);
+#endif
+        }
+        return tll_null();
+    }
+    if (idx == 126) { /* time.date() -> string (YYYY-MM-DD HH:MM:SS) */
+        time_t now = time(NULL);
+        struct tm *t = localtime(&now);
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d:%02d",
+                 t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                 t->tm_hour, t->tm_min, t->tm_sec);
+        return tll_string(buf);
+    }
+
+    /* process extensions (127-128, 131) - P0-3.1 */
+    if (idx == 127) { /* process.cwd() -> string */
+        char buf[4096];
+        if (GETCWD(buf, sizeof(buf))) return tll_string(buf);
+        return tll_string("");
+    }
+    if (idx == 128) { /* process.chdir(path) -> void */
+        const char *path = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
+        CHDIR(path);
+        return tll_null();
+    }
+    if (idx == 131) { /* process.platform() -> string */
+#ifdef _WIN32
+        return tll_string("windows");
+#elif __APPLE__
+        return tll_string("darwin");
+#else
+        return tll_string("linux");
+#endif
+    }
+
+    /* io stderr (129-130) - P0-3.1 */
+    if (idx == 129) { /* io.eprint(value) -> void (stderr) */
+        if (argCount > 0) { char *s = tll_to_string(args[0]); fputs(s, stderr); free(s); }
+        return tll_null();
+    }
+    if (idx == 130) { /* io.eprintln(value) -> void (stderr) */
+        if (argCount > 0) { char *s = tll_to_string(args[0]); fputs(s, stderr); free(s); }
+        fputc('\n', stderr);
+        return tll_null();
     }
 
     fprintf(stderr, "tllvm: unknown builtin index %d\n", idx);
