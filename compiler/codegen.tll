@@ -78,6 +78,7 @@ let cg_fnMap: map = json.parse("{}")
 let cg_fnDeclMap: map = json.parse("{}")
 let cg_varMap: map = json.parse("{}")
 let cg_globalMap: map = json.parse("{}")
+let cg_enumMap: map = json.parse("{}")  // EnumName -> { variantName: value }
 let cg_anonCounter = 0
 
 // ============ Map helpers ============
@@ -477,6 +478,32 @@ export fn compile(program: map) -> map {
             cg_emit(OP_STORE_GLOBAL, [gIdx, fnValReg])
         }
         fvi = fvi + 1
+    }
+
+    // First pass: collect Enum declarations for variant resolution (Color.Red -> value)
+    let ei = 0
+    while ei < arrays.length(stmts) {
+        let estmt = arrays.get(stmts, ei)
+        if estmt.kind == "Enum" {
+            let enumName = estmt.name
+            let variantMap = json.parse("{}")
+            let nextValue = 0
+            let vi = 0
+            while vi < arrays.length(estmt.variants) {
+                let v = arrays.get(estmt.variants, vi)
+                let val = nextValue
+                if v.value != null {
+                    if v.value.kind == "Int" {
+                        val = convert.toInt(v.value.value)
+                    }
+                }
+                variantMap[v.name] = val
+                nextValue = val + 1
+                vi = vi + 1
+            }
+            cg_enumMap[enumName] = variantMap
+        }
+        ei = ei + 1
     }
 
     let mi = 0
@@ -1039,6 +1066,19 @@ fn cg_compileExpression(expr: map) -> int {
     if kind == "Unary" { return cg_compileUnary(expr) }
     if kind == "Call" { return cg_compileCall(expr) }
     if kind == "Member" {
+        // Enum variant access: Color.Red -> constant integer value
+        if expr.object["kind"] == "Ident" {
+            let enumName = expr.object["name"]
+            if cg_enumMap[enumName] != null {
+                let variantMap = cg_enumMap[enumName]
+                let variantValue = variantMap[expr.property]
+                if variantValue != null {
+                    let reg = cg_allocReg()
+                    cg_emit(OP_LOAD_CONST, [reg, cg_addConstant(variantValue)])
+                    return reg
+                }
+            }
+        }
         // Special: process.argv -> call builtin 121 (returns argv array)
         if expr.object["kind"] == "Ident" && expr.object["name"] == "process" && expr.property == "argv" {
             let fnReg = cg_allocReg()

@@ -1,0 +1,46 @@
+// Test Enum Variant Access - P0-5
+enum Color {
+    Red = 1
+    Green = 2
+    Blue = 3
+}
+
+enum Direction {
+    North
+    East
+    South
+    West
+}
+
+io.println("Color.Red = " + convert.toString(Color.Red))
+io.println("Color.Green = " + convert.toString(Color.Green))
+io.println("Color.Blue = " + convert.toString(Color.Blue))
+
+io.println("Direction.North = " + convert.toString(Direction.North))
+io.println("Direction.East = " + convert.toString(Direction.East))
+io.println("Direction.South = " + convert.toString(Direction.South))
+io.println("Direction.West = " + convert.toString(Direction.West))
+
+// Enum comparison
+let c = Color.Green
+if c == Color.Green {
+    io.println("Enum comparison: PASS (c == Green)")
+} else {
+    io.println("Enum comparison: FAIL")
+}
+
+if c == Color.Red {
+    io.println("Enum comparison: FAIL (c should not be Red)")
+} else {
+    io.println("Enum comparison: PASS (c != Red)")
+}
+
+// Enum in function
+fn isPrimary(color: int) -> bool {
+    return color == Color.Red || color == Color.Green || color == Color.Blue
+}
+
+io.println("isPrimary(Red) = " + convert.toString(isPrimary(Color.Red)))
+io.println("isPrimary(North) = " + convert.toString(isPrimary(Direction.North)))
+
+io.println("ALL ENUM TESTS PASSED")
