@@ -483,7 +483,7 @@ export fn compile(program: map) -> map {
     while mi < arrays.length(stmts) {
         let stmt = arrays.get(stmts, mi)
         let kind = stmt.kind
-        if kind != "Fn" && kind != "Struct" && kind != "Import" && kind != "FromImport" && kind != "Export" {
+        if kind != "Fn" && kind != "Struct" && kind != "Enum" && kind != "Import" && kind != "FromImport" && kind != "Export" {
             cg_compileStatement(stmt)
         }
         mi = mi + 1

@@ -86,6 +86,7 @@ fn parseStatement() -> map {
     if stmtType == "CONST" { return parseConstStatement() }
     if stmtType == "FN" { return parseFnDeclaration() }
     if stmtType == "STRUCT" { return parseStructDeclaration() }
+    if stmtType == "ENUM" { return parseEnumDeclaration() }
     if stmtType == "RETURN" { return parseReturnStatement() }
     if stmtType == "IF" { return parseIfStatement() }
     if stmtType == "WHILE" { return parseWhileStatement() }
@@ -180,6 +181,31 @@ fn parseStructDeclaration() -> map {
     let node = makeNode("Struct", t.line, t.column)
     node.name = name
     node.fields = fields
+    return node
+}
+
+fn parseEnumDeclaration() -> map {
+    let t = parse_advance() // enum
+    let nameTok = parse_expect("IDENT", "enum name")
+    let name = nameTok.tkValue
+    parse_expect("LBRACE", "'{'")
+    let variants: list = []
+    while !parse_check("RBRACE") && !parse_isAtEnd() {
+        let variantNameTok = parse_expect("IDENT", "variant name")
+        let variantName = variantNameTok.tkValue
+        let variantValue: map = null
+        if parse_match("EQ") {
+            variantValue = parseExpression()
+        }
+        arrays.push(variants, { name: variantName, value: variantValue })
+        if !parse_match("COMMA") {
+            if parse_check("RBRACE") { break }
+        }
+    }
+    parse_expect("RBRACE", "'}'")
+    let node = makeNode("Enum", t.line, t.column)
+    node.name = name
+    node.variants = variants
     return node
 }
 
