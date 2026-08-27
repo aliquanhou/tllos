@@ -982,6 +982,14 @@ fn cg_compileExpression(expr: map) -> int {
             cg_emit(OP_CALL, [reg, fnReg + 100000, 0])
             return reg
         }
+        // Special: process.env -> call builtin 122 (returns env map)
+        if expr.object["kind"] == "Ident" && expr.object["name"] == "process" && expr.property == "env" {
+            let fnReg = cg_allocReg()
+            cg_emit(OP_LOAD_BUILTIN, [fnReg, 122])
+            let reg = cg_allocReg()
+            cg_emit(OP_CALL, [reg, fnReg + 100000, 0])
+            return reg
+        }
         let objReg = cg_compileExpression(expr.object)
         let reg = cg_allocReg()
         cg_emit(OP_MEMBER_GET, [reg, objReg, cg_addConstant(expr.property)])
