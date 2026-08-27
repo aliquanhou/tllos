@@ -78,6 +78,7 @@ let cg_fnMap: map = json.parse("{}")
 let cg_fnDeclMap: map = json.parse("{}")
 let cg_varMap: map = json.parse("{}")
 let cg_globalMap: map = json.parse("{}")
+let cg_anonCounter = 0
 
 // ============ Map helpers ============
 fn cg_fnMapGet(key: string) -> any { return cg_fnMap[key] }
@@ -195,9 +196,9 @@ fn cg_collectIdentsInExpr(expr: any, result: list) -> void {
         }
         return
     }
-    if convert.typeOf(expr) != "object" { return }
-    if expr.kind == "Fn" {
-        // Recurse into nested function body, but skip its params/locals
+    let t = convert.typeOf(expr)
+    if t != "object" && t != "map" { return }
+    if expr.kind == "Fn" || expr.kind == "FnExpr" {
         if expr.body != null {
             cg_collectIdentsInExpr(expr.body, result)
         }
@@ -232,6 +233,38 @@ fn cg_listContains(lst: list, name: string) -> bool {
     return false
 }
 
+// Recursively collect all FnExpr (anonymous function) nodes in an expression tree
+fn cg_collectFnExprsInExpr(expr: any, result: list) -> void {
+    if expr == null { return }
+    if convert.typeOf(expr) == "array" {
+        let i = 0
+        while i < arrays.length(expr) {
+            cg_collectFnExprsInExpr(arrays.get(expr, i), result)
+            i = i + 1
+        }
+        return
+    }
+    let t = convert.typeOf(expr)
+    if t != "object" && t != "map" { return }
+    if expr.kind == "FnExpr" {
+        arrays.push(result, expr)
+        if expr.body != null {
+            cg_collectFnExprsInExpr(expr.body, result)
+        }
+        return
+    }
+    let keys = ["left", "right", "operand", "callee", "args", "object", "index",
+        "value", "condition", "body", "elseBody", "statements", "elements", "entries",
+        "expression", "iterable", "catchBody", "finallyBlock", "consequent", "alternate",
+        "declaration", "params", "returnType"]
+    let ki = 0
+    while ki < arrays.length(keys) {
+        let k = arrays.get(keys, ki)
+        if expr[k] != null { cg_collectFnExprsInExpr(expr[k], result) }
+        ki = ki + 1
+    }
+}
+
 fn cg_collectAllParamsAndLocals(fnDecl: map, result: list) -> void {
     // Add this function's params
     let pi = 0
@@ -258,13 +291,10 @@ fn cg_collectAllParamsAndLocals(fnDecl: map, result: list) -> void {
 
 fn cg_collectReferencedNames(fnDecl: map) -> list {
     let result: list = []
-    // Collect all params/locals of this function and all nested functions
     let allBound: list = []
     cg_collectAllParamsAndLocals(fnDecl, allBound)
-    // Collect all idents in this function's body (including nested bodies)
     let allIdents: list = []
     if fnDecl.body != null { cg_collectIdentsInExpr(fnDecl.body, allIdents) }
-    // Filter out all bound names
     let ii = 0
     while ii < arrays.length(allIdents) {
         let name = arrays.get(allIdents, ii)
@@ -310,6 +340,25 @@ fn cg_collectCapturedByNested(fnDecl: map) -> list {
                 ri = ri + 1
             }
         }
+        // Also scan for FnExpr (anonymous functions) in all statement expressions
+        if stmt != null {
+            let fnExprs: list = []
+            cg_collectFnExprsInExpr(stmt, fnExprs)
+            let fi = 0
+            while fi < arrays.length(fnExprs) {
+                let fnExpr = arrays.get(fnExprs, fi)
+                let refs2 = cg_collectReferencedNames(fnExpr)
+                let ri2 = 0
+                while ri2 < arrays.length(refs2) {
+                    let ref2 = arrays.get(refs2, ri2)
+                    if cg_listContains(boundNames, ref2) && cg_listContains(result, ref2) == false {
+                        arrays.push(result, ref2)
+                    }
+                    ri2 = ri2 + 1
+                }
+                fi = fi + 1
+            }
+        }
         si = si + 1
     }
     return result
@@ -333,6 +382,7 @@ export fn compile(program: map) -> map {
     cg_fnDeclMap = json.parse("{}")
     cg_varMap = json.parse("{}")
     cg_globalMap = json.parse("{}")
+    cg_anonCounter = 0
 
     let stmts = program.statements
 
@@ -433,7 +483,7 @@ export fn compile(program: map) -> map {
     while mi < arrays.length(stmts) {
         let stmt = arrays.get(stmts, mi)
         let kind = stmt.kind
-        if kind != "Fn" && kind != "Import" && kind != "FromImport" && kind != "Export" {
+        if kind != "Fn" && kind != "Struct" && kind != "Enum" && kind != "Import" && kind != "FromImport" && kind != "Export" {
             cg_compileStatement(stmt)
         }
         mi = mi + 1
@@ -442,6 +492,21 @@ export fn compile(program: map) -> map {
     cg_emit(OP_HALT, [])
     arrays.push(cg_allFnInstructions, cg_instructions)
     arrays.push(cg_allFnLocalCounts, cg_currentLocalCount)
+
+    // Compile any dynamically added functions (anonymous functions added during body compilation)
+    // These were added to cg_functions after the second pass loop ended
+    while arrays.length(cg_allFnInstructions) < arrays.length(cg_functions) {
+        let dfi = arrays.length(cg_allFnInstructions)
+        let fnObj = arrays.get(cg_functions, dfi)
+        if fnObj.decl != null {
+            cg_compileFunction(fnObj.decl)
+            arrays.push(cg_allFnInstructions, cg_instructions)
+            arrays.push(cg_allFnLocalCounts, cg_currentLocalCount)
+        } else {
+            arrays.push(cg_allFnInstructions, [])
+            arrays.push(cg_allFnLocalCounts, 0)
+        }
+    }
 
     // Rebuild functions list
     let finalFunctions: list = []
@@ -1004,6 +1069,88 @@ fn cg_compileExpression(expr: map) -> int {
     }
     if kind == "Array" { return cg_compileArray(expr) }
     if kind == "Map" { return cg_compileMap(expr) }
+    if kind == "StructLiteral" {
+        // Struct literal: TypeName { field: value, ... }
+        // Compile as map with __struct field for type identification
+        let entryCount = arrays.length(expr.entries)
+        // Push __struct key
+        let k0 = cg_allocReg()
+        cg_emit(OP_LOAD_CONST, [k0, cg_addConstant("__struct")])
+        let v0 = cg_allocReg()
+        cg_emit(OP_LOAD_CONST, [v0, cg_addConstant(expr.structName)])
+        cg_emit(OP_PUSH, [k0])
+        cg_emit(OP_PUSH, [v0])
+        let ei = 0
+        while ei < entryCount {
+            let entry = arrays.get(expr.entries, ei)
+            let kReg = cg_allocReg()
+            cg_emit(OP_LOAD_CONST, [kReg, cg_addConstant(entry.key)])
+            let vReg = cg_compileExpression(entry.value)
+            cg_emit(OP_PUSH, [kReg])
+            cg_emit(OP_PUSH, [vReg])
+            ei = ei + 1
+        }
+        let reg = cg_allocReg()
+        cg_emit(OP_MAKE_MAP, [reg, entryCount + 1])
+        return reg
+    }
+    if kind == "FnExpr" {
+        // Anonymous function: register as function, create Function Value
+        let anonName = "__anon_" + convert.toString(cg_anonCounter)
+        cg_anonCounter = cg_anonCounter + 1
+        expr.internalName = anonName
+        // Determine parent function name
+        let parentName = null
+        if cg_currentFn != null { parentName = cg_currentFn.name }
+        expr.parentInternalName = parentName
+        // Register function (will be compiled in the dynamic function loop)
+        let fnIdx = arrays.length(cg_functions)
+        cg_fnMapSet(anonName, fnIdx)
+        cg_fnDeclMap[anonName] = expr
+        let isTop = false
+        if parentName == null { isTop = true }
+        let fnObj = { name: anonName, paramCount: arrays.length(expr.params), instructions: [], localCount: 0, decl: expr, isTopLevel: isTop, parentInternalName: parentName, upvalueMap: null }
+        arrays.push(cg_functions, fnObj)
+        // Create Function Value: use OP_CLOSURE if there are captured variables
+        let fnValReg = 0
+        if cg_closureEnvSize > 0 {
+            // Has captured variables: use OP_CLOSURE
+            let operands: list = []
+            fnValReg = cg_allocReg()
+            arrays.push(operands, fnValReg)
+            arrays.push(operands, fnIdx)
+            arrays.push(operands, cg_closureEnvSize)
+            let si = 0
+            while si < cg_closureEnvSize {
+                arrays.push(operands, si)
+                si = si + 1
+            }
+            cg_emit(OP_CLOSURE, operands)
+        } else {
+            // No capture: create plain {__fn, fnIdx, env:null}
+            let k1 = cg_allocReg()
+            cg_emit(OP_LOAD_CONST, [k1, cg_addConstant("__fn")])
+            let v1 = cg_allocReg()
+            cg_emit(OP_LOAD_CONST, [v1, cg_addConstant(true)])
+            cg_emit(OP_PUSH, [k1])
+            cg_emit(OP_PUSH, [v1])
+            let k2 = cg_allocReg()
+            cg_emit(OP_LOAD_CONST, [k2, cg_addConstant("fnIdx")])
+            let v2 = cg_allocReg()
+            cg_emit(OP_LOAD_CONST, [v2, cg_addConstant(fnIdx)])
+            cg_emit(OP_PUSH, [k2])
+            cg_emit(OP_PUSH, [v2])
+            let k3 = cg_allocReg()
+            cg_emit(OP_LOAD_CONST, [k3, cg_addConstant("env")])
+            let v3 = cg_allocReg()
+            cg_emit(OP_LOAD_CONST, [v3, cg_addConstant(null)])
+            cg_emit(OP_PUSH, [k3])
+            cg_emit(OP_PUSH, [v3])
+            fnValReg = cg_allocReg()
+            cg_emit(OP_MAKE_MAP, [fnValReg, 3])
+        }
+        return fnValReg
+    }
 
     let reg = cg_allocReg()
     cg_emit(OP_LOAD_CONST, [reg, cg_addConstant(null)])
@@ -1205,6 +1352,8 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
         if fnName == "println" { return 0 }
         if fnName == "print" { return 1 }
         if fnName == "readLine" { return 2 }
+        if fnName == "eprint" { return 129 }
+        if fnName == "eprintln" { return 130 }
     }
     if modName == "json" {
         if fnName == "parse" { return 3 }
@@ -1343,15 +1492,24 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
     }
     if modName == "process" {
         if fnName == "exit" { return 120 }
-        if fnName == "argv" { return 121 }
-        if fnName == "env" { return 122 }
+        if fnName == "cwd" { return 127 }
+        if fnName == "chdir" { return 128 }
+        if fnName == "platform" { return 131 }
     }
     if modName == "time" {
         if fnName == "now" { return 123 }
-        if fnName == "format" { return 124 }
+        if fnName == "nowMs" { return 124 }
+        if fnName == "sleep" { return 125 }
+        if fnName == "date" { return 126 }
     }
-    if modName == "fs" {
-        if fnName == "mkdirAll" { return 125 }
+    if modName == "http" {
+        if fnName == "get" { return 91 }
+        if fnName == "post" { return 92 }
+        if fnName == "request" { return 93 }
+        if fnName == "serve" { return 94 }
+        if fnName == "encodeURI" { return 95 }
+        if fnName == "decodeURI" { return 96 }
+        if fnName == "parseJSON" { return 97 }
     }
     return -1
 }

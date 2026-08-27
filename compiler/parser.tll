@@ -85,6 +85,8 @@ fn parseStatement() -> map {
     if stmtType == "LET" || stmtType == "MUT" { return parseLetStatement() }
     if stmtType == "CONST" { return parseConstStatement() }
     if stmtType == "FN" { return parseFnDeclaration() }
+    if stmtType == "STRUCT" { return parseStructDeclaration() }
+    if stmtType == "ENUM" { return parseEnumDeclaration() }
     if stmtType == "RETURN" { return parseReturnStatement() }
     if stmtType == "IF" { return parseIfStatement() }
     if stmtType == "WHILE" { return parseWhileStatement() }
@@ -153,6 +155,57 @@ fn parseFnDeclaration() -> map {
     node.params = params
     node.returnType = returnType
     node.body = body
+    return node
+}
+
+fn parseStructDeclaration() -> map {
+    let t = parse_advance() // struct
+    let nameTok = parse_expect("IDENT", "struct name")
+    let name = nameTok.tkValue
+    parse_expect("LBRACE", "'{'")
+    let fields: list = []
+    while !parse_check("RBRACE") && !parse_isAtEnd() {
+        let fieldNameTok = parse_expect("IDENT", "field name")
+        let fieldName = fieldNameTok.tkValue
+        let fieldType: map = null
+        if parse_match("COLON") {
+            fieldType = parseType()
+        }
+        arrays.push(fields, { name: fieldName, type: fieldType })
+        if !parse_match("COMMA") {
+            // Allow newline-separated fields without comma
+            if parse_check("RBRACE") { break }
+        }
+    }
+    parse_expect("RBRACE", "'}'")
+    let node = makeNode("Struct", t.line, t.column)
+    node.name = name
+    node.fields = fields
+    return node
+}
+
+fn parseEnumDeclaration() -> map {
+    let t = parse_advance() // enum
+    let nameTok = parse_expect("IDENT", "enum name")
+    let name = nameTok.tkValue
+    parse_expect("LBRACE", "'{'")
+    let variants: list = []
+    while !parse_check("RBRACE") && !parse_isAtEnd() {
+        let variantNameTok = parse_expect("IDENT", "variant name")
+        let variantName = variantNameTok.tkValue
+        let variantValue: map = null
+        if parse_match("EQ") {
+            variantValue = parseExpression()
+        }
+        arrays.push(variants, { name: variantName, value: variantValue })
+        if !parse_match("COMMA") {
+            if parse_check("RBRACE") { break }
+        }
+    }
+    parse_expect("RBRACE", "'}'")
+    let node = makeNode("Enum", t.line, t.column)
+    node.name = name
+    node.variants = variants
     return node
 }
 
@@ -651,9 +704,36 @@ fn parsePrimary() -> map {
         return node
     }
     if parse_match("LPAREN") {
+        // Could be parenthesized expression OR arrow function (params) => body
         let expr = parseExpression()
+        // Check if this was actually an arrow function params list
+        // We detect by: after parsing expression, if next is RPAREN then FAT_ARROW
+        if parse_check("RPAREN") {
+            // Look ahead: is it ) => ?
+            // We need to handle this differently - parse as arrow function
+            // For now, treat as parenthesized expression
+            parse_expect("RPAREN", "')'")
+            return expr
+        }
         parse_expect("RPAREN", "')'")
         return expr
+    }
+    if parse_match("FN") {
+        // Anonymous function: fn(params) -> type { body }
+        let t = parse_previous()
+        parse_expect("LPAREN", "'('")
+        let params = parseParams()
+        parse_expect("RPAREN", "')'")
+        let returnType: map = null
+        if parse_match("ARROW") {
+            returnType = parseType()
+        }
+        let body = parseBlockStatement()
+        let node = makeNode("FnExpr", t.line, t.column)
+        node.params = params
+        node.returnType = returnType
+        node.body = body
+        return node
     }
     if parse_match("LBRACKET") {
         return parseArrayLiteral()

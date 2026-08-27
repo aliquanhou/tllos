@@ -1,0 +1,194 @@
+// TLL Standard Library - String operations
+// Implemented in TLL itself
+
+// Get string length
+fn string_len(s: string) -> int {
+    return strings.length(s)
+}
+
+// Convert to uppercase (basic ASCII)
+fn string_toUpper(s: string) -> string {
+    let result = ""
+    let i = 0
+    while i < strings.length(s) {
+        let c = strings.charAt(s, i)
+        if c >= "a" && c <= "z" {
+            let code = convert.toInt(c[0]) - 32
+            result = result + convert.toString(code)
+        } else {
+            result = result + c
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// Convert to lowercase (basic ASCII)
+fn string_toLower(s: string) -> string {
+    let result = ""
+    let i = 0
+    while i < strings.length(s) {
+        let c = strings.charAt(s, i)
+        if c >= "A" && c <= "Z" {
+            let code = convert.toInt(c[0]) + 32
+            result = result + convert.toString(code)
+        } else {
+            result = result + c
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// Check if string starts with prefix
+fn string_startsWith(s: string, prefix: string) -> bool {
+    if strings.length(prefix) > strings.length(s) {
+        return false
+    }
+    let i = 0
+    while i < strings.length(prefix) {
+        if strings.charAt(s, i) != strings.charAt(prefix, i) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// Check if string ends with suffix
+fn string_endsWith(s: string, suffix: string) -> bool {
+    let sLen = strings.length(s)
+    let sufLen = strings.length(suffix)
+    if sufLen > sLen {
+        return false
+    }
+    let i = 0
+    while i < sufLen {
+        if strings.charAt(s, sLen - sufLen + i) != strings.charAt(suffix, i) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// Check if string contains substring
+fn string_contains(s: string, sub: string) -> bool {
+    let sLen = strings.length(s)
+    let subLen = strings.length(sub)
+    if subLen > sLen {
+        return false
+    }
+    let i = 0
+    while i <= sLen - subLen {
+        let match = true
+        let j = 0
+        while j < subLen {
+            if strings.charAt(s, i + j) != strings.charAt(sub, j) {
+                match = false
+                j = subLen
+            }
+            j = j + 1
+        }
+        if match == true {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+// Get substring
+fn string_substring(s: string, start: int, end: int) -> string {
+    let result = ""
+    let i = start
+    while i < end && i < strings.length(s) {
+        result = result + strings.charAt(s, i)
+        i = i + 1
+    }
+    return result
+}
+
+// Split string by delimiter (single char)
+fn string_split(s: string, delim: string) -> list {
+    let result: list = []
+    let current = ""
+    let i = 0
+    while i < strings.length(s) {
+        let c = strings.charAt(s, i)
+        if c == delim {
+            arrays.push(result, current)
+            current = ""
+        } else {
+            current = current + c
+        }
+        i = i + 1
+    }
+    arrays.push(result, current)
+    return result
+}
+
+// Trim whitespace from both ends
+fn string_trim(s: string) -> string {
+    let sLen = strings.length(s)
+    // Find first non-whitespace
+    let start = 0
+    let startDone = false
+    while start < sLen && startDone == false {
+        let c = strings.charAt(s, start)
+        if c == " " || c == "\t" || c == "\n" || c == "\r" {
+            start = start + 1
+        } else {
+            startDone = true
+        }
+    }
+    // Find last non-whitespace
+    let end = sLen - 1
+    let endDone = false
+    while end >= 0 && endDone == false {
+        let c = strings.charAt(s, end)
+        if c == " " || c == "\t" || c == "\n" || c == "\r" {
+            end = end - 1
+        } else {
+            endDone = true
+        }
+    }
+    if start > end {
+        return ""
+    }
+    return string_substring(s, start, end + 1)
+}
+
+// Repeat string n times
+fn string_repeat(s: string, n: int) -> string {
+    let result = ""
+    let i = 0
+    while i < n {
+        result = result + s
+        i = i + 1
+    }
+    return result
+}
+
+// Replace first occurrence
+fn string_replace(s: string, old: string, new: string) -> string {
+    let sLen = strings.length(s)
+    let oldLen = strings.length(old)
+    let i = 0
+    while i <= sLen - oldLen {
+        let match = true
+        let j = 0
+        while j < oldLen {
+            if strings.charAt(s, i + j) != strings.charAt(old, j) {
+                match = false
+                j = oldLen
+            }
+            j = j + 1
+        }
+        if match == true {
+            return string_substring(s, 0, i) + new + string_substring(s, i + oldLen, sLen)
+        }
+        i = i + 1
+    }
+    return s
+}

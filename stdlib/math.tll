@@ -1,0 +1,162 @@
+// TLL Standard Library - Math operations
+// Implemented in TLL itself
+
+// Absolute value
+fn math_abs(x: float) -> float {
+    if x < 0 {
+        return 0 - x
+    }
+    return x
+}
+
+// Maximum of two numbers
+fn math_max(a: float, b: float) -> float {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+// Minimum of two numbers
+fn math_min(a: float, b: float) -> float {
+    if a < b {
+        return a
+    }
+    return b
+}
+
+// Clamp value between min and max
+fn math_clamp(x: float, min: float, max: float) -> float {
+    if x < min {
+        return min
+    }
+    if x > max {
+        return max
+    }
+    return x
+}
+
+// Sign function
+fn math_sign(x: float) -> int {
+    if x > 0 {
+        return 1
+    }
+    if x < 0 {
+        return -1
+    }
+    return 0
+}
+
+// Check if number is even
+fn math_isEven(x: int) -> bool {
+    return x % 2 == 0
+}
+
+// Check if number is odd
+fn math_isOdd(x: int) -> bool {
+    return x % 2 != 0
+}
+
+// Power function (integer exponent)
+fn math_pow(base: float, exp: int) -> float {
+    if exp == 0 {
+        return 1
+    }
+    let result = base
+    let i = 1
+    while i < exp {
+        result = result * base
+        i = i + 1
+    }
+    return result
+}
+
+// Sum of array elements
+fn math_sum(arr: list) -> float {
+    let result = 0
+    let i = 0
+    while i < arrays.length(arr) {
+        result = result + arrays.get(arr, i)
+        i = i + 1
+    }
+    return result
+}
+
+// Average of array elements
+fn math_avg(arr: list) -> float {
+    if arrays.length(arr) == 0 {
+        return 0
+    }
+    return math_sum(arr) / arrays.length(arr)
+}
+
+// Product of array elements
+fn math_product(arr: list) -> float {
+    let result = 1
+    let i = 0
+    while i < arrays.length(arr) {
+        result = result * arrays.get(arr, i)
+        i = i + 1
+    }
+    return result
+}
+
+// Find maximum in array
+fn math_arrayMax(arr: list) -> float {
+    if arrays.length(arr) == 0 {
+        return 0
+    }
+    let result = arrays.get(arr, 0)
+    let i = 1
+    while i < arrays.length(arr) {
+        let val = arrays.get(arr, i)
+        if val > result {
+            result = val
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// Find minimum in array
+fn math_arrayMin(arr: list) -> float {
+    if arrays.length(arr) == 0 {
+        return 0
+    }
+    let result = arrays.get(arr, 0)
+    let i = 1
+    while i < arrays.length(arr) {
+        let val = arrays.get(arr, i)
+        if val < result {
+            result = val
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// Round to nearest integer
+fn math_round(x: float) -> int {
+    if x >= 0 {
+        return convert.toInt(x + 0.5)
+    }
+    return convert.toInt(x - 0.5)
+}
+
+// Floor (largest integer <= x)
+fn math_floor(x: float) -> int {
+    let i = convert.toInt(x)
+    if x < 0 && x != i {
+        return i - 1
+    }
+    return i
+}
+
+// Ceiling (smallest integer >= x)
+fn math_ceil(x: float) -> int {
+    let i = convert.toInt(x)
+    if x > 0 && x != i {
+        return i + 1
+    }
+    return i
+}

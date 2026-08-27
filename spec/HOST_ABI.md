@@ -1,7 +1,7 @@
 # TLL OS Host ABI Specification
 
-**Version**: 1.3
-**Status**: Genesis 0-97 FROZEN; P0-2 extensions 120-122 active; P0-3 extensions 123-125 active
+**Version**: 1.2
+**Status**: Genesis 0-97 FROZEN; P0-2 extensions 120+ active
 
 ---
 
@@ -26,14 +26,15 @@ The Host ABI defines the interface between TLL VM implementations and the underl
 | `arrays` | 49-71 | 23 | Stdlib (pure computation) |
 | `convert` | 72-78 | 7 | Stdlib (pure computation) |
 | `fs` | 79-90 | 12 | **Host ABI** |
-| `http` | 91-97 | 7 | **Host ABI** (stub in bootstrap) |
+| `http` | 91-97 | 7 | **Host ABI** (client implemented P0-3.1; serve=94 stub) |
 | `agent`/`workflow` | 98-119 | 22 | Deferred |
-| `process` | 120-122 | 3 | **Host ABI** (P0-2 extension) |
-| `time` | 123-124 | 2 | **Host ABI** (P0-3 extension) |
-| `fs` mkdirAll | 125 | 1 | **Host ABI** (P0-3 extension) |
+| `process` | 120-122, 127-128, 131 | 6 | **Host ABI** (P0-2 + P0-3.1 extension) |
+| `time` | 123-126 | 4 | **Host ABI** (P0-3.1 extension) |
+| `io_stderr` | 129-130 | 2 | **Host ABI** (P0-3.1 extension) |
 
-**Host ABI total**: 28 builtins (io: 3, fs: 13, http: 7, process: 3, time: 2)
+**Host ABI total**: 34 builtins (io: 3, fs: 12, http: 7, process: 6, time: 4, io_stderr: 2)
 **Stdlib total**: 76 builtins (pure computation, can be implemented in TLL)
+**Total defined**: 110 (0-97 + 120-131)
 
 ---
 
@@ -65,33 +66,51 @@ The Host ABI defines the interface between TLL VM implementations and the underl
 | 88 | `fs.fileSize` | `(path: string) -> int` | Get file size in bytes |
 | 89 | `fs.copyFile` | `(src: string, dst: string) -> void` | Copy file |
 | 90 | `fs.rename` | `(old: string, new: string) -> void` | Rename/move file |
-| 125 | `fs.mkdirAll` | `(path: string) -> void` | Create directory recursively (P0-3) |
 
 ---
 
-## 5. http Module (Host ABI) — STUB
+## 5. http Module (Host ABI) — Client Implemented (P0-3.1)
 
 | Index | Name | Signature | Description |
 |-------|------|-----------|-------------|
-| 91 | `http.get` | `(url: string) -> map` | HTTP GET request |
+| 91 | `http.get` | `(url: string) -> map` | HTTP GET request (WinHTTP on Windows) |
 | 92 | `http.post` | `(url: string, body: string) -> map` | HTTP POST request |
 | 93 | `http.request` | `(options: map) -> map` | Generic HTTP request |
-| 94 | `http.serve` | `(addr: string, handler: fn) -> void` | Start HTTP server |
+| 94 | `http.serve` | `(addr: string, handler: fn) -> void` | Start HTTP server **[STUB]** |
 | 95 | `http.encodeURI` | `(s: string) -> string` | URL encode |
 | 96 | `http.decodeURI` | `(s: string) -> string` | URL decode |
 | 97 | `http.parseJSON` | `(s: string) -> map` | Parse JSON response |
 
-> **Note**: HTTP builtins return `null` in bootstrap mode. Full implementation planned for P0-2.8.
+> **Status**: HTTP client (get/post/request) implemented via WinHTTP on Windows in P0-3.1 (commit 5744bf3). Returns `{ok, status, body, error}` map. `http.serve` (94) remains stub. `encodeURI`/`decodeURI`/`parseJSON` are pure computation helpers.
 
 ---
 
-## 6. process Module (Host ABI) — P0-2 extension
+## 6. process Module (Host ABI) — P0-2 + P0-3.1 extension
 
 | Index | Name | Signature | Description |
 |-------|------|-----------|-------------|
 | 120 | `process.exit` | `(code?: int) -> void` | Exit VM with status code |
 | 121 | `process.argv` | `() -> array<string>` | Command-line arguments |
 | 122 | `process.env` | `() -> map<string,string>` | Environment variables |
+| 127 | `process.cwd` | `() -> string` | Current working directory |
+| 128 | `process.chdir` | `(path: string) -> void` | Change working directory |
+| 131 | `process.platform` | `() -> string` | OS platform: "windows"/"linux"/"darwin" |
+
+## 6b. time Module (Host ABI) — P0-3.1
+
+| Index | Name | Signature | Description |
+|-------|------|-----------|-------------|
+| 123 | `time.now` | `() -> int` | Unix timestamp in seconds |
+| 124 | `time.nowMs` | `() -> int` | Unix timestamp in milliseconds |
+| 125 | `time.sleep` | `(ms: int) -> void` | Sleep for given milliseconds |
+| 126 | `time.date` | `() -> string` | Local date/time as "YYYY-MM-DD HH:MM:SS" |
+
+## 6c. io stderr (Host ABI) — P0-3.1
+
+| Index | Name | Signature | Description |
+|-------|------|-----------|-------------|
+| 129 | `io.eprint` | `(value: any) -> void` | Print to stderr (no newline) |
+| 130 | `io.eprintln` | `(value: any) -> void` | Print to stderr + newline |
 
 ### process.argv layout
 `[tllvm_path, bytecode_path, user_arg1, user_arg2, ...]`
@@ -107,24 +126,6 @@ User arguments start at index 2.
 - Sets VM exit flag and returns.
 - Native launcher propagates the exit code to the OS.
 - Default code is 0 if omitted.
-
----
-
-## 6.1 time Module (Host ABI) — P0-3 extension
-
-| Index | Name | Signature | Description |
-|-------|------|-----------|-------------|
-| 123 | `time.now` | `() -> int` | Unix timestamp in seconds |
-| 124 | `time.format` | `(timestamp: int, format: string) -> string` | Format timestamp with strftime-style format |
-
-### time.now behavior
-- Returns integer Unix timestamp (seconds since epoch).
-- Based on host system clock.
-
-### time.format behavior
-- Uses host strftime (POSIX) / strftime_s (Windows).
-- Common formats: `%Y-%m-%d %H:%M:%S`, `%Y-%m-%d`, `%H:%M:%S`.
-- Returns empty string on invalid timestamp or format.
 
 ---
 

@@ -152,17 +152,38 @@
 | 96 | `http.decodeURI` | `(s: string) -> string` | implemented |
 | 97 | `http.parseJSON` | `(s: string) -> map` | implemented |
 
-## process (Host ABI) — idx 120-122 (P0-2 extension)
+## process (Host ABI) — idx 120-122, 127-128, 131 (P0-2 + P0-3.1 extensions)
 
-> P0-2 process API. Not part of Genesis frozen ABI (0-97).
+> P0-2 process API (120-122). P0-3.1 extensions (127-128, 131).
 
 | # | Name | Signature |
 |---|------|-----------|
 | 120 | `process.exit` | `(code?: int) -> void` |
 | 121 | `process.argv` | `() -> array<string>` |
 | 122 | `process.env` | `() -> map<string,string>` |
+| 127 | `process.cwd` | `() -> string` |
+| 128 | `process.chdir` | `(path: string) -> void` |
+| 131 | `process.platform` | `() -> string` ("windows"/"linux"/"darwin") |
 
-### process.argv layout
+## time (Host ABI) — idx 123-126 (P0-3.1)
+
+| # | Name | Signature |
+|---|------|-----------|
+| 123 | `time.now` | `() -> int` (Unix timestamp seconds) |
+| 124 | `time.nowMs` | `() -> int` (Unix timestamp milliseconds) |
+| 125 | `time.sleep` | `(ms: int) -> void` |
+| 126 | `time.date` | `() -> string` ("YYYY-MM-DD HH:MM:SS" local time) |
+
+## io stderr (Host ABI) — idx 129-130 (P0-3.1)
+
+| # | Name | Signature |
+|---|------|-----------|
+| 129 | `io.eprint` | `(value: any) -> void` (print to stderr, no newline) |
+| 130 | `io.eprintln` | `(value: any) -> void` (print to stderr + newline) |
+
+---
+
+## Reserved
 `[tllvm_path, bytecode_path, user_arg1, user_arg2, ...]`
 User arguments start at index 2.
 
