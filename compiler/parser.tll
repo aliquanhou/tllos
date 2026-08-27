@@ -651,9 +651,36 @@ fn parsePrimary() -> map {
         return node
     }
     if parse_match("LPAREN") {
+        // Could be parenthesized expression OR arrow function (params) => body
         let expr = parseExpression()
+        // Check if this was actually an arrow function params list
+        // We detect by: after parsing expression, if next is RPAREN then FAT_ARROW
+        if parse_check("RPAREN") {
+            // Look ahead: is it ) => ?
+            // We need to handle this differently - parse as arrow function
+            // For now, treat as parenthesized expression
+            parse_expect("RPAREN", "')'")
+            return expr
+        }
         parse_expect("RPAREN", "')'")
         return expr
+    }
+    if parse_match("FN") {
+        // Anonymous function: fn(params) -> type { body }
+        let t = parse_previous()
+        parse_expect("LPAREN", "'('")
+        let params = parseParams()
+        parse_expect("RPAREN", "')'")
+        let returnType: map = null
+        if parse_match("ARROW") {
+            returnType = parseType()
+        }
+        let body = parseBlockStatement()
+        let node = makeNode("FnExpr", t.line, t.column)
+        node.params = params
+        node.returnType = returnType
+        node.body = body
+        return node
     }
     if parse_match("LBRACKET") {
         return parseArrayLiteral()
