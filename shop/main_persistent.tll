@@ -1,0 +1,89 @@
+// TLL OS Shop - Persistent version (P0-5 Dogfooding)
+from "./product" import products, findProduct, productCount
+from "./cart" import cart, addToCart, removeFromCart, cartTotal, cartCount
+from "./templates" import layout, productCard
+from "./storage" import loadOrders, createOrder, getOrders, getOrder
+
+fn handleHome() {
+    let cards = ""
+    let i = 0
+    while (i < arrays.length(products)) {
+        cards = cards + productCard(products[i])
+        i = i + 1
+    }
+    return layout("TLL OS Shop", "<h1>Products (" + convert.toString(productCount()) + ")</h1><div class='grid'>" + cards + "</div>")
+}
+
+fn handleProduct(id) {
+    let p = findProduct(id)
+    if (p == null) { return layout("Not Found", "<div class='empty'>Product not found</div>") }
+    let body = "<div class='card' style='max-width:600px;margin:0 auto'>"
+        + "<h1>" + p.name + "</h1><p>" + p.desc + "</p>"
+        + "<div class='price'>$" + math.round(p.price) + "</div>"
+        + "<a href='/add/" + p.id + "' class='btn'>Add to Cart</a> "
+        + "<a href='/' class='btn' style='background:#666'>Back</a></div>"
+    return layout(p.name, body)
+}
+
+fn handleAdd(id) {
+    let p = findProduct(id)
+    if (p == null) { return layout("Not Found", "<div class='empty'>Product not found</div>") }
+    addToCart(p)
+    return layout("Added", "<div class='success'>Added " + p.name + "!</div><a href='/cart' class='btn'>View Cart</a> <a href='/' class='btn' style='background:#666'>Shop</a>")
+}
+
+fn handleCart() {
+    if (arrays.length(cart) == 0) {
+        return layout("Cart", "<div class='empty'><h2>Cart empty</h2><a href='/' class='btn'>Shop</a></div>")
+    }
+    let rows = ""
+    let i = 0
+    while (i < arrays.length(cart)) {
+        let item = cart[i]
+        rows = rows + "<tr><td>" + item.name + "</td><td>$" + math.round(item.price) + "</td><td>" + item.qty + "</td><td>$" + math.round(item.price * item.qty) + "</td><td><a href='/remove/" + item.id + "' class='btn btn-sm' style='background:#999'>X</a></td></tr>"
+        i = i + 1
+    }
+    return layout("Cart", "<h1>Cart</h1><table><thead><tr><th>Product</th><th>Price</th><th>Qty</th><th>Subtotal</th><th></th></tr></thead><tbody>" + rows + "</tbody></table><div class='total'>Total: $" + math.round(cartTotal()) + "</div><div style='margin-top:1rem'><a href='/checkout' class='btn'>Checkout</a></div>")
+}
+
+fn handleRemove(id) { removeFromCart(id); return handleCart() }
+
+fn handleCheckout() {
+    let order = createOrder()
+    if (order == null) { return layout("Checkout", "<div class='empty'>Cart empty</div>") }
+    return layout("Order Confirmed", "<div class='card' style='max-width:600px;margin:0 auto;text-align:center'><h1>Order #" + convert.toString(order.id) + "</h1><p style='font-size:1.5rem;color:#e94560;font-weight:bold'>$" + math.round(order.total) + "</p><p>Order saved to disk!</p><a href='/orders' class='btn'>View All Orders</a> <a href='/' class='btn' style='background:#666'>Shop</a></div>")
+}
+
+fn handleOrders() {
+    let allOrders = getOrders()
+    if (arrays.length(allOrders) == 0) {
+        return layout("Orders", "<div class='empty'><h2>No orders yet</h2></div>")
+    }
+    let rows = ""
+    let i = 0
+    while (i < arrays.length(allOrders)) {
+        let o = allOrders[i]
+        rows = rows + "<tr><td>#" + convert.toString(o.id) + "</td><td>" + convert.toString(arrays.length(o.items)) + " items</td><td>$" + math.round(o.total) + "</td><td>" + o.status + "</td></tr>"
+        i = i + 1
+    }
+    return layout("Orders", "<h1>All Orders (persisted)</h1><table><thead><tr><th>Order ID</th><th>Items</th><th>Total</th><th>Status</th></tr></thead><tbody>" + rows + "</tbody></table><p style='margin-top:1rem;color:#666'>Orders are loaded from shop/orders.json on server start.</p>")
+}
+
+fn router(req) {
+    let path = req.path
+    if (path == "/" || path == "") { return {status:200, contentType:"text/html; charset=utf-8", body:handleHome()} }
+    if (strings.startsWith(path, "/product/")) { let id = convert.toInt(strings.substring(path, 9, strings.length(path))); return {status:200, contentType:"text/html; charset=utf-8", body:handleProduct(id)} }
+    if (strings.startsWith(path, "/add/")) { let id = convert.toInt(strings.substring(path, 5, strings.length(path))); return {status:200, contentType:"text/html; charset=utf-8", body:handleAdd(id)} }
+    if (strings.startsWith(path, "/remove/")) { let id = convert.toInt(strings.substring(path, 8, strings.length(path))); return {status:200, contentType:"text/html; charset=utf-8", body:handleRemove(id)} }
+    if (path == "/cart") { return {status:200, contentType:"text/html; charset=utf-8", body:handleCart()} }
+    if (path == "/checkout") { return {status:200, contentType:"text/html; charset=utf-8", body:handleCheckout()} }
+    if (path == "/orders") { return {status:200, contentType:"text/html; charset=utf-8", body:handleOrders()} }
+    if (path == "/api/orders") { return {status:200, contentType:"application/json", body:json.stringify(getOrders())} }
+    return {status:404, contentType:"text/html; charset=utf-8", body:layout("404", "<div class='empty'><h1>404</h1><a href='/' class='btn'>Home</a></div>")}
+}
+
+loadOrders()
+io.println("=== TLL OS Shop (Persistent) ===")
+io.println("Products: " + convert.toString(productCount()))
+io.println("Starting server on http://0.0.0.0:8080")
+http.serve("0.0.0.0:8080", router)

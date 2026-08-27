@@ -1,0 +1,58 @@
+// Storage module - JSON file persistence for TLL OS Shop
+from "./cart" import cart, cartTotal, clearCart
+
+let orders = []
+let ordersLoaded = false
+
+export fn loadOrders() {
+    if (ordersLoaded) { return }
+    ordersLoaded = true
+    if (fs.exists("shop/orders.json")) {
+        let data = fs.readFile("shop/orders.json")
+        if (strings.length(data) > 0) {
+            let parsed = json.parse(data)
+            if (parsed != null) {
+                orders = parsed
+            }
+        }
+    }
+    io.println("Loaded " + convert.toString(arrays.length(orders)) + " orders from disk")
+}
+
+fn saveOrders() {
+    let data = json.stringify(orders)
+    fs.writeFile("shop/orders.json", data)
+}
+
+export fn createOrder() {
+    if (arrays.length(cart) == 0) { return null }
+    loadOrders()
+    let total = cartTotal()
+    let orderId = arrays.length(orders) + 1000
+    let items = []
+    let i = 0
+    while (i < arrays.length(cart)) {
+        arrays.push(items, cart[i])
+        i = i + 1
+    }
+    let order = {id: orderId, items: items, total: total, status: "confirmed"}
+    arrays.push(orders, order)
+    saveOrders()
+    clearCart()
+    return order
+}
+
+export fn getOrders() {
+    loadOrders()
+    return orders
+}
+
+export fn getOrder(id) {
+    loadOrders()
+    let i = 0
+    while (i < arrays.length(orders)) {
+        if (orders[i].id == id) { return orders[i] }
+        i = i + 1
+    }
+    return null
+}
