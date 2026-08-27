@@ -1355,6 +1355,15 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
         if fnName == "sleep" { return 125 }
         if fnName == "date" { return 126 }
     }
+    if modName == "http" {
+        if fnName == "get" { return 91 }
+        if fnName == "post" { return 92 }
+        if fnName == "request" { return 93 }
+        if fnName == "serve" { return 94 }
+        if fnName == "encodeURI" { return 95 }
+        if fnName == "decodeURI" { return 96 }
+        if fnName == "parseJSON" { return 97 }
+    }
     return -1
 }
 

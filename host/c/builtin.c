@@ -8,6 +8,13 @@
 #include <errno.h>
 #include <ctype.h>
 
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & 0170000) == 0100000)
+#endif
+#ifndef S_ISDIR
+#define S_ISDIR(m) (((m) & 0170000) == 0040000)
+#endif
+
 #ifdef _WIN32
 #include <windows.h>
 #include <direct.h>
@@ -689,10 +696,153 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
         }
     }
 
-    /* http (91-97) - simplified for bootstrap */
+    /* http (91-97) - WinHTTP client implementation (P0-3.1) */
     if (idx >= 91 && idx <= 97) {
-        fprintf(stderr, "tllvm: http builtin %d not available in bootstrap mode\n", idx);
+#ifdef _WIN32
+        if (idx == 91 || idx == 92 || idx == 93) {
+            /* http.get / http.post / http.request */
+            const char *url = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
+            const char *body = (argCount > 1 && args[1].type == TLL_STRING) ? args[1].as.string : "";
+            const char *method = (idx == 92) ? "POST" : "GET";
+            if (idx == 93 && argCount > 0 && args[0].type == TLL_MAP) {
+                TLLValue mv = map_get(args[0].as.map, "method");
+                if (mv.type == TLL_STRING) method = mv.as.string;
+                TLLValue uv = map_get(args[0].as.map, "url");
+                if (uv.type == TLL_STRING) url = uv.as.string;
+                TLLValue bv = map_get(args[0].as.map, "body");
+                if (bv.type == TLL_STRING) body = bv.as.string;
+            }
+
+            /* Parse URL */
+            char host[256] = "", path[1024] = "/";
+            int port = 80, isHttps = 0;
+            const char *p = url;
+            if (strncmp(p, "https://", 8) == 0) { isHttps = 1; port = 443; p += 8; }
+            else if (strncmp(p, "http://", 7) == 0) { p += 7; }
+            const char *slash = strchr(p, '/');
+            const char *colon = strchr(p, ':');
+            int hostLen;
+            if (colon && (!slash || colon < slash)) {
+                hostLen = (int)(colon - p);
+                port = atoi(colon + 1);
+            } else {
+                hostLen = slash ? (int)(slash - p) : (int)strlen(p);
+            }
+            if (hostLen > 255) hostLen = 255;
+            strncpy(host, p, hostLen); host[hostLen] = '\0';
+            if (slash) strncpy(path, slash, 1023); else strcpy(path, "/");
+
+            /* WinHTTP request */
+            TLLValue result = tll_map();
+            HINTERNET hSession = WinHttpOpen(L"TLLOS/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+            if (!hSession) { map_set(result.as.map, "ok", tll_bool(0)); map_set(result.as.map, "error", tll_string("WinHttpOpen failed")); return result; }
+            HINTERNET hConnect = WinHttpConnect(hSession, (WCHAR*)host, (INTERNET_PORT)port, 0);
+            /* Note: host is ANSI; WinHttpConnect expects wide. Convert properly below. */
+            /* Re-do with wide char conversion */
+            if (hConnect) WinHttpCloseHandle(hConnect);
+            WCHAR wideHost[256];
+            MultiByteToWideChar(CP_UTF8, 0, host, -1, wideHost, 256);
+            hConnect = WinHttpConnect(hSession, wideHost, (INTERNET_PORT)port, 0);
+            if (!hConnect) { WinHttpCloseHandle(hSession); map_set(result.as.map, "ok", tll_bool(0)); map_set(result.as.map, "error", tll_string("WinHttpConnect failed")); return result; }
+            DWORD flags = isHttps ? WINHTTP_FLAG_SECURE : 0;
+            HINTERNET hRequest = WinHttpOpenRequest(hConnect, (WCHAR*)method, (WCHAR*)path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+            /* Convert method and path to wide */
+            if (hRequest) WinHttpCloseHandle(hRequest);
+            WCHAR wideMethod[16], widePath[1024];
+            MultiByteToWideChar(CP_UTF8, 0, method, -1, wideMethod, 16);
+            MultiByteToWideChar(CP_UTF8, 0, path, -1, widePath, 1024);
+            hRequest = WinHttpOpenRequest(hConnect, wideMethod, widePath, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+            if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); map_set(result.as.map, "ok", tll_bool(0)); map_set(result.as.map, "error", tll_string("WinHttpOpenRequest failed")); return result; }
+
+            BOOL sendOk;
+            if (strcmp(method, "POST") == 0 && body && strlen(body) > 0) {
+                sendOk = WinHttpSendRequest(hRequest, L"Content-Type: application/json\r\n", -1, (LPVOID)body, (DWORD)strlen(body), (DWORD)strlen(body), 0);
+            } else {
+                sendOk = WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
+            }
+            if (!sendOk) {
+                DWORD err = GetLastError();
+                char errBuf[64]; snprintf(errBuf, sizeof(errBuf), "SendRequest failed: %lu", err);
+                WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession);
+                map_set(result.as.map, "ok", tll_bool(0)); map_set(result.as.map, "error", tll_string(errBuf));
+                return result;
+            }
+            if (!WinHttpReceiveResponse(hRequest, NULL)) {
+                WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession);
+                map_set(result.as.map, "ok", tll_bool(0)); map_set(result.as.map, "error", tll_string("ReceiveResponse failed"));
+                return result;
+            }
+            /* Status code */
+            DWORD statusCode = 0, statusSize = sizeof(statusCode);
+            WinHttpQueryHeaders(hRequest, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, NULL, &statusCode, &statusSize, NULL);
+            map_set(result.as.map, "status", tll_int((long long)statusCode));
+            map_set(result.as.map, "ok", tll_bool(statusCode >= 200 && statusCode < 300));
+            /* Read body */
+            char *respBody = (char*)malloc(1); respBody[0] = '\0';
+            DWORD totalLen = 0, available = 0, read = 0;
+            do {
+                available = 0;
+                WinHttpQueryDataAvailable(hRequest, &available);
+                if (available == 0) break;
+                char *chunk = (char*)malloc(available + 1);
+                WinHttpReadData(hRequest, chunk, available, &read);
+                chunk[read] = '\0';
+                respBody = (char*)realloc(respBody, totalLen + read + 1);
+                memcpy(respBody + totalLen, chunk, read);
+                totalLen += read;
+                respBody[totalLen] = '\0';
+                free(chunk);
+            } while (read > 0);
+            map_set(result.as.map, "body", tll_string(respBody));
+            free(respBody);
+            WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession);
+            return result;
+        }
+        if (idx == 94) { /* http.serve - not yet implemented */
+            fprintf(stderr, "tllvm: http.serve not yet implemented\n");
+            return tll_null();
+        }
+        if (idx == 95) { /* http.encodeURI */
+            const char *s = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
+            char *out = (char*)malloc(strlen(s) * 3 + 1);
+            int oi = 0;
+            for (int i = 0; s[i]; i++) {
+                unsigned char c = (unsigned char)s[i];
+                if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
+                    out[oi++] = c;
+                } else {
+                    oi += snprintf(out + oi, 4, "%%%02X", c);
+                }
+            }
+            out[oi] = '\0';
+            TLLValue r = tll_string(out); free(out); return r;
+        }
+        if (idx == 96) { /* http.decodeURI */
+            const char *s = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
+            char *out = (char*)malloc(strlen(s) + 1);
+            int oi = 0;
+            for (int i = 0; s[i]; i++) {
+                if (s[i] == '%' && s[i+1] && s[i+2]) {
+                    char hex[3] = {s[i+1], s[i+2], 0};
+                    out[oi++] = (char)strtol(hex, NULL, 16);
+                    i += 2;
+                } else if (s[i] == '+') {
+                    out[oi++] = ' ';
+                } else {
+                    out[oi++] = s[i];
+                }
+            }
+            out[oi] = '\0';
+            TLLValue r = tll_string(out); free(out); return r;
+        }
+        if (idx == 97) { /* http.parseJSON */
+            const char *s = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
+            return tll_parse_json((const char**)&s);
+        }
+#else
+        fprintf(stderr, "tllvm: http builtin %d not available on this platform\n", idx);
         return tll_null();
+#endif
     }
 
     /* agent/workflow (98-119) - deferred */
