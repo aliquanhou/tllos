@@ -1,0 +1,108 @@
+// TLL Standard Library - Array operations
+// Implemented in TLL itself, following "C is the match, TLL is the fuel"
+
+// Apply function to each element, return new array
+fn array_map(arr: list, f) -> list {
+    let result: list = []
+    let i = 0
+    while i < arrays.length(arr) {
+        let val = arrays.get(arr, i)
+        arrays.push(result, f(val))
+        i = i + 1
+    }
+    return result
+}
+
+// Filter elements by predicate function
+fn array_filter(arr: list, f) -> list {
+    let result: list = []
+    let i = 0
+    while i < arrays.length(arr) {
+        let val = arrays.get(arr, i)
+        if f(val) == true {
+            arrays.push(result, val)
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// Reduce array to single value
+fn array_reduce(arr: list, f, initial) -> any {
+    let acc = initial
+    let i = 0
+    while i < arrays.length(arr) {
+        acc = f(acc, arrays.get(arr, i))
+        i = i + 1
+    }
+    return acc
+}
+
+// Find first element matching predicate
+fn array_find(arr: list, f) -> any {
+    let i = 0
+    while i < arrays.length(arr) {
+        let val = arrays.get(arr, i)
+        if f(val) == true {
+            return val
+        }
+        i = i + 1
+    }
+    return null
+}
+
+// Check if any element matches predicate
+fn array_any(arr: list, f) -> bool {
+    let i = 0
+    while i < arrays.length(arr) {
+        if f(arrays.get(arr, i)) == true {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+// Check if all elements match predicate
+fn array_all(arr: list, f) -> bool {
+    let i = 0
+    while i < arrays.length(arr) {
+        if f(arrays.get(arr, i)) == false {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// Reverse array
+fn array_reverse(arr: list) -> list {
+    let result: list = []
+    let i = arrays.length(arr) - 1
+    while i >= 0 {
+        arrays.push(result, arrays.get(arr, i))
+        i = i - 1
+    }
+    return result
+}
+
+// Get array length (wrapper)
+fn array_len(arr: list) -> int {
+    return arrays.length(arr)
+}
+
+// Concatenate two arrays
+fn array_concat(a: list, b: list) -> list {
+    let result: list = []
+    let i = 0
+    while i < arrays.length(a) {
+        arrays.push(result, arrays.get(a, i))
+        i = i + 1
+    }
+    i = 0
+    while i < arrays.length(b) {
+        arrays.push(result, arrays.get(b, i))
+        i = i + 1
+    }
+    return result
+}
