@@ -196,9 +196,9 @@ fn cg_collectIdentsInExpr(expr: any, result: list) -> void {
         }
         return
     }
-    if convert.typeOf(expr) != "object" { return }
-    if expr.kind == "Fn" {
-        // Recurse into nested function body, but skip its params/locals
+    let t = convert.typeOf(expr)
+    if t != "object" && t != "map" { return }
+    if expr.kind == "Fn" || expr.kind == "FnExpr" {
         if expr.body != null {
             cg_collectIdentsInExpr(expr.body, result)
         }
@@ -233,6 +233,38 @@ fn cg_listContains(lst: list, name: string) -> bool {
     return false
 }
 
+// Recursively collect all FnExpr (anonymous function) nodes in an expression tree
+fn cg_collectFnExprsInExpr(expr: any, result: list) -> void {
+    if expr == null { return }
+    if convert.typeOf(expr) == "array" {
+        let i = 0
+        while i < arrays.length(expr) {
+            cg_collectFnExprsInExpr(arrays.get(expr, i), result)
+            i = i + 1
+        }
+        return
+    }
+    let t = convert.typeOf(expr)
+    if t != "object" && t != "map" { return }
+    if expr.kind == "FnExpr" {
+        arrays.push(result, expr)
+        if expr.body != null {
+            cg_collectFnExprsInExpr(expr.body, result)
+        }
+        return
+    }
+    let keys = ["left", "right", "operand", "callee", "args", "object", "index",
+        "value", "condition", "body", "elseBody", "statements", "elements", "entries",
+        "expression", "iterable", "catchBody", "finallyBlock", "consequent", "alternate",
+        "declaration", "params", "returnType"]
+    let ki = 0
+    while ki < arrays.length(keys) {
+        let k = arrays.get(keys, ki)
+        if expr[k] != null { cg_collectFnExprsInExpr(expr[k], result) }
+        ki = ki + 1
+    }
+}
+
 fn cg_collectAllParamsAndLocals(fnDecl: map, result: list) -> void {
     // Add this function's params
     let pi = 0
@@ -259,13 +291,10 @@ fn cg_collectAllParamsAndLocals(fnDecl: map, result: list) -> void {
 
 fn cg_collectReferencedNames(fnDecl: map) -> list {
     let result: list = []
-    // Collect all params/locals of this function and all nested functions
     let allBound: list = []
     cg_collectAllParamsAndLocals(fnDecl, allBound)
-    // Collect all idents in this function's body (including nested bodies)
     let allIdents: list = []
     if fnDecl.body != null { cg_collectIdentsInExpr(fnDecl.body, allIdents) }
-    // Filter out all bound names
     let ii = 0
     while ii < arrays.length(allIdents) {
         let name = arrays.get(allIdents, ii)
@@ -309,6 +338,25 @@ fn cg_collectCapturedByNested(fnDecl: map) -> list {
                     arrays.push(result, ref)
                 }
                 ri = ri + 1
+            }
+        }
+        // Also scan for FnExpr (anonymous functions) in all statement expressions
+        if stmt != null {
+            let fnExprs: list = []
+            cg_collectFnExprsInExpr(stmt, fnExprs)
+            let fi = 0
+            while fi < arrays.length(fnExprs) {
+                let fnExpr = arrays.get(fnExprs, fi)
+                let refs2 = cg_collectReferencedNames(fnExpr)
+                let ri2 = 0
+                while ri2 < arrays.length(refs2) {
+                    let ref2 = arrays.get(refs2, ri2)
+                    if cg_listContains(boundNames, ref2) && cg_listContains(result, ref2) == false {
+                        arrays.push(result, ref2)
+                    }
+                    ri2 = ri2 + 1
+                }
+                fi = fi + 1
             }
         }
         si = si + 1
@@ -1030,7 +1078,7 @@ fn cg_compileExpression(expr: map) -> int {
         let parentName = null
         if cg_currentFn != null { parentName = cg_currentFn.name }
         expr.parentInternalName = parentName
-        // Register function (will be compiled in the second pass loop)
+        // Register function (will be compiled in the dynamic function loop)
         let fnIdx = arrays.length(cg_functions)
         cg_fnMapSet(anonName, fnIdx)
         cg_fnDeclMap[anonName] = expr
@@ -1038,28 +1086,44 @@ fn cg_compileExpression(expr: map) -> int {
         if parentName == null { isTop = true }
         let fnObj = { name: anonName, paramCount: arrays.length(expr.params), instructions: [], localCount: 0, decl: expr, isTopLevel: isTop, parentInternalName: parentName, upvalueMap: null }
         arrays.push(cg_functions, fnObj)
-        // Create Function Value (no capture - closure support via OP_CLOSURE to be added)
+        // Create Function Value: use OP_CLOSURE if there are captured variables
         let fnValReg = 0
-        let k1 = cg_allocReg()
-        cg_emit(OP_LOAD_CONST, [k1, cg_addConstant("__fn")])
-        let v1 = cg_allocReg()
-        cg_emit(OP_LOAD_CONST, [v1, cg_addConstant(true)])
-        cg_emit(OP_PUSH, [k1])
-        cg_emit(OP_PUSH, [v1])
-        let k2 = cg_allocReg()
-        cg_emit(OP_LOAD_CONST, [k2, cg_addConstant("fnIdx")])
-        let v2 = cg_allocReg()
-        cg_emit(OP_LOAD_CONST, [v2, cg_addConstant(fnIdx)])
-        cg_emit(OP_PUSH, [k2])
-        cg_emit(OP_PUSH, [v2])
-        let k3 = cg_allocReg()
-        cg_emit(OP_LOAD_CONST, [k3, cg_addConstant("env")])
-        let v3 = cg_allocReg()
-        cg_emit(OP_LOAD_CONST, [v3, cg_addConstant(null)])
-        cg_emit(OP_PUSH, [k3])
-        cg_emit(OP_PUSH, [v3])
-        fnValReg = cg_allocReg()
-        cg_emit(OP_MAKE_MAP, [fnValReg, 3])
+        if cg_closureEnvSize > 0 {
+            // Has captured variables: use OP_CLOSURE
+            let operands: list = []
+            fnValReg = cg_allocReg()
+            arrays.push(operands, fnValReg)
+            arrays.push(operands, fnIdx)
+            arrays.push(operands, cg_closureEnvSize)
+            let si = 0
+            while si < cg_closureEnvSize {
+                arrays.push(operands, si)
+                si = si + 1
+            }
+            cg_emit(OP_CLOSURE, operands)
+        } else {
+            // No capture: create plain {__fn, fnIdx, env:null}
+            let k1 = cg_allocReg()
+            cg_emit(OP_LOAD_CONST, [k1, cg_addConstant("__fn")])
+            let v1 = cg_allocReg()
+            cg_emit(OP_LOAD_CONST, [v1, cg_addConstant(true)])
+            cg_emit(OP_PUSH, [k1])
+            cg_emit(OP_PUSH, [v1])
+            let k2 = cg_allocReg()
+            cg_emit(OP_LOAD_CONST, [k2, cg_addConstant("fnIdx")])
+            let v2 = cg_allocReg()
+            cg_emit(OP_LOAD_CONST, [v2, cg_addConstant(fnIdx)])
+            cg_emit(OP_PUSH, [k2])
+            cg_emit(OP_PUSH, [v2])
+            let k3 = cg_allocReg()
+            cg_emit(OP_LOAD_CONST, [k3, cg_addConstant("env")])
+            let v3 = cg_allocReg()
+            cg_emit(OP_LOAD_CONST, [v3, cg_addConstant(null)])
+            cg_emit(OP_PUSH, [k3])
+            cg_emit(OP_PUSH, [v3])
+            fnValReg = cg_allocReg()
+            cg_emit(OP_MAKE_MAP, [fnValReg, 3])
+        }
         return fnValReg
     }
 
