@@ -89,7 +89,7 @@ fn handleHome() {
         cards = cards + "<div class='card'><div class='product-img'>" + p.img + "</div>"
             + "<h3>" + p.name + "</h3>"
             + "<p>" + p.desc + "</p>"
-            + "<div class='price'>$" + math_round(p.price, 2) + "</div>"
+            + "<div class='price'>$" + math.round(p.price, 2) + "</div>"
             + "<p style='color:#666;font-size:0.85rem'>Stock: " + p.stock + "</p>"
             + "<a href='/product/" + p.id + "' class='btn btn-sm'>View</a> "
             + "<a href='/add/" + p.id + "' class='btn btn-sm'>Add to Cart</a>"
@@ -109,7 +109,7 @@ fn handleProduct(id) {
         + "<div class='product-img' style='font-size:5rem'>" + p.img + "</div>"
         + "<h1>" + p.name + "</h1>"
         + "<p style='font-size:1.1rem;color:#666'>" + p.desc + "</p>"
-        + "<div class='price' style='font-size:2rem'>$" + math_round(p.price, 2) + "</div>"
+        + "<div class='price' style='font-size:2rem'>$" + math.round(p.price, 2) + "</div>"
         + "<p>Stock: " + p.stock + " units</p>"
         + "<a href='/add/" + p.id + "' class='btn'>Add to Cart</a> "
         + "<a href='/' class='btn' style='background:#666'>Back</a>"
@@ -150,9 +150,9 @@ fn handleCart() {
     while (i < arrays.len(cart)) {
         let item = cart[i]
         rows = rows + "<tr><td>" + item.img + " " + item.name + "</td>"
-            + "<td>$" + math_round(item.price, 2) + "</td>"
+            + "<td>$" + math.round(item.price, 2) + "</td>"
             + "<td>" + item.qty + "</td>"
-            + "<td>$" + math_round(item.price * item.qty, 2) + "</td>"
+            + "<td>$" + math.round(item.price * item.qty, 2) + "</td>"
             + "<td><a href='/remove/" + item.id + "' class='btn btn-sm' style='background:#999'>Remove</a></td></tr>"
         i = i + 1
     }
@@ -160,7 +160,7 @@ fn handleCart() {
     let body = "<h1>Shopping Cart</h1>"
         + "<table><thead><tr><th>Product</th><th>Price</th><th>Qty</th><th>Subtotal</th><th></th></tr></thead>"
         + "<tbody>" + rows + "</tbody></table>"
-        + "<div class='total'>Total: $" + math_round(total, 2) + "</div>"
+        + "<div class='total'>Total: $" + math.round(total, 2) + "</div>"
         + "<div style='margin-top:1rem'><a href='/checkout' class='btn'>Proceed to Checkout</a> "
         + "<a href='/' class='btn' style='background:#666'>Continue Shopping</a></div>"
     return layout("Cart", body)
@@ -198,7 +198,7 @@ fn handleCheckout() {
     let body = "<div class='card' style='max-width:600px;margin:0 auto;text-align:center'>"
         + "<h1>🎉 Order Confirmed!</h1>"
         + "<p style='font-size:1.2rem'>Order #" + orderId + "</p>"
-        + "<p style='font-size:1.5rem;color:#e94560;font-weight:bold'>Total: $" + math_round(total, 2) + "</p>"
+        + "<p style='font-size:1.5rem;color:#e94560;font-weight:bold'>Total: $" + math.round(total, 2) + "</p>"
         + "<p>Thank you for your purchase! This is a demo store, no actual payment was processed.</p>"
         + "<a href='/' class='btn'>Continue Shopping</a></div>"
     return layout("Order Confirmed", body)
@@ -241,11 +241,11 @@ fn router(req) {
     }
     // API: products
     if (path == "/api/products") {
-        return {status: 200, contentType: "application/json", body: json_stringify(products)}
+        return {status: 200, contentType: "application/json", body: json.stringify(products)}
     }
     // API: cart
     if (path == "/api/cart") {
-        return {status: 200, contentType: "application/json", body: json_stringify({items: cart, total: cartTotal()})}
+        return {status: 200, contentType: "application/json", body: json.stringify({items: cart, total: cartTotal()})}
     }
     // 404
     return {status: 404, contentType: "text/html; charset=utf-8", body: layout("404", "<div class='empty'><h1>404 - Page Not Found</h1><a href='/' class='btn'>Go Home</a></div>")}
