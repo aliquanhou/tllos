@@ -1,9 +1,9 @@
 {
-  "version": "1.2",
+  "version": "1.3",
   "frozen": false,
-  "note": "Genesis builtins 0-97 frozen at v1.1. P0-2 extensions 120+ are not frozen. Spec must match host/c/builtin.c exactly.",
-  "total_defined": 101,
-  "total_range": "0-97, 120-122",
+  "note": "Genesis builtins 0-97 frozen at v1.1. P0-2/P0-3.1 extensions 120-131 active. Spec must match host/c/builtin.c exactly. P0-4 added Lambda/Struct/Enum and TLL stdlib (stdlib/*.tll).",
+  "total_defined": 110,
+  "total_range": "0-97, 120-131",
   "modules": {
     "io": {
       "category": "host_abi",
@@ -134,13 +134,13 @@
     },
     "http": {
       "category": "host_abi",
-      "status": "stub",
-      "note": "HTTP builtins return null in bootstrap mode. Full implementation planned for P0-2.8.",
+      "status": "implemented",
+      "note": "HTTP client implemented via WinHTTP on Windows (P0-3.1). http.serve (94) is still stub. encodeURI/decodeURI/parseJSON are pure helpers.",
       "functions": [
         {"name": "get", "index": 91, "params": ["string"], "return": "map"},
         {"name": "post", "index": 92, "params": ["string", "string"], "return": "map"},
         {"name": "request", "index": 93, "params": ["map"], "return": "map"},
-        {"name": "serve", "index": 94, "params": ["string", "fn"], "return": "void"},
+        {"name": "serve", "index": 94, "params": ["string", "fn"], "return": "void", "status": "stub"},
         {"name": "encodeURI", "index": 95, "params": ["string"], "return": "string"},
         {"name": "decodeURI", "index": 96, "params": ["string"], "return": "string"},
         {"name": "parseJSON", "index": 97, "params": ["string"], "return": "map"}
@@ -148,12 +148,35 @@
     },
     "process": {
       "category": "host_abi",
-      "status": "p0_2_extension",
-      "note": "P0-2 process API. Not part of Genesis frozen ABI.",
+      "status": "p0_2_p0_3_1_extension",
+      "note": "P0-2 process API (120-122) + P0-3.1 extensions (127-128, 131). Not part of Genesis frozen ABI.",
       "functions": [
         {"name": "exit", "index": 120, "params": ["int?"], "return": "void"},
         {"name": "argv", "index": 121, "params": [], "return": "array<string>"},
-        {"name": "env", "index": 122, "params": [], "return": "map<string,string>"}
+        {"name": "env", "index": 122, "params": [], "return": "map<string,string>"},
+        {"name": "cwd", "index": 127, "params": [], "return": "string"},
+        {"name": "chdir", "index": 128, "params": ["string"], "return": "void"},
+        {"name": "platform", "index": 131, "params": [], "return": "string"}
+      ]
+    },
+    "time": {
+      "category": "host_abi",
+      "status": "p0_3_1_extension",
+      "note": "P0-3.1 time API. Not part of Genesis frozen ABI.",
+      "functions": [
+        {"name": "now", "index": 123, "params": [], "return": "int"},
+        {"name": "nowMs", "index": 124, "params": [], "return": "int"},
+        {"name": "sleep", "index": 125, "params": ["int"], "return": "void"},
+        {"name": "date", "index": 126, "params": [], "return": "string"}
+      ]
+    },
+    "io_stderr": {
+      "category": "host_abi",
+      "status": "p0_3_1_extension",
+      "note": "P0-3.1 stderr output. Not part of Genesis frozen ABI.",
+      "functions": [
+        {"name": "eprint", "index": 129, "params": ["any"], "return": "void"},
+        {"name": "eprintln", "index": 130, "params": ["any"], "return": "void"}
       ]
     }
   },

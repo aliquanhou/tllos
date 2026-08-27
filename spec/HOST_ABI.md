@@ -26,12 +26,15 @@ The Host ABI defines the interface between TLL VM implementations and the underl
 | `arrays` | 49-71 | 23 | Stdlib (pure computation) |
 | `convert` | 72-78 | 7 | Stdlib (pure computation) |
 | `fs` | 79-90 | 12 | **Host ABI** |
-| `http` | 91-97 | 7 | **Host ABI** (stub in bootstrap) |
+| `http` | 91-97 | 7 | **Host ABI** (client implemented P0-3.1; serve=94 stub) |
 | `agent`/`workflow` | 98-119 | 22 | Deferred |
-| `process` | 120-122 | 3 | **Host ABI** (P0-2 extension) |
+| `process` | 120-122, 127-128, 131 | 6 | **Host ABI** (P0-2 + P0-3.1 extension) |
+| `time` | 123-126 | 4 | **Host ABI** (P0-3.1 extension) |
+| `io_stderr` | 129-130 | 2 | **Host ABI** (P0-3.1 extension) |
 
-**Host ABI total**: 25 builtins (io: 3, fs: 12, http: 7, process: 3)
+**Host ABI total**: 34 builtins (io: 3, fs: 12, http: 7, process: 6, time: 4, io_stderr: 2)
 **Stdlib total**: 76 builtins (pure computation, can be implemented in TLL)
+**Total defined**: 110 (0-97 + 120-131)
 
 ---
 
@@ -66,19 +69,19 @@ The Host ABI defines the interface between TLL VM implementations and the underl
 
 ---
 
-## 5. http Module (Host ABI) — STUB
+## 5. http Module (Host ABI) — Client Implemented (P0-3.1)
 
 | Index | Name | Signature | Description |
 |-------|------|-----------|-------------|
-| 91 | `http.get` | `(url: string) -> map` | HTTP GET request |
+| 91 | `http.get` | `(url: string) -> map` | HTTP GET request (WinHTTP on Windows) |
 | 92 | `http.post` | `(url: string, body: string) -> map` | HTTP POST request |
 | 93 | `http.request` | `(options: map) -> map` | Generic HTTP request |
-| 94 | `http.serve` | `(addr: string, handler: fn) -> void` | Start HTTP server |
+| 94 | `http.serve` | `(addr: string, handler: fn) -> void` | Start HTTP server **[STUB]** |
 | 95 | `http.encodeURI` | `(s: string) -> string` | URL encode |
 | 96 | `http.decodeURI` | `(s: string) -> string` | URL decode |
 | 97 | `http.parseJSON` | `(s: string) -> map` | Parse JSON response |
 
-> **Note**: HTTP builtins return `null` in bootstrap mode. Full implementation planned for P0-2.8.
+> **Status**: HTTP client (get/post/request) implemented via WinHTTP on Windows in P0-3.1 (commit 5744bf3). Returns `{ok, status, body, error}` map. `http.serve` (94) remains stub. `encodeURI`/`decodeURI`/`parseJSON` are pure computation helpers.
 
 ---
 

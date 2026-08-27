@@ -1,9 +1,29 @@
 # TLL 语言能力总审计矩阵
 
-**版本**: v1.1.0 → P0-3.1 审计
-**日期**: 2026-08-27
-**审计基准**: aliquanhou/tllos @ a9acc60 (P0-2.4.1)
+**版本**: v1.1.0 → P0-4 审计（2026-08-28 更新）
+**日期**: 2026-08-27（P0-3.1 基准），2026-08-28（P0-4 更新）
+**审计基准**: aliquanhou/tllos @ 64a3718 (P0-4)
 **审计视角**: AI 开发大型商业软件所需能力
+
+---
+
+## P0-4 更新摘要（2026-08-28）
+
+P0-4 阶段完成以下语言能力和标准库建设：
+
+| 领域 | 变更 | 状态 |
+|------|------|------|
+| 匿名函数 Lambda | `fn(params) -> type { body }` 表达式 | ✅ 已实现 |
+| 闭包捕获修复 | `convert.typeOf(map)` 返回 "map" 导致 AST 扫描提前 return，根因修复 | ✅ 已修复 |
+| Struct 声明 | `struct Name { field: type }` | 🟡 声明可用，字面量语法 deferred |
+| Enum 声明 | `enum Name { Variant = value }` | 🟡 声明可用，Variant Access deferred |
+| TLL 标准库 array | 9 个函数，纯 TLL 实现 | ✅ stdlib/array.tll |
+| TLL 标准库 string | 9 个函数，纯 TLL 实现 | ✅ stdlib/string.tll |
+| TLL 标准库 math | 16 个函数，纯 TLL 实现 | ✅ stdlib/math.tll |
+| TLL 标准库 json | 8 个函数，纯 TLL 实现 | ✅ stdlib/json.tll |
+| ABI 规范对齐 | BUILTINS.json 123-131 补齐，HTTP stub→implemented | ✅ P0-4.1 对齐 |
+
+**C Host 与 TLL stdlib 重复实现**: arrays/strings/math 在 C builtin 和 TLL stdlib 中双重存在。C 版本为 Genesis frozen 0-97，TLL 版本为 P0-4 新增。长期应逐步将纯计算能力迁移到 TLL stdlib，C 仅保留 Host ABI 边界。
 
 ---
 
@@ -30,8 +50,8 @@
 | 类型推导 | 🟡 | 局部变量推导，函数参数无类型强制 |
 | 显式类型注解 | 🟡 | 语法支持但typechecker不强制 |
 | 泛型 Generics | 🔴 | 完全缺失，array<T>/map<K,V>仅为文档标注 |
-| 结构体 Struct | 🔴 | opcode 27预留，语法未实现 |
-| 枚举 Enum | 🔴 | 完全缺失 |
+| 结构体 Struct | 🟡 | 声明 `struct Name { field: type }` 已实现(P0-4)；实例化用 `{__struct:"Name",...}`；字面量语法 `Name{...}` 因与 if/while 代码块歧义 deferred |
+| 枚举 Enum | 🟡 | 声明 `enum Name { Variant = value }` 已实现(P0-4)；Variant Access `Color.Red` deferred；Pattern Matching 缺失 |
 | 接口/协议 Interface | 🔴 | 完全缺失 |
 | 模式匹配 Pattern Matching | 🔴 | 完全缺失 |
 | 可选类型 Optional | 🔴 | 用null代替，无编译期检查 |
