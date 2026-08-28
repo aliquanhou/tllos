@@ -1,19 +1,19 @@
-// SHA-256 implementation in TLL (P0-15 blockchain dogfooding)
+// SHA-256 and HMAC-SHA256 implementation in TLL (P0-15 blockchain dogfooding)
 // Uses bitwise operations: &, |, ^, ~, <<, >>
 
 fn rotr(x: int, n: int) -> int {
-    // 32-bit right rotation
     let ux = x & 0xFFFFFFFF
     let un = n & 31
     return ((ux >> un) | (ux << (32 - un))) & 0xFFFFFFFF
 }
 
-fn sha256_pad(message: string) -> list {
+// Pad raw byte array to 512-bit blocks
+fn sha256_pad_bytes(rawBytes: list) -> list {
     let bytes: list = []
     let i = 0
-    let len = strings.length(message)
+    let len = arrays.length(rawBytes)
     while i < len {
-        bytes[i] = strings.charCodeAt(message, i) & 0xFF
+        bytes[i] = rawBytes[i] & 0xFF
         i = i + 1
     }
     let bitLen = len * 8
@@ -32,7 +32,8 @@ fn sha256_pad(message: string) -> list {
     return bytes
 }
 
-fn sha256(message: string) -> string {
+// Core SHA-256: takes padded byte array, returns hex hash string
+fn sha256_core(bytes: list) -> string {
     let K = [
         0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
         0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -51,13 +52,10 @@ fn sha256(message: string) -> string {
         0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
         0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
     ]
-
     let H = [
         0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
         0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
     ]
-
-    let bytes = sha256_pad(message)
     let numBlocks = arrays.length(bytes) / 64
     let block = 0
     while block < numBlocks {
@@ -129,4 +127,108 @@ fn sha256(message: string) -> string {
         hi = hi + 1
     }
     return result
+}
+
+// SHA-256 from string
+fn sha256(message: string) -> string {
+    let rawBytes: list = []
+    let i = 0
+    let len = strings.length(message)
+    while i < len {
+        rawBytes[i] = strings.charCodeAt(message, i) & 0xFF
+        i = i + 1
+    }
+    let bytes = sha256_pad_bytes(rawBytes)
+    return sha256_core(bytes)
+}
+
+// SHA-256 from raw byte array
+fn sha256Bytes(rawBytes: list) -> string {
+    let bytes = sha256_pad_bytes(rawBytes)
+    return sha256_core(bytes)
+}
+
+// Convert hex char to value (0-15)
+fn hexCharVal(c: string) -> int {
+    let code = strings.charCodeAt(c, 0)
+    if code >= 48 && code <= 57 { return code - 48 }
+    if code >= 97 && code <= 102 { return code - 97 + 10 }
+    if code >= 65 && code <= 70 { return code - 65 + 10 }
+    return 0
+}
+
+// Convert hex string to byte array
+fn hexToBytes(hex: string) -> list {
+    let bytes: list = []
+    let i = 0
+    while i < strings.length(hex) {
+        let highVal = hexCharVal(strings.charAt(hex, i))
+        let lowVal = hexCharVal(strings.charAt(hex, i + 1))
+        bytes[arrays.length(bytes)] = (highVal * 16 + lowVal) & 0xFF
+        i = i + 2
+    }
+    return bytes
+}
+
+// HMAC-SHA256
+fn hmacSha256(key: string, message: string) -> string {
+    let blockSize = 64
+    let keyBytes: list = []
+    let i = 0
+    while i < strings.length(key) {
+        keyBytes[i] = strings.charCodeAt(key, i) & 0xFF
+        i = i + 1
+    }
+    if arrays.length(keyBytes) > blockSize {
+        let hashedKey = sha256Bytes(keyBytes)
+        keyBytes = hexToBytes(hashedKey)
+    }
+    while arrays.length(keyBytes) < blockSize {
+        keyBytes[arrays.length(keyBytes)] = 0
+    }
+    let ipad: list = []
+    let opad: list = []
+    let k = 0
+    while k < blockSize {
+        ipad[k] = (keyBytes[k] ^ 0x36) & 0xFF
+        opad[k] = (keyBytes[k] ^ 0x5c) & 0xFF
+        k = k + 1
+    }
+    let innerBytes: list = []
+    let m = 0
+    while m < blockSize {
+        innerBytes[m] = ipad[m]
+        m = m + 1
+    }
+    let n = 0
+    while n < strings.length(message) {
+        innerBytes[arrays.length(innerBytes)] = strings.charCodeAt(message, n) & 0xFF
+        n = n + 1
+    }
+    let innerHash = sha256Bytes(innerBytes)
+    let outerBytes: list = []
+    let p = 0
+    while p < blockSize {
+        outerBytes[p] = opad[p]
+        p = p + 1
+    }
+    let hashBytes = hexToBytes(innerHash)
+    let q = 0
+    while q < arrays.length(hashBytes) {
+        outerBytes[arrays.length(outerBytes)] = hashBytes[q]
+        q = q + 1
+    }
+    return sha256Bytes(outerBytes)
+}
+
+// Constant-time string comparison
+fn constantTimeEquals(a: string, b: string) -> bool {
+    if strings.length(a) != strings.length(b) { return false }
+    let result = 0
+    let i = 0
+    while i < strings.length(a) {
+        result = result | (strings.charCodeAt(a, i) ^ strings.charCodeAt(b, i))
+        i = i + 1
+    }
+    return result == 0
 }

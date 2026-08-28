@@ -1,0 +1,24 @@
+// HMAC-SHA256 test
+from "../../stdlib/crypto" import hmacSha256, constantTimeEquals
+
+fn main() {
+    io.println("=== HMAC-SHA256 Tests ===")
+
+    let r1 = hmacSha256("key", "The quick brown fox jumps over the lazy dog")
+    io.println("HMAC(key, fox) = " + r1)
+    io.println("expected: f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8")
+    if r1 == "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8" { io.println("PASS") } else { io.println("FAIL") }
+
+    let r2 = hmacSha256("", "")
+    io.println("\nHMAC('', '') = " + r2)
+    io.println("expected: b613679a0814d9ec772f95d778c35fc5ff1697c493715653c6c712144292c5ad")
+    if r2 == "b613679a0814d9ec772f95d778c35fc5ff1697c493715653c6c712144292c5ad" { io.println("PASS") } else { io.println("FAIL") }
+
+    io.println("\n=== Constant-time equals ===")
+    io.println("equals('abc', 'abc') = " + convert.toString(constantTimeEquals("abc", "abc")))
+    io.println("equals('abc', 'abd') = " + convert.toString(constantTimeEquals("abc", "abd")))
+    io.println("equals('abc', 'ab') = " + convert.toString(constantTimeEquals("abc", "ab")))
+
+    io.println("\n=== All HMAC tests completed ===")
+}
+main()
