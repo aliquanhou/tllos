@@ -1,0 +1,15 @@
+io.eprintln("A")
+fn makeReader(val) {
+    io.eprintln("B")
+    fn inner() {
+        io.eprintln("C")
+        return val
+    }
+    io.eprintln("D")
+    return inner
+}
+io.eprintln("E")
+let r = makeReader(42)
+io.eprintln("F")
+let v = r()
+io.eprintln("G " + convert.toString(v))

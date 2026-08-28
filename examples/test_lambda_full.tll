@@ -1,0 +1,61 @@
+// Test 1: anonymous lambda capture and read
+io.println("=== Test 1: capture and read ===")
+fn test1() {
+    let x = 42
+    let f = fn() {
+        return x
+    }
+    io.println("x = " + convert.toString(f()))
+}
+test1()
+
+// Test 2: anonymous lambda capture and write
+io.println("=== Test 2: capture and write ===")
+fn test2() {
+    let x = 0
+    let inc = fn() {
+        x = x + 1
+        return x
+    }
+    io.println("inc: " + convert.toString(inc()))
+    io.println("inc: " + convert.toString(inc()))
+    io.println("x after: " + convert.toString(x))
+}
+test2()
+
+// Test 3: makeAdder with anonymous lambda
+io.println("=== Test 3: makeAdder ===")
+fn makeAdder(n) {
+    return fn(x) {
+        return x + n
+    }
+}
+let add5 = makeAdder(5)
+io.println("add5(10) = " + convert.toString(add5(10)))
+io.println("add5(20) = " + convert.toString(add5(20)))
+
+// Test 4: sibling closures sharing upvalue
+io.println("=== Test 4: sibling closures ===")
+fn makePair() {
+    let n = 0
+    let inc = fn() { n = n + 1; return n }
+    let get = fn() { return n }
+    return [inc, get]
+}
+let pair = makePair()
+io.println("inc: " + convert.toString(pair[0]()))
+io.println("inc: " + convert.toString(pair[0]()))
+io.println("get: " + convert.toString(pair[1]()))
+
+// Test 5: nested anonymous closures
+io.println("=== Test 5: nested closures ===")
+fn makeOuter(a) {
+    return fn(b) {
+        return fn(c) {
+            return a + b + c
+        }
+    }
+}
+io.println("nested: " + convert.toString(makeOuter(1)(2)(3)))
+
+io.println("=== All tests passed ===")

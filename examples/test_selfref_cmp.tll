@@ -1,0 +1,31 @@
+// Test: self-referencing anonymous lambda function value comparison
+fn main() {
+    let arr = []
+    let wrapper = fn(data) {
+        io.println("called: " + data)
+        // Compare self with array element
+        if arr[0] == wrapper {
+            io.println("  arr[0] == wrapper: OK")
+        } else {
+            io.println("  arr[0] == wrapper: FAIL")
+        }
+        if arr[0] != wrapper {
+            io.println("  arr[0] != wrapper: TRUE (bad)")
+        } else {
+            io.println("  arr[0] != wrapper: FALSE (good)")
+        }
+    }
+
+    arrays.push(arr, wrapper)
+
+    io.println("=== outside comparison ===")
+    if arr[0] == wrapper {
+        io.println("  arr[0] == wrapper: OK")
+    } else {
+        io.println("  arr[0] == wrapper: FAIL")
+    }
+
+    io.println("=== inside comparison (via call) ===")
+    wrapper("test")
+}
+main()

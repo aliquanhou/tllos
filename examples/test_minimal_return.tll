@@ -1,0 +1,32 @@
+// Minimal test: no io.println, just return values
+fn main() {
+    let count = 0
+
+    fn handler(data) {
+        count = count + 1
+        return count
+    }
+
+    let wrapper = fn(data) {
+        count = count + 1
+        return handler(data)
+    }
+
+    // Direct call
+    let r1 = handler("d1")
+
+    // Via wrapper
+    let r2 = wrapper("d2")
+
+    // Direct again
+    let r3 = handler("d3")
+
+    // Output using builtin directly
+    io.print("r1=")
+    io.print(r1)
+    io.print(" r2=")
+    io.print(r2)
+    io.print(" r3=")
+    io.println(r3)
+}
+main()

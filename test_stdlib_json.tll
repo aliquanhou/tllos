@@ -1,0 +1,45 @@
+// TLL Standard Library test - JSON operations
+from "./stdlib/json" import json_parse, json_stringify, json_get, json_hasKey, json_objectKeys, json_merge, json_clone, json_pretty
+
+// Test parse/stringify
+let obj = json_parse("{\"name\":\"Alice\",\"age\":30}")
+io.println("parsed name: " + obj.name)
+io.println("parsed age: " + convert.toString(obj.age))
+
+let s = json_stringify(obj)
+io.println("stringified: " + s)
+
+// Test get (nested path)
+let nested = json_parse("{\"a\":{\"b\":{\"c\":42}}}")
+let path = ["a", "b", "c"]
+io.println("get nested: " + convert.toString(json_get(nested, path)))
+
+// Test hasKey
+io.println("hasKey name: " + convert.toString(json_hasKey(obj, "name")))
+io.println("hasKey email: " + convert.toString(json_hasKey(obj, "email")))
+
+// Test objectKeys
+let keys = json_objectKeys(obj)
+io.println("keys count: " + convert.toString(arrays.length(keys)))
+io.println("keys[0]: " + arrays.get(keys, 0))
+
+// Test merge
+let a = json_parse("{\"x\":1,\"y\":2}")
+let b = json_parse("{\"y\":3,\"z\":4}")
+let merged = json_merge(a, b)
+io.println("merged x: " + convert.toString(merged.x))
+io.println("merged y: " + convert.toString(merged.y))
+io.println("merged z: " + convert.toString(merged.z))
+
+// Test clone
+let original = json_parse("{\"val\":1}")
+let cloned = json_clone(original)
+cloned.val = 999
+io.println("original val: " + convert.toString(original.val))
+io.println("cloned val: " + convert.toString(cloned.val))
+
+// Test pretty
+let pretty = json_pretty(obj, 2)
+io.println("pretty first line: " + strings.charAt(pretty, 0))
+
+io.println("=== Stdlib JSON Tests Done ===")

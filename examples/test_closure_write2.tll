@@ -1,0 +1,40 @@
+// Test closure write in function scope (not global)
+fn test() {
+    let x = 0
+    io.println("Before: x=" + convert.toString(x))
+    let adder = fn(v) {
+        x = x + v
+        io.println("Inside: x=" + convert.toString(x))
+    }
+    adder(5)
+    io.println("After: x=" + convert.toString(x))
+}
+
+test()
+
+// Test makeAdder pattern (known to work)
+fn makeAdder(n) {
+    return fn(x) {
+        return x + n
+    }
+}
+let add5 = makeAdder(5)
+io.println("makeAdder(5)(10) = " + convert.toString(add5(10)))
+
+// Test closure that modifies captured variable
+fn makeCounter() {
+    let count = 0
+    return {
+        inc: fn() {
+            count = count + 1
+            return count
+        },
+        get: fn() {
+            return count
+        }
+    }
+}
+let c = makeCounter()
+io.println("counter inc: " + convert.toString(c["inc"]()))
+io.println("counter inc: " + convert.toString(c["inc"]()))
+io.println("counter get: " + convert.toString(c["get"]()))

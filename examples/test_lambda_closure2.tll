@@ -1,0 +1,39 @@
+// Test: anonymous lambda calls named function closure that captures variable
+fn main() {
+    io.println("=== Test 1: named closure capture and modify ===")
+    let count1 = 0
+    fn handler1(data) {
+        count1 = count1 + 1
+        io.println("  handler1: " + convert.toString(data) + ", count=" + convert.toString(count1))
+    }
+    handler1("a")
+    handler1("b")
+    io.println("  final count1=" + convert.toString(count1) + " (expected 2)")
+
+    io.println("=== Test 2: anonymous lambda calls named closure ===")
+    let count2 = 0
+    fn handler2(data) {
+        count2 = count2 + 1
+        io.println("  handler2: " + convert.toString(data) + ", count=" + convert.toString(count2))
+    }
+    let wrapper = fn(data) {
+        io.println("  wrapper called")
+        handler2(data)
+    }
+    wrapper("x")
+    wrapper("y")
+    io.println("  final count2=" + convert.toString(count2) + " (expected 2)")
+
+    io.println("=== Test 3: anonymous lambda captures and modifies ===")
+    let count3 = 0
+    let wrapper3 = fn(data) {
+        count3 = count3 + 1
+        io.println("  wrapper3: " + convert.toString(data) + ", count=" + convert.toString(count3))
+    }
+    wrapper3("p")
+    wrapper3("q")
+    io.println("  final count3=" + convert.toString(count3) + " (expected 2)")
+
+    io.println("=== All tests done ===")
+}
+main()

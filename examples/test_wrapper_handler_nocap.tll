@@ -1,0 +1,15 @@
+// Test: wrapper calls handler that doesn't use captured var
+fn main() {
+    fn handler(data) {
+        return data
+    }
+
+    let wrapper = fn(data) {
+        return handler(data)
+    }
+
+    let r = wrapper("hello")
+    io.print("result=")
+    io.println(r)
+}
+main()

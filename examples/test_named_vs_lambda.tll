@@ -1,0 +1,36 @@
+// Test named function closure vs anonymous lambda closure
+
+// Test 1: named function closure (known working)
+fn makeCounterNamed() {
+    let n = 0
+    fn inc() { n = n + 1; return n }
+    return inc
+}
+let c1 = makeCounterNamed()
+io.println("named: " + convert.toString(c1()) + " " + convert.toString(c1()))
+
+// Test 2: anonymous lambda closure
+fn makeCounterLambda() {
+    let n = 0
+    let inc = fn() { n = n + 1; return n }
+    return inc
+}
+let c2 = makeCounterLambda()
+io.println("lambda: " + convert.toString(c2()) + " " + convert.toString(c2()))
+
+// Test 3: lambda called directly inside function
+fn testDirect() {
+    let x = 42
+    fn get() { return x }
+    io.println("direct named: " + convert.toString(get()))
+}
+testDirect()
+
+fn testDirectLambda() {
+    let x = 42
+    let get = fn() { return x }
+    io.println("direct lambda: " + convert.toString(get()))
+}
+testDirectLambda()
+
+io.println("done")

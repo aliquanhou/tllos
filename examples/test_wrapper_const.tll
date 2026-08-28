@@ -1,0 +1,11 @@
+// Test: wrapper returns constant directly
+fn main() {
+    let wrapper = fn(data) {
+        return 42
+    }
+
+    let r = wrapper("test")
+    io.print("result=")
+    io.println(r)
+}
+main()

@@ -1,0 +1,3 @@
+io.println("type=" + convert.typeOf(http.encodeURI("abc")))
+io.println("len=" + convert.toString(strings.length(http.encodeURI("abc"))))
+io.println("val=[" + http.encodeURI("abc") + "]")

@@ -1,0 +1,24 @@
+// Test: anonymous lambda self-reference
+fn main() {
+    let calls = 0
+    let wrapper = fn(data) {
+        calls = calls + 1
+        io.print("call " + convert.toString(calls) + ": ")
+        io.println(data)
+        // Self-reference: compare wrapper with itself
+        if wrapper == wrapper {
+            io.println("  self-ref OK: wrapper == wrapper")
+        } else {
+            io.println("  self-ref FAIL: wrapper != wrapper")
+        }
+    }
+
+    io.println("=== first call ===")
+    wrapper("first")
+
+    io.println("=== second call ===")
+    wrapper("second")
+
+    io.println("=== done ===")
+}
+main()

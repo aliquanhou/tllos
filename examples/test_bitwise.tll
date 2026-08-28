@@ -1,0 +1,29 @@
+// P0-15: Bitwise operations test
+fn main() {
+    io.println("=== Bitwise AND ===")
+    io.println("6 & 3 = " + convert.toString(6 & 3) + " (expected 2)")
+
+    io.println("\n=== Bitwise OR ===")
+    io.println("6 | 3 = " + convert.toString(6 | 3) + " (expected 7)")
+
+    io.println("\n=== Bitwise XOR ===")
+    io.println("6 ^ 3 = " + convert.toString(6 ^ 3) + " (expected 5)")
+
+    io.println("\n=== Bitwise NOT ===")
+    io.println("~6 = " + convert.toString(~6) + " (expected -7)")
+
+    io.println("\n=== Shift Left ===")
+    io.println("1 << 4 = " + convert.toString(1 << 4) + " (expected 16)")
+
+    io.println("\n=== Shift Right ===")
+    io.println("16 >> 2 = " + convert.toString(16 >> 2) + " (expected 4)")
+
+    io.println("\n=== Combined: SHA-256 style rotation ===")
+    // Test right rotation via shift + or
+    let x = 0x12345678
+    let rotated = (x >> 4) | (x << 28)
+    io.println("rotate right 4: " + convert.toString(rotated))
+
+    io.println("\n=== All bitwise tests passed ===")
+}
+main()

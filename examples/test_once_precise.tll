@@ -1,0 +1,54 @@
+// Test: simulate once() behavior precisely
+fn main() {
+    // Simulate EventEmitter
+    let listeners = []
+    let onceCount = 0
+
+    // once() equivalent
+    let wrapper = fn(data) {
+        onceCount = onceCount + 1
+        io.println("  wrapper called: " + data + ", count=" + convert.toString(onceCount))
+        // off() equivalent: filter out wrapper
+        let newListeners = []
+        let i = 0
+        while i < arrays.length(listeners) {
+            if listeners[i] != wrapper {
+                arrays.push(newListeners, listeners[i])
+            }
+            i = i + 1
+        }
+        io.println("  off: old len=" + convert.toString(arrays.length(listeners)) + " new len=" + convert.toString(arrays.length(newListeners)))
+        listeners = newListeners
+    }
+
+    // on() equivalent
+    arrays.push(listeners, wrapper)
+    io.println("after on: listeners len=" + convert.toString(arrays.length(listeners)))
+
+    // emit() 3 times
+    io.println("=== emit 1 ===")
+    let i = 0
+    while i < arrays.length(listeners) {
+        listeners[i]("emit1")
+        i = i + 1
+    }
+    io.println("after emit1: listeners len=" + convert.toString(arrays.length(listeners)))
+
+    io.println("=== emit 2 ===")
+    i = 0
+    while i < arrays.length(listeners) {
+        listeners[i]("emit2")
+        i = i + 1
+    }
+    io.println("after emit2: listeners len=" + convert.toString(arrays.length(listeners)))
+
+    io.println("=== emit 3 ===")
+    i = 0
+    while i < arrays.length(listeners) {
+        listeners[i]("emit3")
+        i = i + 1
+    }
+
+    io.println("final onceCount=" + convert.toString(onceCount) + " (expected 1)")
+}
+main()

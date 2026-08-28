@@ -1,0 +1,32 @@
+// Test: anonymous callback with closure capturing external variables
+let totalDelta = 0
+let tradeCount = 0
+
+let callbacks = []
+
+// Register anonymous callback that captures external variables
+arrays.push(callbacks, fn(change) {
+    let d = change["new"] - change["old"]
+    totalDelta = totalDelta + d
+    if d > 10 {
+        tradeCount = tradeCount + 1
+    }
+})
+
+io.println("Before: totalDelta=" + convert.toString(totalDelta) + " tradeCount=" + convert.toString(tradeCount))
+
+// Call callback
+let cb = callbacks[0]
+cb({ old: 100, new: 120 })
+
+io.println("After: totalDelta=" + convert.toString(totalDelta) + " tradeCount=" + convert.toString(tradeCount))
+
+// Test with map literal parameter
+let callbacks2 = []
+arrays.push(callbacks2, fn(data) {
+    io.println("Callback2 called with value=" + convert.toString(data["value"]))
+})
+let cb2 = callbacks2[0]
+cb2({ value: 42 })
+
+io.println("Done")

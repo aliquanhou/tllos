@@ -1,0 +1,7 @@
+﻿fn main() {
+    let arr = [1, 2, 3]
+    io.println("before: " + convert.toString(arr[0]))
+    arr[0] = 99
+    io.println("after: " + convert.toString(arr[0]))
+}
+main()

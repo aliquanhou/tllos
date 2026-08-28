@@ -194,7 +194,16 @@ enum {
     OP_CLOSURE = 42,
     OP_GET_UPVALUE = 43,
     OP_SET_UPVALUE = 44,
-    OP_BOX_LOCAL = 45
+    OP_BOX_LOCAL = 45,
+    /* Bitwise operations (P0-15: blockchain stress test exposed gap) */
+    OP_BAND = 46,
+    OP_BOR = 47,
+    OP_BXOR = 48,
+    OP_BNOT = 49,
+    OP_SHL = 50,
+    OP_SHR = 51,
+    OP_ROTR = 52,
+    OP_ROTL = 53
 };
 
 /* === Function declarations === */

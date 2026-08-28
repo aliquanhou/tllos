@@ -1,0 +1,13 @@
+io.println("before test")
+fn test() {
+    io.println("inside test")
+    fn f() {
+        io.println("inside named f")
+    }
+    io.println("calling f")
+    f()
+    io.println("after f")
+}
+io.println("calling test")
+test()
+io.println("after test")

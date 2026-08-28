@@ -1,0 +1,33 @@
+// SHA-256 inline test (no import)
+fn rotr(x: int, n: int) -> int {
+    let ux = x & 0xFFFFFFFF
+    let un = n & 31
+    return ((ux >> un) | (ux << (32 - un))) & 0xFFFFFFFF
+}
+
+fn main() {
+    io.println("=== Basic tests ===")
+    io.println("6 & 3 = " + convert.toString(6 & 3))
+    io.println("6 | 3 = " + convert.toString(6 | 3))
+    io.println("rotr(6, 1) = " + convert.toString(rotr(6, 1)))
+
+    io.println("\n=== Array index assignment test ===")
+    let arr: list = []
+    arr[0] = 100
+    arr[1] = 200
+    io.println("arr[0] = " + convert.toString(arr[0]))
+    io.println("arr[1] = " + convert.toString(arr[1]))
+    io.println("length = " + convert.toString(arrays.length(arr)))
+
+    io.println("\n=== Array append via index ===")
+    let arr2: list = []
+    let i = 0
+    while i < 5 {
+        arr2[arrays.length(arr2)] = i * 10
+        i = i + 1
+    }
+    io.println("arr2[0] = " + convert.toString(arr2[0]))
+    io.println("arr2[4] = " + convert.toString(arr2[4]))
+    io.println("length = " + convert.toString(arrays.length(arr2)))
+}
+main()

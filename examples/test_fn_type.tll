@@ -1,0 +1,25 @@
+// Test: check function value type
+fn main() {
+    let count = 0
+    fn handler(data) {
+        count = count + 1
+        io.println("  handler: " + convert.toString(data) + ", count=" + convert.toString(count))
+    }
+
+    io.println("handler type: " + convert.typeOf(handler))
+    io.println("handler value: " + convert.toString(handler))
+
+    let wrapper = fn(data) {
+        io.println("  wrapper called, handler type: " + convert.typeOf(handler))
+        handler(data)
+    }
+
+    io.println("--- direct ---")
+    handler("direct")
+
+    io.println("--- via lambda ---")
+    wrapper("via")
+
+    io.println("final count=" + convert.toString(count))
+}
+main()

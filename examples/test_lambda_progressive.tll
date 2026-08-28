@@ -1,0 +1,40 @@
+// Test 1: anonymous lambda, no capture
+fn test1() {
+    io.println("test1 start")
+    let f = fn() {
+        io.println("hello from lambda")
+    }
+    io.println("test1 calling f")
+    f()
+    io.println("test1 done")
+}
+test1()
+io.println("")
+
+// Test 2: anonymous lambda, capture but don't read
+fn test2() {
+    io.println("test2 start")
+    let x = 42
+    let f = fn() {
+        io.println("hello from lambda")
+    }
+    io.println("test2 calling f")
+    f()
+    io.println("test2 done, x=" + convert.toString(x))
+}
+test2()
+io.println("")
+
+// Test 3: anonymous lambda, capture and read
+fn test3() {
+    io.println("test3 start")
+    let x = 42
+    let f = fn() {
+        io.println("x = " + convert.toString(x))
+    }
+    io.println("test3 calling f")
+    f()
+    io.println("test3 done")
+}
+test3()
+io.println("all done")

@@ -1,0 +1,53 @@
+// Test EventEmitter once() with fixed lambda closure
+from "../stdlib/events" import createEmitter, on, emit, once, off, listenerCount
+
+fn main() {
+    io.println("=== EventEmitter Test ===")
+    let emitter = createEmitter()
+
+    // Test on/emit
+    io.println("Test on/emit:")
+    let count = 0
+    fn handler(data) {
+        count = count + 1
+        io.println("  received: " + convert.toString(data))
+    }
+    on(emitter, "test", handler)
+    emit(emitter, "test", "hello")
+    emit(emitter, "test", "world")
+    io.println("  count = " + convert.toString(count) + " (expected 2)")
+
+    // Test once
+    io.println("Test once:")
+    let onceCount = 0
+    fn onceHandler(data) {
+        onceCount = onceCount + 1
+        io.println("  once received: " + convert.toString(data))
+    }
+    once(emitter, "once-test", onceHandler)
+    emit(emitter, "once-test", "first")
+    emit(emitter, "once-test", "second")
+    emit(emitter, "once-test", "third")
+    io.println("  onceCount = " + convert.toString(onceCount) + " (expected 1)")
+
+    // Test off
+    io.println("Test off:")
+    let offCount = 0
+    fn offHandler(data) {
+        offCount = offCount + 1
+    }
+    on(emitter, "off-test", offHandler)
+    emit(emitter, "off-test", "before off")
+    off(emitter, "off-test", offHandler)
+    emit(emitter, "off-test", "after off")
+    io.println("  offCount = " + convert.toString(offCount) + " (expected 1)")
+
+    // Test listenerCount
+    io.println("Test listenerCount:")
+    io.println("  test listeners = " + convert.toString(listenerCount(emitter, "test")) + " (expected 1)")
+    io.println("  once-test listeners = " + convert.toString(listenerCount(emitter, "once-test")) + " (expected 0)")
+
+    io.println("=== All EventEmitter tests passed ===")
+}
+
+main()

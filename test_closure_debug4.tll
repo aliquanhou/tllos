@@ -1,0 +1,13 @@
+io.println("A")
+fn makeReader(val) {
+    io.println("B")
+    return fn() {
+        io.println("C")
+        return val
+    }
+}
+io.println("D")
+let r = makeReader(42)
+io.println("E")
+let v = r()
+io.println("F " + convert.toString(v))

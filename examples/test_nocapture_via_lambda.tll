@@ -1,0 +1,15 @@
+// Test: named function (no capture) called via anonymous lambda
+fn main() {
+    io.println("=== Test: no-capture named fn via lambda ===")
+    fn noCapture(data) {
+        io.println("  noCapture: " + convert.toString(data))
+    }
+    let wrapper = fn(data) {
+        io.println("  wrapper called")
+        noCapture(data)
+    }
+    wrapper("test1")
+    wrapper("test2")
+    io.println("=== done ===")
+}
+main()

@@ -1,0 +1,43 @@
+// Precise test: named closure called directly vs via anonymous lambda
+fn main() {
+    io.println("=== Test A: named closure called directly ===")
+    let countA = 0
+    fn handlerA(data) {
+        countA = countA + 1
+        io.println("  handlerA: " + convert.toString(data) + ", count=" + convert.toString(countA))
+    }
+    handlerA("direct1")
+    handlerA("direct2")
+    io.println("  final countA=" + convert.toString(countA))
+
+    io.println("=== Test B: named closure called via anonymous lambda ===")
+    let countB = 0
+    fn handlerB(data) {
+        countB = countB + 1
+        io.println("  handlerB: " + convert.toString(data) + ", count=" + convert.toString(countB))
+    }
+    let wrapperB = fn(data) {
+        io.println("  wrapperB called with " + convert.toString(data))
+        handlerB(data)
+    }
+    wrapperB("via1")
+    wrapperB("via2")
+    io.println("  final countB=" + convert.toString(countB))
+
+    io.println("=== Test C: anonymous lambda captures and calls another anonymous lambda ===")
+    let countC = 0
+    let innerC = fn(data) {
+        countC = countC + 1
+        io.println("  innerC: " + convert.toString(data) + ", count=" + convert.toString(countC))
+    }
+    let outerC = fn(data) {
+        io.println("  outerC called")
+        innerC(data)
+    }
+    outerC("c1")
+    outerC("c2")
+    io.println("  final countC=" + convert.toString(countC))
+
+    io.println("=== All tests done ===")
+}
+main()

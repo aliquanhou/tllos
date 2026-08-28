@@ -1,0 +1,20 @@
+// Simplified bitwise test
+fn main() {
+    let a = 6
+    let b = 3
+    io.println("a = " + convert.toString(a))
+    io.println("b = " + convert.toString(b))
+    let r_and = a & b
+    io.println("a & b = " + convert.toString(r_and))
+    let r_or = a | b
+    io.println("a | b = " + convert.toString(r_or))
+    let r_xor = a ^ b
+    io.println("a ^ b = " + convert.toString(r_xor))
+    let r_not = ~a
+    io.println("~a = " + convert.toString(r_not))
+    let r_shl = a << 1
+    io.println("a << 1 = " + convert.toString(r_shl))
+    let r_shr = a >> 1
+    io.println("a >> 1 = " + convert.toString(r_shr))
+}
+main()

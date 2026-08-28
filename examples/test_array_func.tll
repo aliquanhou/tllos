@@ -1,0 +1,14 @@
+// Test: calling function stored in array
+fn myCallback(data) {
+    io.println("Callback called with: " + convert.toString(data["value"]))
+}
+
+let callbacks = []
+arrays.push(callbacks, myCallback)
+io.println("Callbacks length: " + convert.toString(arrays.length(callbacks)))
+
+let cb = callbacks[0]
+io.println("cb is function? calling...")
+cb({ value: 42 })
+
+io.println("Done")

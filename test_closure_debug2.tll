@@ -1,0 +1,16 @@
+io.println("step1: start")
+fn makeReader(val) {
+    io.println("step2: makeReader called, val=" + convert.toString(val))
+    let f = fn() {
+        io.println("step4: inner called")
+        return val
+    }
+    io.println("step3: returning inner")
+    return f
+}
+io.println("step1.5: calling makeReader")
+let r = makeReader(42)
+io.println("step3.5: got result, type=" + convert.typeOf(r))
+io.println("step3.6: calling result")
+let v = r()
+io.println("step5: result=" + convert.toString(v))

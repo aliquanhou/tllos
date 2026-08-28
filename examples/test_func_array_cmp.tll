@@ -1,0 +1,39 @@
+// Test: function value in array vs original
+fn main() {
+    let wrapper = fn(data) {
+        io.println("called: " + data)
+    }
+
+    io.println("=== direct comparison ===")
+    if wrapper == wrapper {
+        io.println("  wrapper == wrapper: OK")
+    } else {
+        io.println("  wrapper == wrapper: FAIL")
+    }
+
+    io.println("=== array comparison ===")
+    let arr = []
+    arrays.push(arr, wrapper)
+
+    io.println("  arr[0] type: " + convert.typeOf(arr[0]))
+    io.println("  wrapper type: " + convert.typeOf(wrapper))
+
+    if arr[0] == wrapper {
+        io.println("  arr[0] == wrapper: OK")
+    } else {
+        io.println("  arr[0] == wrapper: FAIL")
+    }
+
+    if arr[0] != wrapper {
+        io.println("  arr[0] != wrapper: TRUE (bad!)")
+    } else {
+        io.println("  arr[0] != wrapper: FALSE (good)")
+    }
+
+    io.println("=== call from array ===")
+    arr[0]("from array")
+
+    io.println("=== call original ===")
+    wrapper("from original")
+}
+main()

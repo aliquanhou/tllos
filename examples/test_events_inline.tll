@@ -1,0 +1,118 @@
+// Test EventEmitter once() with fixed lambda closure (inline)
+
+fn createEmitter() {
+    return { __emitter: true, listeners: {} }
+}
+
+fn on(emitter, event, callback) {
+    let listeners = emitter["listeners"]
+    if listeners[event] == null {
+        listeners[event] = []
+    }
+    let eventListeners = listeners[event]
+    arrays.push(eventListeners, callback)
+    listeners[event] = eventListeners
+    emitter["listeners"] = listeners
+    return emitter
+}
+
+fn emit(emitter, event, data) {
+    let listeners = emitter["listeners"]
+    let eventListeners = listeners[event]
+    if eventListeners == null { return 0 }
+    let count = 0
+    let elen = arrays.length(eventListeners)
+    let i = 0
+    while i < elen {
+        let cb = eventListeners[i]
+        cb(data)
+        count = count + 1
+        i = i + 1
+    }
+    return count
+}
+
+fn off(emitter, event, callback) {
+    let listeners = emitter["listeners"]
+    let eventListeners = listeners[event]
+    if eventListeners == null { return }
+    let newListeners: list = []
+    let elen = arrays.length(eventListeners)
+    let i = 0
+    while i < elen {
+        if eventListeners[i] != callback {
+            arrays.push(newListeners, eventListeners[i])
+        }
+        i = i + 1
+    }
+    listeners[event] = newListeners
+    emitter["listeners"] = listeners
+}
+
+fn once(emitter, event, callback) {
+    let wrapper = fn(data) {
+        off(emitter, event, wrapper)
+        callback(data)
+    }
+    on(emitter, event, wrapper)
+    return wrapper
+}
+
+fn listenerCount(emitter, event) {
+    let listeners = emitter["listeners"]
+    let eventListeners = listeners[event]
+    if eventListeners == null { return 0 }
+    return arrays.length(eventListeners)
+}
+
+// === Tests ===
+fn main() {
+    io.println("=== EventEmitter Test ===")
+    let emitter = createEmitter()
+
+    // Test on/emit
+    io.println("Test on/emit:")
+    let count = 0
+    fn handler(data) {
+        count = count + 1
+        io.println("  received: " + convert.toString(data))
+    }
+    on(emitter, "test", handler)
+    emit(emitter, "test", "hello")
+    emit(emitter, "test", "world")
+    io.println("  count = " + convert.toString(count) + " (expected 2)")
+
+    // Test once (uses anonymous lambda - this was the bug!)
+    io.println("Test once:")
+    let onceCount = 0
+    fn onceHandler(data) {
+        onceCount = onceCount + 1
+        io.println("  once received: " + convert.toString(data))
+    }
+    once(emitter, "once-test", onceHandler)
+    emit(emitter, "once-test", "first")
+    emit(emitter, "once-test", "second")
+    emit(emitter, "once-test", "third")
+    io.println("  onceCount = " + convert.toString(onceCount) + " (expected 1)")
+
+    // Test off
+    io.println("Test off:")
+    let offCount = 0
+    fn offHandler(data) {
+        offCount = offCount + 1
+    }
+    on(emitter, "off-test", offHandler)
+    emit(emitter, "off-test", "before off")
+    off(emitter, "off-test", offHandler)
+    emit(emitter, "off-test", "after off")
+    io.println("  offCount = " + convert.toString(offCount) + " (expected 1)")
+
+    // Test listenerCount
+    io.println("Test listenerCount:")
+    io.println("  test listeners = " + convert.toString(listenerCount(emitter, "test")) + " (expected 1)")
+    io.println("  once-test listeners = " + convert.toString(listenerCount(emitter, "once-test")) + " (expected 0)")
+
+    io.println("=== All EventEmitter tests passed ===")
+}
+
+main()

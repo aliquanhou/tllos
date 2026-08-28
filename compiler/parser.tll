@@ -509,12 +509,57 @@ fn parseOr() -> map {
 }
 
 fn parseAnd() -> map {
-    let left = parseEquality()
+    let left = parseBitwiseOr()
     while parse_match("AND") {
+        let t = parse_previous()
+        let right = parseBitwiseOr()
+        let node = makeNode("Binary", t.line, t.column)
+        node.operator = "&&"
+        node.left = left
+        node.right = right
+        left = node
+    }
+    return left
+}
+
+// Bitwise OR (|) - P0-15
+fn parseBitwiseOr() -> map {
+    let left = parseBitwiseXor()
+    while parse_match("BOR") {
+        let t = parse_previous()
+        let right = parseBitwiseXor()
+        let node = makeNode("Binary", t.line, t.column)
+        node.operator = "|"
+        node.left = left
+        node.right = right
+        left = node
+    }
+    return left
+}
+
+// Bitwise XOR (^) - P0-15
+fn parseBitwiseXor() -> map {
+    let left = parseBitwiseAnd()
+    while parse_match("BXOR") {
+        let t = parse_previous()
+        let right = parseBitwiseAnd()
+        let node = makeNode("Binary", t.line, t.column)
+        node.operator = "^"
+        node.left = left
+        node.right = right
+        left = node
+    }
+    return left
+}
+
+// Bitwise AND (&) - P0-15
+fn parseBitwiseAnd() -> map {
+    let left = parseEquality()
+    while parse_match("BAND") {
         let t = parse_previous()
         let right = parseEquality()
         let node = makeNode("Binary", t.line, t.column)
-        node.operator = "&&"
+        node.operator = "&"
         node.left = left
         node.right = right
         left = node
@@ -568,8 +613,24 @@ fn parseRange() -> map {
 }
 
 fn parseAddition() -> map {
-    let left = parseMultiplication()
+    let left = parseShift()
     while parse_match("PLUS") || parse_match("MINUS") {
+        let t = parse_previous()
+        let op = t.tkValue
+        let right = parseShift()
+        let node = makeNode("Binary", t.line, t.column)
+        node.operator = op
+        node.left = left
+        node.right = right
+        left = node
+    }
+    return left
+}
+
+// Shift operations (<<, >>) - P0-15
+fn parseShift() -> map {
+    let left = parseMultiplication()
+    while parse_match("SHL") || parse_match("SHR") {
         let t = parse_previous()
         let op = t.tkValue
         let right = parseMultiplication()
@@ -612,7 +673,7 @@ fn parsePower() -> map {
 }
 
 fn parseUnary() -> map {
-    if parse_match("MINUS") || parse_match("BANG") {
+    if parse_match("MINUS") || parse_match("BANG") || parse_match("BNOT") {
         let t = parse_previous()
         let op = t.tkValue
         let operand = parseUnary()

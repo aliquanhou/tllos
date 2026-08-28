@@ -1,0 +1,36 @@
+// Enum test
+enum Color {
+    Red = 0
+    Green = 1
+    Blue = 2
+}
+
+enum Status {
+    Active = 1
+    Inactive = 0
+    Pending = 2
+}
+
+// Use enum values as constants
+let c = 1 // Color.Green
+io.println("Color value: " + convert.toString(c))
+
+let status = 1 // Status.Active
+if status == 1 {
+    io.println("Status is Active")
+} else {
+    io.println("Status is not Active")
+}
+
+// Enum with struct-like data (using map)
+enum Shape {
+    Circle = 0
+    Rectangle = 1
+    Triangle = 2
+}
+
+let shape = { type: 0, radius: 5 } // Circle
+io.println("Shape type: " + convert.toString(shape.type))
+io.println("Shape radius: " + convert.toString(shape.radius))
+
+io.println("=== Enum Tests Done ===")

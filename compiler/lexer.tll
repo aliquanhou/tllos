@@ -103,6 +103,13 @@ let TK_STAR_EQ = "STAR_EQ"
 let TK_SLASH_EQ = "SLASH_EQ"
 let TK_PERCENT_EQ = "PERCENT_EQ"
 let TK_EOF = "EOF"
+// Bitwise operators (P0-15: blockchain stress test exposed gap)
+let TK_BAND = "BAND"
+let TK_BOR = "BOR"
+let TK_BXOR = "BXOR"
+let TK_BNOT = "BNOT"
+let TK_SHL = "SHL"
+let TK_SHR = "SHR"
 
 fn isDigit(ch: string) -> bool {
     return ch >= "0" && ch <= "9"
@@ -329,6 +336,8 @@ export fn tokenize(input: string) -> list {
             else if twoChar == "/=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SLASH_EQ, tkValue: "/=", line: startLine, column: startCol }); matched = true }
             else if twoChar == "%=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_PERCENT_EQ, tkValue: "%=", line: startLine, column: startCol }); matched = true }
             else if twoChar == "**" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_POWER, tkValue: "**", line: startLine, column: startCol }); matched = true }
+            else if twoChar == "<<" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SHL, tkValue: "<<", line: startLine, column: startCol }); matched = true }
+            else if twoChar == ">>" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SHR, tkValue: ">>", line: startLine, column: startCol }); matched = true }
 
             if !matched {
                 if opCh == "+" { arrays.push(tokens, { tkType: TK_PLUS, tkValue: "+", line: startLine, column: startCol }) }
@@ -352,6 +361,10 @@ export fn tokenize(input: string) -> list {
                 else if opCh == "]" { arrays.push(tokens, { tkType: TK_RBRACKET, tkValue: "]", line: startLine, column: startCol }) }
                 else if opCh == "@" { arrays.push(tokens, { tkType: TK_AT, tkValue: "@", line: startLine, column: startCol }) }
                 else if opCh == "?" { arrays.push(tokens, { tkType: TK_QUESTION, tkValue: "?", line: startLine, column: startCol }) }
+                else if opCh == "&" { arrays.push(tokens, { tkType: TK_BAND, tkValue: "&", line: startLine, column: startCol }) }
+                else if opCh == "|" { arrays.push(tokens, { tkType: TK_BOR, tkValue: "|", line: startLine, column: startCol }) }
+                else if opCh == "^" { arrays.push(tokens, { tkType: TK_BXOR, tkValue: "^", line: startLine, column: startCol }) }
+                else if opCh == "~" { arrays.push(tokens, { tkType: TK_BNOT, tkValue: "~", line: startLine, column: startCol }) }
                 else { throw "Lexer error: unexpected char '" + opCh + "'" }
             }
         }

@@ -1,0 +1,15 @@
+// Test integer limits
+fn main() {
+    io.println("=== Hex literal tests ===")
+    io.println("0x7FFFFFFF = " + convert.toString(0x7FFFFFFF))
+    io.println("0x80000000 = " + convert.toString(0x80000000))
+    io.println("0xFFFFFFFF = " + convert.toString(0xFFFFFFFF))
+    io.println("0x100000000 = " + convert.toString(0x100000000))
+    io.println("2147483647 = " + convert.toString(2147483647))
+    io.println("2147483648 = " + convert.toString(2147483648))
+    io.println("4294967295 = " + convert.toString(4294967295))
+    io.println("4294967296 = " + convert.toString(4294967296))
+    io.println("\n=== Modulo test ===")
+    io.println("12884901888 % 4294967296 = " + convert.toString(12884901888 % 4294967296))
+}
+main()

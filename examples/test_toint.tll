@@ -1,0 +1,10 @@
+// Test convert.toInt
+fn main() {
+    io.println("=== convert.toInt tests ===")
+    io.println("toInt('255') = " + convert.toString(convert.toInt("255")))
+    io.println("toInt('0xFF') = " + convert.toString(convert.toInt("0xFF")))
+    io.println("toInt('0xFF', 16) = " + convert.toString(convert.toInt("0xFF", 16)))
+    io.println("toInt('FF', 16) = " + convert.toString(convert.toInt("FF", 16)))
+    io.println("toInt('11111111', 2) = " + convert.toString(convert.toInt("11111111", 2)))
+}
+main()

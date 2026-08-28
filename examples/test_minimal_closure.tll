@@ -1,0 +1,23 @@
+// Minimal test: handler without captured variable, called via wrapper
+fn main() {
+    fn handler(data) {
+        io.println("  handler: " + convert.toString(data))
+        return data
+    }
+
+    let wrapper = fn(data) {
+        io.println("  wrapper called")
+        return handler(data)
+    }
+
+    io.println("=== direct ===")
+    let r1 = handler("direct1")
+    io.println("  result: " + convert.toString(r1))
+
+    io.println("=== via wrapper ===")
+    let r2 = wrapper("via1")
+    io.println("  result: " + convert.toString(r2))
+
+    io.println("=== done ===")
+}
+main()

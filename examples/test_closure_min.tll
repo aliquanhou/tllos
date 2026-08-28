@@ -1,0 +1,13 @@
+// Minimal closure read test
+fn test() {
+    let x = 42
+    io.println("x is defined")
+    let f = fn() {
+        io.println("inside closure")
+        io.println("x = " + convert.toString(x))
+    }
+    io.println("calling f")
+    f()
+    io.println("done")
+}
+test()

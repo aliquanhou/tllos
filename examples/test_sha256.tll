@@ -1,0 +1,24 @@
+// SHA-256 test
+from "../../stdlib/crypto" import sha256
+
+fn main() {
+    io.println("=== SHA-256 Tests ===")
+
+    let r1 = sha256("")
+    io.println("sha256('') = " + r1)
+    io.println("expected: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+    if r1 == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" { io.println("PASS") } else { io.println("FAIL") }
+
+    let r2 = sha256("abc")
+    io.println("\nsha256('abc') = " + r2)
+    io.println("expected: ba7816bf8f01cfea414140de5dae2223b00361a96177a9cb410ff61f20015ad")
+    if r2 == "ba7816bf8f01cfea414140de5dae2223b00361a96177a9cb410ff61f20015ad" { io.println("PASS") } else { io.println("FAIL") }
+
+    let r3 = sha256("hello")
+    io.println("\nsha256('hello') = " + r3)
+    io.println("expected: 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
+    if r3 == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" { io.println("PASS") } else { io.println("FAIL") }
+
+    io.println("\n=== All SHA-256 tests completed ===")
+}
+main()

@@ -1,0 +1,16 @@
+fn makeCounter() {
+    let n = 0
+    let inc = fn() { n = n + 1; return n }
+    return inc
+}
+
+fn main() {
+    io.println("start")
+    let c = makeCounter()
+    io.println("got counter")
+    io.println("call 1: " + convert.toString(c()))
+    io.println("call 2: " + convert.toString(c()))
+    io.println("done")
+}
+
+main()

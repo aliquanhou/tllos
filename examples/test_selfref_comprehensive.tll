@@ -1,0 +1,90 @@
+// P0-14.3: Comprehensive self-reference closure tests
+
+fn test_recursive_lambda() {
+    io.println("=== Test 1: Recursive lambda ===")
+    let fact = fn(n) {
+        if n <= 1 { return 1 }
+        return n * fact(n - 1)
+    }
+    let r = fact(5)
+    io.println("fact(5) = " + strings.toString(r) + " (expected 120)")
+    if r == 120 { io.println("PASS") } else { io.println("FAIL") }
+}
+
+fn test_nested_self_ref() {
+    io.println("\n=== Test 2: Nested self-reference ===")
+    let outer = fn() {
+        let inner = fn(x) {
+            if x <= 0 { return 0 }
+            return x + inner(x - 1)
+        }
+        return inner(10)
+    }
+    let r = outer()
+    io.println("outer() = " + strings.toString(r) + " (expected 55)")
+    if r == 55 { io.println("PASS") } else { io.println("FAIL") }
+}
+
+fn test_sibling_closure() {
+    io.println("\n=== Test 3: Sibling closures ===")
+    let makeCounter = fn() {
+        let count = 0
+        let inc = fn() {
+            count = count + 1
+            return count
+        }
+        let get = fn() {
+            return count
+        }
+        return { inc: inc, get: get }
+    }
+    let c = makeCounter()
+    c.inc()
+    c.inc()
+    let r = c.get()
+    io.println("counter after 2 inc = " + strings.toString(r) + " (expected 2)")
+    if r == 2 { io.println("PASS") } else { io.println("FAIL") }
+}
+
+fn test_mutual_recursion() {
+    io.println("\n=== Test 4: Mutual recursion via self-ref ===")
+    let isEven = null
+    let isOdd = null
+    isEven = fn(n) {
+        if n == 0 { return true }
+        return isOdd(n - 1)
+    }
+    isOdd = fn(n) {
+        if n == 0 { return false }
+        return isEven(n - 1)
+    }
+    let r1 = isEven(4)
+    let r2 = isOdd(4)
+    io.println("isEven(4) = " + strings.toString(r1) + " (expected true)")
+    io.println("isOdd(4) = " + strings.toString(r2) + " (expected false)")
+    if r1 == true && r2 == false { io.println("PASS") } else { io.println("FAIL") }
+}
+
+fn test_closure_equality() {
+    io.println("\n=== Test 5: Closure equality ===")
+    let makeAdder = fn(x) {
+        return fn(y) { return x + y }
+    }
+    let add5 = makeAdder(5)
+    let add5b = makeAdder(5)
+    let add10 = makeAdder(10)
+    io.println("add5 == add5: " + strings.toString(add5 == add5) + " (expected true)")
+    io.println("add5 == add5b: " + strings.toString(add5 == add5b) + " (expected false, different env)")
+    io.println("add5 == add10: " + strings.toString(add5 == add10) + " (expected false)")
+    if add5 == add5 && add5 != add5b && add5 != add10 { io.println("PASS") } else { io.println("FAIL") }
+}
+
+fn main() {
+    test_recursive_lambda()
+    test_nested_self_ref()
+    test_sibling_closure()
+    test_mutual_recursion()
+    test_closure_equality()
+    io.println("\n=== All tests completed ===")
+}
+main()

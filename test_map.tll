@@ -1,0 +1,56 @@
+// Map field access reliability test
+io.println("=== Map Field Access Test ===")
+
+// Test 1: basic map creation and field access
+let m = {"name": "TLL", "version": 1.1, "active": true}
+io.println("Test1 - name=" + m.name)
+io.println("Test1 - version=" + convert.toString(m.version))
+io.println("Test1 - active=" + convert.toString(m.active))
+
+// Test 2: missing key returns null
+io.println("Test2 - missing=" + convert.toString(m.nonexistent))
+io.println("Test2 - missing==null: " + convert.toString(m.nonexistent == null))
+
+// Test 3: nested map
+let nested = {"outer": {"inner": {"deep": 42}}}
+io.println("Test3 - deep=" + convert.toString(nested.outer.inner.deep))
+
+// Test 4: map with null value
+let withNull = {"key": null}
+io.println("Test4 - nullValue=" + convert.toString(withNull.key))
+io.println("Test4 - nullValue==null: " + convert.toString(withNull.key == null))
+
+// Test 5: dynamic field access via index
+let keyName = "name"
+io.println("Test5 - dynamic=" + m[keyName])
+
+// Test 6: map in function return
+fn makeMap() -> map {
+    return {"x": 10, "y": 20}
+}
+let p = makeMap()
+io.println("Test6 - x=" + convert.toString(p.x) + " y=" + convert.toString(p.y))
+
+// Test 7: map field assignment
+let config = {"host": "localhost"}
+config.port = 8080
+config.host = "0.0.0.0"
+io.println("Test7 - host=" + config.host + " port=" + convert.toString(config.port))
+
+// Test 8: array of maps
+let items = [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}]
+io.println("Test8 - item1=" + items[0].name + " item2=" + items[1].name)
+
+// Test 9: map with function value
+fn addFn(a,b) { return a + b }
+let ops = {"add": addFn}
+io.println("Test9 - add(3,4)=" + convert.toString(ops.add(3,4)))
+
+// Test 10: truthiness of missing key
+if (m.nonexistent) {
+    io.println("Test10 - FAIL: missing key is truthy")
+} else {
+    io.println("Test10 - PASS: missing key is falsy")
+}
+
+io.println("=== All tests done ===")

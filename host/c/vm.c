@@ -350,6 +350,58 @@ static void tll_vm_exec(TLLVM *vm) {
                 regs[a] = tll_function(b, newEnv);
                 break;
             }
+            /* Bitwise operations (P0-15) */
+            case OP_BAND: {
+                long long x = (regs[b].type==TLL_INT)?regs[b].as.integer:(long long)regs[b].as.floating;
+                long long y = (regs[c].type==TLL_INT)?regs[c].as.integer:(long long)regs[c].as.floating;
+                regs[a] = tll_int(x & y);
+                break;
+            }
+            case OP_BOR: {
+                long long x = (regs[b].type==TLL_INT)?regs[b].as.integer:(long long)regs[b].as.floating;
+                long long y = (regs[c].type==TLL_INT)?regs[c].as.integer:(long long)regs[c].as.floating;
+                regs[a] = tll_int(x | y);
+                break;
+            }
+            case OP_BXOR: {
+                long long x = (regs[b].type==TLL_INT)?regs[b].as.integer:(long long)regs[b].as.floating;
+                long long y = (regs[c].type==TLL_INT)?regs[c].as.integer:(long long)regs[c].as.floating;
+                regs[a] = tll_int(x ^ y);
+                break;
+            }
+            case OP_BNOT: {
+                long long x = (regs[b].type==TLL_INT)?regs[b].as.integer:(long long)regs[b].as.floating;
+                regs[a] = tll_int(~x);
+                break;
+            }
+            case OP_SHL: {
+                long long x = (regs[b].type==TLL_INT)?regs[b].as.integer:(long long)regs[b].as.floating;
+                long long y = (regs[c].type==TLL_INT)?regs[c].as.integer:(long long)regs[c].as.floating;
+                regs[a] = tll_int(x << y);
+                break;
+            }
+            case OP_SHR: {
+                long long x = (regs[b].type==TLL_INT)?regs[b].as.integer:(long long)regs[b].as.floating;
+                long long y = (regs[c].type==TLL_INT)?regs[c].as.integer:(long long)regs[c].as.floating;
+                regs[a] = tll_int((unsigned long long)x >> y);
+                break;
+            }
+            case OP_ROTR: {
+                long long x = (regs[b].type==TLL_INT)?regs[b].as.integer:(long long)regs[b].as.floating;
+                long long y = (regs[c].type==TLL_INT)?regs[c].as.integer:(long long)regs[c].as.floating;
+                unsigned int ux = (unsigned int)x;
+                unsigned int uy = (unsigned int)(y & 31);
+                regs[a] = tll_int((long long)((ux >> uy) | (ux << (32 - uy))));
+                break;
+            }
+            case OP_ROTL: {
+                long long x = (regs[b].type==TLL_INT)?regs[b].as.integer:(long long)regs[b].as.floating;
+                long long y = (regs[c].type==TLL_INT)?regs[c].as.integer:(long long)regs[c].as.floating;
+                unsigned int ux = (unsigned int)x;
+                unsigned int uy = (unsigned int)(y & 31);
+                regs[a] = tll_int((long long)((ux << uy) | (ux >> (32 - uy))));
+                break;
+            }
             case OP_ADD: {
                 TLLValue x = regs[b], y = regs[c];
                 if (x.type == TLL_STRING || y.type == TLL_STRING) {

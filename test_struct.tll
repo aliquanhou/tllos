@@ -1,0 +1,32 @@
+// Struct test - struct declaration + map-based instance
+struct Point {
+    x: int
+    y: int
+}
+
+struct Person {
+    name: string
+    age: int
+}
+
+// Create struct instances using map literals (with __struct tag)
+let p = { __struct: "Point", x: 10, y: 20 }
+io.println("Point x=" + convert.toString(p.x))
+io.println("Point y=" + convert.toString(p.y))
+
+let person = { __struct: "Person", name: "Alice", age: 30 }
+io.println("Person name=" + person.name)
+io.println("Person age=" + convert.toString(person.age))
+
+// Mutable struct field
+mut p2 = { __struct: "Point", x: 5, y: 5 }
+p2.x = 100
+io.println("Modified p2.x=" + convert.toString(p2.x))
+
+// Struct as function parameter
+fn printPoint(pt) -> void {
+    io.println("printPoint: " + convert.toString(pt.x) + ", " + convert.toString(pt.y))
+}
+printPoint(p)
+
+io.println("=== Struct Tests Done ===")

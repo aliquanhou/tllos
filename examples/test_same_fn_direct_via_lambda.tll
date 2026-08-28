@@ -1,0 +1,28 @@
+// Test: same closure called directly vs via lambda
+fn main() {
+    io.println("=== Same function: direct vs via lambda ===")
+    let count = 0
+    fn handler(data) {
+        count = count + 1
+        io.println("  handler: " + convert.toString(data) + ", count=" + convert.toString(count))
+    }
+
+    io.println("--- direct call ---")
+    handler("direct1")
+    handler("direct2")
+
+    io.println("--- via lambda ---")
+    let wrapper = fn(data) {
+        io.println("  wrapper called")
+        handler(data)
+    }
+    wrapper("via1")
+    wrapper("via2")
+
+    io.println("--- direct again ---")
+    handler("direct3")
+
+    io.println("final count=" + convert.toString(count) + " (expected 5)")
+    io.println("=== done ===")
+}
+main()

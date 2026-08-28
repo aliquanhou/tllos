@@ -1,0 +1,13 @@
+// Minimal closure capture debug
+fn makeCounter() {
+    let count = 0
+    return fn() {
+        count = count + 1
+        return count
+    }
+}
+
+let c = makeCounter()
+io.println("c1=" + convert.toString(c()))
+io.println("c2=" + convert.toString(c()))
+io.println("c3=" + convert.toString(c()))

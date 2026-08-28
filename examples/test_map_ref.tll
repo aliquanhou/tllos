@@ -1,0 +1,30 @@
+// Minimal test for TLL map reference behavior
+let outer = { inner: { a: 1 } }
+io.println("Before: outer.inner.a = " + convert.toString(outer["inner"]["a"]))
+
+// Test 1: nested assignment
+outer["inner"]["a"] = 2
+io.println("After nested assign: outer.inner.a = " + convert.toString(outer["inner"]["a"]))
+
+// Test 2: reference extraction
+let ref = outer["inner"]
+ref["a"] = 3
+io.println("After ref assign: outer.inner.a = " + convert.toString(outer["inner"]["a"]))
+io.println("ref.a = " + convert.toString(ref["a"]))
+
+// Test 3: array push on nested array
+let outer2 = { list: [] }
+let listRef = outer2["list"]
+array.push(listRef, 1)
+array.push(listRef, 2)
+io.println("outer2.list length = " + convert.toString(array.length(outer2["list"])))
+io.println("listRef length = " + convert.toString(array.length(listRef)))
+
+// Test 4: function modifying nested map
+fn setField(obj, field, value) {
+    let inner = obj["inner"]
+    inner[field] = value
+    obj["inner"] = inner
+}
+setField(outer, "a", 99)
+io.println("After function set: outer.inner.a = " + convert.toString(outer["inner"]["a"]))

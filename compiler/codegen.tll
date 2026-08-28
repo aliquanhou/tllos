@@ -48,6 +48,15 @@ let OP_CLOSURE = 42
 let OP_GET_UPVALUE = 43
 let OP_SET_UPVALUE = 44
 let OP_BOX_LOCAL = 45
+// Bitwise operations (P0-15: blockchain stress test exposed gap)
+let OP_BAND = 46
+let OP_BOR = 47
+let OP_BXOR = 48
+let OP_BNOT = 49
+let OP_SHL = 50
+let OP_SHR = 51
+let OP_ROTR = 52
+let OP_ROTL = 53
 
 // ============ Codegen state ============
 let cg_instructions: list = []
@@ -1314,6 +1323,11 @@ fn cg_compileBinary(expr: map) -> int {
     else if op == ">=" { cg_emit(OP_GE, [resultReg, leftReg, rightReg]) }
     else if op == "&&" { cg_emit(OP_AND, [resultReg, leftReg, rightReg]) }
     else if op == "||" { cg_emit(OP_OR, [resultReg, leftReg, rightReg]) }
+    else if op == "&" { cg_emit(OP_BAND, [resultReg, leftReg, rightReg]) }
+    else if op == "|" { cg_emit(OP_BOR, [resultReg, leftReg, rightReg]) }
+    else if op == "^" { cg_emit(OP_BXOR, [resultReg, leftReg, rightReg]) }
+    else if op == "<<" { cg_emit(OP_SHL, [resultReg, leftReg, rightReg]) }
+    else if op == ">>" { cg_emit(OP_SHR, [resultReg, leftReg, rightReg]) }
     else {
         cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
     }
@@ -1326,6 +1340,7 @@ fn cg_compileUnary(expr: map) -> int {
     let op = expr.operator
     if op == "-" { cg_emit(OP_NEG, [resultReg, operandReg]) }
     else if op == "!" { cg_emit(OP_NOT, [resultReg, operandReg]) }
+    else if op == "~" { cg_emit(OP_BNOT, [resultReg, operandReg]) }
     else { cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)]) }
     return resultReg
 }
@@ -1626,12 +1641,44 @@ fn cg_compileMap(expr: map) -> int {
 }
 
 // ============ Utility ============
+fn cg_hexDigit(c: string) -> int {
+    let code = strings.charCodeAt(c, 0)
+    if code >= 48 && code <= 57 { return code - 48 }
+    if code >= 97 && code <= 102 { return code - 97 + 10 }
+    if code >= 65 && code <= 70 { return code - 65 + 10 }
+    return 0
+}
+
 fn cg_parseInt(value: string) -> int {
     if strings.length(value) >= 2 {
         let prefix = strings.charAt(value, 0) + strings.charAt(value, 1)
-        if prefix == "0x" || prefix == "0X" { return convert.toInt(value, 16) }
-        if prefix == "0o" || prefix == "0O" { return convert.toInt(value, 8) }
-        if prefix == "0b" || prefix == "0B" { return convert.toInt(value, 2) }
+        if prefix == "0x" || prefix == "0X" {
+            let result = 0
+            let i = 2
+            while i < strings.length(value) {
+                result = result * 16 + cg_hexDigit(strings.charAt(value, i))
+                i = i + 1
+            }
+            return result
+        }
+        if prefix == "0o" || prefix == "0O" {
+            let result = 0
+            let i = 2
+            while i < strings.length(value) {
+                result = result * 8 + (convert.toInt(strings.charAt(value, i)))
+                i = i + 1
+            }
+            return result
+        }
+        if prefix == "0b" || prefix == "0B" {
+            let result = 0
+            let i = 2
+            while i < strings.length(value) {
+                result = result * 2 + (convert.toInt(strings.charAt(value, i)))
+                i = i + 1
+            }
+            return result
+        }
     }
     return convert.toInt(value, 10)
 }

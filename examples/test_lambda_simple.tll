@@ -1,0 +1,13 @@
+io.println("before test")
+fn test() {
+    io.println("inside test")
+    let f = fn() {
+        io.println("inside lambda")
+    }
+    io.println("calling f")
+    f()
+    io.println("after f")
+}
+io.println("calling test")
+test()
+io.println("after test")

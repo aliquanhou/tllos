@@ -1,0 +1,63 @@
+// P0-3.1 new Host ABI test
+io.println("=== P0-3.1 New Host ABI Test ===")
+
+// Test time.now
+let t1 = time.now()
+io.println("time.now() = " + convert.toString(t1) + " (unix seconds)")
+
+// Test time.nowMs
+let ms1 = time.nowMs()
+io.println("time.nowMs() = " + convert.toString(ms1) + " (unix ms)")
+
+// Test time.sleep
+io.println("sleeping 200ms...")
+time.sleep(200)
+let ms2 = time.nowMs()
+let elapsed = ms2 - ms1
+io.println("slept, elapsed = " + convert.toString(elapsed) + "ms (expected ~200)")
+
+// Test time.date
+let d = time.date()
+io.println("time.date() = " + d)
+
+// Test process.cwd
+let cwd = process.cwd()
+io.println("process.cwd() = " + cwd)
+
+// Test process.platform
+let plat = process.platform()
+io.println("process.platform() = " + plat)
+
+// Test io.eprintln (stderr)
+io.eprintln("This goes to stderr (eprintln test)")
+io.eprint("This also goes to stderr, no newline: ")
+io.eprintln("OK")
+
+// Test process.chdir
+let originalCwd = process.cwd()
+process.chdir("..")
+let newCwd = process.cwd()
+io.println("after chdir('..'): " + newCwd)
+process.chdir(originalCwd)
+io.println("restored cwd: " + process.cwd())
+
+// Verify time values are reasonable
+if (t1 > 1700000000) {
+    io.println("PASS: time.now() is reasonable (>1.7e9)")
+} else {
+    io.println("FAIL: time.now() unreasonable")
+}
+
+if (elapsed >= 150 && elapsed <= 500) {
+    io.println("PASS: time.sleep(200) elapsed in range")
+} else {
+    io.println("FAIL: time.sleep elapsed out of range: " + convert.toString(elapsed))
+}
+
+if (plat == "windows" || plat == "linux" || plat == "darwin") {
+    io.println("PASS: process.platform() is valid")
+} else {
+    io.println("FAIL: invalid platform: " + plat)
+}
+
+io.println("=== All tests done ===")

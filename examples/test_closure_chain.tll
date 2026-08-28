@@ -1,0 +1,34 @@
+// Test: wrapper directly captures count vs through handler
+fn main() {
+    let count = 0
+
+    // Test 1: wrapper directly captures count
+    io.println("=== Test 1: wrapper directly captures count ===")
+    let directWrapper = fn(data) {
+        count = count + 1
+        io.println("  directWrapper: " + convert.toString(data) + ", count=" + convert.toString(count))
+    }
+    directWrapper("a")
+    directWrapper("b")
+    io.println("  after directWrapper: count=" + convert.toString(count))
+
+    // Test 2: handler captures count, wrapper calls handler
+    io.println("\n=== Test 2: handler captures count, wrapper calls handler ===")
+    fn handler(data) {
+        count = count + 1
+        io.println("  handler: " + convert.toString(data) + ", count=" + convert.toString(count))
+    }
+    let callHandler = fn(data) {
+        io.println("  callHandler: calling handler, type=" + convert.typeOf(handler))
+        handler(data)
+    }
+    callHandler("c")
+    callHandler("d")
+    io.println("  after callHandler: count=" + convert.toString(count))
+
+    // Test 3: direct call to handler
+    io.println("\n=== Test 3: direct call to handler ===")
+    handler("e")
+    io.println("  final count=" + convert.toString(count) + " (expected 5)")
+}
+main()

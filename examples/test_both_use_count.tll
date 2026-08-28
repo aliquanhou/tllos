@@ -1,0 +1,27 @@
+// Test: both wrapper and handler use same captured count
+fn main() {
+    let count = 0
+
+    fn handler(data) {
+        count = count + 1
+        io.println("  handler: " + convert.toString(data) + ", count=" + convert.toString(count))
+    }
+
+    let wrapper = fn(data) {
+        count = count + 1
+        io.println("  wrapper: " + convert.toString(data) + ", count=" + convert.toString(count))
+        handler(data)
+    }
+
+    io.println("=== direct handler ===")
+    handler("direct1")
+
+    io.println("=== via wrapper ===")
+    wrapper("via1")
+
+    io.println("=== direct handler again ===")
+    handler("direct2")
+
+    io.println("final count=" + convert.toString(count) + " (expected 5)")
+}
+main()

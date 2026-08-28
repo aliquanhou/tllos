@@ -1,0 +1,40 @@
+// Minimal observable test
+fn observable(target) {
+    return {
+        __observable: true,
+        target: target,
+        watchers: {},
+        history: {}
+    }
+}
+
+fn set(obs, field, value) {
+    let target = obs["target"]
+    let oldValue = target[field]
+    io.println("set: field=" + field + " old=" + convert.toString(oldValue) + " new=" + convert.toString(value))
+    if oldValue == value { return false }
+    target[field] = value
+    obs["target"] = target
+    io.println("set: after assign, target[field]=" + convert.toString(obs["target"][field]))
+
+    let hist = obs["history"]
+    if hist[field] == null {
+        hist[field] = []
+    }
+    let fieldHist = hist[field]
+    io.println("set: fieldHist length before push=" + convert.toString(arrays.length(fieldHist)))
+    arrays.push(fieldHist, { old: oldValue, new: value })
+    io.println("set: fieldHist length after push=" + convert.toString(arrays.length(fieldHist)))
+    hist[field] = fieldHist
+    obs["history"] = hist
+    io.println("set: obs history field length=" + convert.toString(arrays.length(obs["history"][field])))
+
+    return true
+}
+
+let market = observable({ XAUUSD: 2350.50 })
+io.println("Initial XAUUSD=" + convert.toString(market["target"]["XAUUSD"]))
+
+set(market, "XAUUSD", 2360.00)
+io.println("After set: XAUUSD=" + convert.toString(market["target"]["XAUUSD"]))
+io.println("History length=" + convert.toString(arrays.length(market["history"]["XAUUSD"])))

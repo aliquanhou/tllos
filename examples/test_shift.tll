@@ -1,0 +1,18 @@
+// Test shift operations
+fn main() {
+    io.println("=== Shift tests ===")
+    io.println("6 << 1 = " + convert.toString(6 << 1))
+    io.println("6 << 2 = " + convert.toString(6 << 2))
+    io.println("6 << 31 = " + convert.toString(6 << 31))
+    io.println("1 << 31 = " + convert.toString(1 << 31))
+    io.println("6 >> 1 = " + convert.toString(6 >> 1))
+    io.println("0xFFFFFFFF = " + convert.toString(0xFFFFFFFF))
+    io.println("6 & 0xFFFFFFFF = " + convert.toString(6 & 0xFFFFFFFF))
+    let x = (6 << 31) & 0xFFFFFFFF
+    io.println("(6 << 31) & 0xFFFFFFFF = " + convert.toString(x))
+    let y = (6 >> 1) | (6 << 31)
+    io.println("(6 >> 1) | (6 << 31) = " + convert.toString(y))
+    let z = ((6 >> 1) | (6 << 31)) & 0xFFFFFFFF
+    io.println("rotr(6,1) manual = " + convert.toString(z))
+}
+main()
