@@ -1,0 +1,95 @@
+// TLL Mempool Test (P0-15 dogfooding)
+from "../../stdlib/mempool" import createMempool, mempoolAdd, mempoolSize, mempoolContains, mempoolRemove, getTransactionsByFee, getTransactionsByNonce, getPendingForMining, removeExpired, clearMempool
+from "../../stdlib/blockchain" import createTransaction
+
+fn main() {
+    io.println("=== TLL Mempool Test ===")
+
+    let mp = createMempool(10, 1, 1000)
+    io.println("Mempool created: capacity=10, minFee=1, maxAge=1000")
+
+    // Add transactions
+    io.println("\n--- Adding transactions ---")
+    let tx1 = createTransaction("alice", "bob", 50, 5, 1, 1000, "alice_key")
+    let tx2 = createTransaction("alice", "charlie", 20, 10, 2, 1001, "alice_key")
+    let tx3 = createTransaction("bob", "alice", 30, 3, 1, 1002, "bob_key")
+    let tx4 = createTransaction("charlie", "bob", 10, 8, 1, 1003, "charlie_key")
+
+    let r1 = mempoolAdd(mp, tx1)
+    let r2 = mempoolAdd(mp, tx2)
+    let r3 = mempoolAdd(mp, tx3)
+    let r4 = mempoolAdd(mp, tx4)
+
+    io.println("Add tx1 (fee=5): result=" + convert.toString(r1))
+    io.println("Add tx2 (fee=10): result=" + convert.toString(r2))
+    io.println("Add tx3 (fee=3): result=" + convert.toString(r3))
+    io.println("Add tx4 (fee=8): result=" + convert.toString(r4))
+    io.println("Mempool size: " + convert.toString(mempoolSize(mp)))
+
+    // Test duplicate detection
+    io.println("\n--- Duplicate detection ---")
+    let r5 = mempoolAdd(mp, tx1)
+    io.println("Add duplicate tx1: result=" + convert.toString(r5) + " (1=duplicate)")
+
+    // Test fee ordering
+    io.println("\n--- Fee ordering (descending) ---")
+    let byFee = getTransactionsByFee(mp)
+    let fi = 0
+    while fi < arrays.length(byFee) {
+        if byFee[fi] != null {
+            io.println("  tx fee=" + convert.toString(byFee[fi].fee) + " from=" + byFee[fi].fromAddr)
+        }
+        fi = fi + 1
+    }
+
+    // Test nonce ordering for alice
+    io.println("\n--- Nonce ordering for alice ---")
+    let aliceTxs = getTransactionsByNonce(mp, "alice")
+    let ai = 0
+    while ai < arrays.length(aliceTxs) {
+        io.println("  tx nonce=" + convert.toString(aliceTxs[ai].nonce) + " fee=" + convert.toString(aliceTxs[ai].fee))
+        ai = ai + 1
+    }
+
+    // Test capacity and eviction
+    io.println("\n--- Capacity and eviction ---")
+    let smallMp = createMempool(2, 1, 1000)
+    mempoolAdd(smallMp, createTransaction("a", "b", 10, 1, 1, 2000, "a_key"))
+    mempoolAdd(smallMp, createTransaction("c", "d", 10, 5, 1, 2001, "c_key"))
+    io.println("Small mempool size after 2: " + convert.toString(mempoolSize(smallMp)))
+    let r6 = mempoolAdd(smallMp, createTransaction("e", "f", 10, 10, 1, 2002, "e_key"))
+    io.println("Add 3rd tx (fee=10) to capacity-2 mempool: result=" + convert.toString(r6))
+    io.println("Small mempool size after eviction: " + convert.toString(mempoolSize(smallMp)))
+    let remaining = getTransactionsByFee(smallMp)
+    io.println("Remaining fees: " + convert.toString(remaining[0].fee) + ", " + convert.toString(remaining[1].fee))
+
+    // Test remove
+    io.println("\n--- Remove transaction ---")
+    io.println("Contains tx1: " + convert.toString(mempoolContains(mp, tx1.id)))
+    mempoolRemove(mp, tx1.id)
+    io.println("Contains tx1 after remove: " + convert.toString(mempoolContains(mp, tx1.id)))
+    io.println("Mempool size: " + convert.toString(mempoolSize(mp)))
+
+    // Test getPendingForMining
+    io.println("\n--- Get pending for mining (top 2) ---")
+    let pending = getPendingForMining(mp, 2)
+    io.println("Pending count: " + convert.toString(arrays.length(pending)))
+    let pi = 0
+    while pi < arrays.length(pending) {
+        io.println("  fee=" + convert.toString(pending[pi].fee))
+        pi = pi + 1
+    }
+
+    // Test expiration
+    io.println("\n--- Expiration ---")
+    let expMp = createMempool(10, 0, 100)
+    mempoolAdd(expMp, createTransaction("a", "b", 10, 1, 1, 1000, "a_key"))
+    mempoolAdd(expMp, createTransaction("c", "d", 10, 1, 1, 1500, "c_key"))
+    io.println("Size before expiration: " + convert.toString(mempoolSize(expMp)))
+    let removed = removeExpired(expMp, 1200)
+    io.println("Expired at time 1200 (maxAge=100): removed=" + convert.toString(removed))
+    io.println("Size after expiration: " + convert.toString(mempoolSize(expMp)))
+
+    io.println("\n=== All mempool tests completed ===")
+}
+main()

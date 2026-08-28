@@ -1,0 +1,233 @@
+// TLL Mempool - Transaction memory pool (P0-15 dogfooding)
+// Supports: duplicate detection, nonce ordering, fee ordering,
+// capacity, expiration, eviction, transaction stream input
+// Note: TLL list has no real delete, so we use count + compaction
+
+from "../../stdlib/blockchain" import validateTransaction, verifyTransactionSignature, transactionHash
+
+// Mempool structure
+struct Mempool {
+    transactions: list
+    txIndex: map
+    count: int
+    capacity: int
+    minFee: int
+    maxAge: int
+}
+
+// Create a new mempool
+fn createMempool(capacity: int, minFee: int, maxAge: int) -> map {
+    return {
+        __struct: "Mempool",
+        transactions: [],
+        txIndex: {},
+        count: 0,
+        capacity: capacity,
+        minFee: minFee,
+        maxAge: maxAge
+    }
+}
+
+// Get mempool size
+fn mempoolSize(mp: map) -> int {
+    return mp.count
+}
+
+// Check if transaction exists in mempool
+fn mempoolContains(mp: map, txId: string) -> bool {
+    return mp.txIndex[txId] != null
+}
+
+// Add transaction to mempool
+// Returns: 0=success, 1=duplicate, 2=invalid, 3=fee too low, 4=mempool full
+fn mempoolAdd(mp: map, tx: map) -> int {
+    // Check duplicate
+    if mempoolContains(mp, tx.id) {
+        return 1
+    }
+
+    // Validate transaction
+    if !validateTransaction(tx) {
+        return 2
+    }
+
+    // Check minimum fee
+    if tx.fee < mp.minFee {
+        return 3
+    }
+
+    // Check capacity - evict lowest fee if full
+    if mp.count >= mp.capacity {
+        let evicted = evictLowestFee(mp)
+        if !evicted {
+            return 4
+        }
+    }
+
+    // Add transaction at end
+    mp.transactions[mp.count] = tx
+    mp.txIndex[tx.id] = mp.count
+    mp.count = mp.count + 1
+
+    // Sort by fee (descending) - simple insertion sort
+    sortByFee(mp)
+
+    return 0
+}
+
+// Remove transaction from mempool by index (internal)
+fn removeAt(mp: map, idx: int) -> bool {
+    if idx < 0 || idx >= mp.count {
+        return false
+    }
+
+    let tx = mp.transactions[idx]
+    if tx == null {
+        return false
+    }
+
+    // Remove from index
+    mp.txIndex[tx.id] = null
+
+    // Compact: shift elements left
+    let i = idx
+    while i < mp.count - 1 {
+        mp.transactions[i] = mp.transactions[i + 1]
+        if mp.transactions[i] != null {
+            mp.txIndex[mp.transactions[i].id] = i
+        }
+        i = i + 1
+    }
+
+    // Clear last slot
+    mp.transactions[mp.count - 1] = null
+    mp.count = mp.count - 1
+
+    return true
+}
+
+// Remove transaction from mempool by ID
+fn mempoolRemove(mp: map, txId: string) -> bool {
+    if !mempoolContains(mp, txId) {
+        return false
+    }
+    let idx = mp.txIndex[txId]
+    return removeAt(mp, idx)
+}
+
+// Get transactions sorted by fee (descending) - returns compact list
+fn getTransactionsByFee(mp: map) -> list {
+    let result: list = []
+    let i = 0
+    while i < mp.count {
+        if mp.transactions[i] != null {
+            result[arrays.length(result)] = mp.transactions[i]
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// Get transactions sorted by nonce (for a given sender)
+fn getTransactionsByNonce(mp: map, fromAddr: string) -> list {
+    let result: list = []
+    let i = 0
+    while i < mp.count {
+        let tx = mp.transactions[i]
+        if tx != null && tx.fromAddr == fromAddr {
+            result[arrays.length(result)] = tx
+        }
+        i = i + 1
+    }
+    // Sort by nonce (simple bubble sort)
+    let j = 0
+    while j < arrays.length(result) - 1 {
+        let k = 0
+        while k < arrays.length(result) - 1 - j {
+            if result[k].nonce > result[k + 1].nonce {
+                let tmp = result[k]
+                result[k] = result[k + 1]
+                result[k + 1] = tmp
+            }
+            k = k + 1
+        }
+        j = j + 1
+    }
+    return result
+}
+
+// Evict lowest fee transaction
+fn evictLowestFee(mp: map) -> bool {
+    if mp.count == 0 {
+        return false
+    }
+
+    // Transactions are sorted by fee descending, so last is lowest
+    let lastIdx = mp.count - 1
+    let lowestFeeTx = mp.transactions[lastIdx]
+
+    if lowestFeeTx == null {
+        return false
+    }
+
+    return removeAt(mp, lastIdx)
+}
+
+// Sort transactions by fee (descending) - simple insertion sort
+fn sortByFee(mp: map) {
+    let i = 1
+    while i < mp.count {
+        let key = mp.transactions[i]
+        if key == null {
+            i = i + 1
+            continue
+        }
+        let j = i - 1
+        while j >= 0 && mp.transactions[j] != null && mp.transactions[j].fee < key.fee {
+            mp.transactions[j + 1] = mp.transactions[j]
+            mp.txIndex[mp.transactions[j].id] = j + 1
+            j = j - 1
+        }
+        mp.transactions[j + 1] = key
+        mp.txIndex[key.id] = j + 1
+        i = i + 1
+    }
+}
+
+// Remove expired transactions
+fn removeExpired(mp: map, currentTime: int) -> int {
+    let removed = 0
+    let i = 0
+    while i < mp.count {
+        let tx = mp.transactions[i]
+        if tx != null && (currentTime - tx.timestamp) > mp.maxAge {
+            removeAt(mp, i)
+            removed = removed + 1
+            i = i - 1 // recheck this index after compaction
+        }
+        i = i + 1
+    }
+    return removed
+}
+
+// Get pending transactions for mining (top N by fee)
+fn getPendingForMining(mp: map, maxCount: int) -> list {
+    let result: list = []
+    let count = 0
+    let i = 0
+    while i < mp.count && count < maxCount {
+        if mp.transactions[i] != null {
+            result[arrays.length(result)] = mp.transactions[i]
+            count = count + 1
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// Clear mempool
+fn clearMempool(mp: map) {
+    mp.transactions = []
+    mp.txIndex = {}
+    mp.count = 0
+}
