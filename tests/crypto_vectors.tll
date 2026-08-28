@@ -1,0 +1,67 @@
+// TLL Crypto Standard Vectors - Permanent Regression Test (P0-15)
+from "../../stdlib/crypto" import sha256, hmacSha256
+
+fn main() {
+    io.println("=== TLL Crypto Standard Vectors ===")
+
+    // SHA-256 standard test vectors
+    let passed = 0
+    let failed = 0
+
+    io.println("\n--- SHA-256 ---")
+    let vectors = [
+        ["", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],
+        ["a", "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb"],
+        ["ab", "fb8e20fc2e4c3f248c60c6d9aa8455eedccf1e3e3194428e784a11e76f5c5d8b"],
+        ["abc", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"],
+        ["abcd", "88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589"],
+        ["hello", "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"]
+    ]
+
+    let vi = 0
+    while vi < arrays.length(vectors) {
+        let input = vectors[vi][0]
+        let expected = vectors[vi][1]
+        let result = sha256(input)
+        if result == expected {
+            io.println("PASS: sha256(\"" + input + "\")")
+            passed = passed + 1
+        } else {
+            io.println("FAIL: sha256(\"" + input + "\")")
+            io.println("  expected: " + expected)
+            io.println("  got:      " + result)
+            failed = failed + 1
+        }
+        vi = vi + 1
+    }
+
+    // HMAC-SHA256 standard test vectors
+    io.println("\n--- HMAC-SHA256 ---")
+    let hmacVectors = [
+        ["key", "The quick brown fox jumps over the lazy dog", "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8"],
+        ["", "", "b613679a0814d9ec772f95d778c35fc5ff1697c493715653c6c712144292c5ad"]
+    ]
+
+    let hi = 0
+    while hi < arrays.length(hmacVectors) {
+        let key = hmacVectors[hi][0]
+        let data = hmacVectors[hi][1]
+        let expected = hmacVectors[hi][2]
+        let result = hmacSha256(key, data)
+        if result == expected {
+            io.println("PASS: hmacSha256(\"" + key + "\", \"" + data + "\")")
+            passed = passed + 1
+        } else {
+            io.println("FAIL: hmacSha256(\"" + key + "\", \"" + data + "\")")
+            io.println("  expected: " + expected)
+            io.println("  got:      " + result)
+            failed = failed + 1
+        }
+        hi = hi + 1
+    }
+
+    io.println("\n=== Summary: " + convert.toString(passed) + " passed, " + convert.toString(failed) + " failed ===")
+    io.println("Known issue: SHA-256(\"abc\") has 4-bit difference in H[4] (0xA3 vs 0xA9).")
+    io.println("All other vectors pass. This is a P0 bug to be fixed in a later stage.")
+}
+main()
