@@ -324,6 +324,9 @@ fn cg_collectCapturedByNested(fnDecl: map) -> list {
             if stmt != null && (stmt.kind == "Let" || stmt.kind == "Const") {
                 arrays.push(boundNames, stmt.name)
             }
+            if stmt != null && stmt.kind == "Fn" {
+                arrays.push(boundNames, stmt.name)
+            }
             si = si + 1
         }
     }
