@@ -124,6 +124,7 @@ typedef struct {
     int registerCount;
     TLLValue *locals;
     int localCount;
+    int localCapacity;  /* actual allocated size of locals array */
     TLLValue *argStack;
     int argStackSize;
     int argStackCapacity;

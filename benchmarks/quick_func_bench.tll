@@ -1,0 +1,50 @@
+// Quick function call benchmark - P0-10 frame pool verification
+fn empty_fn() {
+    return 0
+}
+
+fn add_fn(a, b) {
+    return a + b
+}
+
+io.println("=== Function Call Benchmark (Frame Pool) ===")
+
+// empty call
+let start = time.nowMs()
+let i = 0
+while i < 20000 {
+    empty_fn()
+    i = i + 1
+}
+let end = time.nowMs()
+let total = end - start
+if total <= 0 { total = 1 }
+io.println("empty_call: 20000 ops in " + convert.toString(total) + "ms = " + convert.toString((20000 * 1000) / total) + " ops/sec")
+
+// with args
+start = time.nowMs()
+i = 0
+let sum = 0
+while i < 20000 {
+    sum = sum + add_fn(i, i + 1)
+    i = i + 1
+}
+end = time.nowMs()
+total = end - start
+if total <= 0 { total = 1 }
+io.println("with_args:  20000 ops in " + convert.toString(total) + "ms = " + convert.toString((20000 * 1000) / total) + " ops/sec")
+
+// empty loop for comparison
+start = time.nowMs()
+i = 0
+while i < 500000 {
+    i = i + 1
+}
+end = time.nowMs()
+total = end - start
+if total <= 0 { total = 1 }
+io.println("empty_loop: 500000 ops in " + convert.toString(total) + "ms = " + convert.toString((500000 * 1000) / total) + " ops/sec")
+
+io.println("")
+io.println("Before frame pool: empty_call = 9330 ops/sec")
+io.println("After frame pool:  see above")

@@ -3,6 +3,52 @@
  */
 #include "tllvm.h"
 
+/* === Frame Pool (P0-10.1) ===
+ * Pre-allocated pool of TLLFrame objects to eliminate calloc/free per function call.
+ * Frames are recycled: acquire from pool on create_frame, release back to pool on free_frame.
+ * Pool grows dynamically, capped at FRAME_POOL_MAX to avoid unbounded memory.
+ */
+#define FRAME_POOL_INITIAL 64
+#define FRAME_POOL_MAX 512
+
+static TLLFrame **g_frame_pool = NULL;
+static int g_frame_pool_size = 0;
+static int g_frame_pool_capacity = 0;
+
+static TLLFrame *frame_pool_acquire(void) {
+    if (g_frame_pool_size > 0) {
+        return g_frame_pool[--g_frame_pool_size];
+    }
+    /* Pool empty: allocate fresh frame with all arrays */
+    TLLFrame *frame = (TLLFrame*)calloc(1, sizeof(TLLFrame));
+    frame->registerCount = 4096;
+    frame->registers = (TLLValue*)calloc(4096, sizeof(TLLValue));
+    frame->argStackCapacity = 64;
+    frame->argStack = (TLLValue*)calloc(64, sizeof(TLLValue));
+    frame->tryStackCapacity = 16;
+    frame->tryStack = (int*)calloc(16, sizeof(int));
+    frame->localCapacity = 0;
+    frame->locals = NULL;
+    return frame;
+}
+
+static void frame_pool_release(TLLFrame *frame) {
+    if (g_frame_pool_size >= FRAME_POOL_MAX) {
+        /* Pool full: actually free */
+        free(frame->registers);
+        free(frame->locals);
+        free(frame->argStack);
+        free(frame->tryStack);
+        free(frame);
+        return;
+    }
+    if (g_frame_pool_size >= g_frame_pool_capacity) {
+        g_frame_pool_capacity = g_frame_pool_capacity ? g_frame_pool_capacity * 2 : FRAME_POOL_INITIAL;
+        g_frame_pool = (TLLFrame**)realloc(g_frame_pool, g_frame_pool_capacity * sizeof(TLLFrame*));
+    }
+    g_frame_pool[g_frame_pool_size++] = frame;
+}
+
 static void push_arg(TLLFrame *frame, TLLValue v) {
     if (frame->argStackSize >= frame->argStackCapacity) {
         frame->argStackCapacity = frame->argStackCapacity ? frame->argStackCapacity * 2 : 16;
@@ -42,19 +88,23 @@ TLLVM *tll_vm_create(TLLProgram *prog) {
 }
 
 static TLLFrame *create_frame(TLLFunction *fn, int returnReg, TLLClosureEnv *env) {
-    TLLFrame *frame = (TLLFrame*)calloc(1, sizeof(TLLFrame));
+    /* Acquire frame from pool (or allocate if pool empty) */
+    TLLFrame *frame = frame_pool_acquire();
     frame->function = fn;
     frame->pc = 0;
-    frame->registerCount = 4096;
-    frame->registers = (TLLValue*)calloc(4096, sizeof(TLLValue));
+    /* Reset registers to null (registers array is pre-allocated) */
     for (int i = 0; i < 4096; i++) frame->registers[i] = tll_null();
     frame->localCount = fn->localCount;
-    frame->locals = (TLLValue*)calloc(fn->localCount > 0 ? fn->localCount : 1, sizeof(TLLValue));
+    /* locals array: reallocate if function needs more locals than current capacity */
+    int needed_locals = fn->localCount > 0 ? fn->localCount : 1;
+    if (frame->localCapacity < needed_locals) {
+        if (frame->locals) free(frame->locals);
+        frame->locals = (TLLValue*)calloc(needed_locals, sizeof(TLLValue));
+        frame->localCapacity = needed_locals;
+    }
     for (int i = 0; i < fn->localCount; i++) frame->locals[i] = tll_null();
-    frame->argStackCapacity = 64;
-    frame->argStack = (TLLValue*)calloc(64, sizeof(TLLValue));
-    frame->tryStackCapacity = 16;
-    frame->tryStack = (int*)calloc(16, sizeof(int));
+    frame->argStackSize = 0;
+    frame->tryStackSize = 0;
     frame->returnReg = returnReg;
     frame->closureEnv = env;
     return frame;
@@ -81,6 +131,7 @@ static void free_frame(TLLFrame *frame) {
     TLLClosureEnv *env = frame->closureEnv;
     frame->closureEnv = NULL;
 
+    /* Release all value references (arrays themselves are pooled, not freed) */
     for (int i = 0; i < 4096; i++) tll_value_free(frame->registers[i]);
     for (int i = 0; i < frame->localCount; i++) tll_value_free(frame->locals[i]);
     for (int i = 0; i < frame->argStackSize; i++) tll_value_free(frame->argStack[i]);
@@ -96,11 +147,9 @@ static void free_frame(TLLFrame *frame) {
         free(env->upvalues);
         free(env);
     }
-    free(frame->registers);
-    free(frame->locals);
-    free(frame->argStack);
-    free(frame->tryStack);
-    free(frame);
+
+    /* Return frame to pool instead of freeing (P0-10 frame pool) */
+    frame_pool_release(frame);
 }
 
 static void throw_exception(TLLVM *vm, TLLFrame *frame, TLLValue error) {
