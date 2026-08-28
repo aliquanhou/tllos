@@ -1,0 +1,4 @@
+// Test undefined identifier detection
+fn main() {
+    io.println(undefinedVariable)
+}

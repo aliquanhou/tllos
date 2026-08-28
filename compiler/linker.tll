@@ -3,6 +3,7 @@
 
 from "./lexer" import tokenize
 from "./parser" import parse
+from "./typechecker" import check
 from "./codegen" import compile
 
 // ============ Path Resolution ============
@@ -36,9 +37,16 @@ fn resolveModulePath(currentFile: string, importPath: string) -> string {
         let lastSlash = strings.lastIndexOf(dir, "/")
         if lastSlash >= 0 {
             dir = strings.substring(dir, 0, lastSlash)
+        } else {
+            dir = ""
         }
     }
-    let fullPath = dir + "/" + cleanPath
+    let fullPath = ""
+    if strings.length(dir) > 0 {
+        fullPath = dir + "/" + cleanPath
+    } else {
+        fullPath = cleanPath
+    }
     // Add .tll extension if not present
     if !strings.endsWith(fullPath, ".tll") {
         fullPath = fullPath + ".tll"
@@ -1033,8 +1041,21 @@ export fn linkAndCompile(entryFile: string) -> map {
         mj = mj + 1
     }
 
+    // Phase 3.5: Type checking (warnings only, does not block compilation)
+    io.println("[linker] Phase 3.5: Type checking started, statements=" + convert.toString(arrays.length(allStatements)))
+    let mergedProgram = { statements: allStatements }
+    let typeErrors = check(mergedProgram)
+    io.println("[linker] Phase 3.5: Type checking done, errors=" + convert.toString(arrays.length(typeErrors)))
+    if arrays.length(typeErrors) > 0 {
+        io.println("[TypeChecker] " + convert.toString(arrays.length(typeErrors)) + " type warning(s):")
+        let ti = 0
+        while ti < arrays.length(typeErrors) {
+            io.println("  " + arrays.get(typeErrors, ti))
+            ti = ti + 1
+        }
+    }
+
     // Phase 4: Compile merged AST
-    let program = { statements: allStatements }
-    let bytecode = compile(program)
+    let bytecode = compile(mergedProgram)
     return bytecode
 }
