@@ -1,0 +1,67 @@
+// TLL High Frame Rate Benchmark
+struct BenchmarkMarker {
+    name: string
+}
+
+let marker = BenchmarkMarker { name: "high-frame-rate" }
+
+io.println("=== TLL High Frame Rate Benchmark ===")
+
+// Test 1: empty function call rate (Frames/sec)
+fn empty_fn() { return 0 }
+let iterations = 50000
+let start = time.nowMs()
+let i = 0
+while i < iterations {
+    empty_fn()
+    i = i + 1
+}
+let elapsed = time.nowMs() - start
+let fps = (iterations * 1000) / elapsed
+io.println("Frames/sec (empty fn): " + convert.toString(fps) + " (" + convert.toString(iterations) + " calls in " + convert.toString(elapsed) + "ms)")
+
+// Test 2: loop iteration rate
+let loops = 500000
+let start2 = time.nowMs()
+let sum = 0
+let j = 0
+while j < loops {
+    sum = sum + j
+    j = j + 1
+}
+let elapsed2 = time.nowMs() - start2
+let ips = (loops * 1000) / elapsed2
+io.println("Loop iterations/sec: " + convert.toString(ips) + " (sum=" + convert.toString(sum) + ")")
+
+// Test 3: map state updates (State Updates/sec)
+let map_iter = 20000
+let m = {}
+let start3 = time.nowMs()
+let k = 0
+while k < map_iter {
+    let key = "k" + convert.toString(k)
+    m[key] = k
+    k = k + 1
+}
+let elapsed3 = time.nowMs() - start3
+let ups = (map_iter * 1000) / elapsed3
+io.println("State Updates/sec (map writes): " + convert.toString(ups) + " (size=" + convert.toString(map.size(m)) + ")")
+
+// Test 4: event processing (Events/sec)
+fn handle_event(ev) { return ev["id"] + ev["data"] }
+let events = 5000
+let processed = 0
+let start4 = time.nowMs()
+let e = 0
+while e < events {
+    let event = { id: e, data: e * 2 }
+    processed = processed + handle_event(event)
+    e = e + 1
+}
+let elapsed4 = time.nowMs() - start4
+let eps = (events * 1000) / elapsed4
+io.println("Events/sec (create+dispatch): " + convert.toString(eps) + " (processed=" + convert.toString(processed) + ")")
+
+io.println("=== Benchmark Complete ===")
+io.println("Note: VM has global lock. These are single-threaded numbers.")
+io.println("True parallel execution requires per-worker callStack + fine-grained locking.")
