@@ -784,15 +784,36 @@ fn cg_compileStatement(stmt: map) -> void {
     }
 
     if kind == "Let" || kind == "Const" {
-        let valueReg = cg_compileExpression(stmt.value)
         let resolved = cg_resolveVar(stmt.name)
+        let isSelfRef = false
+        let selfSlot = -1
+        // Detect self-referencing closure: lambda that captures the variable being assigned.
+        // For `let wrapper = fn(...) { ... wrapper ... }`, the closure needs wrapper's box
+        // to exist BEFORE OP_CLOSURE runs, otherwise the captured self upvalue is NULL.
+        if resolved.isGlobal == false && stmt.value != null && stmt.value.kind == "FnExpr" && cg_listContains(cg_upvalueMap, stmt.name) {
+            isSelfRef = true
+            let si = 0
+            while si < arrays.length(cg_upvalueMap) {
+                if arrays.get(cg_upvalueMap, si) == stmt.name { selfSlot = si; si = arrays.length(cg_upvalueMap) }
+                si = si + 1
+            }
+            // Step 1: Create empty box first (local is null at this point)
+            cg_emit(OP_BOX_LOCAL, [resolved.index, selfSlot])
+        }
+        // Step 2: Compile the lambda (OP_CLOSURE) - self box now exists in closureEnv
+        let valueReg = cg_compileExpression(stmt.value)
+        if isSelfRef {
+            // Step 3: Write closure into self box so closure's env sees the correct identity
+            cg_emit(OP_SET_UPVALUE, [selfSlot, valueReg])
+        }
+        // Step 4: Store to local variable
         if resolved.isGlobal {
             cg_emit(OP_STORE_GLOBAL, [resolved.index, valueReg])
         } else {
             cg_emit(OP_STORE_VAR, [resolved.index, valueReg])
         }
-        // If this local is captured by nested function, box it after initialization
-        if resolved.isGlobal == false && cg_listContains(cg_upvalueMap, stmt.name) {
+        // If this local is captured by nested function (but not self-ref, already boxed above)
+        if isSelfRef == false && resolved.isGlobal == false && cg_listContains(cg_upvalueMap, stmt.name) {
             let slot = -1
             let si = 0
             while si < arrays.length(cg_upvalueMap) {
