@@ -1,0 +1,7 @@
+fn main() {
+    let parts: list = ["Hello", " ", "World"]
+    let r = strings.concatMany(parts)
+    io.println("Result: " + r)
+    io.println("Length: " + convert.toString(strings.length(r)))
+}
+main()

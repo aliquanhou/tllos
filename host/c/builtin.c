@@ -1339,6 +1339,36 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
         return tll_null();
     }
 
+    /* strings.concatMany (132) - P0-15.8-C fix: true O(n) multi-string concat */
+    if (idx == 132) { /* strings.concatMany(list_of_strings) -> string */
+        if (argCount > 0 && args[0].type == TLL_ARRAY) {
+            TLLArray *arr = args[0].as.array;
+            int totalLen = 0;
+            int i;
+            for (i = 0; i < arr->length; i++) {
+                if (arr->items[i].type == TLL_STRING) {
+                    totalLen += (int)strlen(arr->items[i].as.string);
+                }
+            }
+            char *buf = (char*)malloc(sizeof(int) + totalLen + 1);
+            *(int*)buf = 1;
+            char *pos = buf + sizeof(int);
+            for (i = 0; i < arr->length; i++) {
+                if (arr->items[i].type == TLL_STRING) {
+                    int len = (int)strlen(arr->items[i].as.string);
+                    memcpy(pos, arr->items[i].as.string, len);
+                    pos += len;
+                }
+            }
+            *pos = '\0';
+            TLLValue v;
+            v.type = TLL_STRING;
+            v.as.string = buf + sizeof(int);
+            return v;
+        }
+        return tll_string("");
+    }
+
     fprintf(stderr, "tllvm: unknown builtin index %d\n", idx);
     return tll_null();
 }

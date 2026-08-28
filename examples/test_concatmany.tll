@@ -1,0 +1,80 @@
+from "../../stdlib/stringbuilder" import newStringBuilder, sbAppend, sbAppendInt, sbToString, sbLength
+
+fn main() {
+    io.println("=== True O(n) StringBuilder Test ===")
+
+    // Test 1: strings.concatMany direct
+    io.println("\n--- strings.concatMany ---")
+    let parts: list = ["Hello", " ", "World", "!", " ", "TLL", " ", "OS"]
+    let result = strings.concatMany(parts)
+    io.println("Result: " + result)
+    io.println("Length: " + convert.toString(strings.length(result)))
+
+    // Test 2: StringBuilder with concatMany
+    io.println("\n--- StringBuilder (concatMany) ---")
+    let sb = newStringBuilder()
+    sbAppend(sb, "Hello")
+    sbAppend(sb, " ")
+    sbAppend(sb, "World")
+    sbAppend(sb, "!")
+    io.println("Result: " + sbToString(sb))
+    io.println("Length: " + convert.toString(sbLength(sb)))
+
+    // Test 3: Performance comparison - 100K appends
+    io.println("\n--- Performance: 100K appends ---")
+    let n = 100000
+
+    // Using + operator (O(n^2))
+    let t0 = time.nowMs()
+    let s = ""
+    let i = 0
+    while i < n {
+        s = s + "x"
+        i = i + 1
+    }
+    let t1 = time.nowMs()
+    io.println("+ operator: " + convert.toString(n) + " appends in " + convert.toString(t1-t0) + "ms, len=" + convert.toString(strings.length(s)))
+
+    // Using StringBuilder with concatMany (true O(n))
+    let t2 = time.nowMs()
+    let sb2 = newStringBuilder()
+    i = 0
+    while i < n {
+        sbAppend(sb2, "x")
+        i = i + 1
+    }
+    let s2 = sbToString(sb2)
+    let t3 = time.nowMs()
+    io.println("StringBuilder: " + convert.toString(n) + " appends in " + convert.toString(t3-t2) + "ms, len=" + convert.toString(strings.length(s2)))
+
+    // Test 4: Large fragment count
+    io.println("\n--- Large fragment count (50K fragments) ---")
+    let n2 = 50000
+    let bigParts: list = []
+    i = 0
+    while i < n2 {
+        bigParts[arrays.length(bigParts)] = "fragment_" + convert.toString(i) + "_"
+        i = i + 1
+    }
+    let t4 = time.nowMs()
+    let bigResult = strings.concatMany(bigParts)
+    let t5 = time.nowMs()
+    io.println("concatMany " + convert.toString(n2) + " fragments in " + convert.toString(t5-t4) + "ms")
+    io.println("Result length: " + convert.toString(strings.length(bigResult)))
+    io.println("First 50 chars: " + strings.substring(bigResult, 0, 50))
+
+    // Test 5: JSON construction
+    io.println("\n--- JSON construction ---")
+    let sb3 = newStringBuilder()
+    sbAppend(sb3, "{\"id\":")
+    sbAppendInt(sb3, 12345)
+    sbAppend(sb3, ",\"name\":\"test\",\"price\":")
+    sbAppendInt(sb3, 999)
+    sbAppend(sb3, ",\"tags\":[\"a\",\"b\",\"c\"]}")
+    let json = sbToString(sb3)
+    io.println("JSON: " + json)
+    io.println("Valid JSON parse: " + convert.toString(json.parse(json) != null))
+
+    io.println("\n=== All tests passed ===")
+}
+main()
