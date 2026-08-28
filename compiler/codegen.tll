@@ -1459,10 +1459,11 @@ fn cg_compileCall(expr: map) -> int {
     // Check for direct function call - use function name map for O(1) lookup
     if callee["kind"] == "Ident" {
         let calleeName = callee["name"]
-        // First check if this is a local/global variable (indirect call via Function Value)
+        // First check if this is a local/global/upvalue variable (indirect call via Function Value)
         let isVar = false
         if cg_varMapGet(calleeName) != null { isVar = true }
         if isVar == false && cg_globalMapGet(calleeName) != null { isVar = true }
+        if isVar == false && cg_listContains(cg_upvalueMap, calleeName) { isVar = true }
         if isVar == false {
             let foundIdx = cg_fnMapGet(calleeName)
             if foundIdx != null {
