@@ -1,0 +1,300 @@
+// TLL Stream - Stream processing library (P0-15 dogfooding)
+// Level: Stdlib (uses list + closure; upgrade to Runtime if performance insufficient)
+// Supports: map, filter, reduce, forEach, collect, take, skip, count, find, any, all, concat, buffer, batch
+
+// Stream structure - lazy evaluation via pipeline of operations
+struct Stream {
+    source: list
+    pipeline: list
+}
+
+// Create a stream from a list
+fn streamFromList(lst: list) -> map {
+    return {
+        __struct: "Stream",
+        source: lst,
+        pipeline: []
+    }
+}
+
+// Create an empty stream
+fn streamEmpty() -> map {
+    return streamFromList([])
+}
+
+// Add a map operation to the pipeline
+fn streamMap(s: map, func) -> map {
+    s.pipeline[arrays.length(s.pipeline)] = {op: "map", func: func}
+    return s
+}
+
+// Add a filter operation to the pipeline
+fn streamFilter(s: map, func) -> map {
+    s.pipeline[arrays.length(s.pipeline)] = {op: "filter", func: func}
+    return s
+}
+
+// Add a take operation
+fn streamTake(s: map, n: int) -> map {
+    s.pipeline[arrays.length(s.pipeline)] = {op: "take", n: n}
+    return s
+}
+
+// Add a skip operation
+fn streamSkip(s: map, n: int) -> map {
+    s.pipeline[arrays.length(s.pipeline)] = {op: "skip", n: n}
+    return s
+}
+
+// Internal: apply map/filter pipeline to a single element
+// Returns [keep, value] - take/skip handled by caller
+fn applyTransforms(pipeline: list, value) -> list {
+    let current = value
+    let i = 0
+    while i < arrays.length(pipeline) {
+        let op = pipeline[i]
+        if op.op == "map" {
+            current = op.func(current)
+        } else if op.op == "filter" {
+            if !op.func(current) {
+                return [false, null]
+            }
+        }
+        i = i + 1
+    }
+    return [true, current]
+}
+
+// Internal: extract take/skip limits from pipeline
+fn getTakeSkip(pipeline: list) -> list {
+    let takeLimit = 2147483647
+    let skipCount = 0
+    let i = 0
+    while i < arrays.length(pipeline) {
+        let op = pipeline[i]
+        if op.op == "take" {
+            takeLimit = op.n
+        } else if op.op == "skip" {
+            skipCount = skipCount + op.n
+        }
+        i = i + 1
+    }
+    return [takeLimit, skipCount]
+}
+
+// Collect stream results into a list
+fn streamCollect(s: map) -> list {
+    let result: list = []
+    let limits = getTakeSkip(s.pipeline)
+    let takeLimit = limits[0]
+    let skipCount = limits[1]
+    let outputCount = 0
+    let i = 0
+    while i < arrays.length(s.source) {
+        let applied = applyTransforms(s.pipeline, s.source[i])
+        if applied[0] == true {
+            if outputCount >= skipCount {
+                if arrays.length(result) < takeLimit {
+                    result[arrays.length(result)] = applied[1]
+                }
+            }
+            outputCount = outputCount + 1
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// ForEach - execute function for each element
+fn streamForEach(s: map, func) {
+    let limits = getTakeSkip(s.pipeline)
+    let takeLimit = limits[0]
+    let skipCount = limits[1]
+    let outputCount = 0
+    let taken = 0
+    let i = 0
+    while i < arrays.length(s.source) {
+        let applied = applyTransforms(s.pipeline, s.source[i])
+        if applied[0] == true {
+            if outputCount >= skipCount && taken < takeLimit {
+                func(applied[1])
+                taken = taken + 1
+            }
+            outputCount = outputCount + 1
+        }
+        i = i + 1
+    }
+}
+
+// Reduce - fold stream to a single value
+fn streamReduce(s: map, func, init) {
+    let acc = init
+    let limits = getTakeSkip(s.pipeline)
+    let takeLimit = limits[0]
+    let skipCount = limits[1]
+    let outputCount = 0
+    let taken = 0
+    let i = 0
+    while i < arrays.length(s.source) {
+        let applied = applyTransforms(s.pipeline, s.source[i])
+        if applied[0] == true {
+            if outputCount >= skipCount && taken < takeLimit {
+                acc = func(acc, applied[1])
+                taken = taken + 1
+            }
+            outputCount = outputCount + 1
+        }
+        i = i + 1
+    }
+    return acc
+}
+
+// Count - count elements after pipeline
+fn streamCount(s: map) -> int {
+    let count = 0
+    let limits = getTakeSkip(s.pipeline)
+    let takeLimit = limits[0]
+    let skipCount = limits[1]
+    let outputCount = 0
+    let taken = 0
+    let i = 0
+    while i < arrays.length(s.source) {
+        let applied = applyTransforms(s.pipeline, s.source[i])
+        if applied[0] == true {
+            if outputCount >= skipCount && taken < takeLimit {
+                count = count + 1
+                taken = taken + 1
+            }
+            outputCount = outputCount + 1
+        }
+        i = i + 1
+    }
+    return count
+}
+
+// Find - find first element matching predicate
+fn streamFind(s: map, func) {
+    let limits = getTakeSkip(s.pipeline)
+    let takeLimit = limits[0]
+    let skipCount = limits[1]
+    let outputCount = 0
+    let taken = 0
+    let i = 0
+    while i < arrays.length(s.source) {
+        let applied = applyTransforms(s.pipeline, s.source[i])
+        if applied[0] == true {
+            if outputCount >= skipCount && taken < takeLimit {
+                if func(applied[1]) {
+                    return applied[1]
+                }
+                taken = taken + 1
+            }
+            outputCount = outputCount + 1
+        }
+        i = i + 1
+    }
+    return null
+}
+
+// Any - check if any element matches predicate
+fn streamAny(s: map, func) -> bool {
+    let limits = getTakeSkip(s.pipeline)
+    let takeLimit = limits[0]
+    let skipCount = limits[1]
+    let outputCount = 0
+    let taken = 0
+    let i = 0
+    while i < arrays.length(s.source) {
+        let applied = applyTransforms(s.pipeline, s.source[i])
+        if applied[0] == true {
+            if outputCount >= skipCount && taken < takeLimit {
+                if func(applied[1]) {
+                    return true
+                }
+                taken = taken + 1
+            }
+            outputCount = outputCount + 1
+        }
+        i = i + 1
+    }
+    return false
+}
+
+// All - check if all elements match predicate
+fn streamAll(s: map, func) -> bool {
+    let limits = getTakeSkip(s.pipeline)
+    let takeLimit = limits[0]
+    let skipCount = limits[1]
+    let outputCount = 0
+    let taken = 0
+    let i = 0
+    while i < arrays.length(s.source) {
+        let applied = applyTransforms(s.pipeline, s.source[i])
+        if applied[0] == true {
+            if outputCount >= skipCount && taken < takeLimit {
+                if !func(applied[1]) {
+                    return false
+                }
+                taken = taken + 1
+            }
+            outputCount = outputCount + 1
+        }
+        i = i + 1
+    }
+    return true
+}
+
+// Concat - concatenate two streams
+fn streamConcat(s1: map, s2: map) -> map {
+    let combined: list = []
+    let i = 0
+    while i < arrays.length(s1.source) {
+        combined[arrays.length(combined)] = s1.source[i]
+        i = i + 1
+    }
+    i = 0
+    while i < arrays.length(s2.source) {
+        combined[arrays.length(combined)] = s2.source[i]
+        i = i + 1
+    }
+    return streamFromList(combined)
+}
+
+// Batch - group elements into batches of given size
+fn streamBatch(s: map, size: int) -> list {
+    let collected = streamCollect(s)
+    let batches: list = []
+    let i = 0
+    while i < arrays.length(collected) {
+        let batch: list = []
+        let j = 0
+        while j < size && i + j < arrays.length(collected) {
+            batch[arrays.length(batch)] = collected[i + j]
+            j = j + 1
+        }
+        batches[arrays.length(batches)] = batch
+        i = i + size
+    }
+    return batches
+}
+
+// Sum - sum all numeric elements
+fn streamSum(s: map) -> int {
+    return streamReduce(s, fn(acc, x) { return acc + x }, 0)
+}
+
+// Max - find maximum numeric element
+fn streamMax(s: map) {
+    return streamReduce(s, fn(acc, x) {
+        if x > acc { return x }
+        return acc
+    }, -2147483648)
+}
+
+// Min - find minimum numeric element
+fn streamMin(s: map) {
+    return streamReduce(s, fn(acc, x) {
+        if x < acc { return x }
+        return acc
+    }, 2147483647)
+}

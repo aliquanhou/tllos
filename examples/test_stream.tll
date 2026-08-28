@@ -1,0 +1,124 @@
+// TLL Stream Test (P0-15 dogfooding)
+from "../../stdlib/stream" import streamFromList, streamMap, streamFilter, streamCollect, streamForEach, streamReduce, streamCount, streamFind, streamAny, streamAll, streamTake, streamSkip, streamConcat, streamBatch, streamSum, streamMax, streamMin
+
+fn main() {
+    io.println("=== TLL Stream Test ===")
+
+    // Basic map
+    io.println("\n--- Map ---")
+    let s1 = streamFromList([1, 2, 3, 4, 5])
+    streamMap(s1, fn(x) { return x * 2 })
+    let r1 = streamCollect(s1)
+    io.print("map x*2: ")
+    let i = 0
+    while i < arrays.length(r1) {
+        io.print(convert.toString(r1[i]) + " ")
+        i = i + 1
+    }
+    io.println("")
+
+    // Filter
+    io.println("\n--- Filter ---")
+    let s2 = streamFromList([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    streamFilter(s2, fn(x) { return x % 2 == 0 })
+    let r2 = streamCollect(s2)
+    io.print("filter even: ")
+    i = 0
+    while i < arrays.length(r2) {
+        io.print(convert.toString(r2[i]) + " ")
+        i = i + 1
+    }
+    io.println("")
+
+    // Map + Filter chain
+    io.println("\n--- Map + Filter chain ---")
+    let s3 = streamFromList([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    streamFilter(s3, fn(x) { return x > 3 })
+    streamMap(s3, fn(x) { return x * x })
+    let r3 = streamCollect(s3)
+    io.print("filter >3, map x*x: ")
+    i = 0
+    while i < arrays.length(r3) {
+        io.print(convert.toString(r3[i]) + " ")
+        i = i + 1
+    }
+    io.println("")
+
+    // Reduce
+    io.println("\n--- Reduce ---")
+    let s4 = streamFromList([1, 2, 3, 4, 5])
+    let sum = streamReduce(s4, fn(acc, x) { return acc + x }, 0)
+    io.println("reduce sum: " + convert.toString(sum))
+
+    // Count
+    io.println("\n--- Count ---")
+    let s5 = streamFromList([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    streamFilter(s5, fn(x) { return x > 5 })
+    io.println("count >5: " + convert.toString(streamCount(s5)))
+
+    // Find
+    io.println("\n--- Find ---")
+    let s6 = streamFromList([1, 2, 3, 4, 5])
+    let found = streamFind(s6, fn(x) { return x > 3 })
+    io.println("find first >3: " + convert.toString(found))
+
+    // Any / All
+    io.println("\n--- Any / All ---")
+    let s7 = streamFromList([2, 4, 6, 8])
+    io.println("any >5: " + convert.toString(streamAny(s7, fn(x) { return x > 5 })))
+    let s8 = streamFromList([2, 4, 6, 8])
+    io.println("all even: " + convert.toString(streamAll(s8, fn(x) { return x % 2 == 0 })))
+
+    // Take / Skip
+    io.println("\n--- Take / Skip ---")
+    let s9 = streamFromList([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    streamSkip(s9, 3)
+    streamTake(s9, 4)
+    let r9 = streamCollect(s9)
+    io.print("skip 3, take 4: ")
+    i = 0
+    while i < arrays.length(r9) {
+        io.print(convert.toString(r9[i]) + " ")
+        i = i + 1
+    }
+    io.println("")
+
+    // Sum / Max / Min
+    io.println("\n--- Sum / Max / Min ---")
+    let s10 = streamFromList([3, 7, 2, 9, 1, 5])
+    io.println("sum: " + convert.toString(streamSum(s10)))
+    let s11 = streamFromList([3, 7, 2, 9, 1, 5])
+    io.println("max: " + convert.toString(streamMax(s11)))
+    let s12 = streamFromList([3, 7, 2, 9, 1, 5])
+    io.println("min: " + convert.toString(streamMin(s12)))
+
+    // Batch
+    io.println("\n--- Batch ---")
+    let s13 = streamFromList([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    let batches = streamBatch(s13, 3)
+    io.println("batch size 3: " + convert.toString(arrays.length(batches)) + " batches")
+    i = 0
+    while i < arrays.length(batches) {
+        io.print("  batch " + convert.toString(i) + ": ")
+        let j = 0
+        while j < arrays.length(batches[i]) {
+            io.print(convert.toString(batches[i][j]) + " ")
+            j = j + 1
+        }
+        io.println("")
+        i = i + 1
+    }
+
+    // ForEach
+    io.println("\n--- ForEach ---")
+    let s14 = streamFromList([1, 2, 3])
+    let total = 0
+    streamForEach(s14, fn(x) {
+        total = total + x
+        io.println("  element: " + convert.toString(x))
+    })
+    io.println("forEach total: " + convert.toString(total))
+
+    io.println("\n=== All stream tests completed ===")
+}
+main()
