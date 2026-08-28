@@ -23,15 +23,76 @@
 static CRITICAL_SECTION g_vm_lock;
 static int g_vm_lock_initialized = 0;
 
-/* Thread data for HTTP worker threads */
+/* === Worker Pool === */
+/* Fixed pool of worker threads + thread-safe task queue.
+   Replaces thread-per-connection to avoid OS thread explosion at high connection counts. */
+#define WORKER_POOL_SIZE 8
+
 typedef struct {
     unsigned int client_fd;
     TLLVM *vm;
     TLLValue handler_fn;
-} HttpThreadData;
+} HttpTask;
 
-/* Forward declaration */
-static DWORD WINAPI http_worker_thread(LPVOID param);
+typedef struct TaskNode {
+    HttpTask *task;
+    struct TaskNode *next;
+} TaskNode;
+
+static TaskNode *g_task_head = NULL;
+static TaskNode *g_task_tail = NULL;
+static CRITICAL_SECTION g_queue_lock;
+static HANDLE g_task_sem = NULL;
+static int g_pool_initialized = 0;
+
+/* Forward declarations */
+static void http_process_task(HttpTask *task);
+static DWORD WINAPI worker_thread(LPVOID param);
+
+static void init_worker_pool(void) {
+    InitializeCriticalSection(&g_queue_lock);
+    g_task_sem = CreateSemaphore(NULL, 0, 1000000, NULL);
+    for (int i = 0; i < WORKER_POOL_SIZE; i++) {
+        CreateThread(NULL, 0, worker_thread, NULL, 0, NULL);
+    }
+    g_pool_initialized = 1;
+    fprintf(stderr, "tllvm: worker pool initialized with %d threads\n", WORKER_POOL_SIZE);
+}
+
+static void enqueue_task(HttpTask *task) {
+    TaskNode *node = (TaskNode*)malloc(sizeof(TaskNode));
+    node->task = task;
+    node->next = NULL;
+    EnterCriticalSection(&g_queue_lock);
+    if (g_task_tail) {
+        g_task_tail->next = node;
+    } else {
+        g_task_head = node;
+    }
+    g_task_tail = node;
+    LeaveCriticalSection(&g_queue_lock);
+    ReleaseSemaphore(g_task_sem, 1, NULL);
+}
+
+static DWORD WINAPI worker_thread(LPVOID param) {
+    (void)param;
+    while (1) {
+        WaitForSingleObject(g_task_sem, INFINITE);
+        EnterCriticalSection(&g_queue_lock);
+        TaskNode *node = g_task_head;
+        if (node) {
+            g_task_head = node->next;
+            if (!g_task_head) g_task_tail = NULL;
+        }
+        LeaveCriticalSection(&g_queue_lock);
+        if (node) {
+            http_process_task(node->task);
+            free(node->task);
+            free(node);
+        }
+    }
+    return 0;
+}
 /* Minimal WinHTTP declarations (TCC lacks winhttp.h) */
 #ifndef _WINHTTP_H_
 #define _WINHTTP_H_
@@ -117,13 +178,12 @@ static char *str_sub(const char *s, int start, int end) {
 
 /* === Builtin dispatch === */
 
-/* HTTP worker thread - handles one connection. VM invocation is protected by g_vm_lock. */
-static DWORD WINAPI http_worker_thread(LPVOID param) {
-    HttpThreadData *data = (HttpThreadData*)param;
+/* HTTP task processor - called by worker threads from the pool.
+   VM invocation is protected by g_vm_lock. */
+static void http_process_task(HttpTask *data) {
     SOCKET client_fd = (SOCKET)data->client_fd;
     TLLVM *vm = data->vm;
     TLLValue handlerFn = data->handler_fn;
-    free(data);
 
     /* Read request */
     char req_buf[65536];
@@ -286,7 +346,6 @@ static DWORD WINAPI http_worker_thread(LPVOID param) {
     }
     send(client_fd, resp_buf, resp_len, 0);
     closesocket(client_fd);
-    return 0;
 }
 
 TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
@@ -1089,24 +1148,28 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
                 closesocket(server_fd);
                 return tll_null();
             }
-            fprintf(stderr, "tllvm: HTTP server listening on %s:%d (concurrent)\n", host, port);
-            /* Initialize VM lock for concurrent requests */
+            fprintf(stderr, "tllvm: HTTP server listening on %s:%d (worker pool, %d threads)\n", host, port, WORKER_POOL_SIZE);
+            /* Initialize VM lock and worker pool */
             if (!g_vm_lock_initialized) {
                 InitializeCriticalSection(&g_vm_lock);
                 g_vm_lock_initialized = 1;
             }
-            /* Accept loop - spawn worker thread per connection.
+            if (!g_pool_initialized) {
+                init_worker_pool();
+            }
+            /* Accept loop - enqueue task to worker pool.
+               Worker pool has fixed WORKER_POOL_SIZE threads, avoiding OS thread explosion.
                VM invocation is serialized by g_vm_lock inside worker thread. */
             while (1) {
                 struct sockaddr_in client_addr;
                 socklen_t client_len = sizeof(client_addr);
                 SOCKET client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
                 if (client_fd == INVALID_SOCKET) continue;
-                HttpThreadData *data = (HttpThreadData*)malloc(sizeof(HttpThreadData));
-                data->client_fd = client_fd;
-                data->vm = vm;
-                data->handler_fn = args[1];
-                CreateThread(NULL, 0, http_worker_thread, data, 0, NULL);
+                HttpTask *task = (HttpTask*)malloc(sizeof(HttpTask));
+                task->client_fd = (unsigned int)client_fd;
+                task->vm = vm;
+                task->handler_fn = args[1];
+                enqueue_task(task);
             }
             closesocket(server_fd);
 #ifdef _WIN32
