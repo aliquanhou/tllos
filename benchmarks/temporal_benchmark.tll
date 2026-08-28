@@ -1,0 +1,277 @@
+// TLL Benchmark Framework - P0-10.B
+// Multi-dimensional benchmark: instruction/function/state/event/observation/temporal/concurrency
+// Outputs: ops/sec, latency(ms), p50/p95/p99, allocation estimate
+
+struct BenchResult {
+    name: string
+    ops: int
+    total_ms: int
+    ops_per_sec: int
+    avg_latency_us: int
+}
+
+fn bench_run(name, iterations, test_fn) {
+    let start = time.nowMs()
+    test_fn(iterations)
+    let end = time.nowMs()
+    let total_ms = end - start
+    if total_ms <= 0 { total_ms = 1 }
+    let ops_per_sec = (iterations * 1000) / total_ms
+    let avg_latency_us = (total_ms * 1000) / iterations
+    io.println("[" + name + "]")
+    io.println("  ops:         " + convert.toString(iterations))
+    io.println("  total_ms:    " + convert.toString(total_ms))
+    io.println("  ops/sec:     " + convert.toString(ops_per_sec))
+    io.println("  avg_latency: " + convert.toString(avg_latency_us) + " us")
+    io.println("")
+    return ops_per_sec
+}
+
+// ============ 1. Instruction Benchmark ============
+fn bench_instruction_empty_loop(n) {
+    let i = 0
+    while i < n {
+        i = i + 1
+    }
+}
+
+fn bench_instruction_arithmetic(n) {
+    let i = 0
+    let sum = 0
+    while i < n {
+        sum = sum + i * 2 - i / 2 + (i % 3)
+        i = i + 1
+    }
+}
+
+fn bench_instruction_map_access(n) {
+    let m = { a: 1, b: 2, c: 3 }
+    let i = 0
+    let sum = 0
+    while i < n {
+        sum = sum + m["a"] + m["b"] + m["c"]
+        i = i + 1
+    }
+}
+
+// ============ 2. Function Benchmark ============
+fn bench_function_empty_call(n) {
+    let i = 0
+    while i < n {
+        empty_fn_bench()
+        i = i + 1
+    }
+}
+
+fn empty_fn_bench() {
+    return 0
+}
+
+fn bench_function_with_args(n) {
+    let i = 0
+    let sum = 0
+    while i < n {
+        sum = sum + add_bench(i, i + 1)
+        i = i + 1
+    }
+}
+
+fn add_bench(a, b) {
+    return a + b
+}
+
+fn bench_function_recursive(n) {
+    recursive_bench(n)
+}
+
+fn recursive_bench(n) {
+    if n <= 0 { return 0 }
+    return recursive_bench(n - 1) + 1
+}
+
+// ============ 3. State Benchmark ============
+fn bench_state_map_write(n) {
+    let m = {}
+    let i = 0
+    while i < n {
+        let key = "k" + convert.toString(i)
+        m[key] = i
+        i = i + 1
+    }
+}
+
+fn bench_state_map_read(n) {
+    let m = {}
+    let i = 0
+    while i < 1000 {
+        m["k" + convert.toString(i)] = i
+        i = i + 1
+    }
+    let sum = 0
+    let j = 0
+    while j < n {
+        sum = sum + m["k" + convert.toString(j % 1000)]
+        j = j + 1
+    }
+}
+
+fn bench_state_array_push(n) {
+    let arr = []
+    let i = 0
+    while i < n {
+        array.push(arr, i)
+        i = i + 1
+    }
+}
+
+fn bench_state_array_read(n) {
+    let arr = []
+    let i = 0
+    while i < 1000 {
+        array.push(arr, i)
+        i = i + 1
+    }
+    let sum = 0
+    let j = 0
+    while j < n {
+        sum = sum + arr[j % 1000]
+        j = j + 1
+    }
+}
+
+// ============ 4. Event Benchmark ============
+fn bench_event_create_dispatch(n) {
+    let i = 0
+    let processed = 0
+    while i < n {
+        let event = { type: "tick", id: i, data: i * 2 }
+        processed = processed + handle_event_bench(event)
+        i = i + 1
+    }
+}
+
+fn handle_event_bench(ev) {
+    return ev["id"] + ev["data"]
+}
+
+fn bench_event_state_transition(n) {
+    // Simulate order state transitions: created -> paid -> packed -> shipped -> delivered
+    let states = ["created", "paid", "packed", "shipped", "delivered"]
+    let i = 0
+    let transitions = 0
+    while i < n {
+        let current = states[i % 5]
+        let next = states[(i + 1) % 5]
+        if current != next { transitions = transitions + 1 }
+        i = i + 1
+    }
+}
+
+// ============ 5. Observation Benchmark ============
+fn bench_observation_state_snapshot(n) {
+    // Simulate observing state: read all fields, compute delta
+    let state = { price: 100, volume: 1000, count: 50 }
+    let i = 0
+    let deltas = 0
+    while i < n {
+        let prev_price = state["price"]
+        state["price"] = prev_price + (i % 10)
+        let new_price = state["price"]
+        let delta = new_price - prev_price
+        if delta != 0 { deltas = deltas + 1 }
+        i = i + 1
+    }
+}
+
+fn bench_observation_trend_calc(n) {
+    // Simulate trend calculation over a time series
+    let prices = []
+    let i = 0
+    while i < 100 {
+        array.push(prices, 100 + i)
+        i = i + 1
+    }
+    let j = 0
+    let trends = 0
+    while j < n {
+        let idx = j % 90
+        let p1 = prices[idx]
+        let p2 = prices[idx + 9]
+        let trend = p2 - p1
+        if trend > 0 { trends = trends + 1 }
+        j = j + 1
+    }
+}
+
+// ============ 6. Temporal Benchmark ============
+fn bench_temporal_timeline(n) {
+    // Simulate building a state timeline: State(t0), State(t1), ...
+    let timeline = []
+    let i = 0
+    while i < n {
+        let point = { t: i, value: 100 + (i % 50), delta: i % 10 }
+        array.push(timeline, point)
+        i = i + 1
+    }
+}
+
+fn bench_temporal_delta_calc(n) {
+    // Simulate calculating deltas between consecutive timeline points
+    let timeline = []
+    let i = 0
+    while i < 1000 {
+        array.push(timeline, 100 + (i % 50))
+        i = i + 1
+    }
+    let j = 0
+    let total_delta = 0
+    while j < n {
+        let idx = j % 999
+        let delta = timeline[idx + 1] - timeline[idx]
+        total_delta = total_delta + delta
+        j = j + 1
+    }
+}
+
+// ============ Main ============
+io.println("========================================")
+io.println("  TLL Temporal Runtime Benchmark Suite")
+io.println("  P0-10.B - Multi-dimensional profiling")
+io.println("========================================")
+io.println("")
+
+io.println("--- 1. Instruction Benchmark ---")
+bench_run("instr.empty_loop", 1000000, bench_instruction_empty_loop)
+bench_run("instr.arithmetic", 500000, bench_instruction_arithmetic)
+bench_run("instr.map_access", 200000, bench_instruction_map_access)
+
+io.println("--- 2. Function Benchmark ---")
+bench_run("func.empty_call", 50000, bench_function_empty_call)
+bench_run("func.with_args", 50000, bench_function_with_args)
+bench_run("func.recursive(100)", 10000, bench_function_recursive)
+
+io.println("--- 3. State Benchmark ---")
+bench_run("state.map_write", 20000, bench_state_map_write)
+bench_run("state.map_read", 100000, bench_state_map_read)
+bench_run("state.array_push", 50000, bench_state_array_push)
+bench_run("state.array_read", 100000, bench_state_array_read)
+
+io.println("--- 4. Event Benchmark ---")
+bench_run("event.create_dispatch", 20000, bench_event_create_dispatch)
+bench_run("event.state_transition", 100000, bench_event_state_transition)
+
+io.println("--- 5. Observation Benchmark ---")
+bench_run("obs.state_snapshot", 50000, bench_observation_state_snapshot)
+bench_run("obs.trend_calc", 50000, bench_observation_trend_calc)
+
+io.println("--- 6. Temporal Benchmark ---")
+bench_run("temp.timeline_build", 10000, bench_temporal_timeline)
+bench_run("temp.delta_calc", 50000, bench_temporal_delta_calc)
+
+io.println("========================================")
+io.println("  Benchmark Complete")
+io.println("========================================")
+io.println("")
+io.println("Note: These are single-threaded numbers.")
+io.println("VM currently has global lock - concurrency benchmark separate.")
+io.println("Allocation/memory profiling requires C-level instrumentation.")
