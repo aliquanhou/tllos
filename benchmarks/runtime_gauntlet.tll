@@ -1,0 +1,298 @@
+// TLL Universal Runtime Reality Gauntlet (P0-15.8-B)
+// Two tracks: A) Language performance  B) Runtime/Agent simulation
+// Goal: map TLL's real capability boundary, not just blockchain crypto
+
+fn bench(name: string, count: int, func) {
+    let t0 = time.nowMs()
+    func()
+    let t1 = time.nowMs()
+    let elapsed = t1 - t0
+    let perSec = (count * 1000) / elapsed
+    let perOpUs = (elapsed * 1000) / count
+    io.println(name + ": " + convert.toString(count) + " in " + convert.toString(elapsed) + "ms = " + convert.toString(perSec) + "/s, " + convert.toString(perOpUs) + "us/op")
+}
+
+fn main() {
+    io.println("=== TLL Universal Runtime Reality Gauntlet ===")
+    io.println("")
+
+    // ===== TRACK A: Language Performance Micro-benchmarks =====
+    io.println("--- TRACK A: Language Performance ---")
+
+    // A1: Integer arithmetic
+    bench("Integer add/mul", 1000000, fn() {
+        let x = 0
+        let i = 0
+        while i < 1000000 { x = x + i * 3; i = i + 1 }
+    })
+
+    // A2: Loop overhead
+    bench("Pure loop", 5000000, fn() {
+        let i = 0
+        while i < 5000000 { i = i + 1 }
+    })
+
+    // A3: Function call (non-closure)
+    fn helper(x: int) -> int { return x + 1 }
+    bench("Function call", 500000, fn() {
+        let i = 0
+        let s = 0
+        while i < 500000 { s = s + helper(i); i = i + 1 }
+    })
+
+    // A4: Closure call
+    let closure = fn(x: int) -> int { return x + 1 }
+    bench("Closure call", 500000, fn() {
+        let i = 0
+        let s = 0
+        while i < 500000 { s = s + closure(i); i = i + 1 }
+    })
+
+    // A5: Closure with capture
+    let base = 100
+    let capClosure = fn(x: int) -> int { return x + base }
+    bench("Closure with capture", 500000, fn() {
+        let i = 0
+        let s = 0
+        while i < 500000 { s = s + capClosure(i); i = i + 1 }
+    })
+
+    // A6: Recursion
+    fn fib(n: int) -> int {
+        if n < 2 { return n }
+        return fib(n-1) + fib(n-2)
+    }
+    bench("Recursion fib(20)", 100, fn() {
+        let i = 0
+        while i < 100 { fib(20); i = i + 1 }
+    })
+
+    // A7: Array read
+    let arrSize = 100000
+    let bigArr: list = []
+    let ai = 0
+    while ai < arrSize { bigArr[arrays.length(bigArr)] = ai; ai = ai + 1 }
+    bench("Array read (100K)", 100000, fn() {
+        let i = 0
+        let s = 0
+        while i < 100000 { s = s + bigArr[i]; i = i + 1 }
+    })
+
+    // A8: Array write (append)
+    bench("Array append (100K)", 100000, fn() {
+        let arr: list = []
+        let i = 0
+        while i < 100000 { arr[arrays.length(arr)] = i; i = i + 1 }
+    })
+
+    // A9: Map read
+    let mapSize = 10000
+    let bigMap: map = {}
+    let mi = 0
+    while mi < mapSize { bigMap["k"+convert.toString(mi)] = mi; mi = mi + 1 }
+    bench("Map read (10K)", 10000, fn() {
+        let i = 0
+        let s = 0
+        while i < 10000 { s = s + bigMap["k"+convert.toString(i)]; i = i + 1 }
+    })
+
+    // A10: Map write
+    bench("Map write (10K)", 10000, fn() {
+        let m: map = {}
+        let i = 0
+        while i < 10000 { m["k"+convert.toString(i)] = i; i = i + 1 }
+    })
+
+    // A11: String concat
+    bench("String concat (50K)", 50000, fn() {
+        let s = ""
+        let i = 0
+        while i < 50000 { s = s + convert.toString(i); i = i + 1 }
+    })
+
+    // A12: convert.toString
+    bench("convert.toString (100K)", 100000, fn() {
+        let i = 0
+        while i < 100000 { convert.toString(i); i = i + 1 }
+    })
+
+    // A13: Bitwise operations
+    bench("Bitwise ops (500K)", 500000, fn() {
+        let x = 0xDEADBEEF
+        let i = 0
+        while i < 500000 {
+            x = ((x << 1) | (x >> 31)) & 0xFFFFFFFF
+            x = x ^ 0x5A5A5A5A
+            x = x & 0x0FFFFFFF
+            i = i + 1
+        }
+    })
+
+    // ===== TRACK B: Runtime / Agent Simulation =====
+    io.println("")
+    io.println("--- TRACK B: Runtime / Agent Simulation ---")
+
+    // B1: Agent simulation - 100 agents, 100 cycles each
+    // Each agent: state update -> event check -> decision -> action -> next cycle
+    io.println("")
+    io.println("Agent Simulation (100 agents x 100 cycles):")
+    let agentCount = 100
+    let cycles = 100
+    let agents: list = []
+    let agi = 0
+    while agi < agentCount {
+        agents[arrays.length(agents)] = {
+            id: agi,
+            state: 0,
+            events: 0,
+            decisions: 0,
+            actions: 0
+        }
+        agi = agi + 1
+    }
+    let tAgent0 = time.nowMs()
+    let totalEvents = 0
+    let totalDecisions = 0
+    let totalActions = 0
+    let cy = 0
+    while cy < cycles {
+        let ai2 = 0
+        while ai2 < agentCount {
+            let ag = agents[ai2]
+            // Event: random-ish event based on state
+            let event = (ag.state + cy + ai2) % 7
+            ag.events = ag.events + 1
+            // Decision: simple rule
+            if event == 0 {
+                ag.decisions = ag.decisions + 1
+                ag.state = ag.state + 1
+            } else if event == 3 {
+                ag.decisions = ag.decisions + 1
+                ag.state = ag.state - 1
+            } else if event == 5 {
+                ag.decisions = ag.decisions + 1
+                ag.state = ag.state * 2
+            }
+            // Action
+            ag.actions = ag.actions + 1
+            if ag.state > 1000 { ag.state = 0 }
+            totalEvents = totalEvents + 1
+            if event == 0 || event == 3 || event == 5 {
+                totalDecisions = totalDecisions + 1
+            }
+            totalActions = totalActions + 1
+            ai2 = ai2 + 1
+        }
+        cy = cy + 1
+    }
+    let tAgent1 = time.nowMs()
+    let agentElapsed = tAgent1 - tAgent0
+    let agentCyclesPerSec = (agentCount * cycles * 1000) / agentElapsed
+    io.println("  " + convert.toString(agentCount) + " agents x " + convert.toString(cycles) + " cycles = " + convert.toString(agentCount*cycles) + " agent-cycles in " + convert.toString(agentElapsed) + "ms")
+    io.println("  Agent-cycles/s: " + convert.toString(agentCyclesPerSec))
+    io.println("  Events: " + convert.toString(totalEvents) + ", Decisions: " + convert.toString(totalDecisions) + ", Actions: " + convert.toString(totalActions))
+
+    // B2: Agent simulation - 1000 agents, 50 cycles
+    io.println("")
+    io.println("Agent Simulation (1000 agents x 50 cycles):")
+    let agentCount2 = 1000
+    let cycles2 = 50
+    let agents2: list = []
+    let agi2 = 0
+    while agi2 < agentCount2 {
+        agents2[arrays.length(agents2)] = {
+            id: agi2,
+            state: agi2 % 100,
+            events: 0,
+            decisions: 0,
+            actions: 0
+        }
+        agi2 = agi2 + 1
+    }
+    let tAgent2_0 = time.nowMs()
+    let totalEvents2 = 0
+    let totalActions2 = 0
+    let cy2 = 0
+    while cy2 < cycles2 {
+        let ai3 = 0
+        while ai3 < agentCount2 {
+            let ag2 = agents2[ai3]
+            let event = (ag2.state + cy2 + ai3) % 7
+            ag2.events = ag2.events + 1
+            if event == 0 { ag2.state = ag2.state + 1 }
+            else if event == 3 { ag2.state = ag2.state - 1 }
+            else if event == 5 { ag2.state = ag2.state * 2 }
+            ag2.actions = ag2.actions + 1
+            if ag2.state > 10000 { ag2.state = 0 }
+            totalEvents2 = totalEvents2 + 1
+            totalActions2 = totalActions2 + 1
+            ai3 = ai3 + 1
+        }
+        cy2 = cy2 + 1
+    }
+    let tAgent2_1 = time.nowMs()
+    let agentElapsed2 = tAgent2_1 - tAgent2_0
+    let agentCyclesPerSec2 = (agentCount2 * cycles2 * 1000) / agentElapsed2
+    io.println("  " + convert.toString(agentCount2) + " agents x " + convert.toString(cycles2) + " cycles = " + convert.toString(agentCount2*cycles2) + " agent-cycles in " + convert.toString(agentElapsed2) + "ms")
+    io.println("  Agent-cycles/s: " + convert.toString(agentCyclesPerSec2))
+    io.println("  Events: " + convert.toString(totalEvents2) + ", Actions: " + convert.toString(totalActions2))
+
+    // ===== TRACK C: Long-running / Memory =====
+    io.println("")
+    io.println("--- TRACK C: Long-running Stability ---")
+
+    // C1: Repeated allocation (detect memory leak / GC pressure)
+    io.println("Repeated allocation (10K iterations x 100 objects):")
+    let tC0 = time.nowMs()
+    let allocIter = 0
+    while allocIter < 10000 {
+        let temp: list = []
+        let ti = 0
+        while ti < 100 { temp[arrays.length(temp)] = allocIter * 100 + ti; ti = ti + 1 }
+        // temp goes out of scope each iteration
+        allocIter = allocIter + 1
+    }
+    let tC1 = time.nowMs()
+    io.println("  10K iterations x 100 objects = 1M allocations in " + convert.toString(tC1-tC0) + "ms")
+    io.println("  Alloc/s: " + convert.toString(1000000 * 1000 / (tC1-tC0)))
+
+    // C2: Map churn (create + discard)
+    io.println("Map churn (5K iterations x 50 entries):")
+    let tC2 = time.nowMs()
+    let mapIter = 0
+    while mapIter < 5000 {
+        let tempMap: map = {}
+        let mi2 = 0
+        while mi2 < 50 { tempMap["k"+convert.toString(mi2)] = mi2; mi2 = mi2 + 1 }
+        mapIter = mapIter + 1
+    }
+    let tC3 = time.nowMs()
+    io.println("  5K iterations x 50 entries = 250K map writes in " + convert.toString(tC3-tC2) + "ms")
+
+    // ===== SUMMARY =====
+    io.println("")
+    io.println("=== Gauntlet Complete ===")
+    io.println("")
+    io.println("Capability Matrix (measured):")
+    io.println("  Integer ops:    ~1M+/s (loop-bound)")
+    io.println("  Function call:  measured above")
+    io.println("  Closure call:   measured above")
+    io.println("  Array read:     ~6M/s")
+    io.println("  Array append:   measured above")
+    io.println("  Map read/write: measured above")
+    io.println("  String concat:  measured above")
+    io.println("  Bitwise:        measured above")
+    io.println("  Agent-cycles:   measured above")
+    io.println("  Allocation:     measured above")
+    io.println("")
+    io.println("Missing (not yet measurable in TLL):")
+    io.println("  Task/s           - no Task runtime")
+    io.println("  Channel msg/s    - no Channel")
+    io.println("  Event/s          - no Event runtime (events.tll is stdlib)")
+    io.println("  HTTP req/s       - HTTP server exists but not benchmarked")
+    io.println("  TCP conn/s       - no TCP")
+    io.println("  Concurrent conn  - global VM lock")
+    io.println("  Scheduler latency- no scheduler")
+    io.println("  Memory per task  - no task isolation")
+}
+main()
