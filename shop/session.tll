@@ -1,0 +1,98 @@
+// Session module - Cookie parsing and session management for TLL OS Shop
+// Pure TLL implementation - uses HTTP headers (req.headers) and response headers
+
+let sessions = {}
+let sessionsLoaded = false
+
+fn loadSessions() {
+    if (sessionsLoaded) { return }
+    sessionsLoaded = true
+    if (fs.exists("shop/sessions.json")) {
+        let data = fs.readFile("shop/sessions.json")
+        if (strings.length(data) > 0) {
+            let parsed = json.parse(data)
+            if (parsed != null) { sessions = parsed }
+        }
+    }
+}
+
+fn saveSessions() {
+    fs.writeFile("shop/sessions.json", json.stringify(sessions))
+}
+
+fn generateSessionId() {
+    let ts = time.nowMs()
+    let rand = math.floor(math.random() * 1000000)
+    return "sess_" + convert.toString(ts) + "_" + convert.toString(rand)
+}
+
+fn parseCookies(req) {
+    let cookies = {}
+    let cookieHeader = req.headers["Cookie"]
+    if (cookieHeader == null) { cookieHeader = req.headers["cookie"] }
+    if (cookieHeader != null && strings.length(cookieHeader) > 0) {
+        let remaining = cookieHeader
+        while (strings.length(remaining) > 0) {
+            let semi = strings.indexOf(remaining, ";")
+            let part = ""
+            if (semi >= 0) {
+                part = strings.substring(remaining, 0, semi)
+                remaining = strings.substring(remaining, semi + 1, strings.length(remaining))
+                if (strings.length(remaining) > 0 && strings.charAt(remaining, 0) == " ") {
+                    remaining = strings.substring(remaining, 1, strings.length(remaining))
+                }
+            } else {
+                part = remaining
+                remaining = ""
+            }
+            let eq = strings.indexOf(part, "=")
+            if (eq >= 0) {
+                let key = strings.substring(part, 0, eq)
+                let val = strings.substring(part, eq + 1, strings.length(part))
+                cookies[key] = val
+            }
+        }
+    }
+    return cookies
+}
+
+export fn getSession(req) {
+    loadSessions()
+    let cookies = parseCookies(req)
+    let sid = cookies["tll_session"]
+    if (sid != null && sessions[sid] != null) {
+        return { id: sid, data: sessions[sid] }
+    }
+    return null
+}
+
+export fn createSession(userId) {
+    loadSessions()
+    let sid = generateSessionId()
+    sessions[sid] = { userId: userId, createdAt: time.now() }
+    saveSessions()
+    return { id: sid, data: sessions[sid], setCookie: "tll_session=" + sid + "; Path=/; HttpOnly" }
+}
+
+export fn destroySession(req) {
+    loadSessions()
+    let cookies = parseCookies(req)
+    let sid = cookies["tll_session"]
+    if (sid != null) {
+        sessions[sid] = null
+        saveSessions()
+    }
+    return { setCookie: "tll_session=; Path=/; Max-Age=0" }
+}
+
+export fn getCurrentUser(req, users) {
+    let session = getSession(req)
+    if (session == null) { return null }
+    let userId = session.data.userId
+    let i = 0
+    while (i < arrays.length(users)) {
+        if (users[i].id == userId) { return users[i] }
+        i = i + 1
+    }
+    return null
+}

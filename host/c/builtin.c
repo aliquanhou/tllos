@@ -1001,10 +1001,9 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
                 map_set(reqMap.as.map, "query", tll_string(query));
                 map_set(reqMap.as.map, "queryMap", queryMap);
                 map_set(reqMap.as.map, "headers", headersMap);
-                /* Parse body */
-                char *body_start = strstr(line_end ? line_end + 2 : req_buf, "\r\n\r\n");
-                if (body_start) {
-                    body_start += 4;
+                /* Parse body - use header_end found earlier (before \r\n were nulled) */
+                if (header_end) {
+                    char *body_start = header_end + 4;
                     map_set(reqMap.as.map, "body", tll_string(body_start));
                 } else {
                     map_set(reqMap.as.map, "body", tll_string(""));

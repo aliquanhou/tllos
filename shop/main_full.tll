@@ -1,0 +1,177 @@
+// TLL OS Shop - Full Dogfooding version (P0-6)
+// Modules: product, cart, templates, storage, session, user
+from "./product" import products, findProduct, productCount
+from "./cart" import cart, addToCart, removeFromCart, cartTotal, cartCount, clearCart
+from "./templates" import layout, productCard
+from "./storage" import loadOrders, createOrder, getOrders
+from "./session" import getSession, createSession, destroySession, getCurrentUser
+from "./user" import registerUser, loginUser, getUserCount, getAllUsers
+
+fn handleHome(req) {
+    let user = getCurrentUser(req, getAllUsers())
+    let cards = ""
+    let i = 0
+    while (i < arrays.length(products)) {
+        cards = cards + productCard(products[i])
+        i = i + 1
+    }
+    let userNav = ""
+    if (user != null) {
+        userNav = "<a href='/account'>" + user.username + "</a> <a href='/logout'>Logout</a>"
+    } else {
+        userNav = "<a href='/login'>Login</a> <a href='/register'>Register</a>"
+    }
+    return layout("TLL OS Shop", "<div style='text-align:right;margin-bottom:1rem'>" + userNav + "</div><h1>Products (" + convert.toString(productCount()) + ")</h1><div class='grid'>" + cards + "</div>")
+}
+
+fn handleProduct(req, id) {
+    let p = findProduct(id)
+    if (p == null) { return layout("Not Found", "<div class='empty'>Product not found</div>") }
+    return layout(p.name, "<div class='card' style='max-width:600px;margin:0 auto'><h1>" + p.name + "</h1><p>" + p.desc + "</p><div class='price'>$" + math.round(p.price) + "</div><a href='/add/" + p.id + "' class='btn'>Add to Cart</a> <a href='/' class='btn' style='background:#666'>Back</a></div>")
+}
+
+fn handleAdd(req, id) {
+    let p = findProduct(id)
+    if (p == null) { return layout("Not Found", "<div class='empty'>Product not found</div>") }
+    addToCart(p)
+    return layout("Added", "<div class='success'>Added " + p.name + "!</div><a href='/cart' class='btn'>View Cart</a> <a href='/' class='btn' style='background:#666'>Shop</a>")
+}
+
+fn handleCart(req) {
+    if (arrays.length(cart) == 0) {
+        return layout("Cart", "<div class='empty'><h2>Cart empty</h2><a href='/' class='btn'>Shop</a></div>")
+    }
+    let rows = ""
+    let i = 0
+    while (i < arrays.length(cart)) {
+        let item = cart[i]
+        rows = rows + "<tr><td>" + item.name + "</td><td>$" + math.round(item.price) + "</td><td>" + item.qty + "</td><td>$" + math.round(item.price * item.qty) + "</td><td><a href='/remove/" + item.id + "' class='btn btn-sm' style='background:#999'>X</a></td></tr>"
+        i = i + 1
+    }
+    return layout("Cart", "<h1>Cart</h1><table><thead><tr><th>Product</th><th>Price</th><th>Qty</th><th>Subtotal</th><th></th></tr></thead><tbody>" + rows + "</tbody></table><div class='total'>Total: $" + math.round(cartTotal()) + "</div><div style='margin-top:1rem'><a href='/checkout' class='btn'>Checkout</a></div>")
+}
+
+fn handleRemove(req, id) { removeFromCart(id); return handleCart(req) }
+
+fn handleCheckout(req) {
+    let user = getCurrentUser(req, getAllUsers())
+    if (user == null) {
+        return layout("Login Required", "<div class='empty'><h2>Please login to checkout</h2><a href='/login' class='btn'>Login</a> <a href='/register' class='btn' style='background:#666'>Register</a></div>")
+    }
+    let order = createOrder()
+    if (order == null) { return layout("Checkout", "<div class='empty'>Cart empty</div>") }
+    return layout("Order Confirmed", "<div class='card' style='max-width:600px;margin:0 auto;text-align:center'><h1>Order #" + convert.toString(order.id) + "</h1><p style='font-size:1.5rem;color:#e94560;font-weight:bold'>$" + math.round(order.total) + "</p><p>Order saved! Customer: " + user.username + "</p><a href='/orders' class='btn'>View Orders</a> <a href='/' class='btn' style='background:#666'>Shop</a></div>")
+}
+
+fn handleOrders(req) {
+    let allOrders = getOrders()
+    if (arrays.length(allOrders) == 0) { return layout("Orders", "<div class='empty'><h2>No orders</h2></div>") }
+    let rows = ""
+    let i = 0
+    while (i < arrays.length(allOrders)) {
+        let o = allOrders[i]
+        rows = rows + "<tr><td>#" + convert.toString(o.id) + "</td><td>" + convert.toString(arrays.length(o.items)) + " items</td><td>$" + math.round(o.total) + "</td><td>" + o.status + "</td></tr>"
+        i = i + 1
+    }
+    return layout("Orders", "<h1>All Orders (persisted)</h1><table><thead><tr><th>Order ID</th><th>Items</th><th>Total</th><th>Status</th></tr></thead><tbody>" + rows + "</tbody></table>")
+}
+
+fn parseFormBody(body) {
+    let result = {}
+    if (body == null || strings.length(body) == 0) { return result }
+    let pos = 0
+    let len = strings.length(body)
+    while (pos < len) {
+        let amp = strings.indexOf(body, "&")
+        let pair = ""
+        if (amp >= 0) {
+            pair = strings.substring(body, 0, amp)
+            body = strings.substring(body, amp + 1, strings.length(body))
+        } else {
+            pair = body
+            body = ""
+        }
+        let eq = strings.indexOf(pair, "=")
+        if (eq >= 0) {
+            let key = strings.substring(pair, 0, eq)
+            let val = strings.substring(pair, eq + 1, strings.length(pair))
+            result[key] = val
+        }
+        pos = pos + strings.length(pair) + 1
+    }
+    return result
+}
+
+fn handleRegister(req) {
+    if (req.method == "POST") {
+        let form = parseFormBody(req.body)
+        let username = form["username"]
+        let password = form["password"]
+        let email = form["email"]
+        if (username == null) { username = "" }
+        if (password == null) { password = "" }
+        if (email == null) { email = "" }
+        let result = registerUser(username, password, email)
+        if (result.success) {
+            return {status: 302, headers: {"Location": "/login"}, body: ""}
+        }
+        return layout("Register", "<div class='card' style='max-width:400px;margin:0 auto'><h1>Register</h1><p style='color:red'>" + result.error + "</p><form method='POST'><p><input name='username' placeholder='Username' style='width:100%;padding:0.5rem'></p><p><input name='password' type='password' placeholder='Password' style='width:100%;padding:0.5rem'></p><p><input name='email' placeholder='Email' style='width:100%;padding:0.5rem'></p><button type='submit' class='btn'>Register</button></form><p><a href='/login'>Already have account? Login</a></p></div>")
+    }
+    return layout("Register", "<div class='card' style='max-width:400px;margin:0 auto'><h1>Register</h1><form method='POST'><p><input name='username' placeholder='Username' style='width:100%;padding:0.5rem'></p><p><input name='password' type='password' placeholder='Password' style='width:100%;padding:0.5rem'></p><p><input name='email' placeholder='Email' style='width:100%;padding:0.5rem'></p><button type='submit' class='btn'>Register</button></form><p><a href='/login'>Already have account? Login</a></p></div>")
+}
+
+fn handleLogin(req) {
+    if (req.method == "POST") {
+        let form = parseFormBody(req.body)
+        let username = form["username"]
+        let password = form["password"]
+        if (username == null) { username = "" }
+        if (password == null) { password = "" }
+        let result = loginUser(username, password)
+        if (result.success) {
+            let session = createSession(result.user.id)
+            return {status: 302, headers: {"Location": "/account", "Set-Cookie": session.setCookie}, body: ""}
+        }
+        return layout("Login", "<div class='card' style='max-width:400px;margin:0 auto'><h1>Login</h1><p style='color:red'>Invalid username or password</p><form method='POST'><p><input name='username' placeholder='Username' style='width:100%;padding:0.5rem'></p><p><input name='password' type='password' placeholder='Password' style='width:100%;padding:0.5rem'></p><button type='submit' class='btn'>Login</button></form><p><a href='/register'>Need account? Register</a></p></div>")
+    }
+    return layout("Login", "<div class='card' style='max-width:400px;margin:0 auto'><h1>Login</h1><form method='POST'><p><input name='username' placeholder='Username' style='width:100%;padding:0.5rem'></p><p><input name='password' type='password' placeholder='Password' style='width:100%;padding:0.5rem'></p><button type='submit' class='btn'>Login</button></form><p><a href='/register'>Need account? Register</a></p></div>")
+}
+
+fn handleLogout(req) {
+    let result = destroySession(req)
+    return {status: 302, headers: {"Location": "/", "Set-Cookie": result.setCookie}, body: ""}
+}
+
+fn handleAccount(req) {
+    let user = getCurrentUser(req, getAllUsers())
+    if (user == null) {
+        return {status: 302, headers: {"Location": "/login"}, body: ""}
+    }
+    return layout("Account", "<div class='card' style='max-width:600px;margin:0 auto'><h1>Welcome, " + user.username + "!</h1><p>Email: " + user.email + "</p><p>User ID: " + convert.toString(user.id) + "</p><p><a href='/orders' class='btn'>View Orders</a> <a href='/logout' class='btn' style='background:#999'>Logout</a></p></div>")
+}
+
+fn router(req) {
+    let path = req.path
+    if (path == "/" || path == "") { return {status:200, contentType:"text/html; charset=utf-8", body:handleHome(req)} }
+    if (strings.startsWith(path, "/product/")) { let id = convert.toInt(strings.substring(path, 9, strings.length(path))); return {status:200, contentType:"text/html; charset=utf-8", body:handleProduct(req, id)} }
+    if (strings.startsWith(path, "/add/")) { let id = convert.toInt(strings.substring(path, 5, strings.length(path))); return {status:200, contentType:"text/html; charset=utf-8", body:handleAdd(req, id)} }
+    if (strings.startsWith(path, "/remove/")) { let id = convert.toInt(strings.substring(path, 8, strings.length(path))); return {status:200, contentType:"text/html; charset=utf-8", body:handleRemove(req, id)} }
+    if (path == "/cart") { return {status:200, contentType:"text/html; charset=utf-8", body:handleCart(req)} }
+    if (path == "/checkout") { return {status:200, contentType:"text/html; charset=utf-8", body:handleCheckout(req)} }
+    if (path == "/orders") { return {status:200, contentType:"text/html; charset=utf-8", body:handleOrders(req)} }
+    if (path == "/register") { return handleRegister(req) }
+    if (path == "/login") { return handleLogin(req) }
+    if (path == "/logout") { return handleLogout(req) }
+    if (path == "/account") { return handleAccount(req) }
+    if (path == "/api/products") { return {status:200, contentType:"application/json", body:json.stringify(products)} }
+    if (path == "/api/orders") { return {status:200, contentType:"application/json", body:json.stringify(getOrders())} }
+    return {status:404, contentType:"text/html; charset=utf-8", body:layout("404", "<div class='empty'><h1>404 - Not Found</h1><a href='/' class='btn'>Home</a></div>")}
+}
+
+loadOrders()
+io.println("=== TLL OS Shop (Full Dogfooding - P0-6) ===")
+io.println("Products: " + convert.toString(productCount()))
+io.println("Users: " + convert.toString(getUserCount()))
+io.println("Modules: product, cart, templates, storage, session, user")
+io.println("Starting server on http://0.0.0.0:8080")
+http.serve("0.0.0.0:8080", router)
