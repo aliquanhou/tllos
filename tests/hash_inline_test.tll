@@ -1,0 +1,19 @@
+// Inline hashPassword test
+fn hashPassword(password) {
+    let hash = 5381
+    let i = 0
+    let len = strings.length(password)
+    while (i < len) {
+        let c = strings.charCodeAt(password, i)
+        hash = ((hash * 33) + c) % 1000000007
+        i = i + 1
+    }
+    return convert.toString(hash)
+}
+
+let h1 = hashPassword("abc")
+let h2 = hashPassword("xyz")
+io.println("hash(abc) = " + h1)
+io.println("hash(xyz) = " + h2)
+if (h1 != h2) { io.println("PASSED: different passwords have different hashes") }
+else { io.println("FAILED") }

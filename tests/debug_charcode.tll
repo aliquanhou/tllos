@@ -1,0 +1,12 @@
+// Direct test of strings.charCodeAt
+let s = "abc"
+io.println("length: " + convert.toString(strings.length(s)))
+io.println("charAt(0): " + strings.charAt(s, 0))
+let c = strings.charCodeAt(s, 0)
+io.println("charCodeAt(0) type: " + convert.typeOf(c))
+io.println("charCodeAt(0): " + convert.toString(c))
+io.println("charCodeAt(1): " + convert.toString(strings.charCodeAt(s, 1)))
+io.println("charCodeAt(2): " + convert.toString(strings.charCodeAt(s, 2)))
+let h = 5381
+h = ((h * 33) + strings.charCodeAt(s, 0)) % 1000000007
+io.println("hash after first char: " + convert.toString(h))

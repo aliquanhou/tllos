@@ -22,15 +22,16 @@ fn saveUsers() {
 }
 
 fn hashPassword(password) {
-    // Simple hash for demo - not cryptographically secure
-    let hash = 0
+    // DJB2-style hash using strings.charCodeAt (ABI 42)
+    let hash = 5381
     let i = 0
     let len = strings.length(password)
     while (i < len) {
-        hash = (hash * 31 + (i + 1) * 7) % 1000000007
+        let c = strings.charCodeAt(password, i)
+        hash = ((hash * 33) + c) % 1000000007
         i = i + 1
     }
-    return convert.toString(hash) + "_" + convert.toString(len)
+    return convert.toString(hash)
 }
 
 export fn registerUser(username, password, email) {
