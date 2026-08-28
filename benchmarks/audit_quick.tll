@@ -1,0 +1,95 @@
+from "../../stdlib/crypto" import sha256, hmacSha256
+from "../../stdlib/blockchain" import createTransaction, signTransaction, validateTransaction
+from "../../stdlib/mempool" import createMempool, mempoolAdd, mempoolSize
+from "../../stdlib/stream" import streamFromList, streamMap, streamFilter, streamCollect
+
+fn main() {
+    io.println("=== TLL Runtime Audit (Quick) ===")
+    let n1 = 5000
+    let t0 = time.nowMs()
+    let i = 0
+    while i < n1 { sha256("t"+convert.toString(i)); i = i + 1 }
+    let t1 = time.nowMs()
+    io.println("SHA256 " + convert.toString(n1) + ": " + convert.toString(t1-t0) + "ms " + convert.toString(n1*1000/(t1-t0)) + "/s")
+
+    let n2 = 500
+    let t2 = time.nowMs()
+    i = 0
+    while i < n2 {
+        let tx = createTransaction("a"+convert.toString(i%10), "b"+convert.toString(i%5), 100, 2, i, 1700000000+i, "k"+convert.toString(i%10))
+        tx = signTransaction(tx, "pk"+convert.toString(i%10))
+        validateTransaction(tx)
+        i = i + 1
+    }
+    let t3 = time.nowMs()
+    io.println("TX " + convert.toString(n2) + ": " + convert.toString(t3-t2) + "ms " + convert.toString(n2*1000/(t3-t2)) + "/s")
+
+    let n3 = 1000
+    let mp = createMempool(50000, 0, 999999999)
+    let t4 = time.nowMs()
+    i = 0
+    while i < n3 {
+        let tx = createTransaction("f"+convert.toString(i), "t"+convert.toString(i), 50, 2, i, 1700000000+i, "k"+convert.toString(i))
+        mempoolAdd(mp, tx)
+        i = i + 1
+    }
+    let t5 = time.nowMs()
+    io.println("MempoolAdd " + convert.toString(n3) + ": " + convert.toString(t5-t4) + "ms " + convert.toString(n3*1000/(t5-t4)) + "/s size=" + convert.toString(mempoolSize(mp)))
+
+    let n4 = 5000
+    let lst: list = []
+    i = 0
+    while i < n4 { lst[arrays.length(lst)] = i; i = i + 1 }
+    let t6 = time.nowMs()
+    let s = streamFromList(lst)
+    streamFilter(s, fn(x) { return x % 2 == 0 })
+    streamMap(s, fn(x) { return x * x })
+    let res = streamCollect(s)
+    let t7 = time.nowMs()
+    io.println("Stream " + convert.toString(n4) + ": " + convert.toString(t7-t6) + "ms " + convert.toString(n4*1000/(t7-t6)) + "/s result=" + convert.toString(arrays.length(res)))
+
+    let n5 = 20000
+    let t8 = time.nowMs()
+    let arr: list = []
+    i = 0
+    while i < n5 { arr[arrays.length(arr)] = i*2; i = i + 1 }
+    let t9 = time.nowMs()
+    let sum = 0
+    i = 0
+    while i < arrays.length(arr) { sum = sum + arr[i]; i = i + 1 }
+    let t10 = time.nowMs()
+    io.println("ArrayCreate " + convert.toString(n5) + ": " + convert.toString(t9-t8) + "ms " + convert.toString(n5*1000/(t9-t8)) + "/s")
+    io.println("ArraySum " + convert.toString(n5) + ": " + convert.toString(t10-t9) + "ms " + convert.toString(n5*1000/(t10-t9)) + "/s")
+
+    let n6 = 2000
+    let t11 = time.nowMs()
+    let m: map = {}
+    i = 0
+    while i < n6 { m["k"+convert.toString(i)] = i*3; i = i + 1 }
+    let t12 = time.nowMs()
+    let msum = 0
+    i = 0
+    while i < n6 { msum = msum + m["k"+convert.toString(i)]; i = i + 1 }
+    let t13 = time.nowMs()
+    io.println("MapCreate " + convert.toString(n6) + ": " + convert.toString(t12-t11) + "ms " + convert.toString(n6*1000/(t12-t11)) + "/s")
+    io.println("MapRead " + convert.toString(n6) + ": " + convert.toString(t13-t12) + "ms " + convert.toString(n6*1000/(t13-t12)) + "/s")
+
+    let n7 = 20000
+    let adder = fn(x) { return x + 1 }
+    let t14 = time.nowMs()
+    let csum = 0
+    i = 0
+    while i < n7 { csum = csum + adder(i); i = i + 1 }
+    let t15 = time.nowMs()
+    io.println("Closure " + convert.toString(n7) + ": " + convert.toString(t15-t14) + "ms " + convert.toString(n7*1000/(t15-t14)) + "/s")
+
+    let n8 = 2000
+    let t16 = time.nowMs()
+    i = 0
+    while i < n8 { hmacSha256("sk"+convert.toString(i%10), "msg"+convert.toString(i)); i = i + 1 }
+    let t17 = time.nowMs()
+    io.println("HMAC " + convert.toString(n8) + ": " + convert.toString(t17-t16) + "ms " + convert.toString(n8*1000/(t17-t16)) + "/s")
+
+    io.println("=== Done ===")
+}
+main()
