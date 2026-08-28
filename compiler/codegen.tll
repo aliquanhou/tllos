@@ -283,6 +283,7 @@ fn cg_collectAllParamsAndLocals(fnDecl: map, result: list) -> void {
                 if cg_listContains(result, stmt.name) == false { arrays.push(result, stmt.name) }
             }
             if stmt != null && stmt.kind == "Fn" {
+                if cg_listContains(result, stmt.name) == false { arrays.push(result, stmt.name) }
                 cg_collectAllParamsAndLocals(stmt, result)
             }
             si = si + 1
@@ -420,13 +421,21 @@ export fn compile(program: map) -> map {
     arrays.push(cg_functions, mainFn)
 
     // Second pass: compile ALL function bodies (top-level + nested)
+    // IMPORTANT: must push placeholder for main to keep index alignment with cg_functions
     let p2i = 0
     while p2i < arrays.length(cg_functions) {
         let fnObj = arrays.get(cg_functions, p2i)
-        if p2i != cg_mainFnIndex && fnObj.decl != null {
+        if p2i == cg_mainFnIndex {
+            // Placeholder for main, will be replaced after main compilation
+            arrays.push(cg_allFnInstructions, null)
+            arrays.push(cg_allFnLocalCounts, 0)
+        } else if fnObj.decl != null {
             cg_compileFunction(fnObj.decl)
             arrays.push(cg_allFnInstructions, cg_instructions)
             arrays.push(cg_allFnLocalCounts, cg_currentLocalCount)
+        } else {
+            arrays.push(cg_allFnInstructions, [])
+            arrays.push(cg_allFnLocalCounts, 0)
         }
         p2i = p2i + 1
     }
@@ -517,8 +526,9 @@ export fn compile(program: map) -> map {
     }
 
     cg_emit(OP_HALT, [])
-    arrays.push(cg_allFnInstructions, cg_instructions)
-    arrays.push(cg_allFnLocalCounts, cg_currentLocalCount)
+    // Replace main placeholder (keeps index alignment with cg_functions)
+    cg_allFnInstructions[cg_mainFnIndex] = cg_instructions
+    cg_allFnLocalCounts[cg_mainFnIndex] = cg_currentLocalCount
 
     // Compile any dynamically added functions (anonymous functions added during body compilation)
     // These were added to cg_functions after the second pass loop ended
@@ -728,18 +738,59 @@ fn cg_compileStatement(stmt: map) -> void {
         if nestedFnIdx >= 0 {
             let fnValReg = 0
             if cg_closureEnvSize > 0 {
-                // Has captured variables: use OP_CLOSURE
-                let operands: list = []
-                fnValReg = cg_allocReg()
-                arrays.push(operands, fnValReg)
-                arrays.push(operands, nestedFnIdx)
-                arrays.push(operands, cg_closureEnvSize)
-                let si = 0
-                while si < cg_closureEnvSize {
-                    arrays.push(operands, si)
-                    si = si + 1
+                // Find which external variables this named function actually references
+                let referencedNames = cg_collectReferencedNames(stmt)
+                let capturedSlots: list = []
+                let ri = 0
+                while ri < arrays.length(referencedNames) {
+                    let rname = arrays.get(referencedNames, ri)
+                    let si = 0
+                    while si < arrays.length(cg_upvalueMap) {
+                        if arrays.get(cg_upvalueMap, si) == rname {
+                            arrays.push(capturedSlots, si)
+                            si = arrays.length(cg_upvalueMap)
+                        }
+                        si = si + 1
+                    }
+                    ri = ri + 1
                 }
-                cg_emit(OP_CLOSURE, operands)
+                let actualCaptureCount = arrays.length(capturedSlots)
+                if actualCaptureCount > 0 {
+                    // Has captured variables: use OP_CLOSURE with correct slots
+                    let operands: list = []
+                    fnValReg = cg_allocReg()
+                    arrays.push(operands, fnValReg)
+                    arrays.push(operands, nestedFnIdx)
+                    arrays.push(operands, actualCaptureCount)
+                    let csi = 0
+                    while csi < actualCaptureCount {
+                        arrays.push(operands, arrays.get(capturedSlots, csi))
+                        csi = csi + 1
+                    }
+                    cg_emit(OP_CLOSURE, operands)
+                } else {
+                    // No actual captured variables: create plain function value
+                    let k1 = cg_allocReg()
+                    cg_emit(OP_LOAD_CONST, [k1, cg_addConstant("__fn")])
+                    let v1 = cg_allocReg()
+                    cg_emit(OP_LOAD_CONST, [v1, cg_addConstant(true)])
+                    cg_emit(OP_PUSH, [k1])
+                    cg_emit(OP_PUSH, [v1])
+                    let k2 = cg_allocReg()
+                    cg_emit(OP_LOAD_CONST, [k2, cg_addConstant("fnIdx")])
+                    let v2 = cg_allocReg()
+                    cg_emit(OP_LOAD_CONST, [v2, cg_addConstant(nestedFnIdx)])
+                    cg_emit(OP_PUSH, [k2])
+                    cg_emit(OP_PUSH, [v2])
+                    let k3 = cg_allocReg()
+                    cg_emit(OP_LOAD_CONST, [k3, cg_addConstant("env")])
+                    let v3 = cg_allocReg()
+                    cg_emit(OP_LOAD_CONST, [v3, cg_addConstant(null)])
+                    cg_emit(OP_PUSH, [k3])
+                    cg_emit(OP_PUSH, [v3])
+                    fnValReg = cg_allocReg()
+                    cg_emit(OP_MAKE_MAP, [fnValReg, 3])
+                }
             } else {
                 // No capture: create plain {__fn, fnIdx, env:null}
                 let k1 = cg_allocReg()
@@ -769,6 +820,16 @@ fn cg_compileStatement(stmt: map) -> void {
                 cg_emit(OP_STORE_GLOBAL, [resolved.index, fnValReg])
             } else {
                 cg_emit(OP_STORE_VAR, [resolved.index, fnValReg])
+            }
+            // If this function is captured by nested function, box it after initialization
+            if resolved.isGlobal == false && cg_listContains(cg_upvalueMap, stmt.name) {
+                let slot = -1
+                let si = 0
+                while si < arrays.length(cg_upvalueMap) {
+                    if arrays.get(cg_upvalueMap, si) == stmt.name { slot = si; si = arrays.length(cg_upvalueMap) }
+                    si = si + 1
+                }
+                cg_emit(OP_BOX_LOCAL, [resolved.index, slot])
             }
         }
         return
@@ -1154,18 +1215,61 @@ fn cg_compileExpression(expr: map) -> int {
         // Create Function Value: use OP_CLOSURE if there are captured variables
         let fnValReg = 0
         if cg_closureEnvSize > 0 {
-            // Has captured variables: use OP_CLOSURE
-            let operands: list = []
-            fnValReg = cg_allocReg()
-            arrays.push(operands, fnValReg)
-            arrays.push(operands, fnIdx)
-            arrays.push(operands, cg_closureEnvSize)
-            let si = 0
-            while si < cg_closureEnvSize {
-                arrays.push(operands, si)
-                si = si + 1
+            // Find which external variables this anonymous lambda actually references
+            let referencedNames = cg_collectReferencedNames(expr)
+            let capturedSlots: list = []
+            let ri = 0
+            while ri < arrays.length(referencedNames) {
+                let rname = arrays.get(referencedNames, ri)
+                // Find this variable's slot in parent's upvalueMap
+                let si = 0
+                while si < arrays.length(cg_upvalueMap) {
+                    if arrays.get(cg_upvalueMap, si) == rname {
+                        arrays.push(capturedSlots, si)
+                        si = arrays.length(cg_upvalueMap)
+                    }
+                    si = si + 1
+                }
+                ri = ri + 1
             }
-            cg_emit(OP_CLOSURE, operands)
+            let actualCaptureCount = arrays.length(capturedSlots)
+            if actualCaptureCount > 0 {
+                // Has captured variables: use OP_CLOSURE with correct slots
+                let operands: list = []
+                fnValReg = cg_allocReg()
+                arrays.push(operands, fnValReg)
+                arrays.push(operands, fnIdx)
+                arrays.push(operands, actualCaptureCount)
+                let csi = 0
+                while csi < actualCaptureCount {
+                    arrays.push(operands, arrays.get(capturedSlots, csi))
+                    csi = csi + 1
+                }
+                cg_emit(OP_CLOSURE, operands)
+            } else {
+                // References external names but none are in upvalueMap (e.g., globals)
+                // Create plain function value with null env
+                let k1 = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [k1, cg_addConstant("__fn")])
+                let v1 = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [v1, cg_addConstant(true)])
+                cg_emit(OP_PUSH, [k1])
+                cg_emit(OP_PUSH, [v1])
+                let k2 = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [k2, cg_addConstant("fnIdx")])
+                let v2 = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [v2, cg_addConstant(fnIdx)])
+                cg_emit(OP_PUSH, [k2])
+                cg_emit(OP_PUSH, [v2])
+                let k3 = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [k3, cg_addConstant("env")])
+                let v3 = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [v3, cg_addConstant(null)])
+                cg_emit(OP_PUSH, [k3])
+                cg_emit(OP_PUSH, [v3])
+                fnValReg = cg_allocReg()
+                cg_emit(OP_MAKE_MAP, [fnValReg, 3])
+            }
         } else {
             // No capture: create plain {__fn, fnIdx, env:null}
             let k1 = cg_allocReg()
