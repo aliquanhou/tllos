@@ -187,7 +187,9 @@ int tll_equals(TLLValue a, TLLValue b) {
         case TLL_INT: return a.as.integer == b.as.integer;
         case TLL_FLOAT: return a.as.floating == b.as.floating;
         case TLL_STRING: return strcmp(a.as.string, b.as.string) == 0;
-        default: return 0; /* reference equality for array/map/function */
+        case TLL_FUNCTION: return a.as.func.fnIdx == b.as.func.fnIdx && a.as.func.env == b.as.func.env;
+        case TLL_BUILTIN: return a.as.builtin.idx == b.as.builtin.idx;
+        default: return 0; /* array/map: reference equality not supported, return false */
     }
 }
 

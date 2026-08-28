@@ -16,7 +16,11 @@
 #endif
 
 #ifdef _WIN32
+#include <winsock2.h>
 #include <windows.h>
+#include <winhttp.h>
+#define _WINHTTP_H_
+#define _WINSOCK2_H_
 #include <direct.h>
 
 /* Global VM lock for concurrent HTTP requests - protects VM state during handler invocation */
@@ -1162,7 +1166,7 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
                VM invocation is serialized by g_vm_lock inside worker thread. */
             while (1) {
                 struct sockaddr_in client_addr;
-                socklen_t client_len = sizeof(client_addr);
+                int client_len = sizeof(client_addr);
                 SOCKET client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
                 if (client_fd == INVALID_SOCKET) continue;
                 HttpTask *task = (HttpTask*)malloc(sizeof(HttpTask));

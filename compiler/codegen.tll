@@ -451,7 +451,8 @@ export fn compile(program: map) -> map {
     cg_instructions = []
     cg_currentLocalCount = 0
 
-    // Emit function value initialization: create {__fn, fnIdx, env:null} for TOP-LEVEL functions only
+    // Emit function value initialization: use OP_CLOSURE with 0 captures for TOP-LEVEL functions
+    // This ensures function value comparison works correctly (not map reference comparison)
     // Nested functions get their Function Value created at runtime in their enclosing function
     let fvi = 0
     while fvi < arrays.length(cg_functions) {
@@ -463,30 +464,8 @@ export fn compile(program: map) -> map {
                 continue
             }
             let gIdx = cg_globalMapGet(func.name)
-            // Push key "__fn", value true
-            let k1 = cg_allocReg()
-            cg_emit(OP_LOAD_CONST, [k1, cg_addConstant("__fn")])
-            let v1 = cg_allocReg()
-            cg_emit(OP_LOAD_CONST, [v1, cg_addConstant(true)])
-            cg_emit(OP_PUSH, [k1])
-            cg_emit(OP_PUSH, [v1])
-            // Push key "fnIdx", value fvi
-            let k2 = cg_allocReg()
-            cg_emit(OP_LOAD_CONST, [k2, cg_addConstant("fnIdx")])
-            let v2 = cg_allocReg()
-            cg_emit(OP_LOAD_CONST, [v2, cg_addConstant(fvi)])
-            cg_emit(OP_PUSH, [k2])
-            cg_emit(OP_PUSH, [v2])
-            // Push key "env", value null
-            let k3 = cg_allocReg()
-            cg_emit(OP_LOAD_CONST, [k3, cg_addConstant("env")])
-            let v3 = cg_allocReg()
-            cg_emit(OP_LOAD_CONST, [v3, cg_addConstant(null)])
-            cg_emit(OP_PUSH, [k3])
-            cg_emit(OP_PUSH, [v3])
-            // Make map and store to global
             let fnValReg = cg_allocReg()
-            cg_emit(OP_MAKE_MAP, [fnValReg, 3])
+            cg_emit(OP_CLOSURE, [fnValReg, fvi, 0])
             cg_emit(OP_STORE_GLOBAL, [gIdx, fnValReg])
         }
         fvi = fvi + 1
@@ -772,50 +751,16 @@ fn cg_compileStatement(stmt: map) -> void {
                     }
                     cg_emit(OP_CLOSURE, operands)
                 } else {
-                    // No actual captured variables: create plain function value
-                    let k1 = cg_allocReg()
-                    cg_emit(OP_LOAD_CONST, [k1, cg_addConstant("__fn")])
-                    let v1 = cg_allocReg()
-                    cg_emit(OP_LOAD_CONST, [v1, cg_addConstant(true)])
-                    cg_emit(OP_PUSH, [k1])
-                    cg_emit(OP_PUSH, [v1])
-                    let k2 = cg_allocReg()
-                    cg_emit(OP_LOAD_CONST, [k2, cg_addConstant("fnIdx")])
-                    let v2 = cg_allocReg()
-                    cg_emit(OP_LOAD_CONST, [v2, cg_addConstant(nestedFnIdx)])
-                    cg_emit(OP_PUSH, [k2])
-                    cg_emit(OP_PUSH, [v2])
-                    let k3 = cg_allocReg()
-                    cg_emit(OP_LOAD_CONST, [k3, cg_addConstant("env")])
-                    let v3 = cg_allocReg()
-                    cg_emit(OP_LOAD_CONST, [v3, cg_addConstant(null)])
-                    cg_emit(OP_PUSH, [k3])
-                    cg_emit(OP_PUSH, [v3])
+                    // No actual captured variables: use OP_CLOSURE with 0 captures
+                    // This ensures function value comparison works correctly (not map reference comparison)
                     fnValReg = cg_allocReg()
-                    cg_emit(OP_MAKE_MAP, [fnValReg, 3])
+                    cg_emit(OP_CLOSURE, [fnValReg, nestedFnIdx, 0])
                 }
             } else {
-                // No capture: create plain {__fn, fnIdx, env:null}
-                let k1 = cg_allocReg()
-                cg_emit(OP_LOAD_CONST, [k1, cg_addConstant("__fn")])
-                let v1 = cg_allocReg()
-                cg_emit(OP_LOAD_CONST, [v1, cg_addConstant(true)])
-                cg_emit(OP_PUSH, [k1])
-                cg_emit(OP_PUSH, [v1])
-                let k2 = cg_allocReg()
-                cg_emit(OP_LOAD_CONST, [k2, cg_addConstant("fnIdx")])
-                let v2 = cg_allocReg()
-                cg_emit(OP_LOAD_CONST, [v2, cg_addConstant(nestedFnIdx)])
-                cg_emit(OP_PUSH, [k2])
-                cg_emit(OP_PUSH, [v2])
-                let k3 = cg_allocReg()
-                cg_emit(OP_LOAD_CONST, [k3, cg_addConstant("env")])
-                let v3 = cg_allocReg()
-                cg_emit(OP_LOAD_CONST, [v3, cg_addConstant(null)])
-                cg_emit(OP_PUSH, [k3])
-                cg_emit(OP_PUSH, [v3])
+                // No capture: use OP_CLOSURE with 0 captures
+                // This ensures function value comparison works correctly (not map reference comparison)
                 fnValReg = cg_allocReg()
-                cg_emit(OP_MAKE_MAP, [fnValReg, 3])
+                cg_emit(OP_CLOSURE, [fnValReg, nestedFnIdx, 0])
             }
             // Store to local variable
             let resolved = cg_resolveVar(stmt.name)
@@ -1251,50 +1196,16 @@ fn cg_compileExpression(expr: map) -> int {
                 cg_emit(OP_CLOSURE, operands)
             } else {
                 // References external names but none are in upvalueMap (e.g., globals)
-                // Create plain function value with null env
-                let k1 = cg_allocReg()
-                cg_emit(OP_LOAD_CONST, [k1, cg_addConstant("__fn")])
-                let v1 = cg_allocReg()
-                cg_emit(OP_LOAD_CONST, [v1, cg_addConstant(true)])
-                cg_emit(OP_PUSH, [k1])
-                cg_emit(OP_PUSH, [v1])
-                let k2 = cg_allocReg()
-                cg_emit(OP_LOAD_CONST, [k2, cg_addConstant("fnIdx")])
-                let v2 = cg_allocReg()
-                cg_emit(OP_LOAD_CONST, [v2, cg_addConstant(fnIdx)])
-                cg_emit(OP_PUSH, [k2])
-                cg_emit(OP_PUSH, [v2])
-                let k3 = cg_allocReg()
-                cg_emit(OP_LOAD_CONST, [k3, cg_addConstant("env")])
-                let v3 = cg_allocReg()
-                cg_emit(OP_LOAD_CONST, [v3, cg_addConstant(null)])
-                cg_emit(OP_PUSH, [k3])
-                cg_emit(OP_PUSH, [v3])
+                // Use OP_CLOSURE with 0 captures to create TLL_FUNCTION value (env=empty)
+                // This ensures function value comparison works correctly (not map reference comparison)
                 fnValReg = cg_allocReg()
-                cg_emit(OP_MAKE_MAP, [fnValReg, 3])
+                cg_emit(OP_CLOSURE, [fnValReg, fnIdx, 0])
             }
         } else {
-            // No capture: create plain {__fn, fnIdx, env:null}
-            let k1 = cg_allocReg()
-            cg_emit(OP_LOAD_CONST, [k1, cg_addConstant("__fn")])
-            let v1 = cg_allocReg()
-            cg_emit(OP_LOAD_CONST, [v1, cg_addConstant(true)])
-            cg_emit(OP_PUSH, [k1])
-            cg_emit(OP_PUSH, [v1])
-            let k2 = cg_allocReg()
-            cg_emit(OP_LOAD_CONST, [k2, cg_addConstant("fnIdx")])
-            let v2 = cg_allocReg()
-            cg_emit(OP_LOAD_CONST, [v2, cg_addConstant(fnIdx)])
-            cg_emit(OP_PUSH, [k2])
-            cg_emit(OP_PUSH, [v2])
-            let k3 = cg_allocReg()
-            cg_emit(OP_LOAD_CONST, [k3, cg_addConstant("env")])
-            let v3 = cg_allocReg()
-            cg_emit(OP_LOAD_CONST, [v3, cg_addConstant(null)])
-            cg_emit(OP_PUSH, [k3])
-            cg_emit(OP_PUSH, [v3])
+            // No capture: use OP_CLOSURE with 0 captures to create TLL_FUNCTION value
+            // This ensures function value comparison works correctly (not map reference comparison)
             fnValReg = cg_allocReg()
-            cg_emit(OP_MAKE_MAP, [fnValReg, 3])
+            cg_emit(OP_CLOSURE, [fnValReg, fnIdx, 0])
         }
         return fnValReg
     }
