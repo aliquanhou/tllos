@@ -3,13 +3,15 @@
 > An AI-Native Programming Language and Runtime
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-P0--4%20dev-yellow.svg)](https://github.com/aliquanhou/tllos)
+[![Version](https://img.shields.io/badge/version-P0--12%20dev-yellow.svg)](https://github.com/aliquanhou/tllos)
 
-TLL OS is a **specification-driven, self-hosted programming language** with a pure-TLL compiler, native bytecode VM, and first-class support for functions, closures, modules, and packages. It is designed to be the foundation for AI-native application development.
+TLL OS is a **specification-driven, self-hosted programming language** with a pure-TLL compiler, native bytecode VM, and first-class support for functions, closures, modules, and packages. It is designed to be the foundation for AI-native application development and high-temporal-resolution runtime systems.
 
-**Current phase: P0-4 Language Capability Completion.** Active development includes Lambda/Closure, Struct, Enum, and a growing TLL-native standard library (stdlib/). See [docs/development/](docs/development/) for phase details.
+**Current phase: P0-12 Language Capability Closure.** Active development focuses on verifying and fixing the authenticity of existing language capabilities (especially Lambda/Closure), establishing Language Conformance Matrix, and building ABI/Spec consistency automation. See [docs/](docs/) for phase details.
 
 **TLL OS v1 is Native-Only.** The production toolchain does not depend on Node.js, npm, TypeScript, or JavaScript. A C compiler is only needed to build the native launcher once; after that, TLL compiles and runs itself.
+
+**C is the match, TLL is the fuel.** C provides only OS-boundary primitives (socket, filesystem, process, clock, memory). All language semantics, standard library, and application logic are implemented in TLL itself.
 
 **Licensed under the Apache License, Version 2.0.**
 
@@ -18,19 +20,25 @@ TLL OS is a **specification-driven, self-hosted programming language** with a pu
 ## Features
 
 - **Self-hosting compiler** — The TLL compiler is written in TLL and compiles itself natively
-- **Native bytecode VM** — 46 opcodes, including closure support (OP_CLOSURE 42, OP_GET_UPVALUE 43, OP_SET_UPVALUE 44, OP_BOX_LOCAL 45)
-- **First-class functions and closures** — Function values, higher-order functions, nested functions, mutable capture, shared box, escaping closures
-- **Anonymous functions (Lambda)** — `fn(params) -> type { body }` inline function expressions (P0-4)
-- **Struct declarations** — `struct Name { field: type }` with field access and mutation (P0-4, literal syntax deferred)
-- **Enum declarations** — `enum Name { Variant = value }` for enumerated constants (P0-4, variant access deferred)
-- **TLL-native standard library** — `stdlib/array.tll`, `stdlib/string.tll`, `stdlib/math.tll`, `stdlib/json.tll` — 34+ functions implemented in pure TLL (P0-4)
-- **Module and package system** — `from "./path" import name`, `tll.toml` manifest
+- **Native bytecode VM** — 46+ opcodes, including closure support (OP_CLOSURE 42, OP_GET_UPVALUE 43, OP_SET_UPVALUE 44, OP_BOX_LOCAL 45)
+- **First-class functions and closures** — Function values, higher-order functions, nested functions, mutable capture, shared box, escaping closures, anonymous lambda (P0-12: 5 root-cause bugs fixed)
+- **Anonymous functions (Lambda)** — `fn(params) { body }` inline function expressions with full closure support
+- **Struct declarations** — `struct Name { field: type }` with field access and mutation (literal syntax via `__struct` metadata)
+- **Enum declarations** — `enum Name { Variant = value }` for enumerated constants with variant access
+- **Exception handling** — `try/catch/finally/throw` with runtime error propagation
+- **TLL-native standard library** — `stdlib/array.tll`, `stdlib/string.tll`, `stdlib/math.tll`, `stdlib/json.tll`, `stdlib/observable.tll`, `stdlib/events.tll` — 50+ functions implemented in pure TLL
+- **Observable pattern** — `watch/set/history/trend/snapshot` for reactive state management (P0-11)
+- **EventEmitter** — `on/emit/off/once/listenerCount` for event-driven programming (P0-11)
+- **Module and package system** — `from "./path" import name`, `tll.toml` manifest, package manifest parser
 - **Native process API** — `process.argv`, `process.env`, `process.exit`, `process.cwd`, `process.chdir`, `process.platform`
-- **Native time API** — `time.now`, `time.nowMs`, `time.sleep`, `time.date` (P0-3.1)
-- **Native HTTP client** — `http.get`, `http.post`, `http.request` via WinHTTP (P0-3.1, `http.serve` stub)
-- **Native file system API** — `fs.readFile`, `fs.writeFile`, `fs.listDir`, etc.
+- **Native time API** — `time.now`, `time.nowMs`, `time.sleep`, `time.date`
+- **Native HTTP client** — `http.get`, `http.post`, `http.request` via WinHTTP
+- **Native HTTP server** — `http.serve` with Worker Pool + global VM lock, concurrent connection support (P0-8)
+- **Native file system API** — `fs.readFile`, `fs.writeFile`, `fs.listDir`, `fs.exists`, `fs.delete`, `fs.mkdir`
+- **Runtime performance** — Frame Pool (P0-10), maxRegister optimization (357x function call speedup, P0-10)
 - **Native self-hosting** — Deterministic SHA256-verified multi-generation bootstrap
 - **Spec First Architecture** — Language Specification is the sole semantic authority; all VMs are implementations of the Spec
+- **Dogfooding projects** — TLL Shop (e-commerce with HTTP/Session/Cookie/Persistence), realtime market system (46,511 ticks/sec)
 
 ---
 

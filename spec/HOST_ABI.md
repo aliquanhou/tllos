@@ -26,7 +26,7 @@ The Host ABI defines the interface between TLL VM implementations and the underl
 | `arrays` | 49-71 | 23 | Stdlib (pure computation) |
 | `convert` | 72-78 | 7 | Stdlib (pure computation) |
 | `fs` | 79-90 | 12 | **Host ABI** |
-| `http` | 91-97 | 7 | **Host ABI** (client implemented P0-3.1; serve=94 stub) |
+| `http` | 91-97 | 7 | **Host ABI** (client P0-3.1; server P0-8 with Worker Pool + concurrent connections) |
 | `agent`/`workflow` | 98-119 | 22 | Deferred |
 | `process` | 120-122, 127-128, 131 | 6 | **Host ABI** (P0-2 + P0-3.1 extension) |
 | `time` | 123-126 | 4 | **Host ABI** (P0-3.1 extension) |
@@ -76,12 +76,12 @@ The Host ABI defines the interface between TLL VM implementations and the underl
 | 91 | `http.get` | `(url: string) -> map` | HTTP GET request (WinHTTP on Windows) |
 | 92 | `http.post` | `(url: string, body: string) -> map` | HTTP POST request |
 | 93 | `http.request` | `(options: map) -> map` | Generic HTTP request |
-| 94 | `http.serve` | `(addr: string, handler: fn) -> void` | Start HTTP server **[STUB]** |
+| 94 | `http.serve` | `(addr: string, handler: fn) -> void` | Start HTTP server (Worker Pool + global VM lock, concurrent connections) |
 | 95 | `http.encodeURI` | `(s: string) -> string` | URL encode |
 | 96 | `http.decodeURI` | `(s: string) -> string` | URL decode |
 | 97 | `http.parseJSON` | `(s: string) -> map` | Parse JSON response |
 
-> **Status**: HTTP client (get/post/request) implemented via WinHTTP on Windows in P0-3.1 (commit 5744bf3). Returns `{ok, status, body, error}` map. `http.serve` (94) remains stub. `encodeURI`/`decodeURI`/`parseJSON` are pure computation helpers.
+> **Status**: HTTP client (get/post/request) implemented via WinHTTP on Windows in P0-3.1 (commit 5744bf3). Returns `{ok, status, body, error}` map. `http.serve` (94) implemented in P0-8 with Worker Pool + global VM lock, supporting concurrent connections. `encodeURI`/`decodeURI`/`parseJSON` are pure computation helpers.
 
 ---
 
