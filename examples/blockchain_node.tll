@@ -1,0 +1,218 @@
+// TLL Blockchain Node - P0-15.10 Multi-Node Reality Test
+// Usage: tllvm node.tllbc <nodeId> <port> [bootstrapHost:bootstrapPort]
+// Mode 1 (server): listen, accept, process messages
+// Mode 2 (client): connect to bootstrap, sync, broadcast
+
+from "../../stdlib/blockchain" import createTransaction, signTransaction, validateTransaction, verifyTransactionSignature, createBlock, mineBlock, validateBlock, getBlockHash
+from "../../stdlib/crypto" import sha256
+from "../../stdlib/p2p" import encodeMessage, decodeMessages
+
+fn main() {
+    let argv = process.argv
+    let argc = arrays.length(argv)
+
+    if argc < 4 {
+        io.println("Usage: node.tllbc <nodeId> <port> [bootstrapHost:bootstrapPort]")
+        return
+    }
+
+    let nodeId = convert.toString(arrays.get(argv, 2))
+    let port = convert.toInt(convert.toString(arrays.get(argv, 3)))
+    let hasBootstrap = argc > 4
+    let bootstrapAddr = ""
+    if hasBootstrap {
+        bootstrapAddr = convert.toString(arrays.get(argv, 4))
+    }
+
+    io.println("=== TLL Blockchain Node " + nodeId + " ===")
+    io.println("Port: " + convert.toString(port))
+    if hasBootstrap {
+        io.println("Bootstrap: " + bootstrapAddr)
+    }
+
+    // Initialize blockchain with genesis block
+    let chain: list = []
+    let genesis = createGenesisBlock()
+    arrays.push(chain, genesis)
+    io.println("Genesis block: " + genesis.hash)
+
+    // Mempool
+    let mempool: list = []
+
+    // Known peers
+    let peers: list = []
+
+    if hasBootstrap {
+        // Client mode: connect to bootstrap, sync, broadcast
+        io.println("\n--- Client Mode ---")
+        let parts = strings.split(bootstrapAddr, ":")
+        let bootHost = parts[0]
+        let bootPort = convert.toInt(parts[1])
+
+        let fd = tcp.connect(bootHost, bootPort)
+        if fd < 0 {
+            io.println("Failed to connect to bootstrap")
+            return
+        }
+        io.println("Connected to bootstrap")
+
+        // Send handshake
+        let handshake = { nodeId: nodeId, host: "127.0.0.1", port: port, version: "0.1.0" }
+        tcp.send(fd, encodeMessage("handshake", handshake))
+        io.println("Sent handshake")
+
+        // Receive response
+        let resp = tcp.recv(fd, 65536)
+        let decoded = decodeMessages(resp)
+        if arrays.length(decoded.messages) > 0 {
+            let msg = decoded.messages[0]
+            if msg.type == "handshake" {
+                io.println("Handshake OK with " + msg.payload.nodeId)
+                arrays.push(peers, { nodeId: msg.payload.nodeId, host: bootHost, port: bootPort, fd: fd })
+            }
+        }
+
+        // Create and broadcast a transaction
+        io.println("\n--- Broadcasting Transaction ---")
+        let tx = createTransaction("addr_A", "addr_B", 50, 1, 0, time.nowMs(), "pubkey_A")
+        tx = signTransaction(tx, "private_key_A")
+        io.println("Transaction: " + tx.id)
+        io.println("  from: " + tx.fromAddr + " to: " + tx.toAddr + " amount: " + convert.toString(tx.amount))
+
+        // Validate locally
+        let valid = validateTransaction(tx) && verifyTransactionSignature(tx)
+        io.println("  valid: " + convert.toString(valid))
+
+        if valid {
+            arrays.push(mempool, tx)
+            // Broadcast to peer
+            tcp.send(fd, encodeMessage("transaction", tx))
+            io.println("Broadcasted transaction")
+
+            // Receive ack
+            let ackResp = tcp.recv(fd, 65536)
+            let ackDecoded = decodeMessages(ackResp)
+            if arrays.length(ackDecoded.messages) > 0 {
+                io.println("Received: " + ackDecoded.messages[0].type)
+            }
+        }
+
+        // Request chain sync
+        io.println("\n--- Requesting Chain Sync ---")
+        tcp.send(fd, encodeMessage("get_chain", { fromIndex: 0 }))
+        let chainResp = tcp.recv(fd, 65536)
+        let chainDecoded = decodeMessages(chainResp)
+        if arrays.length(chainDecoded.messages) > 0 && chainDecoded.messages[0].type == "chain" {
+            let remoteChain = chainDecoded.messages[0].payload.blocks
+            io.println("Received chain with " + convert.toString(arrays.length(remoteChain)) + " blocks")
+            let bi = 0
+            while bi < arrays.length(remoteChain) {
+                io.println("  Block " + convert.toString(remoteChain[bi].index) + ": " + strings.substring(remoteChain[bi].hash, 0, 16) + "...")
+                bi = bi + 1
+            }
+        }
+
+        tcp.close(fd)
+        io.println("\n--- Client Done ---")
+        io.println("Mempool size: " + convert.toString(arrays.length(mempool)))
+        io.println("Peers: " + convert.toString(arrays.length(peers)))
+    } else {
+        // Server mode: listen, accept, process
+        io.println("\n--- Server Mode ---")
+        let serverFd = tcp.listen("127.0.0.1", port)
+        if serverFd < 0 {
+            io.println("Failed to listen")
+            return
+        }
+        io.println("Listening on port " + convert.toString(port))
+        io.println("Waiting for connection...")
+
+        let clientFd = tcp.accept(serverFd)
+        if clientFd < 0 {
+            io.println("Accept failed")
+            return
+        }
+        io.println("Client connected!")
+
+        // Set recv timeout to 500ms to avoid infinite blocking
+        tcp.setTimeout(clientFd, 500)
+
+        // Process all messages from this client
+        let allData = ""
+        let keepReading = true
+        let consecutiveTimeouts = 0
+        let maxTimeouts = 6  // 6 * 500ms = 3 seconds of no data
+        while keepReading {
+            let chunk = tcp.recv(clientFd, 65536)
+            if strings.length(chunk) == 0 {
+                consecutiveTimeouts = consecutiveTimeouts + 1
+                if consecutiveTimeouts >= maxTimeouts {
+                    io.println("  No data for 3s, closing connection")
+                    keepReading = false
+                }
+            } else {
+                consecutiveTimeouts = 0
+                allData = allData + chunk
+                let decoded = decodeMessages(allData)
+                allData = decoded.remaining
+
+                let mi = 0
+                while mi < arrays.length(decoded.messages) {
+                    let msg = decoded.messages[mi]
+                    io.println("\nReceived message: " + msg.type)
+
+                    if msg.type == "handshake" {
+                        io.println("  Handshake from " + msg.payload.nodeId)
+                        let resp = { nodeId: nodeId, host: "127.0.0.1", port: port, version: "0.1.0" }
+                        tcp.send(clientFd, encodeMessage("handshake", resp))
+                        io.println("  Sent handshake response")
+                    }
+
+                    if msg.type == "transaction" {
+                        let tx = msg.payload
+                        io.println("  Transaction: " + strings.substring(tx.id, 0, 16) + "...")
+                        io.println("    from: " + tx.fromAddr + " to: " + tx.toAddr + " amount: " + convert.toString(tx.amount))
+                        let valid = validateTransaction(tx) && verifyTransactionSignature(tx)
+                        io.println("    valid: " + convert.toString(valid))
+                        if valid {
+                            arrays.push(mempool, tx)
+                            io.println("    Added to mempool (size: " + convert.toString(arrays.length(mempool)) + ")")
+                        }
+                        tcp.send(clientFd, encodeMessage("ack", { ok: valid, txId: tx.id }))
+                    }
+
+                    if msg.type == "get_chain" {
+                        io.println("  Sending chain (" + convert.toString(arrays.length(chain)) + " blocks)")
+                        tcp.send(clientFd, encodeMessage("chain", { blocks: chain }))
+                    }
+
+                    mi = mi + 1
+                }
+            }
+        }
+
+        tcp.close(clientFd)
+        tcp.close(serverFd)
+
+        io.println("\n--- Server Done ---")
+        io.println("Mempool size: " + convert.toString(arrays.length(mempool)))
+        io.println("Chain height: " + convert.toString(arrays.length(chain)))
+    }
+}
+
+// Create genesis block
+fn createGenesisBlock() -> map {
+    let block = {
+        index: 0,
+        timestamp: 0,
+        transactions: [],
+        previousHash: "0",
+        hash: "",
+        nonce: 0,
+        difficulty: 1
+    }
+    block.hash = sha256("genesis_block_tll_v1")
+    return block
+}
+
+main()

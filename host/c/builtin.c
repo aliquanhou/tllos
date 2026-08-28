@@ -1369,6 +1369,105 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
         return tll_string("");
     }
 
+    /* TCP socket API (133-138) - P0-15.10 Multi-Node Blockchain P2P */
+    if (idx == 133) { /* tcp.listen(host, port) -> server_fd (int) */
+        const char *host = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "0.0.0.0";
+        int port = (argCount > 1 && args[1].type == TLL_INT) ? (int)args[1].as.integer : 9000;
+#ifdef _WIN32
+        static int wsa_init = 0;
+        if (!wsa_init) { WSADATA wsa; WSAStartup(MAKEWORD(2,2), &wsa); wsa_init = 1; }
+#endif
+        SOCKET s = socket(AF_INET, SOCK_STREAM, 0);
+        if (s == INVALID_SOCKET) return tll_int(-1);
+        int opt = 1;
+        setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+        struct sockaddr_in addr;
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = inet_addr(host);
+        addr.sin_port = htons((unsigned short)port);
+        if (bind(s, (struct sockaddr*)&addr, sizeof(addr)) < 0) { closesocket(s); return tll_int(-1); }
+        if (listen(s, 16) < 0) { closesocket(s); return tll_int(-1); }
+        return tll_int((long long)s);
+    }
+    if (idx == 134) { /* tcp.accept(server_fd) -> client_fd (int), blocking */
+        if (argCount > 0 && args[0].type == TLL_INT) {
+            SOCKET server = (SOCKET)args[0].as.integer;
+            struct sockaddr_in client_addr;
+            int client_len = sizeof(client_addr);
+            SOCKET client = accept(server, (struct sockaddr*)&client_addr, &client_len);
+            if (client == INVALID_SOCKET) return tll_int(-1);
+            return tll_int((long long)client);
+        }
+        return tll_int(-1);
+    }
+    if (idx == 135) { /* tcp.connect(host, port) -> socket_fd (int) */
+        const char *host = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "127.0.0.1";
+        int port = (argCount > 1 && args[1].type == TLL_INT) ? (int)args[1].as.integer : 9000;
+#ifdef _WIN32
+        static int wsa_init2 = 0;
+        if (!wsa_init2) { WSADATA wsa; WSAStartup(MAKEWORD(2,2), &wsa); wsa_init2 = 1; }
+#endif
+        SOCKET s = socket(AF_INET, SOCK_STREAM, 0);
+        if (s == INVALID_SOCKET) return tll_int(-1);
+        struct sockaddr_in addr;
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = inet_addr(host);
+        addr.sin_port = htons((unsigned short)port);
+        if (connect(s, (struct sockaddr*)&addr, sizeof(addr)) < 0) { closesocket(s); return tll_int(-1); }
+        return tll_int((long long)s);
+    }
+    if (idx == 136) { /* tcp.send(socket_fd, data) -> bytes sent (int) */
+        if (argCount > 1 && args[0].type == TLL_INT && args[1].type == TLL_STRING) {
+            SOCKET s = (SOCKET)args[0].as.integer;
+            const char *data = args[1].as.string;
+            int len = (int)strlen(data);
+            int sent = send(s, data, len, 0);
+            return tll_int(sent);
+        }
+        return tll_int(-1);
+    }
+    if (idx == 137) { /* tcp.recv(socket_fd, max_bytes) -> data (string), blocking */
+        if (argCount > 0 && args[0].type == TLL_INT) {
+            SOCKET s = (SOCKET)args[0].as.integer;
+            int maxBytes = (argCount > 1 && args[1].type == TLL_INT) ? (int)args[1].as.integer : 65536;
+            char *buf = (char*)malloc(maxBytes + 1);
+            int received = recv(s, buf, maxBytes, 0);
+            if (received <= 0) { free(buf); return tll_string(""); }
+            buf[received] = '\0';
+            TLLValue v = tll_string(buf);
+            free(buf);
+            return v;
+        }
+        return tll_string("");
+    }
+    if (idx == 138) { /* tcp.close(socket_fd) -> void */
+        if (argCount > 0 && args[0].type == TLL_INT) {
+            SOCKET s = (SOCKET)args[0].as.integer;
+            closesocket(s);
+        }
+        return tll_null();
+    }
+    if (idx == 139) { /* tcp.setTimeout(socket_fd, ms) -> bool */
+        if (argCount > 1 && args[0].type == TLL_INT && args[1].type == TLL_INT) {
+            SOCKET s = (SOCKET)args[0].as.integer;
+            int ms = (int)args[1].as.integer;
+#ifdef _WIN32
+            DWORD timeout = (DWORD)ms;
+            int r1 = setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
+            int r2 = setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
+            return tll_bool(r1 == 0 && r2 == 0);
+#else
+            struct timeval tv;
+            tv.tv_sec = ms / 1000;
+            tv.tv_usec = (ms % 1000) * 1000;
+            int r1 = setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+            int r2 = setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+            return tll_bool(r1 == 0 && r2 == 0);
+#endif
+        }
+        return tll_bool(0);
+    }
+
     fprintf(stderr, "tllvm: unknown builtin index %d\n", idx);
     return tll_null();
 }

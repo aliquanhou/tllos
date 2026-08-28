@@ -1560,6 +1560,15 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
         if fnName == "getStatus" { return 96 }
         if fnName == "download" { return 97 }
     }
+    if modName == "tcp" {
+        if fnName == "listen" { return 133 }
+        if fnName == "accept" { return 134 }
+        if fnName == "connect" { return 135 }
+        if fnName == "send" { return 136 }
+        if fnName == "recv" { return 137 }
+        if fnName == "close" { return 138 }
+        if fnName == "setTimeout" { return 139 }
+    }
     if modName == "agent" {
         if fnName == "run" { return 98 }
         if fnName == "chat" { return 99 }

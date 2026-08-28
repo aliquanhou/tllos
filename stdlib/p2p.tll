@@ -1,0 +1,236 @@
+// TLL P2P Network Layer - P0-15.10 Multi-Node Blockchain
+// Message framing: 4-byte length prefix (big-endian ASCII hex) + JSON payload
+// Message types: handshake, ping, pong, transaction, block, get_blocks, blocks
+
+// Create a new P2P node
+fn createP2PNode(nodeId: string, host: string, port: int) -> map {
+    return {
+        nodeId: nodeId,
+        host: host,
+        port: port,
+        serverFd: -1,
+        peers: [],        // list of { nodeId, host, port, fd, lastSeen }
+        messageHandlers: {},  // type -> handler function
+        running: false
+    }
+}
+
+// Convert integer to 4-digit hex string (TLL convert.toString doesn't support base param)
+fn intToHex4(n: int) -> string {
+    let hex = "0123456789abcdef"
+    let result = ""
+    let i = 0
+    while i < 4 {
+        let digit = n % 16
+        result = strings.charAt(hex, digit) + result
+        n = convert.toInt(n / 16)
+        i = i + 1
+    }
+    return result
+}
+
+// Convert hex string to integer (TLL convert.toInt doesn't support 0x prefix)
+fn hexToInt(hex: string) -> int {
+    let result = 0
+    let i = 0
+    let len = strings.length(hex)
+    while i < len {
+        let c = strings.charAt(hex, i)
+        let digit = 0
+        if c >= "0" && c <= "9" {
+            digit = convert.toInt(c)
+        } else if c >= "a" && c <= "f" {
+            digit = convert.toInt(c) - convert.toInt("a") + 10
+        } else if c >= "A" && c <= "F" {
+            digit = convert.toInt(c) - convert.toInt("A") + 10
+        }
+        result = result * 16 + digit
+        i = i + 1
+    }
+    return result
+}
+
+// Encode message with length prefix framing
+fn encodeMessage(msgType: string, payload: map) -> string {
+    let envelope = {
+        type: msgType,
+        payload: payload
+    }
+    let jsonStr = json.stringify(envelope)
+    let len = strings.length(jsonStr)
+    let lenHex = intToHex4(len)
+    return lenHex + jsonStr
+}
+
+// Decode message from raw data (may contain partial or multiple messages)
+// Returns { messages: [], remaining: "" }
+fn decodeMessages(rawData: string) -> map {
+    let result = { messages: [], remaining: rawData }
+    let data = rawData
+    while strings.length(data) >= 4 {
+        let lenHex = strings.substring(data, 0, 4)
+        let msgLen = hexToInt(lenHex)
+        if msgLen <= 0 || strings.length(data) < 4 + msgLen {
+            break
+        }
+        let jsonStr = strings.substring(data, 4, 4 + msgLen)
+        let msg = json.parse(jsonStr)
+        arrays.push(result.messages, msg)
+        data = strings.substring(data, 4 + msgLen, strings.length(data))
+    }
+    result.remaining = data
+    return result
+}
+
+// Start listening for incoming connections
+fn p2pListen(node: map) -> bool {
+    let fd = tcp.listen(node.host, node.port)
+    if fd < 0 {
+        io.println("[" + node.nodeId + "] Failed to listen on " + node.host + ":" + convert.toString(node.port))
+        return false
+    }
+    node.serverFd = fd
+    node.running = true
+    io.println("[" + node.nodeId + "] Listening on " + node.host + ":" + convert.toString(node.port))
+    return true
+}
+
+// Connect to a peer
+fn p2pConnect(node: map, host: string, port: int) -> bool {
+    let fd = tcp.connect(host, port)
+    if fd < 0 {
+        io.println("[" + node.nodeId + "] Failed to connect to " + host + ":" + convert.toString(port))
+        return false
+    }
+    // Send handshake
+    let handshake = {
+        nodeId: node.nodeId,
+        host: node.host,
+        port: node.port,
+        version: "0.1.0"
+    }
+    let msg = encodeMessage("handshake", handshake)
+    tcp.send(fd, msg)
+    // Receive handshake response
+    let resp = tcp.recv(fd, 65536)
+    let decoded = decodeMessages(resp)
+    if arrays.length(decoded.messages) > 0 {
+        let respMsg = decoded.messages[0]
+        if respMsg.type == "handshake" {
+            let peer = {
+                nodeId: respMsg.payload.nodeId,
+                host: host,
+                port: port,
+                fd: fd,
+                lastSeen: time.nowMs()
+            }
+            arrays.push(node.peers, peer)
+            io.println("[" + node.nodeId + "] Connected to peer " + peer.nodeId + " (" + host + ":" + convert.toString(port) + ")")
+            return true
+        }
+    }
+    tcp.close(fd)
+    return false
+}
+
+// Accept and handle one incoming connection (blocking)
+fn p2pAccept(node: map) -> void {
+    let clientFd = tcp.accept(node.serverFd)
+    if clientFd < 0 { return }
+    // Receive handshake
+    let data = tcp.recv(clientFd, 65536)
+    let decoded = decodeMessages(data)
+    if arrays.length(decoded.messages) > 0 {
+        let msg = decoded.messages[0]
+        if msg.type == "handshake" {
+            let peer = {
+                nodeId: msg.payload.nodeId,
+                host: msg.payload.host,
+                port: msg.payload.port,
+                fd: clientFd,
+                lastSeen: time.nowMs()
+            }
+            arrays.push(node.peers, peer)
+            io.println("[" + node.nodeId + "] Peer connected: " + peer.nodeId)
+            // Send handshake response
+            let resp = {
+                nodeId: node.nodeId,
+                host: node.host,
+                port: node.port,
+                version: "0.1.0"
+            }
+            tcp.send(clientFd, encodeMessage("handshake", resp))
+            return
+        }
+    }
+    tcp.close(clientFd)
+}
+
+// Send message to a specific peer
+fn p2pSendToPeer(node: map, peerIndex: int, msgType: string, payload: map) -> bool {
+    if peerIndex < 0 || peerIndex >= arrays.length(node.peers) { return false }
+    let peer = node.peers[peerIndex]
+    let msg = encodeMessage(msgType, payload)
+    let sent = tcp.send(peer.fd, msg)
+    if sent > 0 {
+        peer.lastSeen = time.nowMs()
+        return true
+    }
+    return false
+}
+
+// Broadcast message to all peers
+fn p2pBroadcast(node: map, msgType: string, payload: map) -> int {
+    let sent = 0
+    let i = 0
+    while i < arrays.length(node.peers) {
+        if p2pSendToPeer(node, i, msgType, payload) {
+            sent = sent + 1
+        }
+        i = i + 1
+    }
+    return sent
+}
+
+// Receive and dispatch messages from all peers (non-blocking attempt)
+fn p2pReceive(node: map) -> list {
+    let received: list = []
+    let i = 0
+    while i < arrays.length(node.peers) {
+        let peer = node.peers[i]
+        // Try to receive (will return empty if no data, but blocks in current impl)
+        // For now, we skip peers that might block
+        i = i + 1
+    }
+    return received
+}
+
+// Send ping to all peers
+fn p2pPingAll(node: map) -> int {
+    let ping = { timestamp: time.nowMs() }
+    return p2pBroadcast(node, "ping", ping)
+}
+
+// Disconnect from a peer
+fn p2pDisconnect(node: map, peerIndex: int) -> void {
+    if peerIndex < 0 || peerIndex >= arrays.length(node.peers) { return }
+    let peer = node.peers[peerIndex]
+    io.println("[" + node.nodeId + "] Disconnecting peer " + peer.nodeId)
+    tcp.close(peer.fd)
+    arrays.remove(node.peers, peerIndex)
+}
+
+// Get peer count
+fn p2pPeerCount(node: map) -> int {
+    return arrays.length(node.peers)
+}
+
+// Find peer by nodeId
+fn p2pFindPeer(node: map, nodeId: string) -> int {
+    let i = 0
+    while i < arrays.length(node.peers) {
+        if node.peers[i].nodeId == nodeId { return i }
+        i = i + 1
+    }
+    return -1
+}

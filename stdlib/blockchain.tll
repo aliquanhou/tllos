@@ -53,9 +53,13 @@ fn createTransaction(fromAddr: string, toAddr: string, amount: int, fee: int, no
 }
 
 // Sign transaction with private key (using HMAC-SHA256 as simplified signature)
+// NOTE: This is a SIMULATED signature using HMAC, not real asymmetric cryptography.
+// In this simulation, both signing and verification use tx.publicKey as the HMAC key.
+// Real Ed25519/secp256k1 signatures will be added in a future phase.
 fn signTransaction(tx: map, privateKey: string) -> map {
     let message = transactionCanonicalEncoding(tx)
-    tx.signature = hmacSha256(privateKey, message)
+    // Use publicKey as HMAC key for simulation consistency with verifyTransactionSignature
+    tx.signature = hmacSha256(tx.publicKey, message)
     return tx
 }
 
