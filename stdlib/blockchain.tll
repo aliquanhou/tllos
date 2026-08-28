@@ -1,0 +1,223 @@
+// TLL Blockchain Core Data Structures (P0-15 dogfooding)
+// Block, Transaction, Chain, Merkle Tree
+
+from "../../stdlib/crypto" import sha256
+
+// Transaction structure
+struct Transaction {
+    id: string
+    fromAddr: string
+    toAddr: string
+    amount: int
+    timestamp: int
+    signature: string
+}
+
+// Block structure
+struct Block {
+    index: int
+    timestamp: int
+    transactions: list
+    previousHash: string
+    hash: string
+    nonce: int
+    difficulty: int
+}
+
+// Create a new transaction
+fn createTransaction(fromAddr: string, toAddr: string, amount: int, timestamp: int) -> map {
+    let txData = fromAddr + toAddr + convert.toString(amount) + convert.toString(timestamp)
+    let id = sha256(txData)
+    return {
+        __struct: "Transaction",
+        id: id,
+        fromAddr: fromAddr,
+        toAddr: toAddr,
+        amount: amount,
+        timestamp: timestamp,
+        signature: ""
+    }
+}
+
+// Calculate transaction hash
+fn transactionHash(tx: map) -> string {
+    let data = tx.id + tx.fromAddr + tx.toAddr + convert.toString(tx.amount) + convert.toString(tx.timestamp)
+    return sha256(data)
+}
+
+// Calculate Merkle root from transaction hashes
+fn merkleRoot(transactions: list) -> string {
+    let count = arrays.length(transactions)
+    if count == 0 { return sha256("") }
+    if count == 1 { return transactionHash(transactions[0]) }
+
+    let hashes: list = []
+    let i = 0
+    while i < count {
+        hashes[i] = transactionHash(transactions[i])
+        i = i + 1
+    }
+
+    while arrays.length(hashes) > 1 {
+        let newHashes: list = []
+        let j = 0
+        while j < arrays.length(hashes) {
+            let left = hashes[j]
+            let right = left
+            if j + 1 < arrays.length(hashes) { right = hashes[j + 1] }
+            newHashes[arrays.length(newHashes)] = sha256(left + right)
+            j = j + 2
+        }
+        hashes = newHashes
+    }
+    return hashes[0]
+}
+
+// Calculate block hash
+fn blockHash(block: map) -> string {
+    let txRoot = merkleRoot(block.transactions)
+    let data = convert.toString(block.index) +
+               convert.toString(block.timestamp) +
+               txRoot +
+               block.previousHash +
+               convert.toString(block.nonce) +
+               convert.toString(block.difficulty)
+    return sha256(data)
+}
+
+// Create genesis block
+fn createGenesisBlock() -> map {
+    let genesisTx = createTransaction("genesis", "genesis", 0, 0)
+    let txs: list = []
+    txs[0] = genesisTx
+    let block = {
+        __struct: "Block",
+        index: 0,
+        timestamp: 0,
+        transactions: txs,
+        previousHash: "0000000000000000000000000000000000000000000000000000000000000000",
+        hash: "",
+        nonce: 0,
+        difficulty: 1
+    }
+    block.hash = blockHash(block)
+    return block
+}
+
+// Create a new block
+fn createBlock(index: int, previousHash: string, transactions: list, difficulty: int, timestamp: int) -> map {
+    let block = {
+        __struct: "Block",
+        index: index,
+        timestamp: timestamp,
+        transactions: transactions,
+        previousHash: previousHash,
+        hash: "",
+        nonce: 0,
+        difficulty: difficulty
+    }
+    return block
+}
+
+// Proof of Work - mine a block
+fn mineBlock(block: map) -> map {
+    let prefix = ""
+    let i = 0
+    while i < block.difficulty {
+        prefix = prefix + "0"
+        i = i + 1
+    }
+    block.nonce = 0
+    block.hash = blockHash(block)
+    while !strings.startsWith(block.hash, prefix) {
+        block.nonce = block.nonce + 1
+        block.hash = blockHash(block)
+    }
+    return block
+}
+
+// Validate a block
+fn isValidBlock(block: map, previousBlock: map) -> bool {
+    if block.index != previousBlock.index + 1 { return false }
+    if block.previousHash != previousBlock.hash { return false }
+    if blockHash(block) != block.hash { return false }
+    return true
+}
+
+// Blockchain structure
+struct Blockchain {
+    chain: list
+    difficulty: int
+    pendingTransactions: list
+    miningReward: int
+}
+
+// Create a new blockchain
+fn createBlockchain(difficulty: int, miningReward: int) -> map {
+    let chain: list = []
+    chain[0] = createGenesisBlock()
+    return {
+        __struct: "Blockchain",
+        chain: chain,
+        difficulty: difficulty,
+        pendingTransactions: [],
+        miningReward: miningReward
+    }
+}
+
+// Get latest block
+fn getLatestBlock(bc: map) -> map {
+    return bc.chain[arrays.length(bc.chain) - 1]
+}
+
+// Add transaction to pending pool
+fn addTransaction(bc: map, tx: map) {
+    bc.pendingTransactions[arrays.length(bc.pendingTransactions)] = tx
+}
+
+// Mine pending transactions
+fn minePendingTransactions(bc: map, minerAddress: string, timestamp: int) -> map {
+    let rewardTx = createTransaction("system", minerAddress, bc.miningReward, timestamp)
+    bc.pendingTransactions[arrays.length(bc.pendingTransactions)] = rewardTx
+
+    let latest = getLatestBlock(bc)
+    let block = createBlock(
+        latest.index + 1,
+        latest.hash,
+        bc.pendingTransactions,
+        bc.difficulty,
+        timestamp
+    )
+    block = mineBlock(block)
+    bc.chain[arrays.length(bc.chain)] = block
+    bc.pendingTransactions = []
+    return block
+}
+
+// Get balance of an address
+fn getBalance(bc: map, address: string) -> int {
+    let balance = 0
+    let i = 0
+    while i < arrays.length(bc.chain) {
+        let block = bc.chain[i]
+        let j = 0
+        while j < arrays.length(block.transactions) {
+            let tx = block.transactions[j]
+            if tx.fromAddr == address { balance = balance - tx.amount }
+            if tx.toAddr == address { balance = balance + tx.amount }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return balance
+}
+
+// Validate entire chain
+fn isChainValid(bc: map) -> bool {
+    let i = 1
+    while i < arrays.length(bc.chain) {
+        if !isValidBlock(bc.chain[i], bc.chain[i - 1]) { return false }
+        i = i + 1
+    }
+    return true
+}

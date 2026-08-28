@@ -1,0 +1,53 @@
+// TLL Blockchain Test (P0-15 dogfooding)
+from "../../stdlib/blockchain" import createBlockchain, addTransaction, minePendingTransactions, getBalance, isChainValid, getLatestBlock
+
+fn main() {
+    io.println("=== TLL Blockchain Test ===")
+
+    // Create blockchain with difficulty 2 and mining reward 100
+    let bc = createBlockchain(2, 100)
+    io.println("Genesis block created")
+    io.println("Genesis hash: " + getLatestBlock(bc).hash)
+
+    // Add transactions
+    io.println("\n=== Adding transactions ===")
+    addTransaction(bc, createTransaction("alice", "bob", 50, 1000))
+    addTransaction(bc, createTransaction("bob", "charlie", 25, 1001))
+    io.println("Pending transactions: " + convert.toString(arrays.length(bc.pendingTransactions)))
+
+    // Mine block 1
+    io.println("\n=== Mining block 1 ===")
+    let block1 = minePendingTransactions(bc, "miner1", 2000)
+    io.println("Block 1 index: " + convert.toString(block1.index))
+    io.println("Block 1 nonce: " + convert.toString(block1.nonce))
+    io.println("Block 1 hash: " + block1.hash)
+    io.println("Block 1 transactions: " + convert.toString(arrays.length(block1.transactions)))
+
+    // Add more transactions
+    io.println("\n=== Adding more transactions ===")
+    addTransaction(bc, createTransaction("charlie", "alice", 10, 3000))
+    addTransaction(bc, createTransaction("alice", "bob", 5, 3001))
+
+    // Mine block 2
+    io.println("\n=== Mining block 2 ===")
+    let block2 = minePendingTransactions(bc, "miner2", 4000)
+    io.println("Block 2 index: " + convert.toString(block2.index))
+    io.println("Block 2 nonce: " + convert.toString(block2.nonce))
+    io.println("Block 2 hash: " + block2.hash)
+
+    // Check balances
+    io.println("\n=== Balances ===")
+    io.println("alice: " + convert.toString(getBalance(bc, "alice")))
+    io.println("bob: " + convert.toString(getBalance(bc, "bob")))
+    io.println("charlie: " + convert.toString(getBalance(bc, "charlie")))
+    io.println("miner1: " + convert.toString(getBalance(bc, "miner1")))
+    io.println("miner2: " + convert.toString(getBalance(bc, "miner2")))
+
+    // Validate chain
+    io.println("\n=== Chain Validation ===")
+    io.println("Chain valid: " + convert.toString(isChainValid(bc)))
+    io.println("Chain length: " + convert.toString(arrays.length(bc.chain)))
+
+    io.println("\n=== All blockchain tests completed ===")
+}
+main()
