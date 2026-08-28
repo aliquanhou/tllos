@@ -2,6 +2,7 @@
  * This is the Host/Bootstrap layer. Language semantics live in runtime/vm.tll.
  */
 #include "tllvm.h"
+#include <malloc.h>  /* MSVC alloca */
 
 /* === Frame Pool (P0-10.1) ===
  * Pre-allocated pool of TLLFrame objects to eliminate calloc/free per function call.
@@ -405,11 +406,32 @@ static void tll_vm_exec(TLLVM *vm) {
             case OP_ADD: {
                 TLLValue x = regs[b], y = regs[c];
                 if (x.type == TLL_STRING || y.type == TLL_STRING) {
-                    char *sx = tll_to_string(x), *sy = tll_to_string(y);
-                    char *r = (char*)malloc(strlen(sx) + strlen(sy) + 1);
-                    strcpy(r, sx); strcat(r, sy);
-                    regs[a] = tll_string(r);
-                    free(sx); free(sy); free(r);
+                    /* Optimized string concat: allocate RC string directly,
+                       avoid 3x temp allocations from tll_to_string + tll_string */
+                    const char *sx = NULL, *sy = NULL;
+                    int lx = 0, ly = 0;
+                    char *tmpx = NULL, *tmpy = NULL;
+
+                    if (x.type == TLL_STRING) { sx = x.as.string; lx = (int)strlen(sx); }
+                    else { tmpx = tll_to_string(x); sx = tmpx; lx = (int)strlen(sx); }
+
+                    if (y.type == TLL_STRING) { sy = y.as.string; ly = (int)strlen(sy); }
+                    else { tmpy = tll_to_string(y); sy = tmpy; ly = (int)strlen(sy); }
+
+                    /* Allocate refCounted string directly: [int rc][data...] */
+                    char *buf = (char*)malloc(sizeof(int) + lx + ly + 1);
+                    *(int*)buf = 1;
+                    if (lx > 0) memcpy(buf + sizeof(int), sx, lx);
+                    if (ly > 0) memcpy(buf + sizeof(int) + lx, sy, ly);
+                    buf[sizeof(int) + lx + ly] = '\0';
+
+                    TLLValue v;
+                    v.type = TLL_STRING;
+                    v.as.string = buf + sizeof(int);
+                    regs[a] = v;
+
+                    if (tmpx) free(tmpx);
+                    if (tmpy) free(tmpy);
                 } else if (x.type == TLL_FLOAT || y.type == TLL_FLOAT) {
                     double dx = (x.type == TLL_INT) ? (double)x.as.integer : x.as.floating;
                     double dy = (y.type == TLL_INT) ? (double)y.as.integer : y.as.floating;

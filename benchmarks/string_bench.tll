@@ -1,0 +1,48 @@
+fn main() {
+    io.println("=== String Concat Benchmark (Optimized OP_ADD) ===")
+    let n1 = 100000
+    let t0 = time.nowMs()
+    let i = 0
+    while i < n1 {
+        let s = "a" + "b"
+        i = i + 1
+    }
+    let t1 = time.nowMs()
+    io.println("Short concat (a+b) x" + convert.toString(n1) + ": " + convert.toString(t1-t0) + "ms = " + convert.toString(n1*1000/(t1-t0)) + "/s")
+
+    let n2 = 10000
+    let t2 = time.nowMs()
+    let s = ""
+    i = 0
+    while i < n2 {
+        s = s + "x"
+        i = i + 1
+    }
+    let t3 = time.nowMs()
+    io.println("Consecutive concat x" + convert.toString(n2) + ": " + convert.toString(t3-t2) + "ms = " + convert.toString(n2*1000/(t3-t2)) + "/s")
+    io.println("Final length: " + convert.toString(strings.length(s)))
+
+    let n3 = 50000
+    let t4 = time.nowMs()
+    i = 0
+    while i < n3 {
+        let s2 = "height=" + i
+        i = i + 1
+    }
+    let t5 = time.nowMs()
+    io.println("String+Number x" + convert.toString(n3) + ": " + convert.toString(t5-t4) + "ms = " + convert.toString(n3*1000/(t5-t4)) + "/s")
+
+    let n4 = 10000
+    let medium = "abcdefghijklmnopqrstuvwxyz0123456789"
+    let t6 = time.nowMs()
+    i = 0
+    while i < n4 {
+        let s3 = medium + medium
+        i = i + 1
+    }
+    let t7 = time.nowMs()
+    io.println("Medium concat (36+36) x" + convert.toString(n4) + ": " + convert.toString(t7-t6) + "ms = " + convert.toString(n4*1000/(t7-t6)) + "/s")
+
+    io.println("=== Done ===")
+}
+main()

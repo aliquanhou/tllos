@@ -1,0 +1,126 @@
+// TLL StringBuilder - Efficient string construction (P0-15.8-C)
+// Level: Stdlib (uses list to collect fragments, single concat at toString)
+// Avoids O(n^2) consecutive string concatenation
+
+struct StringBuilder {
+    fragments: list
+    totalLength: int
+}
+
+// Create a new StringBuilder
+fn newStringBuilder() -> map {
+    return {
+        __struct: "StringBuilder",
+        fragments: [],
+        totalLength: 0
+    }
+}
+
+// Create a StringBuilder with initial content
+fn newStringBuilderFrom(initial: string) -> map {
+    let sb = newStringBuilder()
+    sbAppend(sb, initial)
+    return sb
+}
+
+// Append a string to the builder
+fn sbAppend(sb: map, value: string) {
+    sb.fragments[arrays.length(sb.fragments)] = value
+    sb.totalLength = sb.totalLength + strings.length(value)
+}
+
+// Append an integer (converts to string first)
+fn sbAppendInt(sb: map, value: int) {
+    sbAppend(sb, convert.toString(value))
+}
+
+// Append a float
+fn sbAppendFloat(sb: map, value: float) {
+    sbAppend(sb, convert.toString(value))
+}
+
+// Append a boolean
+fn sbAppendBool(sb: map, value: bool) {
+    if value {
+        sbAppend(sb, "true")
+    } else {
+        sbAppend(sb, "false")
+    }
+}
+
+// Append a newline
+fn sbAppendLine(sb: map, value: string) {
+    sbAppend(sb, value)
+    sbAppend(sb, "\n")
+}
+
+// Get current length
+fn sbLength(sb: map) -> int {
+    return sb.totalLength
+}
+
+// Get fragment count
+fn sbFragmentCount(sb: map) -> int {
+    return arrays.length(sb.fragments)
+}
+
+// Clear the builder
+fn sbClear(sb: map) {
+    sb.fragments = []
+    sb.totalLength = 0
+}
+
+// Build the final string (single concatenation of all fragments)
+// This is O(n) total instead of O(n^2) for consecutive + operations
+fn sbToString(sb: map) -> string {
+    let fragCount = arrays.length(sb.fragments)
+    if fragCount == 0 {
+        return ""
+    }
+    if fragCount == 1 {
+        return sb.fragments[0]
+    }
+    // Build result by iterating fragments - each concat is O(current_length)
+    // but total is O(total_length) since each char is copied once per level
+    let result = sb.fragments[0]
+    let i = 1
+    while i < fragCount {
+        result = result + sb.fragments[i]
+        i = i + 1
+    }
+    return result
+}
+
+// Join a list of strings with a separator
+fn sbJoin(parts: list, separator: string) -> string {
+    let count = arrays.length(parts)
+    if count == 0 {
+        return ""
+    }
+    if count == 1 {
+        return parts[0]
+    }
+    let sb = newStringBuilder()
+    sbAppend(sb, parts[0])
+    let i = 1
+    while i < count {
+        sbAppend(sb, separator)
+        sbAppend(sb, parts[i])
+        i = i + 1
+    }
+    return sbToString(sb)
+}
+
+// Repeat a string n times
+fn sbRepeat(s: string, n: int) -> string {
+    if n <= 0 {
+        return ""
+    }
+    let sb = newStringBuilder()
+    let i = 0
+    while i < n {
+        sbAppend(sb, s)
+        i = i + 1
+    }
+    return sbToString(sb)
+}

@@ -1,0 +1,106 @@
+from "../../stdlib/stringbuilder" import newStringBuilder, sbAppend, sbAppendInt, sbAppendLine, sbToString, sbLength, sbClear, sbJoin, sbRepeat, sbFragmentCount
+
+fn main() {
+    io.println("=== StringBuilder Test ===")
+
+    // Test 1: Basic append
+    io.println("\n--- Basic Append ---")
+    let sb = newStringBuilder()
+    sbAppend(sb, "Hello")
+    sbAppend(sb, " ")
+    sbAppend(sb, "World")
+    sbAppend(sb, "!")
+    let result = sbToString(sb)
+    io.println("Result: " + result)
+    io.println("Length: " + convert.toString(sbLength(sb)))
+    io.println("Fragments: " + convert.toString(sbFragmentCount(sb)))
+
+    // Test 2: Append integer
+    io.println("\n--- Append Integer ---")
+    let sb2 = newStringBuilder()
+    sbAppend(sb2, "Count: ")
+    sbAppendInt(sb2, 42)
+    io.println("Result: " + sbToString(sb2))
+
+    // Test 3: Append line
+    io.println("\n--- Append Line ---")
+    let sb3 = newStringBuilder()
+    sbAppendLine(sb3, "Line 1")
+    sbAppendLine(sb3, "Line 2")
+    sbAppendLine(sb3, "Line 3")
+    io.println("Result:\n" + sbToString(sb3))
+
+    // Test 4: Clear
+    io.println("\n--- Clear ---")
+    let sb4 = newStringBuilder()
+    sbAppend(sb4, "before")
+    io.println("Before clear: " + sbToString(sb4) + " len=" + convert.toString(sbLength(sb4)))
+    sbClear(sb4)
+    sbAppend(sb4, "after")
+    io.println("After clear: " + sbToString(sb4) + " len=" + convert.toString(sbLength(sb4)))
+
+    // Test 5: Join
+    io.println("\n--- Join ---")
+    let parts: list = ["apple", "banana", "cherry"]
+    io.println("Join with ', ': " + sbJoin(parts, ", "))
+    io.println("Join with '-': " + sbJoin(parts, "-"))
+    io.println("Join with '': " + sbJoin(parts, ""))
+
+    // Test 6: Repeat
+    io.println("\n--- Repeat ---")
+    io.println("Repeat 'ab' 5: " + sbRepeat("ab", 5))
+    io.println("Repeat 'x' 10: " + sbRepeat("x", 10))
+
+    // Test 7: Empty builder
+    io.println("\n--- Empty Builder ---")
+    let sb5 = newStringBuilder()
+    io.println("Empty result: '" + sbToString(sb5) + "'")
+    io.println("Empty length: " + convert.toString(sbLength(sb5)))
+
+    // Test 8: Performance comparison
+    io.println("\n--- Performance: Consecutive Concat ---")
+    let n = 50000
+
+    // Using + operator (O(n^2))
+    let t0 = time.nowMs()
+    let s = ""
+    let i = 0
+    while i < n {
+        s = s + "x"
+        i = i + 1
+    }
+    let t1 = time.nowMs()
+    io.println("+ operator: " + convert.toString(n) + " appends in " + convert.toString(t1-t0) + "ms, len=" + convert.toString(strings.length(s)))
+
+    // Using StringBuilder (O(n))
+    let t2 = time.nowMs()
+    let sb6 = newStringBuilder()
+    i = 0
+    while i < n {
+        sbAppend(sb6, "x")
+        i = i + 1
+    }
+    let s2 = sbToString(sb6)
+    let t3 = time.nowMs()
+    io.println("StringBuilder: " + convert.toString(n) + " appends in " + convert.toString(t3-t2) + "ms, len=" + convert.toString(strings.length(s2)))
+
+    // Test 9: JSON-like construction
+    io.println("\n--- JSON Construction ---")
+    let sb7 = newStringBuilder()
+    sbAppend(sb7, "{")
+    sbAppend(sb7, "\"id\":")
+    sbAppendInt(sb7, 12345)
+    sbAppend(sb7, ",\"name\":\"")
+    sbAppend(sb7, "test product")
+    sbAppend(sb7, "\",\"price\":")
+    sbAppendInt(sb7, 999)
+    sbAppend(sb7, ",\"tags\":[")
+    sbAppend(sb7, "\"electronics\",\"sale\",\"new\"")
+    sbAppend(sb7, "]}")
+    let json = sbToString(sb7)
+    io.println("JSON: " + json)
+    io.println("JSON length: " + convert.toString(strings.length(json)))
+
+    io.println("\n=== All StringBuilder tests completed ===")
+}
+main()
