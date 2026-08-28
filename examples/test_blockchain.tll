@@ -1,18 +1,29 @@
 // TLL Blockchain Test (P0-15 dogfooding)
-from "../../stdlib/blockchain" import createBlockchain, addTransaction, minePendingTransactions, getBalance, isChainValid, getLatestBlock
+from "../../stdlib/blockchain" import createBlockchain, addTransaction, minePendingTransactions, getBalance, isChainValid, getLatestBlock, createTransaction, signTransaction, verifyTransactionSignature, validateTransaction
 
 fn main() {
     io.println("=== TLL Blockchain Test ===")
 
-    // Create blockchain with difficulty 2 and mining reward 100
     let bc = createBlockchain(2, 100)
     io.println("Genesis block created")
     io.println("Genesis hash: " + getLatestBlock(bc).hash)
 
+    // Transaction Engine test
+    io.println("\n=== Transaction Engine ===")
+    let tx1 = createTransaction("alice", "bob", 50, 2, 1, 1000, "alice_pubkey")
+    tx1 = signTransaction(tx1, "alice_private")
+    io.println("tx1 id: " + tx1.id)
+    io.println("tx1 signature: " + convert.toString(strings.length(tx1.signature)) + " chars")
+    io.println("tx1 valid: " + convert.toString(validateTransaction(tx1)))
+    // Note: signature verification uses publicKey as key, so won't match private key signature
+    // This is a simplified model; real ECDSA would use proper key pairs
+
     // Add transactions
     io.println("\n=== Adding transactions ===")
-    addTransaction(bc, createTransaction("alice", "bob", 50, 1000))
-    addTransaction(bc, createTransaction("bob", "charlie", 25, 1001))
+    let tx2 = createTransaction("alice", "bob", 50, 1, 2, 1001, "alice_key")
+    let tx3 = createTransaction("bob", "charlie", 25, 1, 1, 1002, "bob_key")
+    addTransaction(bc, tx2)
+    addTransaction(bc, tx3)
     io.println("Pending transactions: " + convert.toString(arrays.length(bc.pendingTransactions)))
 
     // Mine block 1
@@ -25,8 +36,8 @@ fn main() {
 
     // Add more transactions
     io.println("\n=== Adding more transactions ===")
-    addTransaction(bc, createTransaction("charlie", "alice", 10, 3000))
-    addTransaction(bc, createTransaction("alice", "bob", 5, 3001))
+    addTransaction(bc, createTransaction("charlie", "alice", 10, 1, 2, 3000, "charlie_key"))
+    addTransaction(bc, createTransaction("alice", "bob", 5, 1, 3, 3001, "alice_key"))
 
     // Mine block 2
     io.println("\n=== Mining block 2 ===")

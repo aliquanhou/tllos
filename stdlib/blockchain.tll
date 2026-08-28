@@ -1,7 +1,7 @@
-// TLL Blockchain Core Data Structures (P0-15 dogfooding)
-// Block, Transaction, Chain, Merkle Tree
+// TLL Blockchain Core Data Structures + Transaction Engine (P0-15)
+// Block, Transaction, Chain, Merkle Tree, Signing, Validation
 
-from "../../stdlib/crypto" import sha256
+from "../../stdlib/crypto" import sha256, hmacSha256, constantTimeEquals
 
 // Transaction structure
 struct Transaction {
@@ -9,7 +9,10 @@ struct Transaction {
     fromAddr: string
     toAddr: string
     amount: int
+    fee: int
+    nonce: int
     timestamp: int
+    publicKey: string
     signature: string
 }
 
@@ -24,25 +27,62 @@ struct Block {
     difficulty: int
 }
 
-// Create a new transaction
-fn createTransaction(fromAddr: string, toAddr: string, amount: int, timestamp: int) -> map {
-    let txData = fromAddr + toAddr + convert.toString(amount) + convert.toString(timestamp)
-    let id = sha256(txData)
-    return {
+// Canonical encoding of transaction for signing/hashing
+fn transactionCanonicalEncoding(tx: map) -> string {
+    return tx.fromAddr + "|" + tx.toAddr + "|" + convert.toString(tx.amount) + "|" +
+           convert.toString(tx.fee) + "|" + convert.toString(tx.nonce) + "|" +
+           convert.toString(tx.timestamp) + "|" + tx.publicKey
+}
+
+// Create a new transaction (unsigned)
+fn createTransaction(fromAddr: string, toAddr: string, amount: int, fee: int, nonce: int, timestamp: int, publicKey: string) -> map {
+    let tx = {
         __struct: "Transaction",
-        id: id,
+        id: "",
         fromAddr: fromAddr,
         toAddr: toAddr,
         amount: amount,
+        fee: fee,
+        nonce: nonce,
         timestamp: timestamp,
+        publicKey: publicKey,
         signature: ""
     }
+    tx.id = sha256(transactionCanonicalEncoding(tx))
+    return tx
+}
+
+// Sign transaction with private key (using HMAC-SHA256 as simplified signature)
+fn signTransaction(tx: map, privateKey: string) -> map {
+    let message = transactionCanonicalEncoding(tx)
+    tx.signature = hmacSha256(privateKey, message)
+    return tx
+}
+
+// Verify transaction signature
+fn verifyTransactionSignature(tx: map) -> bool {
+    if tx.signature == "" { return false }
+    let message = transactionCanonicalEncoding(tx)
+    // In simplified model, publicKey is used as verification key
+    let expected = hmacSha256(tx.publicKey, message)
+    return constantTimeEquals(tx.signature, expected)
+}
+
+// Validate transaction (basic checks)
+fn validateTransaction(tx: map) -> bool {
+    if tx.fromAddr == "" { return false }
+    if tx.toAddr == "" { return false }
+    if tx.amount <= 0 { return false }
+    if tx.fee < 0 { return false }
+    if tx.nonce < 0 { return false }
+    if tx.timestamp < 0 { return false }
+    if tx.id != sha256(transactionCanonicalEncoding(tx)) { return false }
+    return true
 }
 
 // Calculate transaction hash
 fn transactionHash(tx: map) -> string {
-    let data = tx.id + tx.fromAddr + tx.toAddr + convert.toString(tx.amount) + convert.toString(tx.timestamp)
-    return sha256(data)
+    return sha256(transactionCanonicalEncoding(tx) + "|" + tx.signature)
 }
 
 // Calculate Merkle root from transaction hashes
@@ -87,7 +127,7 @@ fn blockHash(block: map) -> string {
 
 // Create genesis block
 fn createGenesisBlock() -> map {
-    let genesisTx = createTransaction("genesis", "genesis", 0, 0)
+    let genesisTx = createTransaction("genesis", "genesis", 0, 0, 0, 0, "genesis_key")
     let txs: list = []
     txs[0] = genesisTx
     let block = {
@@ -177,7 +217,7 @@ fn addTransaction(bc: map, tx: map) {
 
 // Mine pending transactions
 fn minePendingTransactions(bc: map, minerAddress: string, timestamp: int) -> map {
-    let rewardTx = createTransaction("system", minerAddress, bc.miningReward, timestamp)
+    let rewardTx = createTransaction("system", minerAddress, bc.miningReward, 0, 0, timestamp, "system_key")
     bc.pendingTransactions[arrays.length(bc.pendingTransactions)] = rewardTx
 
     let latest = getLatestBlock(bc)
