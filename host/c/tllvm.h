@@ -105,6 +105,7 @@ typedef struct {
     TLLInstruction *instructions;
     int instructionCount;
     int localCount;
+    int maxRegister;  /* highest register index actually used by this function */
 } TLLFunction;
 
 typedef struct {

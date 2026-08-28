@@ -199,6 +199,22 @@ TLLProgram *tll_load_program(const char *filename) {
         }
     }
 
+    /* Compute maxRegister for each function (P0-10: avoid scanning all 4096 regs) */
+    for (int i = 0; i < prog->functionCount; i++) {
+        int maxR = 0;
+        TLLFunction *fn = &prog->functions[i];
+        for (int j = 0; j < fn->instructionCount; j++) {
+            TLLInstruction *inst = &fn->instructions[j];
+            for (int k = 0; k < inst->operandCount; k++) {
+                if (inst->operands[k] > maxR && inst->operands[k] < 4096) {
+                    maxR = inst->operands[k];
+                }
+            }
+        }
+        fn->maxRegister = maxR + 1;  /* +1 because we need count, not max index */
+        if (fn->maxRegister < 1) fn->maxRegister = 1;
+    }
+
     /* Parse constants */
     TLLValue consts = map_get(root.as.map, "constants");
     if (consts.type == TLL_ARRAY) {

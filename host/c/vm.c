@@ -92,8 +92,9 @@ static TLLFrame *create_frame(TLLFunction *fn, int returnReg, TLLClosureEnv *env
     TLLFrame *frame = frame_pool_acquire();
     frame->function = fn;
     frame->pc = 0;
-    /* Reset registers to null (registers array is pre-allocated) */
-    for (int i = 0; i < 4096; i++) frame->registers[i] = tll_null();
+    /* Reset only registers actually used by this function (P0-10) */
+    int regCount = fn->maxRegister > 0 ? fn->maxRegister : 1;
+    for (int i = 0; i < regCount; i++) frame->registers[i] = tll_null();
     frame->localCount = fn->localCount;
     /* locals array: reallocate if function needs more locals than current capacity */
     int needed_locals = fn->localCount > 0 ? fn->localCount : 1;
@@ -131,8 +132,9 @@ static void free_frame(TLLFrame *frame) {
     TLLClosureEnv *env = frame->closureEnv;
     frame->closureEnv = NULL;
 
-    /* Release all value references (arrays themselves are pooled, not freed) */
-    for (int i = 0; i < 4096; i++) tll_value_free(frame->registers[i]);
+    /* Release only registers actually used by this function (P0-10) */
+    int regCount = frame->function->maxRegister > 0 ? frame->function->maxRegister : 1;
+    for (int i = 0; i < regCount; i++) tll_value_free(frame->registers[i]);
     for (int i = 0; i < frame->localCount; i++) tll_value_free(frame->locals[i]);
     for (int i = 0; i < frame->argStackSize; i++) tll_value_free(frame->argStack[i]);
 
