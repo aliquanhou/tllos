@@ -1,0 +1,26 @@
+// String capability completeness test
+fn main() {
+    let s = "hello world"
+    io.println("length: " + convert.toString(strings.length(s)))
+    io.println("charAt(0): " + strings.charAt(s, 0))
+    io.println("charCodeAt(0): " + convert.toString(strings.charCodeAt(s, 0)))
+    io.println("substring(0,5): " + strings.substring(s, 0, 5))
+    io.println("indexOf('world'): " + convert.toString(strings.indexOf(s, "world")))
+    io.println("lastIndexOf('l'): " + convert.toString(strings.lastIndexOf(s, "l")))
+    io.println("startsWith('hello'): " + convert.toString(strings.startsWith(s, "hello")))
+    io.println("endsWith('world'): " + convert.toString(strings.endsWith(s, "world")))
+    io.println("contains('lo wo'): " + convert.toString(strings.contains(s, "lo wo")))
+    io.println("toUpper: " + strings.toUpper(s))
+    io.println("replace('world','tll'): " + strings.replace(s, "world", "tll"))
+    io.println("isEmpty(''): " + convert.toString(strings.isEmpty("")))
+    // Test split
+    let parts = strings.split("a,b,c", ",")
+    io.println("split count: " + convert.toString(arrays.length(parts)))
+    let i = 0
+    while i < arrays.length(parts) {
+        io.println("  part[" + convert.toString(i) + "]=" + arrays.get(parts, i))
+        i = i + 1
+    }
+    io.println("ALL STRING TESTS DONE")
+}
+main()

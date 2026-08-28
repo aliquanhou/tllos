@@ -133,14 +133,33 @@ export fn check(program: map) -> list {
     tc_pushScope()
     tc_registerBuiltins()
 
-    // Pre-register function declarations
+    // Pre-register function declarations with param/return types
     let stmts = program["statements"]
     let i = 0
     while i < arrays.length(stmts) {
         let stmt = arrays.get(stmts, i)
         if stmt["kind"] == "Fn" {
             let fnType = makeType("fn", "function")
-            fnType["returnType"] = typeAuto()
+            // Resolve return type from declaration
+            if stmt["returnType"] != null {
+                fnType["returnType"] = tc_resolveType(stmt["returnType"])
+            } else {
+                fnType["returnType"] = typeAuto()
+            }
+            // Record parameter types
+            let paramTypes = []
+            let params = stmt["params"]
+            let pi = 0
+            while pi < arrays.length(params) {
+                let param = arrays.get(params, pi)
+                if param["type"] != null {
+                    arrays.push(paramTypes, tc_resolveType(param["type"]))
+                } else {
+                    arrays.push(paramTypes, typeAuto())
+                }
+                pi = pi + 1
+            }
+            fnType["paramTypes"] = paramTypes
             let sym = { name: stmt["name"], type: fnType, mutable: false, kind: "function" }
             tc_define(stmt["name"], sym)
         }
@@ -337,10 +356,36 @@ fn tc_checkExpression(expr: map) -> map {
     if kind == "Call" {
         let calleeType = tc_checkExpression(expr["callee"])
         let args = expr["args"]
+        let argTypes = []
         let i = 0
         while i < arrays.length(args) {
-            tc_checkExpression(arrays.get(args, i))
+            arrays.push(argTypes, tc_checkExpression(arrays.get(args, i)))
             i = i + 1
+        }
+        // Check argument types against function parameter types
+        if calleeType["name"] == "fn" && calleeType["paramTypes"] != null {
+            let paramTypes = calleeType["paramTypes"]
+            let expectedCount = arrays.length(paramTypes)
+            let actualCount = arrays.length(argTypes)
+            if actualCount != expectedCount {
+                tc_error(expr["line"], "function expects " + convert.toString(expectedCount) + " arguments, got " + convert.toString(actualCount))
+            }
+            let ai = 0
+            while ai < actualCount && ai < expectedCount {
+                let expected = arrays.get(paramTypes, ai)
+                let actual = arrays.get(argTypes, ai)
+                // Only check if both types are known (not auto/unknown)
+                if expected["name"] != "auto" && expected["name"] != "unknown" && actual["name"] != "auto" && actual["name"] != "unknown" {
+                    if expected["name"] != actual["name"] {
+                        // Allow int->float and numeric compatibility
+                        let numericOk = isNumeric(expected) && isNumeric(actual)
+                        if !numericOk {
+                            tc_error(expr["line"], "argument " + convert.toString(ai + 1) + ": expected " + expected["name"] + ", got " + actual["name"])
+                        }
+                    }
+                }
+                ai = ai + 1
+            }
         }
         // Stdlib function calls return auto
         if calleeType["name"] == "auto" {
