@@ -1,0 +1,75 @@
+﻿// TLL Event Emitter - Stdlib implementation
+// P0-11: Verify if Stdlib event system is sufficient, or if language-level observe is needed
+
+struct EventEmitter {
+    listeners: map
+}
+
+fn createEmitter() {
+    return { __emitter: true, listeners: {} }
+}
+
+fn on(emitter, event, callback) {
+    if emitter["listeners"][event] == null {
+        emitter["listeners"][event] = []
+    }
+    arrays.push(emitter["listeners"][event], callback)
+    return emitter
+}
+
+fn off(emitter, event, callback) {
+    let listeners = emitter["listeners"][event]
+    if listeners == null { return emitter }
+    let i = 0
+    let newListeners = []
+    while i < arrays.length(listeners) {
+        if listeners[i] != callback {
+            arrays.push(newListeners, listeners[i])
+        }
+        i = i + 1
+    }
+    emitter["listeners"][event] = newListeners
+    return emitter
+}
+
+fn emit(emitter, event, data) {
+    let listeners = emitter["listeners"][event]
+    if listeners == null { return 0 }
+    let count = 0
+    let i = 0
+    while i < arrays.length(listeners) {
+        listeners[i](data)
+        count = count + 1
+        i = i + 1
+    }
+    return count
+}
+
+fn once(emitter, event, callback) {
+    let wrapper = fn(data) {
+        off(emitter, event, wrapper)
+        callback(data)
+    }
+    on(emitter, event, wrapper)
+    return emitter
+}
+
+fn listenerCount(emitter, event) {
+    let listeners = emitter["listeners"][event]
+    if listeners == null { return 0 }
+    return arrays.length(listeners)
+}
+
+fn eventNames(emitter) {
+    return map.keys(emitter["listeners"])
+}
+
+fn removeAllListeners(emitter, event) {
+    if event == null {
+        emitter["listeners"] = {}
+    } else {
+        emitter["listeners"][event] = []
+    }
+    return emitter
+}
+

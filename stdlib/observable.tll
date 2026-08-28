@@ -1,0 +1,125 @@
+﻿// TLL Observable / Watch - Stdlib implementation
+// P0-11: Verify if Stdlib observable is sufficient, or if language-level observe is needed
+
+struct Observable {
+    target: map
+    watchers: map
+    history: map
+}
+
+fn observable(target) {
+    return {
+        __observable: true,
+        target: target,
+        watchers: {},
+        history: {}
+    }
+}
+
+fn get(obs, field) {
+    return obs["target"][field]
+}
+
+fn set(obs, field, value) {
+    let oldValue = obs["target"][field]
+    if oldValue == value { return false }
+    obs["target"][field] = value
+
+    // Record history
+    if obs["history"][field] == null {
+        obs["history"][field] = []
+    }
+    arrays.push(obs["history"][field], {
+        old: oldValue,
+        new: value,
+        time: time.nowMs()
+    })
+
+    // Trigger watchers
+    let watchers = obs["watchers"][field]
+    if watchers != null {
+        let i = 0
+        while i < arrays.length(watchers) {
+            watchers[i]({
+                field: field,
+                old: oldValue,
+                new: value,
+                time: time.nowMs()
+            })
+            i = i + 1
+        }
+    }
+
+    // Trigger wildcard watchers
+    let allWatchers = obs["watchers"]["*"]
+    if allWatchers != null {
+        let i = 0
+        while i < arrays.length(allWatchers) {
+            allWatchers[i]({
+                field: field,
+                old: oldValue,
+                new: value,
+                time: time.nowMs()
+            })
+            i = i + 1
+        }
+    }
+
+    return true
+}
+
+fn watch(obs, field, callback) {
+    if obs["watchers"][field] == null {
+        obs["watchers"][field] = []
+    }
+    arrays.push(obs["watchers"][field], callback)
+    return callback
+}
+
+fn unwatch(obs, field, callback) {
+    let watchers = obs["watchers"][field]
+    if watchers == null { return }
+    let i = 0
+    let newWatchers = []
+    while i < arrays.length(watchers) {
+        if watchers[i] != callback {
+            arrays.push(newWatchers, watchers[i])
+        }
+        i = i + 1
+    }
+    obs["watchers"][field] = newWatchers
+}
+
+fn history(obs, field) {
+    return obs["history"][field]
+}
+
+fn delta(obs, field) {
+    let h = obs["history"][field]
+    if h == null || arrays.length(h) < 1 { return null }
+    let last = h[arrays.length(h) - 1]
+    return last["new"] - last["old"]
+}
+
+fn trend(obs, field, n) {
+    let h = obs["history"][field]
+    if h == null || arrays.length(h) < 2 { return 0 }
+    let count = n
+    if count > arrays.length(h) { count = arrays.length(h) }
+    let start = h[arrays.length(h) - count]["old"]
+    let end = h[arrays.length(h) - 1]["new"]
+    if start == 0 { return 0 }
+    return (end - start) / start
+}
+
+fn snapshot(obs) {
+    let result = {}
+    let keys = map.keys(obs["target"])
+    let i = 0
+    while i < arrays.length(keys) {
+        result[keys[i]] = obs["target"][keys[i]]
+        i = i + 1
+    }
+    return result
+}
+

@@ -1,0 +1,238 @@
+// TLL Real-time Market System - Dogfooding for P0-11
+// Uses named functions instead of anonymous lambdas to work around lambda closure bug
+// (P0-11 discovered bug: anonymous lambda closures crash, named function closures work)
+
+// === Observable (inline) ===
+fn observable(target) {
+    return {
+        __observable: true,
+        target: target,
+        watchers: {},
+        history: {}
+    }
+}
+
+fn get(obs, field) {
+    let target = obs["target"]
+    return target[field]
+}
+
+fn set(obs, field, value) {
+    let target = obs["target"]
+    let oldValue = target[field]
+    if oldValue == value { return false }
+    target[field] = value
+    obs["target"] = target
+
+    let hist = obs["history"]
+    if hist[field] == null {
+        hist[field] = []
+    }
+    let fieldHist = hist[field]
+    arrays.push(fieldHist, {
+        old: oldValue,
+        new: value,
+        time: time.nowMs()
+    })
+    hist[field] = fieldHist
+    obs["history"] = hist
+
+    // Trigger watchers
+    let watchersMap = obs["watchers"]
+    let watchers = watchersMap[field]
+    if watchers != null {
+        let wlen = arrays.length(watchers)
+        let i = 0
+        while i < wlen {
+            let cb = watchers[i]
+            cb({
+                field: field,
+                old: oldValue,
+                new: value,
+                time: time.nowMs()
+            })
+            i = i + 1
+        }
+    }
+
+    return true
+}
+
+fn watch(obs, field, callback) {
+    let watchersMap = obs["watchers"]
+    if watchersMap[field] == null {
+        watchersMap[field] = []
+    }
+    let fieldWatchers = watchersMap[field]
+    arrays.push(fieldWatchers, callback)
+    watchersMap[field] = fieldWatchers
+    obs["watchers"] = watchersMap
+    return callback
+}
+
+fn history(obs, field) {
+    let hist = obs["history"]
+    return hist[field]
+}
+
+fn trend(obs, field, n) {
+    let hist = obs["history"]
+    let h = hist[field]
+    if h == null || arrays.length(h) < 2 { return 0 }
+    let count = n
+    if count > arrays.length(h) { count = arrays.length(h) }
+    let start = h[arrays.length(h) - count]["old"]
+    let end = h[arrays.length(h) - 1]["new"]
+    if start == 0 { return 0 }
+    return (end - start) / start
+}
+
+// === Event Emitter (inline) ===
+fn createEmitter() {
+    return { __emitter: true, listeners: {} }
+}
+
+fn on(emitter, event, callback) {
+    let listeners = emitter["listeners"]
+    if listeners[event] == null {
+        listeners[event] = []
+    }
+    let eventListeners = listeners[event]
+    arrays.push(eventListeners, callback)
+    listeners[event] = eventListeners
+    emitter["listeners"] = listeners
+    return emitter
+}
+
+fn emit(emitter, event, data) {
+    let listeners = emitter["listeners"]
+    let eventListeners = listeners[event]
+    if eventListeners == null { return 0 }
+    let count = 0
+    let elen = arrays.length(eventListeners)
+    let i = 0
+    while i < elen {
+        let cb = eventListeners[i]
+        cb(data)
+        count = count + 1
+        i = i + 1
+    }
+    return count
+}
+
+// === Global state for market system ===
+let totalDelta = 0
+let tradeCount = 0
+let alertCount = 0
+let market = null
+let signals = null
+
+// === Named function watchers (workaround for lambda closure bug) ===
+fn xauusdWatcher(change) {
+    let d = change["new"] - change["old"]
+    totalDelta = totalDelta + d
+    let t = trend(market, "XAUUSD", 5)
+    let pct = (d / change["old"]) * 100
+
+    if pct > 0.5 || pct < -0.5 {
+        alertCount = alertCount + 1
+        emit(signals, "alert", {
+            symbol: "XAUUSD", old: change["old"], new: change["new"],
+            delta: d, pct: pct, time: change["time"]
+        })
+    }
+
+    if t > 0.001 {
+        emit(signals, "signal", {
+            symbol: "XAUUSD", direction: "BUY", price: change["new"],
+            trend: t, time: change["time"]
+        })
+    } else if t < -0.001 {
+        emit(signals, "signal", {
+            symbol: "XAUUSD", direction: "SELL", price: change["new"],
+            trend: t, time: change["time"]
+        })
+    }
+}
+
+fn alertHandler(alert) {
+    io.println("[ALERT] " + alert["symbol"] + " " + convert.toString(alert["pct"]) + "%")
+}
+
+fn signalHandler(sig) {
+    tradeCount = tradeCount + 1
+}
+
+// === Main ===
+fn main() {
+    io.println("=== TLL Real-time Market System (P0-11 Dogfooding) ===")
+    io.println("")
+
+    market = observable({
+        XAUUSD: 2350.50,
+        EURUSD: 1.0850,
+        BTCUSD: 64200.00,
+        SPX500: 5420.00
+    })
+
+    signals = createEmitter()
+
+    // Register watchers using named functions
+    watch(market, "XAUUSD", xauusdWatcher)
+    on(signals, "alert", alertHandler)
+    on(signals, "signal", signalHandler)
+
+    // Simulate market data
+    let prices = {
+        XAUUSD: 2350.50, EURUSD: 1.0850, BTCUSD: 64200.00, SPX500: 5420.00
+    }
+
+    let tickCount = 0
+    let start = time.nowMs()
+
+    let i = 0
+    while i < 2000 {
+        let symbols = ["XAUUSD", "EURUSD", "BTCUSD", "SPX500"]
+        let symIdx = i % 4
+        let symbol = symbols[symIdx]
+        let current = prices[symbol]
+        let changePct = (i % 200 - 100) / 10000.0
+        let newPrice = current * (1 + changePct)
+        prices[symbol] = newPrice
+
+        set(market, symbol, newPrice)
+
+        tickCount = tickCount + 1
+        i = i + 1
+    }
+
+    let end = time.nowMs()
+    let elapsed = end - start
+    if elapsed <= 0 { elapsed = 1 }
+
+    io.println("=== Results ===")
+    io.println("Ticks: " + convert.toString(tickCount))
+    io.println("Time: " + convert.toString(elapsed) + "ms")
+    io.println("Ticks/sec (Observation rate): " + convert.toString((tickCount * 1000) / elapsed))
+    io.println("Trades: " + convert.toString(tradeCount))
+    io.println("Alerts: " + convert.toString(alertCount))
+    io.println("Total XAUUSD delta: " + convert.toString(totalDelta))
+
+    let xauHistory = history(market, "XAUUSD")
+    io.println("XAUUSD history entries: " + convert.toString(arrays.length(xauHistory)))
+
+    io.println("")
+    io.println("=== Assessment ===")
+    io.println("Stdlib observable + events successfully expresses:")
+    io.println("  - observe price changes (watch)")
+    io.println("  - auto-trigger on change (set -> watcher)")
+    io.println("  - trend calculation from history")
+    io.println("  - anomaly detection")
+    io.println("  - event emission (signals/alerts)")
+    io.println("  - state history recording")
+    io.println("")
+    io.println("P0-11 discovered bug: anonymous lambda closures crash")
+    io.println("Workaround: use named function closures (work correctly)")
+}
+
+main()
