@@ -1531,6 +1531,62 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
         return tll_array();
     }
 
+    /* P0-15.16 IO-aware scheduler: non-blocking TCP + channel wake */
+    if (idx == 142) { /* tcp.tryRecv(fd, max_bytes) -> string, non-blocking ("" if would block) */
+        if (argCount > 0 && args[0].type == TLL_INT) {
+            SOCKET s = (SOCKET)args[0].as.integer;
+            int maxBytes = (argCount > 1 && args[1].type == TLL_INT) ? (int)args[1].as.integer : 65536;
+            /* Check if data is available without blocking */
+            fd_set readfds;
+            FD_ZERO(&readfds);
+            FD_SET(s, &readfds);
+            struct timeval tv0;
+            tv0.tv_sec = 0;
+            tv0.tv_usec = 0;
+            int ready = select((int)s + 1, &readfds, NULL, NULL, &tv0);
+            if (ready <= 0 || !FD_ISSET(s, &readfds)) {
+                return tll_string("");  /* would block or error */
+            }
+            char *buf = (char*)malloc(maxBytes + 1);
+            int received = recv(s, buf, maxBytes, 0);
+            if (received <= 0) { free(buf); return tll_string(""); }
+            buf[received] = '\0';
+            TLLValue v = tll_string(buf);
+            free(buf);
+            return v;
+        }
+        return tll_string("");
+    }
+    if (idx == 143) { /* tcp.trySend(fd, data) -> int bytes sent, -1 if would block */
+        if (argCount > 1 && args[0].type == TLL_INT && args[1].type == TLL_STRING) {
+            SOCKET s = (SOCKET)args[0].as.integer;
+            const char *data = args[1].as.string;
+            int len = (int)strlen(data);
+            /* Check if socket is writable without blocking */
+            fd_set writefds;
+            FD_ZERO(&writefds);
+            FD_SET(s, &writefds);
+            struct timeval tv0;
+            tv0.tv_sec = 0;
+            tv0.tv_usec = 0;
+            int ready = select((int)s + 1, NULL, &writefds, NULL, &tv0);
+            if (ready <= 0 || !FD_ISSET(s, &writefds)) {
+                return tll_int(-1);  /* would block */
+            }
+            int sent = send(s, data, len, 0);
+            return tll_int(sent);
+        }
+        return tll_int(-1);
+    }
+    if (idx == 144) { /* coroutine.wakeChannel(channelMap) -> int number woken */
+        if (argCount > 0 && args[0].type == TLL_MAP) {
+            void *chPtr = (void*)args[0].as.map;
+            int woken = coroutine_wake_channel(vm, chPtr);
+            return tll_int(woken);
+        }
+        return tll_int(0);
+    }
+
     fprintf(stderr, "tllvm: unknown builtin index %d\n", idx);
     return tll_null();
 }

@@ -136,15 +136,19 @@ typedef struct {
     TLLClosureEnv *closureEnv;
 } TLLFrame;
 
-/* === Coroutine (P0-15.14 VM-level, P0-15.15 per-VM scheduler + unified timer) === */
+/* === Coroutine (P0-15.14 VM-level, P0-15.15 per-VM scheduler + unified timer, P0-15.16 IO-aware) === */
 typedef struct {
     TLLFrame **callStack;
     int callStackSize;
     int callStackCapacity;
-    int state;  /* 0=running, 1=suspended, 2=dead */
+    int state;  /* 0=alive/ready, 2=dead (suspended implied by not-current) */
     TLLValue result;
     int invokeTargetStackSize;
-    long long wakeTime;  /* 0=runnable, >0=sleeping until this ms timestamp (P0-15.15 unified scheduler) */
+    long long wakeTime;  /* 0=runnable, >0=sleeping until this ms timestamp (P0-15.15) */
+    /* P0-15.16 IO-aware scheduler fields */
+    int waitingFd;       /* 0=not waiting on IO, >0=socket fd to wait on */
+    int waitingEvents;   /* 1=READ, 2=WRITE, 4=ERROR (bitmask) */
+    void *waitingChannel; /* NULL=not waiting on channel, else TLLMap* channel pointer */
 } TLLCoroutine;
 
 /* === VM === */
@@ -223,7 +227,11 @@ enum {
     /* Coroutine opcodes (P0-15.14: VM-level yield/resume) */
     OP_SPAWN = 54,  /* spawn coroutine: reg[a] = fn, reg[b..] = args */
     OP_YIELD = 55,  /* yield current coroutine, switch to next */
-    OP_SLEEP = 56   /* sleep current coroutine for N ms, then yield (P0-15.15 unified scheduler) */
+    OP_SLEEP = 56,  /* sleep current coroutine for N ms, then yield (P0-15.15) */
+    /* P0-15.16 IO-aware scheduler opcodes */
+    OP_WAIT_READ = 57,    /* wait for fd readable: reg[a] = fd, suspend until IO ready */
+    OP_WAIT_WRITE = 58,   /* wait for fd writable: reg[a] = fd, suspend until IO ready */
+    OP_WAIT_CHANNEL = 59  /* wait for channel send: reg[a] = channel map, suspend until wakeChannel */
 };
 
 /* === Function declarations === */
@@ -268,6 +276,10 @@ TLLValue tll_vm_invoke(TLLVM *vm, TLLValue fnValue, TLLValue *args, int argCount
 
 /* Builtin */
 TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount);
+
+/* P0-15.16 IO-aware scheduler: wake all coroutines waiting on a specific channel.
+ * Called from builtin coroutine.wakeChannel(channelMap). Returns number woken. */
+int coroutine_wake_channel(TLLVM *vm, void *channelPtr);
 
 /* Host ABI */
 void host_print(const char *s);

@@ -1,0 +1,126 @@
+// P0-15.16: Exception/Error Path Test
+// Verifies: WAITING_IO coroutine wakes when socket is closed by peer.
+// WAITING_CHANNEL coroutine gets null when channel is closed.
+from "../stdlib/task" import createChannel, sendChannel, recvChannel, tryRecvChannel, lenChannel, closeChannel
+
+io.println("=== Exception/Error Path Test ===")
+
+// Test 1: WAITING_IO → socket closed by peer
+let PORT2 = 19877
+let serverWokeAfterClose = false
+let test1Done = false
+
+fn closeServer() {
+    let serverFd = tcp.listen("127.0.0.1", PORT2)
+    if serverFd < 0 { test1Done = true; return }
+    // Wait for connection - but client will connect then immediately close
+    coroutine.waitRead(serverFd)
+    let clientFd = tcp.tryAccept(serverFd, 0)
+    if clientFd >= 0 {
+        // Wait for data - client closed without sending, so this should wake on close
+        coroutine.waitRead(clientFd)
+        let data = tcp.tryRecv(clientFd, 4096)
+        // data should be "" (connection closed) or the wake happened
+        serverWokeAfterClose = true
+        tcp.close(clientFd)
+    }
+    tcp.close(serverFd)
+    test1Done = true
+}
+
+fn closeClient() {
+    coroutine.sleep(50)
+    let clientFd = tcp.connect("127.0.0.1", PORT2)
+    if clientFd >= 0 {
+        coroutine.sleep(30)
+        tcp.close(clientFd)  // close without sending data
+    }
+}
+
+coroutine.spawn(closeServer)
+coroutine.spawn(closeClient)
+let g = 0
+while !test1Done && g < 50 { coroutine.sleep(10); g = g + 1 }
+
+if serverWokeAfterClose {
+    io.println("Test 1 PASS: WAITING_IO coroutine woke after peer closed socket")
+} else {
+    io.println("Test 1 FAIL: coroutine did not wake after close")
+}
+
+// Test 2: WAITING_CHANNEL → channel closed
+let ch2 = createChannel()
+let consumerGotNull = false
+let test2Done = false
+
+fn waitConsumer() {
+    let v = recvChannel(ch2)  // will wait, then channel closes → should get null
+    if v == null { consumerGotNull = true }
+    test2Done = true
+}
+
+fn closer() {
+    coroutine.sleep(30)
+    closeChannel(ch2)
+}
+
+coroutine.spawn(waitConsumer)
+coroutine.spawn(closer)
+g = 0
+while !test2Done && g < 30 { coroutine.sleep(10); g = g + 1 }
+
+if consumerGotNull {
+    io.println("Test 2 PASS: WAITING_CHANNEL coroutine got null after channel close")
+} else {
+    io.println("Test 2 FAIL: consumer did not get null")
+}
+
+// Test 3: Multiple WAITING_IO on different fds
+let PORT3 = 19878
+let results: list = []
+let test3Done = false
+
+fn multiServer() {
+    let s1 = tcp.listen("127.0.0.1", PORT3)
+    let s2 = tcp.listen("127.0.0.1", PORT3 + 1)
+    if s1 < 0 || s2 < 0 { test3Done = true; return }
+    // Wait on both - whichever connects first
+    coroutine.waitRead(s1)
+    let c1 = tcp.tryAccept(s1, 0)
+    if c1 >= 0 {
+        arrays.push(results, "s1")
+        tcp.close(c1)
+    }
+    coroutine.waitRead(s2)
+    let c2 = tcp.tryAccept(s2, 0)
+    if c2 >= 0 {
+        arrays.push(results, "s2")
+        tcp.close(c2)
+    }
+    tcp.close(s1)
+    tcp.close(s2)
+    test3Done = true
+}
+
+fn multiClient() {
+    coroutine.sleep(30)
+    let c1 = tcp.connect("127.0.0.1", PORT3)
+    if c1 >= 0 { coroutine.sleep(10); tcp.close(c1) }
+    coroutine.sleep(10)
+    let c2 = tcp.connect("127.0.0.1", PORT3 + 1)
+    if c2 >= 0 { coroutine.sleep(10); tcp.close(c2) }
+}
+
+coroutine.spawn(multiServer)
+coroutine.spawn(multiClient)
+g = 0
+while !test3Done && g < 50 { coroutine.sleep(10); g = g + 1 }
+
+if arrays.length(results) == 2 {
+    io.println("Test 3 PASS: Multiple WAITING_IO on different fds (s1+s2)")
+} else {
+    io.println("Test 3 FAIL: results count=" + convert.toString(arrays.length(results)))
+}
+
+io.println("")
+io.println("=== Exception Tests Done ===")

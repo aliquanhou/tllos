@@ -1,0 +1,175 @@
+// P0-15.16: IO-Aware Scheduler Test
+// Core验收: TCP WAIT does NOT block the VM.
+// Coroutine A waits for TCP READ. Coroutine B ticks every 10ms.
+// If A blocks TCP, B would stop. PASS = B continues while A waits.
+from "../stdlib/task" import createChannel, sendChannel, recvChannel, tryRecvChannel, lenChannel, closeChannel
+
+io.println("=== IO-Aware Scheduler Test ===")
+
+// Shared state
+let timerTicks = 0
+let serverReceived = ""
+let testDone = false
+let PORT = 19876
+
+// Coroutine B: timer that ticks every 10ms
+fn timerCoroutine() {
+    while !testDone {
+        coroutine.sleep(10)
+        timerTicks = timerTicks + 1
+    }
+}
+
+// Coroutine A: TCP server that waits for READ
+fn serverCoroutine() {
+    let serverFd = tcp.listen("127.0.0.1", PORT)
+    if serverFd < 0 {
+        io.println("  server: listen failed")
+        testDone = true
+        return
+    }
+    io.println("  server: listening on port " + convert.toString(PORT))
+
+    // Wait for incoming connection (this is the critical WAIT_IO point)
+    coroutine.waitRead(serverFd)
+    io.println("  server: waitRead returned, accepting...")
+
+    let clientFd = tcp.tryAccept(serverFd, 0)
+    if clientFd < 0 {
+        io.println("  server: accept failed")
+        tcp.close(serverFd)
+        testDone = true
+        return
+    }
+    io.println("  server: client connected, fd=" + convert.toString(clientFd))
+
+    // Wait for client data (another WAIT_IO point)
+    coroutine.waitRead(clientFd)
+    io.println("  server: waitRead for client data returned")
+
+    let data = tcp.tryRecv(clientFd, 4096)
+    serverReceived = data
+    io.println("  server: received: " + data)
+
+    tcp.close(clientFd)
+    tcp.close(serverFd)
+    testDone = true
+}
+
+// Coroutine C: TCP client
+fn clientCoroutine() {
+    // Give server time to start listening
+    coroutine.sleep(50)
+    let clientFd = tcp.connect("127.0.0.1", PORT)
+    if clientFd < 0 {
+        io.println("  client: connect failed")
+        testDone = true
+        return
+    }
+    io.println("  client: connected, sending data...")
+    coroutine.sleep(20)  // let server wait on IO
+    tcp.send(clientFd, "HELLO_IO_AWARE")
+    coroutine.sleep(50)  // let server receive
+    tcp.close(clientFd)
+}
+
+// Launch all coroutines
+coroutine.spawn(timerCoroutine)
+coroutine.spawn(serverCoroutine)
+coroutine.spawn(clientCoroutine)
+
+// Main drives scheduler until done (use sleep, not busy-yield)
+let guard = 0
+while !testDone && guard < 100 {
+    coroutine.sleep(10)
+    guard = guard + 1
+}
+
+// Verify
+io.println("")
+io.println("Results:")
+io.println("  timerTicks while waiting: " + convert.toString(timerTicks))
+io.println("  serverReceived: " + serverReceived)
+
+if timerTicks >= 3 && serverReceived == "HELLO_IO_AWARE" {
+    io.println("Test 1 PASS: TCP WAIT did not block VM (timer ran " + convert.toString(timerTicks) + " ticks)")
+} else {
+    io.println("Test 1 FAIL: timerTicks=" + convert.toString(timerTicks) + " received=" + serverReceived)
+}
+
+// Test 2: Channel await (consumer suspends, producer wakes)
+io.println("")
+io.println("Test 2: Channel await...")
+let ch2 = createChannel()
+let consumerGot = ""
+let consumerStarted = false
+
+fn channelConsumer() {
+    consumerStarted = true
+    let val = recvChannel(ch2)  // should suspend until producer sends
+    consumerGot = val
+}
+
+fn channelProducer() {
+    coroutine.sleep(30)  // let consumer start and wait
+    sendChannel(ch2, "CHANNEL_AWAKE_OK")
+}
+
+coroutine.spawn(channelConsumer)
+coroutine.spawn(channelProducer)
+let guard2 = 0
+while consumerGot == "" && guard2 < 50 {
+    coroutine.sleep(10)
+    guard2 = guard2 + 1
+}
+
+if consumerGot == "CHANNEL_AWAKE_OK" {
+    io.println("Test 2 PASS: Channel await suspend/wake works")
+} else {
+    io.println("Test 2 FAIL: consumerGot=" + consumerGot)
+}
+
+// Test 3: Mixed Timer + IO + Channel (all in one scheduler)
+io.println("")
+io.println("Test 3: Mixed Timer+IO+Channel...")
+let mixedTicks = 0
+let mixedDone = false
+
+fn mixedTimer() {
+    while !mixedDone {
+        coroutine.sleep(10)
+        mixedTicks = mixedTicks + 1
+    }
+}
+
+let ch3 = createChannel()
+let mixedChannelVal = ""
+
+fn mixedChannelWaiter() {
+    let v = recvChannel(ch3)
+    mixedChannelVal = v
+    mixedDone = true
+}
+
+fn mixedChannelSender() {
+    coroutine.sleep(80)
+    sendChannel(ch3, "MIXED_OK")
+}
+
+coroutine.spawn(mixedTimer)
+coroutine.spawn(mixedChannelWaiter)
+coroutine.spawn(mixedChannelSender)
+let guard3 = 0
+while !mixedDone && guard3 < 50 {
+    coroutine.sleep(10)
+    guard3 = guard3 + 1
+}
+
+if mixedChannelVal == "MIXED_OK" && mixedTicks >= 3 {
+    io.println("Test 3 PASS: Mixed Timer(" + convert.toString(mixedTicks) + " ticks)+Channel in unified scheduler")
+} else {
+    io.println("Test 3 FAIL: val=" + mixedChannelVal + " ticks=" + convert.toString(mixedTicks))
+}
+
+io.println("")
+io.println("=== IO-Aware Tests Done ===")

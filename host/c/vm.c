@@ -202,10 +202,35 @@ static long long current_time_ms(void) {
 #endif
 }
 
+/* P0-15.16: Check if a coroutine is runnable (not dead, not sleeping, not waiting on IO/channel). */
+static int coroutine_is_runnable(TLLCoroutine *co) {
+    if (!co || co->state == 2) return 0;  /* dead */
+    if (co->wakeTime > 0) return 0;         /* sleeping */
+    if (co->waitingFd > 0) return 0;        /* waiting on IO */
+    if (co->waitingChannel != NULL) return 0; /* waiting on channel */
+    return 1;
+}
+
+/* P0-15.16: Wake all coroutines waiting on a specific channel pointer.
+ * Called from builtin coroutine.wakeChannel(). Returns number woken. */
+int coroutine_wake_channel(TLLVM *vm, void *channelPtr) {
+    int woken = 0;
+    int i;
+    for (i = 0; i < vm->coroutineCount; i++) {
+        TLLCoroutine *co = vm->coroutines[i];
+        if (co && co->waitingChannel == channelPtr) {
+            co->waitingChannel = NULL;
+            woken++;
+        }
+    }
+    return woken;
+}
+
 /* Yield: save current, destroy if dead, round-robin to next runnable.
- * P0-15.15: Sleeping coroutines (wakeTime > now) are skipped. If all are
- * sleeping, the scheduler sleeps until the earliest wakeup, then retries.
- * This is the foundation of the unified Coroutine + Timer scheduler.
+ * P0-15.15: Sleeping coroutines (wakeTime > now) are skipped.
+ * P0-15.16: IO-aware - if no runnable coroutines, collect WAITING_IO fds,
+ * call select() with timeout from earliest sleeper, wake ready fds.
+ * WAITING_CHANNEL coroutines skipped until explicitly woken via wakeChannel.
  */
 static void coroutine_yield(TLLVM *vm) {
     int old = vm->currentCoroutine;
@@ -216,31 +241,32 @@ static void coroutine_yield(TLLVM *vm) {
     /* If current is dead, destroy it now (after save, before switch) */
     if (old >= 0 && old < vm->coroutineCount && vm->coroutines[old] && vm->coroutines[old]->state == 2) {
         coroutine_destroy(vm, old);
-        /* After swap-remove, adjust old for next calculation */
         if (old >= vm->coroutineCount) old = (vm->coroutineCount > 0) ? vm->coroutineCount - 1 : 0;
     }
 
     /* No coroutines left - nothing to restore */
     if (vm->coroutineCount == 0) return;
 
-    /* Try up to 2 times: first pass find runnable, second after sleeping */
+    /* Try up to 2 times: first pass find runnable, second after IO/timer wait */
     int pass;
     for (pass = 0; pass < 2; pass++) {
-        /* Find next runnable coroutine (not sleeping, or wakeTime has arrived) */
+        /* Wake expired sleepers */
         long long now = current_time_ms();
-        int next = -1;
-        long long minWake = 0;
         int i;
         for (i = 0; i < vm->coroutineCount; i++) {
+            TLLCoroutine *co = vm->coroutines[i];
+            if (co && co->wakeTime > 0 && co->wakeTime <= now) {
+                co->wakeTime = 0;
+            }
+        }
+
+        /* Find next runnable coroutine */
+        int next = -1;
+        for (i = 0; i < vm->coroutineCount; i++) {
             int idx = (old + 1 + i) % vm->coroutineCount;
-            TLLCoroutine *co = vm->coroutines[idx];
-            if (!co) continue;
-            if (co->wakeTime == 0 || co->wakeTime <= now) {
+            if (coroutine_is_runnable(vm->coroutines[idx])) {
                 next = idx;
                 break;
-            }
-            if (minWake == 0 || co->wakeTime < minWake) {
-                minWake = co->wakeTime;
             }
         }
 
@@ -249,21 +275,85 @@ static void coroutine_yield(TLLVM *vm) {
             return;
         }
 
-        /* All coroutines are sleeping - sleep until the earliest wakeup */
-        if (pass == 0 && minWake > now) {
-            long long sleepMs = minWake - now;
-            if (sleepMs > 0) {
-#ifdef _WIN32
-                Sleep((DWORD)sleepMs);
-#else
-                usleep((useconds_t)(sleepMs * 1000));
-#endif
+        /* No runnable. On first pass, wait for IO or timers. */
+        if (pass == 0) {
+            fd_set readfds, writefds, exceptfds;
+            FD_ZERO(&readfds);
+            FD_ZERO(&writefds);
+            FD_ZERO(&exceptfds);
+            int maxFd = 0;
+            int ioCount = 0;
+            long long minWake = 0;
+            int sleepCount = 0;
+
+            for (i = 0; i < vm->coroutineCount; i++) {
+                TLLCoroutine *co = vm->coroutines[i];
+                if (!co || co->state == 2) continue;
+                if (co->waitingFd > 0) {
+                    SOCKET s = (SOCKET)co->waitingFd;
+                    if (co->waitingEvents & 1) FD_SET(s, &readfds);
+                    if (co->waitingEvents & 2) FD_SET(s, &writefds);
+                    FD_SET(s, &exceptfds);
+                    if ((int)s > maxFd) maxFd = (int)s;
+                    ioCount++;
+                }
+                if (co->wakeTime > 0) {
+                    if (minWake == 0 || co->wakeTime < minWake) minWake = co->wakeTime;
+                    sleepCount++;
+                }
             }
-            /* loop back to find runnable */
+
+            /* Nothing to wait on (only channel-waiters) → exit cleanly */
+            if (ioCount == 0 && sleepCount == 0) return;
+
+            if (ioCount > 0) {
+                struct timeval tv, *ptv = NULL;
+                if (sleepCount > 0) {
+                    now = current_time_ms();
+                    long long timeoutMs = (minWake > now) ? (minWake - now) : 0;
+                    tv.tv_sec = (long)(timeoutMs / 1000);
+                    tv.tv_usec = (long)((timeoutMs % 1000) * 1000);
+                    ptv = &tv;
+                }
+                int ready = select(maxFd + 1, &readfds, &writefds, &exceptfds, ptv);
+                if (ready > 0) {
+                    for (i = 0; i < vm->coroutineCount; i++) {
+                        TLLCoroutine *co = vm->coroutines[i];
+                        if (!co || co->waitingFd <= 0) continue;
+                        SOCKET s = (SOCKET)co->waitingFd;
+                        int isReady = 0;
+                        if ((co->waitingEvents & 1) && FD_ISSET(s, &readfds)) isReady = 1;
+                        if ((co->waitingEvents & 2) && FD_ISSET(s, &writefds)) isReady = 1;
+                        if (FD_ISSET(s, &exceptfds)) isReady = 1;
+                        if (isReady) {
+                            co->waitingFd = 0;
+                            co->waitingEvents = 0;
+                        }
+                    }
+                }
+            } else {
+                /* Only sleepers, no IO */
+                now = current_time_ms();
+                if (minWake > now) {
+                    long long sleepMs = minWake - now;
+                    if (sleepMs > 0) {
+#ifdef _WIN32
+                        Sleep((DWORD)sleepMs);
+#else
+                        usleep((useconds_t)(sleepMs * 1000));
+#endif
+                    }
+                }
+            }
+            /* loop back to wake expired sleepers and find runnable */
         } else {
-            /* Shouldn't happen - after sleeping, at least one should be runnable.
-             * But if not, restore the first coroutine to avoid infinite loop/crash. */
-            coroutine_restore(vm, 0);
+            /* Second pass still no runnable - restore first alive to avoid crash */
+            for (i = 0; i < vm->coroutineCount; i++) {
+                if (vm->coroutines[i] && vm->coroutines[i]->state != 2) {
+                    coroutine_restore(vm, i);
+                    return;
+                }
+            }
             return;
         }
     }
@@ -937,6 +1027,59 @@ static void tll_vm_exec(TLLVM *vm) {
                 }
                 coroutine_yield(vm);
                 /* After yield, frame may have changed, re-fetch */
+                frame = vm->callStack[vm->callStackSize - 1];
+                regs = frame->registers;
+                break;
+            }
+            case OP_WAIT_READ: {
+                /* P0-15.16: Wait for socket fd to become readable.
+                 * Sets current coroutine to WAITING_IO, then yields.
+                 * Scheduler will call select() and wake when fd is ready.
+                 * operand a = register holding socket fd.
+                 */
+                int fd = 0;
+                if (regs[a].type == TLL_INT) fd = (int)regs[a].as.integer;
+                if (vm->coroutineCount > 0 && vm->currentCoroutine < vm->coroutineCount) {
+                    TLLCoroutine *co = vm->coroutines[vm->currentCoroutine];
+                    if (co && fd > 0) {
+                        co->waitingFd = fd;
+                        co->waitingEvents = 1;  /* READ */
+                    }
+                }
+                coroutine_yield(vm);
+                frame = vm->callStack[vm->callStackSize - 1];
+                regs = frame->registers;
+                break;
+            }
+            case OP_WAIT_WRITE: {
+                /* P0-15.16: Wait for socket fd to become writable. */
+                int fd = 0;
+                if (regs[a].type == TLL_INT) fd = (int)regs[a].as.integer;
+                if (vm->coroutineCount > 0 && vm->currentCoroutine < vm->coroutineCount) {
+                    TLLCoroutine *co = vm->coroutines[vm->currentCoroutine];
+                    if (co && fd > 0) {
+                        co->waitingFd = fd;
+                        co->waitingEvents = 2;  /* WRITE */
+                    }
+                }
+                coroutine_yield(vm);
+                frame = vm->callStack[vm->callStackSize - 1];
+                regs = frame->registers;
+                break;
+            }
+            case OP_WAIT_CHANNEL: {
+                /* P0-15.16: Wait for a channel send.
+                 * operand a = register holding channel map value.
+                 * Stores the map pointer in coroutine.waitingChannel.
+                 * Woken by builtin coroutine.wakeChannel(channelMap).
+                 */
+                if (vm->coroutineCount > 0 && vm->currentCoroutine < vm->coroutineCount) {
+                    TLLCoroutine *co = vm->coroutines[vm->currentCoroutine];
+                    if (co && regs[a].type == TLL_MAP) {
+                        co->waitingChannel = (void*)regs[a].as.map;
+                    }
+                }
+                coroutine_yield(vm);
                 frame = vm->callStack[vm->callStackSize - 1];
                 regs = frame->registers;
                 break;

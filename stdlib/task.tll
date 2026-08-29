@@ -62,11 +62,18 @@ fn sendChannel(ch: map, value) -> bool {
     ch.buf[ch.tail] = value
     ch.tail = (ch.tail + 1) % ch.capacity
     ch.count = ch.count + 1
+    // P0-15.16: Wake any coroutine waiting on this channel
+    coroutine.wakeChannel(ch)
     return true
 }
 
 fn recvChannel(ch: map) {
-    if ch.count == 0 { return null }
+    // P0-15.16: If channel is empty, suspend until a sender wakes us.
+    // This is true await, not polling.
+    while ch.count == 0 {
+        if ch.closed { return null }
+        coroutine.waitChannel(ch)
+    }
     let val = ch.buf[ch.head]
     ch.buf[ch.head] = null  // clear reference for GC
     ch.head = (ch.head + 1) % ch.capacity
@@ -87,6 +94,8 @@ fn lenChannel(ch: map) -> int {
 
 fn closeChannel(ch: map) -> void {
     ch.closed = true
+    // P0-15.16: Wake all waiting consumers so they can observe closed state
+    coroutine.wakeChannel(ch)
 }
 
 // === Event Reactor ===

@@ -63,6 +63,10 @@ let OP_SPAWN = 54
 let OP_YIELD = 55
 // Coroutine sleep (P0-15.15: unified scheduler - timer-aware sleep)
 let OP_SLEEP = 56
+// Coroutine IO wait (P0-15.16: IO-aware unified scheduler)
+let OP_WAIT_READ = 57
+let OP_WAIT_WRITE = 58
+let OP_WAIT_CHANNEL = 59
 
 // ============ Codegen state ============
 let cg_instructions: list = []
@@ -1420,6 +1424,36 @@ fn cg_compileCall(expr: map) -> int {
         return resultReg
     }
 
+    // P0-15.16: coroutine.waitRead(fd) -> WAIT_READ opcode
+    if callee["kind"] == "Member" && callee.object["kind"] == "Ident" && callee.object["name"] == "coroutine" && callee["property"] == "waitRead" {
+        if arrays.length(args) > 0 {
+            let fdReg = cg_compileExpression(arrays.get(args, 0))
+            cg_emit(OP_WAIT_READ, [fdReg])
+        }
+        cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
+        return resultReg
+    }
+
+    // P0-15.16: coroutine.waitWrite(fd) -> WAIT_WRITE opcode
+    if callee["kind"] == "Member" && callee.object["kind"] == "Ident" && callee.object["name"] == "coroutine" && callee["property"] == "waitWrite" {
+        if arrays.length(args) > 0 {
+            let fdReg = cg_compileExpression(arrays.get(args, 0))
+            cg_emit(OP_WAIT_WRITE, [fdReg])
+        }
+        cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
+        return resultReg
+    }
+
+    // P0-15.16: coroutine.waitChannel(channelMap) -> WAIT_CHANNEL opcode
+    if callee["kind"] == "Member" && callee.object["kind"] == "Ident" && callee.object["name"] == "coroutine" && callee["property"] == "waitChannel" {
+        if arrays.length(args) > 0 {
+            let chReg = cg_compileExpression(arrays.get(args, 0))
+            cg_emit(OP_WAIT_CHANNEL, [chReg])
+        }
+        cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
+        return resultReg
+    }
+
     // Standard library function call (module.function) -> LOAD_BUILTIN + CALL
     if callee["kind"] == "Member" && callee.object["kind"] == "Ident" {
         let modName = callee.object["name"]
@@ -1616,6 +1650,11 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
         if fnName == "setTimeout" { return 139 }
         if fnName == "tryAccept" { return 140 }
         if fnName == "select" { return 141 }
+        if fnName == "tryRecv" { return 142 }
+        if fnName == "trySend" { return 143 }
+    }
+    if modName == "coroutine" {
+        if fnName == "wakeChannel" { return 144 }
     }
     if modName == "agent" {
         if fnName == "run" { return 98 }
