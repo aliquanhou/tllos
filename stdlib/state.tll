@@ -1,0 +1,73 @@
+// P0-15.17: StateStore for TLL Agent Runtime
+// Persistent state boundary. Agent State is separate from Runtime Memory.
+// Agent State -> can be persisted (file-backed in future)
+// Runtime Memory -> process-lifetime only (TLL variables)
+//
+// v1: in-memory KV store. Interface is stable for future file-backed implementation.
+// Future: state_set will optionally write to disk; state_get reads from disk cache.
+
+// Create a new StateStore.
+fn state_create() -> map {
+    return { __statestore: true, store: {}, count: 0 }
+}
+
+// Get a value by key. Returns null if not found.
+fn state_get(store: map, key: string) {
+    return store.store[key]
+}
+
+// Set a key-value pair.
+fn state_set(store: map, key: string, value) -> void {
+    if store.store[key] == null && value != null {
+        store.count = store.count + 1
+    }
+    if value == null && store.store[key] != null {
+        store.count = store.count - 1
+    }
+    store.store[key] = value
+}
+
+// Delete a key.
+fn state_delete(store: map, key: string) -> void {
+    if store.store[key] != null {
+        store.count = store.count - 1
+    }
+    store.store[key] = null
+}
+
+// Check if a key exists.
+fn state_exists(store: map, key: string) -> bool {
+    return store.store[key] != null
+}
+
+// List all keys.
+fn state_keys(store: map) -> list {
+    return map.keys(store.store)
+}
+
+// Get the number of entries.
+fn state_count(store: map) -> int {
+    return store.count
+}
+
+// Clear all entries.
+fn state_clear(store: map) -> void {
+    store.store = {}
+    store.count = 0
+}
+
+// Get a value with a default if not found.
+fn state_getOr(store: map, key: string, defaultValue) {
+    let val = store.store[key]
+    if val == null { return defaultValue }
+    return val
+}
+
+// Atomically increment a numeric value (or set to 1 if not exists).
+fn state_incr(store: map, key: string) -> int {
+    let current = store.store[key]
+    if current == null { current = 0 }
+    current = current + 1
+    store.store[key] = current
+    return current
+}

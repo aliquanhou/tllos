@@ -1,0 +1,17 @@
+// Test: inline closure capture + sleep only
+io.println("start")
+let x = 42
+let result = 0
+coroutine.spawn(fn() {
+    io.println("closure: x=" + convert.toString(x))
+    coroutine.sleep(20)
+    io.println("closure: after sleep")
+    result = x
+})
+coroutine.sleep(50)
+io.println("result=" + convert.toString(result))
+if result == 42 {
+    io.println("PASS")
+} else {
+    io.println("FAIL")
+}

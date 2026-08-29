@@ -1,0 +1,14 @@
+// Test: inline closure in same coroutine
+io.println("start")
+let x = 42
+let f = fn() {
+    io.println("closure: x=" + convert.toString(x))
+    return x
+}
+let result = f()
+io.println("result=" + convert.toString(result))
+if result == 42 {
+    io.println("PASS")
+} else {
+    io.println("FAIL")
+}

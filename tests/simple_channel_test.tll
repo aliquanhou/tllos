@@ -1,0 +1,9 @@
+from "../stdlib/task" import createChannel, sendChannel, recvChannel
+
+io.println("step1")
+let ch = createChannel()
+io.println("step2: cap=" + ch.capacity)
+sendChannel(ch, "hello")
+io.println("step3: sent")
+let val = recvChannel(ch)
+io.println("step4: got " + val)

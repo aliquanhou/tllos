@@ -1,0 +1,27 @@
+// Minimal Future test to isolate crash
+from "../stdlib/future" import future_create, future_resolve, future_await, future_isDone
+
+io.println("start")
+let f = future_create()
+io.println("future created")
+let result = ""
+
+coroutine.spawn(fn() {
+    io.println("awaiter: awaiting")
+    let val = future_await(f)
+    io.println("awaiter: got " + val)
+    result = val
+})
+
+io.println("main: sleeping")
+coroutine.sleep(50)
+io.println("main: resolving")
+future_resolve(f, "HELLO")
+io.println("main: resolved")
+coroutine.sleep(50)
+io.println("result: " + result)
+if result == "HELLO" && future_isDone(f) {
+    io.println("PASS")
+} else {
+    io.println("FAIL")
+}

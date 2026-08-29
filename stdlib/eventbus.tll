@@ -1,0 +1,143 @@
+// P0-15.17: Coroutine-aware EventBus for TLL Agent Runtime
+// Events can be emitted and subscribers can either:
+//   1. Register a synchronous callback (eventbus_on)
+//   2. Await the next event of a type, suspending the coroutine (eventbus_await)
+// Built on Channel + Coroutine. No threads.
+
+from "./task" import createChannel, sendChannel, recvChannel, tryRecvChannel, lenChannel, closeChannel
+
+// Create a new EventBus.
+fn eventbus_create() -> map {
+    return {
+        __eventbus: true,
+        callbacks: {},      // eventType -> list of callback functions
+        waiters: {},        // eventType -> list of waiting channels
+        history: {},        // eventType -> last event (for late subscribers, optional)
+        eventCount: 0
+    }
+}
+
+// Register a synchronous callback for an event type.
+// Returns the callback (can be used with eventbus_off).
+fn eventbus_on(bus: map, eventType: string, callback) -> map {
+    if bus.callbacks[eventType] == null {
+        bus.callbacks[eventType] = []
+    }
+    arrays.push(bus.callbacks[eventType], callback)
+    return bus
+}
+
+// Remove a specific callback for an event type.
+fn eventbus_off(bus: map, eventType: string, callback) -> map {
+    let listeners = bus.callbacks[eventType]
+    if listeners == null { return bus }
+    let newListeners = []
+    let i = 0
+    while i < arrays.length(listeners) {
+        if listeners[i] != callback {
+            arrays.push(newListeners, listeners[i])
+        }
+        i = i + 1
+    }
+    bus.callbacks[eventType] = newListeners
+    return bus
+}
+
+// Emit an event. Triggers all callbacks and wakes all waiting coroutines.
+// eventType: string identifier
+// data: any payload
+// Returns the number of recipients (callbacks + waiters).
+fn eventbus_emit(bus: map, eventType: string, data) -> int {
+    bus.eventCount = bus.eventCount + 1
+    let count = 0
+
+    // Store in history (last event only)
+    bus.history[eventType] = { type: eventType, data: data, timestamp: bus.eventCount }
+
+    // Trigger synchronous callbacks
+    let callbacks = bus.callbacks[eventType]
+    if callbacks != null {
+        let i = 0
+        while i < arrays.length(callbacks) {
+            callbacks[i](data)
+            count = count + 1
+            i = i + 1
+        }
+    }
+
+    // Wake all waiting coroutines (send event to their channels)
+    let waiters = bus.waiters[eventType]
+    if waiters != null {
+        let i = 0
+        while i < arrays.length(waiters) {
+            sendChannel(waiters[i], { type: eventType, data: data })
+            count = count + 1
+            i = i + 1
+        }
+        // Clear waiters after waking (one-shot await)
+        bus.waiters[eventType] = []
+    }
+
+    return count
+}
+
+// Await the next event of a specific type.
+// Suspends the current coroutine until an event of this type is emitted.
+// Returns { type: string, data: any }.
+fn eventbus_await(bus: map, eventType: string) -> map {
+    // Create a one-shot channel for this waiter
+    let ch = createChannel()
+    if bus.waiters[eventType] == null {
+        bus.waiters[eventType] = []
+    }
+    arrays.push(bus.waiters[eventType], ch)
+    // Wait for the event (this suspends the coroutine via Channel await)
+    let event = recvChannel(ch)
+    closeChannel(ch)
+    return event
+}
+
+// Check if there are any waiters for an event type.
+fn eventbus_hasWaiters(bus: map, eventType: string) -> bool {
+    let waiters = bus.waiters[eventType]
+    if waiters == null { return false }
+    return arrays.length(waiters) > 0
+}
+
+// Get the number of callbacks for an event type.
+fn eventbus_listenerCount(bus: map, eventType: string) -> int {
+    let listeners = bus.callbacks[eventType]
+    if listeners == null { return 0 }
+    return arrays.length(listeners)
+}
+
+// Get total events emitted on this bus.
+fn eventbus_eventCount(bus: map) -> int {
+    return bus.eventCount
+}
+
+// Get the last emitted event of a type (from history).
+fn eventbus_lastEvent(bus: map, eventType: string) -> map {
+    return bus.history[eventType]
+}
+
+// Remove all listeners and waiters for an event type (or all if null).
+fn eventbus_clear(bus: map, eventType: string) -> map {
+    if eventType == null {
+        bus.callbacks = {}
+        bus.waiters = {}
+    } else {
+        bus.callbacks[eventType] = []
+        // Close any waiting channels
+        let waiters = bus.waiters[eventType]
+        if waiters != null {
+            let i = 0
+            while i < arrays.length(waiters) {
+                closeChannel(waiters[i])
+                i = i + 1
+            }
+        }
+        bus.waiters[eventType] = []
+    }
+    return bus
+}

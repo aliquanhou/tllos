@@ -1,0 +1,9 @@
+from "../stdlib/task" import createChannel
+
+io.println("step1")
+let x = 42
+let f = fn() {
+    io.println("step2: x=" + x)
+}
+f()
+io.println("step3: done")

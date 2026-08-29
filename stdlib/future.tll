@@ -1,0 +1,89 @@
+// P0-15.17: Future / Promise for TLL Agent Runtime
+// Built on top of Channel (O(1) ring buffer) + Coroutine await.
+// Future represents a value that will be available later.
+// await() suspends the current coroutine until the future is resolved/rejected.
+
+from "./task" import createChannel, sendChannel, recvChannel, tryRecvChannel, lenChannel, closeChannel
+
+// Create a new pending future.
+fn future_create() -> map {
+    return {
+        __future: true,
+        channel: createChannel(),
+        done: false,
+        ok: false,
+        value: null,
+        error: null
+    }
+}
+
+// Resolve a future with a value. Wakes any coroutine awaiting it.
+fn future_resolve(fut: map, value) -> void {
+    if fut.done { return }
+    fut.done = true
+    fut.ok = true
+    fut.value = value
+    sendChannel(fut.channel, { ok: true, value: value })
+}
+
+// Reject a future with an error. Wakes any coroutine awaiting it (they will throw).
+fn future_reject(fut: map, error) -> void {
+    if fut.done { return }
+    fut.done = true
+    fut.ok = false
+    fut.error = error
+    sendChannel(fut.channel, { ok: false, error: error })
+}
+
+// Await a future. Suspends current coroutine until resolved/rejected.
+// Returns the resolved value, or throws the rejection error.
+fn future_await(fut: map) {
+    if fut.done {
+        if fut.ok { return fut.value }
+        // Throw stored error
+        let err = fut.error
+        throw err
+    }
+    let result = recvChannel(fut.channel)
+    if result.ok {
+        return result.value
+    } else {
+        throw result.error
+    }
+}
+
+// Check if a future is done (resolved or rejected).
+fn future_isDone(fut: map) -> bool {
+    return fut.done
+}
+
+// Check if a future was resolved successfully.
+fn future_isOk(fut: map) -> bool {
+    return fut.done && fut.ok
+}
+
+// Get the resolved value (only valid if done and ok).
+fn future_getValue(fut: map) {
+    return fut.value
+}
+
+// Get the rejection error (only valid if done and not ok).
+fn future_getError(fut: map) {
+    return fut.error
+}
+
+// Try to get the result without blocking. Returns { ready: bool, value, error }.
+fn future_tryGet(fut: map) -> map {
+    if fut.done {
+        return { ready: true, value: fut.value, error: fut.error, ok: fut.ok }
+    }
+    let attempt = tryRecvChannel(fut.channel)
+    if attempt.ok {
+        let result = attempt.value
+        fut.done = true
+        fut.ok = result.ok
+        if result.ok { fut.value = result.value } else { fut.error = result.error }
+        return { ready: true, value: fut.value, error: fut.error, ok: fut.ok }
+    }
+    return { ready: false, value: null, error: null, ok: false }
+}

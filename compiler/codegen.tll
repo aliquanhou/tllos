@@ -165,6 +165,18 @@ fn cg_resolveVar(name: string) -> map {
     if globalIdx != null {
         return { index: globalIdx, isGlobal: true }
     }
+    // P0-15.17 fix: module renaming prefixes top-level symbols as __mod_N__name.
+    // Function bodies (including anonymous FnExpr) may reference the original name.
+    // Fall back to trying common module prefixes directly (map.keys has scope issues in TLL).
+    let prefixIdx = 0
+    while prefixIdx < 10 {
+        let prefixedName = "__mod_" + convert.toString(prefixIdx) + "__" + name
+        let prefixedVal = cg_globalMapGet(prefixedName)
+        if prefixedVal != null {
+            return { index: prefixedVal, isGlobal: true }
+        }
+        prefixIdx = prefixIdx + 1
+    }
     let idx = cg_currentLocalCount
     cg_currentLocalCount = idx + 1
     cg_varMapSet(name, idx)
@@ -469,6 +481,12 @@ export fn compile(program: map) -> map {
     cg_labelCounter = 0
     cg_instructions = []
     cg_currentLocalCount = 0
+    // P0-15.17 fix: reset closure state for main, same as cg_compileFunction does.
+    // Without this, cg_upvalueMap stays as {} (map) instead of [] (list), causing
+    // cg_listContains to misbehave and captured globals to be wrongly emitted as OP_GET_UPVALUE.
+    cg_upvalueMap = []
+    cg_parentUpvalueMap = null
+    cg_closureEnvSize = 0
 
     // Emit function value initialization: use OP_CLOSURE with 0 captures for TOP-LEVEL functions
     // This ensures function value comparison works correctly (not map reference comparison)
@@ -530,6 +548,8 @@ export fn compile(program: map) -> map {
     // Replace main placeholder (keeps index alignment with cg_functions)
     cg_allFnInstructions[cg_mainFnIndex] = cg_instructions
     cg_allFnLocalCounts[cg_mainFnIndex] = cg_currentLocalCount
+    // P0-15.17 fix: save upvalueMap for main so nested closures see [] (not undefined)
+    cg_currentFn.upvalueMap = cg_upvalueMap
 
     // Compile any dynamically added functions (anonymous functions added during body compilation)
     // These were added to cg_functions after the second pass loop ended

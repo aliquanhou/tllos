@@ -1,0 +1,8 @@
+let x = 42
+io.println("main: x type=" + convert.typeOf(x) + " val=" + convert.toString(x))
+let f = fn() {
+    io.println("closure: x type=" + convert.typeOf(x) + " val=" + convert.toString(x))
+    return x
+}
+let result = f()
+io.println("result type=" + convert.typeOf(result) + " val=" + convert.toString(result))

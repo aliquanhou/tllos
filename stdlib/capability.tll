@@ -1,0 +1,106 @@
+// P0-15.17: Capability Model for TLL Agent Runtime
+// Agents must not have infinite permissions. CapabilitySet controls what
+// an Agent can do. Tool execution checks capabilities before running.
+//
+// Standard capability names:
+//   network        - TCP/UDP/HTTP access
+//   file           - file system read/write
+//   process        - spawn/manage processes
+//   device         - generic device access
+//   camera         - camera access
+//   microphone     - microphone access
+//   gps            - location access
+//   bluetooth      - bluetooth access
+//   notification   - system notifications
+//   agent.spawn    - create/spawn other agents
+//   agent.message  - send messages to other agents
+//   state.write    - write to persistent state
+//   tool.call      - call tools (beyond built-in)
+
+// Create a new empty CapabilitySet.
+fn capability_create() -> map {
+    return { __capability: true, granted: {} }
+}
+
+// Create a CapabilitySet with specific capabilities granted.
+fn capability_with(list: list) -> map {
+    let cap = capability_create()
+    let i = 0
+    while i < arrays.length(list) {
+        cap.granted[list[i]] = true
+        i = i + 1
+    }
+    return cap
+}
+
+// Check if a capability is granted.
+fn capability_has(cap: map, name: string) -> bool {
+    return cap.granted[name] == true
+}
+
+// Require a capability. Throws an error if not granted.
+// This is the primary guard used before Tool execution.
+fn capability_require(cap: map, name: string) -> void {
+    if cap.granted[name] != true {
+        throw "Capability required but not granted: " + name
+    }
+}
+
+// Grant a capability.
+fn capability_grant(cap: map, name: string) -> map {
+    cap.granted[name] = true
+    return cap
+}
+
+// Revoke a capability.
+fn capability_revoke(cap: map, name: string) -> map {
+    cap.granted[name] = false
+    return cap
+}
+
+// List all granted capabilities.
+fn capability_list(cap: map) -> list {
+    return map.keys(cap.granted)
+}
+
+// Check if any of a list of capabilities is granted (OR logic).
+fn capability_hasAny(cap: map, names: list) -> bool {
+    let i = 0
+    while i < arrays.length(names) {
+        if cap.granted[names[i]] == true { return true }
+        i = i + 1
+    }
+    return false
+}
+
+// Check if all of a list of capabilities are granted (AND logic).
+fn capability_hasAll(cap: map, names: list) -> bool {
+    let i = 0
+    while i < arrays.length(names) {
+        if cap.granted[names[i]] != true { return false }
+        i = i + 1
+    }
+    return true
+}
+
+// Merge two capability sets (union).
+fn capability_merge(a: map, b: map) -> map {
+    let result = capability_create()
+    let keysA = map.keys(a.granted)
+    let i = 0
+    while i < arrays.length(keysA) {
+        if a.granted[keysA[i]] == true {
+            result.granted[keysA[i]] = true
+        }
+        i = i + 1
+    }
+    let keysB = map.keys(b.granted)
+    i = 0
+    while i < arrays.length(keysB) {
+        if b.granted[keysB[i]] == true {
+            result.granted[keysB[i]] = true
+        }
+        i = i + 1
+    }
+    return result
+}

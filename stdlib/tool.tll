@@ -1,0 +1,75 @@
+// P0-15.17: Tool Runtime for TLL Agent Runtime
+// Agents call tools through a unified Tool layer. Every tool has:
+//   - name, description
+//   - input_schema, output_schema (descriptive, not enforced in v1)
+//   - capability_required (checked before execution)
+//   - executor (TLL function: fn(input, context) -> result or Future)
+//
+// Execution chain: Agent -> Tool Resolver -> Capability Check -> Tool Execute -> Result
+
+from "./capability" import capability_has, capability_require, capability_create
+
+// Create a new ToolRegistry.
+fn tool_createRegistry() -> map {
+    return { __toolregistry: true, tools: {} }
+}
+
+// Register a tool definition.
+// def: { name, description, inputSchema, outputSchema, capabilityRequired, executor }
+fn tool_register(registry: map, def: map) -> map {
+    if def.name == null { throw "tool_register: name is required" }
+    if def.executor == null { throw "tool_register: executor is required for " + def.name }
+    if def.capabilityRequired == null { def.capabilityRequired = null }
+    if def.description == null { def.description = "" }
+    registry.tools[def.name] = def
+    return registry
+}
+
+// Check if a tool is registered.
+fn tool_has(registry: map, name: string) -> bool {
+    return registry.tools[name] != null
+}
+
+// List all registered tool names.
+fn tool_list(registry: map) -> list {
+    return map.keys(registry.tools)
+}
+
+// Get a tool definition.
+fn tool_get(registry: map, name: string) -> map {
+    return registry.tools[name]
+}
+
+// Call a tool. Checks capability, then executes.
+// registry: ToolRegistry
+// capSet: CapabilitySet of the calling agent
+// name: tool name
+// input: tool input
+// context: optional execution context (agent_id, etc.)
+// Returns the tool result (may be a Future for async tools).
+fn tool_call(registry: map, capSet: map, name: string, input, context) {
+    let def = registry.tools[name]
+    if def == null {
+        throw "tool_call: tool not found: " + name
+    }
+
+    // Capability check - this is the mandatory guard
+    if def.capabilityRequired != null {
+        capability_require(capSet, def.capabilityRequired)
+    }
+
+    // Execute the tool
+    if context == null { context = {} }
+    return def.executor(input, context)
+}
+
+// Remove a tool from the registry.
+fn tool_unregister(registry: map, name: string) -> map {
+    registry.tools[name] = null
+    return registry
+}
+
+// Get the count of registered tools.
+fn tool_count(registry: map) -> int {
+    return arrays.length(map.keys(registry.tools))
+}

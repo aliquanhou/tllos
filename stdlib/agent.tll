@@ -1,0 +1,431 @@
+// P0-15.17: TLL ag Runtime - Core
+// ag is a first-class Runtime entity, separate from Coroutine.
+// An ag owns: identity, lifecycle, mailbox, state, capabilities, tools, context.
+// Coroutine is the execution mechanism; ag is the upper-level runtime entity.
+//
+// Architecture:
+//   AgentRuntime (registry + shared eventbus + shared tool registry)
+//     └── ag[] (each with own mailbox, state_store, capability_set)
+//          └── main_coroutine (spawned on start, runs behavior loop)
+//               └── worker coroutines (optional, spawned by ag behavior)
+
+from "./task" import createChannel, sendChannel, recvChannel, tryRecvChannel, lenChannel, closeChannel
+from "./eventbus" import eventbus_create, eventbus_emit, eventbus_on, eventbus_await, eventbus_eventCount
+from "./capability" import capability_create, capability_has, capability_require, capability_grant, capability_revoke, capability_list
+from "./tool" import tool_createRegistry, tool_register, tool_call, tool_has, tool_list
+from "./state" import state_create, state_get, state_set, state_delete, state_exists, state_keys, state_count
+from "./future" import future_create, future_resolve, future_reject, future_await, future_isDone
+
+// ============================================================
+// ag Runtime (registry + shared infrastructure)
+// ============================================================
+
+// Create the ag Runtime. Holds ag registry, shared eventbus, shared tool registry.
+fn agent_createRuntime() -> map {
+    return {
+        __agentruntime: true,
+        agents: {},           // agent_id -> ag
+        eventbus: eventbus_create(),
+        toolRegistry: tool_createRegistry(),
+        nextId: 1,
+        supervisor: null
+    }
+}
+
+// Generate a unique ag ID.
+fn agent_generateId(runtime: map) -> string {
+    let id = "agent_" + convert.toString(runtime.nextId)
+    runtime.nextId = runtime.nextId + 1
+    return id
+}
+
+// ============================================================
+// ag Identity & Creation (P0-15.17-1)
+// ============================================================
+
+// ag states
+// CREATED -> STARTING -> RUNNING -> WAITING -> RUNNING -> STOPPING -> STOPPED
+// Any state -> FAILED
+
+// Create a new ag (does NOT start it).
+// config: { name, behavior, capabilities(list), metadata }
+// behavior: fn(ag, runtime) -> void  (the ag's main loop)
+fn agent_create(runtime: map, config: map) -> map {
+    let id = agent_generateId(runtime)
+    let capSet = capability_create()
+    if config.capabilities != null {
+        let i = 0
+        while i < arrays.length(config.capabilities) {
+            capability_grant(capSet, config.capabilities[i])
+            i = i + 1
+        }
+    }
+
+    let ag = {
+        __agent: true,
+        agent_id: id,
+        name: config.name,
+        state: "CREATED",
+        created_at: 0,
+        updated_at: 0,
+        main_coroutine: -1,
+        mailbox: createChannel(),
+        state_store: state_create(),
+        capability_set: capSet,
+        metadata: config.metadata,
+        behavior: config.behavior,
+        runtime: runtime,
+        error: null,
+        supervisor: null,
+        restartCount: 0
+    }
+
+    if ag.name == null { ag.name = id }
+    if ag.metadata == null { ag.metadata = {} }
+
+    runtime.agents[id] = ag
+
+    // Emit AgentCreated event
+    eventbus_emit(runtime.eventbus, "AgentCreated", { agent_id: id, name: ag.name })
+
+    return ag
+}
+
+// Get an ag by ID.
+fn agent_get(runtime: map, agent_id: string) -> map {
+    return runtime.agents[agent_id]
+}
+
+// List all ag IDs.
+fn agent_list(runtime: map) -> list {
+    return map.keys(runtime.agents)
+}
+
+// ============================================================
+// ag Lifecycle (P0-15.17-2)
+// ============================================================
+
+// Start an ag. Spawns its main coroutine running the behavior function.
+fn agent_start(runtime: map, agent_id: string) -> bool {
+    let ag = runtime.agents[agent_id]
+    if ag == null { return false }
+    if ag.state != "CREATED" && ag.state != "STOPPED" { return false }
+
+    ag.state = "STARTING"
+    ag.updated_at = 0
+    eventbus_emit(runtime.eventbus, "AgentStarting", { agent_id: agent_id })
+
+    // Spawn the main coroutine. The behavior function receives (ag, runtime).
+    let behavior = ag.behavior
+    let coId = coroutine.spawn(fn() {
+        ag.state = "RUNNING"
+        eventbus_emit(runtime.eventbus, "AgentStarted", { agent_id: agent_id })
+        try {
+            behavior(ag, runtime)
+        } catch err {
+            ag.state = "FAILED"
+            ag.error = err
+            eventbus_emit(runtime.eventbus, "AgentFailed", { agent_id: agent_id, error: err })
+            // If supervised, notify supervisor
+            if ag.supervisor != null {
+                ag.supervisor.__failedAgent = ag
+            }
+            return
+        }
+        if ag.state != "STOPPED" && ag.state != "FAILED" {
+            ag.state = "STOPPED"
+            eventbus_emit(runtime.eventbus, "AgentStopped", { agent_id: agent_id })
+        }
+    })
+
+    ag.main_coroutine = coId
+    return true
+}
+
+// Stop an ag. Sets state to STOPPING; the behavior loop should observe this and exit.
+fn agent_stop(runtime: map, agent_id: string) -> bool {
+    let ag = runtime.agents[agent_id]
+    if ag == null { return false }
+    if ag.state == "STOPPED" || ag.state == "CREATED" { return false }
+    ag.state = "STOPPING"
+    eventbus_emit(runtime.eventbus, "AgentStopping", { agent_id: agent_id })
+    // Send a stop signal to the ag's mailbox so it wakes from recv()
+    sendChannel(ag.mailbox, { __system: true, type: "STOP", agent_id: agent_id })
+    return true
+}
+
+// Pause an ag (sets WAITING; behavior should yield when observing this).
+fn agent_pause(runtime: map, agent_id: string) -> bool {
+    let ag = runtime.agents[agent_id]
+    if ag == null { return false }
+    if ag.state != "RUNNING" { return false }
+    ag.state = "WAITING"
+    eventbus_emit(runtime.eventbus, "AgentPaused", { agent_id: agent_id })
+    return true
+}
+
+// Resume a paused ag.
+fn agent_resume(runtime: map, agent_id: string) -> bool {
+    let ag = runtime.agents[agent_id]
+    if ag == null { return false }
+    if ag.state != "WAITING" { return false }
+    ag.state = "RUNNING"
+    eventbus_emit(runtime.eventbus, "AgentResumed", { agent_id: agent_id })
+    return true
+}
+
+// Get ag status (state string).
+fn agent_status(runtime: map, agent_id: string) -> string {
+    let ag = runtime.agents[agent_id]
+    if ag == null { return "NOT_FOUND" }
+    return ag.state
+}
+
+// Destroy an ag. Stops it, closes mailbox, removes from registry.
+fn agent_destroy(runtime: map, agent_id: string) -> bool {
+    let ag = runtime.agents[agent_id]
+    if ag == null { return false }
+    if ag.state == "RUNNING" || ag.state == "WAITING" {
+        agent_stop(runtime, agent_id)
+    }
+    closeChannel(ag.mailbox)
+    runtime.agents[agent_id] = null
+    eventbus_emit(runtime.eventbus, "AgentDestroyed", { agent_id: agent_id })
+    return true
+}
+
+// ============================================================
+// ag Mailbox & Message API (P0-15.17-3, P0-15.17-4)
+// ============================================================
+
+// Send a message to an ag.
+// message: { type, payload, correlation_id }
+// Returns true if delivered (ag exists), false otherwise.
+fn agent_send(runtime: map, to_id: string, message: map) -> bool {
+    let target = runtime.agents[to_id]
+    if target == null { return false }
+
+    // Enrich message with metadata
+    if message.message_id == null {
+        message.message_id = "msg_" + convert.toString(runtime.nextId)
+        runtime.nextId = runtime.nextId + 1
+    }
+    message.receiver = to_id
+    if message.timestamp == null { message.timestamp = 0 }
+
+    sendChannel(target.mailbox, message)
+    eventbus_emit(runtime.eventbus, "MessageSent", { to: to_id, type: message.type })
+    return true
+}
+
+// Receive a message from the ag's own mailbox.
+// Blocks (awaits) until a message arrives.
+// Returns the message map.
+fn agent_recv(ag: map) -> map {
+    let msg = recvChannel(ag.mailbox)
+    eventbus_emit(ag.runtime.eventbus, "MessageReceived", { agent_id: ag.agent_id, type: msg.type })
+    return msg
+}
+
+// Try to receive a message without blocking.
+// Returns { ok: bool, message: map }. ok=false if mailbox empty.
+fn agent_tryRecv(ag: map) -> map {
+    let attempt = tryRecvChannel(ag.mailbox)
+    if attempt.ok {
+        eventbus_emit(ag.runtime.eventbus, "MessageReceived", { agent_id: ag.agent_id, type: attempt.value.type })
+    }
+    return attempt
+}
+
+// Reply to a message. Sends a message back to the sender with correlation_id.
+fn agent_reply(ag: map, originalMessage: map, replyPayload) -> bool {
+    if originalMessage.sender == null { return false }
+    let reply = {
+        type: "REPLY",
+        payload: replyPayload,
+        correlation_id: originalMessage.message_id,
+        sender: ag.agent_id
+    }
+    return agent_send(ag.runtime, originalMessage.sender, reply)
+}
+
+// Broadcast a message to all agents (except sender).
+fn agent_broadcast(runtime: map, from_id: string, message: map) -> int {
+    let ids = map.keys(runtime.agents)
+    let count = 0
+    let i = 0
+    while i < arrays.length(ids) {
+        if ids[i] != from_id {
+            message.sender = from_id
+            if agent_send(runtime, ids[i], message) {
+                count = count + 1
+            }
+        }
+        i = i + 1
+    }
+    return count
+}
+
+// ============================================================
+// ag State & Memory (P0-15.17-8, P0-15.17-9)
+// ============================================================
+
+// Get a value from ag's persistent state.
+fn agent_stateGet(ag: map, key: string) {
+    return state_get(ag.state_store, key)
+}
+
+// Set a value in ag's persistent state.
+fn agent_stateSet(ag: map, key: string, value) -> void {
+    state_set(ag.state_store, key, value)
+    eventbus_emit(ag.runtime.eventbus, "StateChanged", { agent_id: ag.agent_id, key: key })
+}
+
+// Delete a value from ag's state.
+fn agent_stateDelete(ag: map, key: string) -> void {
+    state_delete(ag.state_store, key)
+}
+
+// Check if a key exists in ag's state.
+fn agent_stateExists(ag: map, key: string) -> bool {
+    return state_exists(ag.state_store, key)
+}
+
+// List all keys in ag's state.
+fn agent_stateKeys(ag: map) -> list {
+    return state_keys(ag.state_store)
+}
+
+// ============================================================
+// ag Capability (P0-15.17-6)
+// ============================================================
+
+// Check if ag has a capability.
+fn agent_hasCapability(ag: map, name: string) -> bool {
+    return capability_has(ag.capability_set, name)
+}
+
+// Require a capability (throws if not granted).
+fn agent_requireCapability(ag: map, name: string) -> void {
+    capability_require(ag.capability_set, name)
+}
+
+// Grant a capability to an ag.
+fn agent_grantCapability(ag: map, name: string) -> void {
+    capability_grant(ag.capability_set, name)
+}
+
+// Revoke a capability from an ag.
+fn agent_revokeCapability(ag: map, name: string) -> void {
+    capability_revoke(ag.capability_set, name)
+}
+
+// List ag's capabilities.
+fn agent_listCapabilities(ag: map) -> list {
+    return capability_list(ag.capability_set)
+}
+
+// ============================================================
+// ag Tool Invocation (P0-15.17-7)
+// ============================================================
+
+// Call a tool through the ag's capability check.
+fn agent_toolCall(ag: map, name: string, input) {
+    eventbus_emit(ag.runtime.eventbus, "ToolCalled", { agent_id: ag.agent_id, tool_name: name })
+    let result = tool_call(ag.runtime.toolRegistry, ag.capability_set, name, input, { agent_id: ag.agent_id })
+    eventbus_emit(ag.runtime.eventbus, "ToolCompleted", { agent_id: ag.agent_id, tool_name: name })
+    return result
+}
+
+// Register a tool in the runtime's shared tool registry.
+fn agent_registerTool(runtime: map, def: map) -> void {
+    tool_register(runtime.toolRegistry, def)
+}
+
+// ============================================================
+// ag Event (P0-15.17-5)
+// ============================================================
+
+// Subscribe to runtime events with a callback.
+fn agent_onEvent(runtime: map, eventType: string, callback) -> void {
+    eventbus_on(runtime.eventbus, eventType, callback)
+}
+
+// Await a specific runtime event (suspends coroutine).
+fn agent_awaitEvent(runtime: map, eventType: string) -> map {
+    return eventbus_await(runtime.eventbus, eventType)
+}
+
+// Emit a custom runtime event.
+fn agent_emitEvent(runtime: map, eventType: string, data) -> int {
+    return eventbus_emit(runtime.eventbus, eventType, data)
+}
+
+// ============================================================
+// ag Supervisor (P0-15.17-11)
+// ============================================================
+
+// Create a Supervisor that monitors agents and can restart failed ones.
+fn supervisor_create(runtime: map) -> map {
+    let sup = {
+        __supervisor: true,
+        runtime: runtime,
+        monitored: {},       // agent_id -> { restartPolicy, maxRestarts }
+        __failedAgent: null  // internal: set by ag failure callback
+    }
+    runtime.supervisor = sup
+
+    // Listen for AgentFailed events
+    eventbus_on(runtime.eventbus, "AgentFailed", fn(data) {
+        let agentId = data.agent_id
+        let mon = sup.monitored[agentId]
+        if mon != null && agentId != null {
+            let ag = runtime.agents[agentId]
+            if ag != null {
+                ag.restartCount = ag.restartCount + 1
+                if ag.restartCount <= mon.maxRestarts {
+                    // Reset state and restart
+                    ag.state = "CREATED"
+                    ag.error = null
+                    agent_start(runtime, agentId)
+                }
+            }
+        }
+    })
+
+    return sup
+}
+
+// Monitor an ag with a restart policy.
+// restartPolicy: "always" | "on_failure" | "never"
+// maxRestarts: maximum number of restarts
+fn supervisor_monitor(sup: map, agent_id: string, restartPolicy: string, maxRestarts: int) -> void {
+    sup.monitored[agent_id] = { restartPolicy: restartPolicy, maxRestarts: maxRestarts }
+    let ag = sup.runtime.agents[agent_id]
+    if ag != null { ag.supervisor = sup }
+}
+
+// Stop monitoring an ag.
+fn supervisor_unmonitor(sup: map, agent_id: string) -> void {
+    sup.monitored[agent_id] = null
+    let ag = sup.runtime.agents[agent_id]
+    if ag != null { ag.supervisor = null }
+}
+
+// ============================================================
+// ag Context helper (P0-15.17-8)
+// ============================================================
+
+// Get a summary of the ag's context (for debugging/logging).
+fn agent_context(ag: map) -> map {
+    return {
+        agent_id: ag.agent_id,
+        name: ag.name,
+        state: ag.state,
+        mailbox_count: lenChannel(ag.mailbox),
+        state_count: state_count(ag.state_store),
+        capabilities: capability_list(ag.capability_set),
+        restart_count: ag.restartCount,
+        error: ag.error
+    }
+}

@@ -1,0 +1,8 @@
+io.println("step1")
+let m = { capacity: 16, items: [] }
+io.println("step2: cap=" + m.capacity)
+let f = fn() {
+    io.println("step3: closure cap=" + m.capacity)
+}
+f()
+io.println("step4: done")

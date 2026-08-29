@@ -1,0 +1,7 @@
+io.println("step1")
+let x = 42
+coroutine.spawn(fn() {
+    io.println("step2: x=" + x)
+})
+coroutine.sleep(30)
+io.println("step3: done")

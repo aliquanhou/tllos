@@ -1,0 +1,4 @@
+let x = 42
+io.println("x=" + convert.toString(x))
+x = 100
+io.println("x=" + convert.toString(x))

@@ -1,0 +1,6 @@
+io.println("start")
+coroutine.spawn(fn() {
+    io.println("inside closure")
+})
+coroutine.sleep(100)
+io.println("end")

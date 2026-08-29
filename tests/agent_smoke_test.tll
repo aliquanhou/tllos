@@ -1,0 +1,114 @@
+// P0-15.17 Smoke Test - verify all modules compile and basic flow works
+from "../stdlib/agent" import agent_createRuntime, agent_create, agent_start, agent_stop, agent_send, agent_recv, agent_status, agent_destroy, agent_list, agent_stateGet, agent_stateSet, agent_hasCapability, agent_toolCall, agent_registerTool, agent_onEvent, agent_awaitEvent, agent_emitEvent, agent_reply, agent_tryRecv, supervisor_create, supervisor_monitor
+from "../stdlib/future" import future_create, future_resolve, future_await, future_isDone, future_reject
+from "../stdlib/eventbus" import eventbus_create, eventbus_emit, eventbus_on, eventbus_await
+from "../stdlib/capability" import capability_create, capability_has, capability_grant, capability_require
+from "../stdlib/tool" import tool_createRegistry, tool_register, tool_call, tool_list
+from "../stdlib/state" import state_create, state_get, state_set, state_exists, state_keys
+
+io.println("=== P0-15.17 Smoke Test ===")
+
+// Test 1: Future
+io.println("Test 1: Future...")
+let f = future_create()
+let futureResult = ""
+coroutine.spawn(fn() {
+    let val = future_await(f)
+    futureResult = val
+})
+coroutine.sleep(20)
+future_resolve(f, "FUTURE_OK")
+coroutine.sleep(20)
+if futureResult == "FUTURE_OK" && future_isDone(f) {
+    io.println("  PASS: Future resolve/await")
+} else {
+    io.println("  FAIL: Future result=" + futureResult)
+}
+
+// Test 2: EventBus
+io.println("Test 2: EventBus...")
+let bus = eventbus_create()
+let eventReceived = ""
+eventbus_on(bus, "test_event", fn(data) {
+    eventReceived = data
+})
+eventbus_emit(bus, "test_event", "EVENT_OK")
+coroutine.sleep(10)
+if eventReceived == "EVENT_OK" {
+    io.println("  PASS: EventBus callback")
+} else {
+    io.println("  FAIL: EventBus received=" + eventReceived)
+}
+
+// Test 3: EventBus await (coroutine wake)
+io.println("Test 3: EventBus await...")
+let bus2 = eventbus_create()
+let awaitResult = ""
+coroutine.spawn(fn() {
+    let ev = eventbus_await(bus2, "await_test")
+    awaitResult = ev.data
+})
+coroutine.sleep(20)
+eventbus_emit(bus2, "await_test", "AWAKE_OK")
+coroutine.sleep(20)
+if awaitResult == "AWAKE_OK" {
+    io.println("  PASS: EventBus await wakes coroutine")
+} else {
+    io.println("  FAIL: awaitResult=" + awaitResult)
+}
+
+// Test 4: Capability
+io.println("Test 4: Capability...")
+let cap = capability_create()
+capability_grant(cap, "network")
+if capability_has(cap, "network") && !capability_has(cap, "file") {
+    io.println("  PASS: Capability has/grant")
+} else {
+    io.println("  FAIL: Capability")
+}
+
+// Test 5: StateStore
+io.println("Test 5: StateStore...")
+let st = state_create()
+state_set(st, "key1", "value1")
+if state_get(st, "key1") == "value1" && state_exists(st, "key1") && !state_exists(st, "missing") {
+    io.println("  PASS: StateStore get/set/exists")
+} else {
+    io.println("  FAIL: StateStore")
+}
+
+// Test 6: Tool with capability check
+io.println("Test 6: Tool...")
+let reg = tool_createRegistry()
+tool_register(reg, {
+    name: "echo",
+    description: "Echo input",
+    capabilityRequired: "tool.call",
+    executor: fn(input, ctx) { return "echo:" + input }
+})
+let cap2 = capability_create()
+capability_grant(cap2, "tool.call")
+let toolResult = tool_call(reg, cap2, "echo", "hello", null)
+if toolResult == "echo:hello" {
+    io.println("  PASS: Tool call with capability")
+} else {
+    io.println("  FAIL: Tool result=" + toolResult)
+}
+
+// Test 7: Tool capability rejection
+io.println("Test 7: Tool capability rejection...")
+let cap3 = capability_create()  // no capabilities
+let rejected = false
+try {
+    tool_call(reg, cap3, "echo", "hello", null)
+} catch err {
+    rejected = true
+}
+if rejected {
+    io.println("  PASS: Tool rejected without capability")
+} else {
+    io.println("  FAIL: Tool should have been rejected")
+}
+
+io.println("")
+io.println("=== Smoke Tests Done ===")

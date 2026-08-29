@@ -1,0 +1,28 @@
+// Test: channel await with named functions (module-level vars)
+from "../stdlib/task" import createChannel, sendChannel, recvChannel
+
+let ch = createChannel()
+let got = ""
+
+fn consumer() {
+    io.println("consumer: waiting")
+    let val = recvChannel(ch)
+    io.println("consumer: got " + val)
+    got = val
+}
+
+fn main() {
+    io.println("start")
+    coroutine.spawn(consumer)
+    coroutine.sleep(30)
+    io.println("producer: sending")
+    sendChannel(ch, "NAMED_OK")
+    coroutine.sleep(30)
+    io.println("got: " + got)
+    if got == "NAMED_OK" {
+        io.println("PASS")
+    } else {
+        io.println("FAIL")
+    }
+}
+main()

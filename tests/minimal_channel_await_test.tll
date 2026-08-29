@@ -1,0 +1,20 @@
+from "../stdlib/task" import createChannel, sendChannel, recvChannel
+
+io.println("step1: start")
+let ch = createChannel()
+io.println("step2: channel created, type=" + convert.typeOf(ch) + " cap=" + convert.toString(ch.capacity))
+let got = ""
+io.println("step3: spawning")
+coroutine.spawn(fn() {
+    io.println("step4: consumer running, ch type=" + convert.typeOf(ch))
+    let val = recvChannel(ch)
+    io.println("step5: consumer got " + val)
+    got = val
+})
+io.println("step6: spawned")
+coroutine.sleep(30)
+io.println("step7: sending")
+sendChannel(ch, "DIRECT_OK")
+coroutine.sleep(30)
+io.println("got: " + got)
+if got == "DIRECT_OK" { io.println("PASS") } else { io.println("FAIL") }
