@@ -1489,6 +1489,47 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
         }
         return tll_int(-1);
     }
+    if (idx == 141) { /* tcp.select(fd_list, timeout_ms) -> list of ready fds */
+        if (argCount > 0 && args[0].type == TLL_ARRAY) {
+            TLLArray *arr = args[0].as.array;
+            int timeoutMs = (argCount > 1 && args[1].type == TLL_INT) ? (int)args[1].as.integer : 100;
+            fd_set readfds;
+            FD_ZERO(&readfds);
+            int maxFd = 0;
+            int i;
+            int validCount = 0;
+            for (i = 0; i < arr->length; i++) {
+                if (arr->items[i].type == TLL_INT) {
+                    SOCKET s = (SOCKET)arr->items[i].as.integer;
+                    if (s > 0) {
+                        FD_SET(s, &readfds);
+                        if ((int)s > maxFd) maxFd = (int)s;
+                        validCount++;
+                    }
+                }
+            }
+            TLLValue result = tll_array();
+            if (validCount == 0) return result;
+            struct timeval tv;
+            tv.tv_sec = timeoutMs / 1000;
+            tv.tv_usec = (timeoutMs % 1000) * 1000;
+            int ready = select(maxFd + 1, &readfds, NULL, NULL, &tv);
+            if (ready <= 0) return result;
+            for (i = 0; i < arr->length; i++) {
+                if (arr->items[i].type == TLL_INT) {
+                    SOCKET s = (SOCKET)arr->items[i].as.integer;
+                    if (s > 0 && FD_ISSET(s, &readfds)) {
+                        TLLValue v;
+                        v.type = TLL_INT;
+                        v.as.integer = (long long)s;
+                        array_push(result.as.array, v);
+                    }
+                }
+            }
+            return result;
+        }
+        return tll_array();
+    }
 
     fprintf(stderr, "tllvm: unknown builtin index %d\n", idx);
     return tll_null();

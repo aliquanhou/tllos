@@ -1569,6 +1569,7 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
         if fnName == "close" { return 138 }
         if fnName == "setTimeout" { return 139 }
         if fnName == "tryAccept" { return 140 }
+        if fnName == "select" { return 141 }
     }
     if modName == "agent" {
         if fnName == "run" { return 98 }
