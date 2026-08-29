@@ -16,11 +16,11 @@
 #endif
 
 #ifdef _WIN32
-#include <winsock2.h>
+/* #include <winsock2.h> removed: TCC lacks it; manual declarations below */
 #include <windows.h>
-#include <winhttp.h>
-#define _WINHTTP_H_
-#define _WINSOCK2_H_
+/* #include <winhttp.h> removed: TCC lacks it; manual declarations below */
+/* _WINHTTP_H_ defined in manual declarations block below */
+/* _WINSOCK2_H_ defined in manual declarations block below */
 #include <direct.h>
 
 /* Global VM lock for concurrent HTTP requests - protects VM state during handler invocation */
@@ -130,6 +130,8 @@ typedef UINT_PTR SOCKET;
 #define SOCKET_ERROR (-1)
 #define SOL_SOCKET 0xffff
 #define SO_REUSEADDR 0x0004
+#define SO_RCVTIMEO 0x1006
+#define SO_SNDTIMEO 0x1005
 #define AF_INET 2
 #define SOCK_STREAM 1
 #define IPPROTO_TCP 6
@@ -144,12 +146,30 @@ SOCKET PASCAL socket(int, int, int);
 int PASCAL setsockopt(SOCKET, int, int, const char*, int);
 int PASCAL bind(SOCKET, const SOCKADDR*, int);
 int PASCAL listen(SOCKET, int);
+int PASCAL connect(SOCKET, const SOCKADDR*, int);
 SOCKET PASCAL accept(SOCKET, SOCKADDR*, int*);
 int PASCAL recv(SOCKET, char*, int, int);
 int PASCAL send(SOCKET, const char*, int, int);
 int PASCAL closesocket(SOCKET);
 unsigned long PASCAL inet_addr(const char*);
 unsigned short PASCAL htons(unsigned short);
+/* fd_set / select for non-blocking IO (P0-15.16) */
+#ifndef FD_SETSIZE
+#define FD_SETSIZE 64
+#endif
+#ifndef _FD_SET_DEFINED
+#define _FD_SET_DEFINED
+typedef struct fd_set { unsigned int fd_count; SOCKET fd_array[FD_SETSIZE]; } fd_set;
+#endif
+#define FD_ZERO(s) ((s)->fd_count = 0)
+#define FD_SET(fd,s) ((s)->fd_array[(s)->fd_count++] = (SOCKET)(fd))
+static int builtin_fd_isset(SOCKET fd, fd_set *s) { int _i=0; while(_i<s->fd_count){if(s->fd_array[_i]==fd) return 1;_i++;} return 0; }
+#define FD_ISSET(fd,s) builtin_fd_isset((SOCKET)(fd), s)
+#ifndef _TIMEVAL_DEFINED
+#define _TIMEVAL_DEFINED
+struct timeval { long tv_sec; long tv_usec; };
+#endif
+int PASCAL select(int, fd_set*, fd_set*, fd_set*, const struct timeval*);
 #endif
 /* Libraries linked via build.bat (DLL paths for TCC) */
 /* Minimal winnls declarations (TCC lacks winnls.h) */

@@ -23,35 +23,35 @@
 fn createChannel() -> map {
     let cap = 16
     let buf: list = []
-    let i = 0
-    while i < cap {
+    let _cci = 0
+    while _cci < cap {
         arrays.push(buf, null)
-        i = i + 1
+        _cci = _cci + 1
     }
     return { buf: buf, head: 0, tail: 0, count: 0, capacity: cap, closed: false }
 }
 
 // Grow the ring buffer to double capacity. O(n) but amortized O(1) per send.
 fn channel_grow(ch: map) -> void {
-    let oldCap = ch.capacity
-    let newCap = oldCap * 2
-    let newBuf: list = []
-    let i = 0
-    while i < newCap {
-        arrays.push(newBuf, null)
-        i = i + 1
+    let _cg_oldCap = ch.capacity
+    let _cg_newCap = _cg_oldCap * 2
+    let _cg_newBuf: list = []
+    let _cgi = 0
+    while _cgi < _cg_newCap {
+        arrays.push(_cg_newBuf, null)
+        _cgi = _cgi + 1
     }
     // Copy elements in order from old buffer starting at head
-    let j = 0
-    while j < ch.count {
-        let idx = (ch.head + j) % oldCap
-        newBuf[j] = ch.buf[idx]
-        j = j + 1
+    let _cgj = 0
+    while _cgj < ch.count {
+        let _cg_idx = (ch.head + _cgj) % _cg_oldCap
+        _cg_newBuf[_cgj] = ch.buf[_cg_idx]
+        _cgj = _cgj + 1
     }
-    ch.buf = newBuf
+    ch.buf = _cg_newBuf
     ch.head = 0
     ch.tail = ch.count
-    ch.capacity = newCap
+    ch.capacity = _cg_newCap
 }
 
 fn sendChannel(ch: map, value) -> bool {
@@ -126,94 +126,94 @@ fn onTimerEvent(reactor: map, intervalMs: int, callback) -> void {
 
 // Remove all handlers for a given fd (called when a connection closes).
 fn removeFdHandlers(reactor: map, fd: int) -> void {
-    let newHandlers: list = []
-    let i = 0
-    while i < arrays.length(reactor.ioHandlers) {
-        if arrays.get(reactor.ioHandlers, i).fd != fd {
-            arrays.push(newHandlers, arrays.get(reactor.ioHandlers, i))
+    let _rfh_newHandlers: list = []
+    let _rfh_i = 0
+    while _rfh_i < arrays.length(reactor.ioHandlers) {
+        if arrays.get(reactor.ioHandlers, _rfh_i).fd != fd {
+            arrays.push(_rfh_newHandlers, arrays.get(reactor.ioHandlers, _rfh_i))
         }
-        i = i + 1
+        _rfh_i = _rfh_i + 1
     }
-    reactor.ioHandlers = newHandlers
+    reactor.ioHandlers = _rfh_newHandlers
 }
 
 // Run one reactor tick: process due timers, then select on IO fds, dispatch events.
 // Returns true if any event was processed.
 fn reactorTick(reactor: map, selectTimeoutMs: int) -> bool {
     reactor.tickCount = reactor.tickCount + 1
-    let now = time.nowMs()
-    let anyActivity = false
+    let _rt_now = time.nowMs()
+    let _rt_any = false
 
     // 1. Process due timers
-    let ti = 0
-    while ti < arrays.length(reactor.timerHandlers) {
-        let timer = arrays.get(reactor.timerHandlers, ti)
+    let _rt_ti = 0
+    while _rt_ti < arrays.length(reactor.timerHandlers) {
+        let _rt_timer = arrays.get(reactor.timerHandlers, _rt_ti)
         if now - timer.lastRun >= timer.intervalMs {
             timer.lastRun = now
             timer.callback({ tick: reactor.tickCount, now: now })
-            anyActivity = true
+            _rt_any = true
         }
-        ti = ti + 1
+        _rt_ti = _rt_ti + 1
     }
 
     // 2. Build fd list and select
     if arrays.length(reactor.ioHandlers) > 0 {
-        let fdList: list = []
-        let fi = 0
-        while fi < arrays.length(reactor.ioHandlers) {
-            arrays.push(fdList, arrays.get(reactor.ioHandlers, fi).fd)
-            fi = fi + 1
+        let _rt_fdList: list = []
+        let _rt_fi = 0
+        while _rt_fi < arrays.length(reactor.ioHandlers) {
+            arrays.push(_rt_fdList, arrays.get(reactor.ioHandlers, _rt_fi).fd)
+            _rt_fi = _rt_fi + 1
         }
-        let readyFds = tcp.select(fdList, selectTimeoutMs)
+        let _rt_ready = tcp.select(_rt_fdList, selectTimeoutMs)
 
         // 3. Dispatch ready fds
-        let ri = 0
-        while ri < arrays.length(readyFds) {
-            let readyFd = arrays.get(readyFds, ri)
-            let fi2 = 0
-            while fi2 < arrays.length(reactor.ioHandlers) {
-                let handler = arrays.get(reactor.ioHandlers, fi2)
-                if handler.fd == readyFd {
-                    if handler.ioType == "server" {
+        let _rt_ri = 0
+        while _rt_ri < arrays.length(_rt_ready) {
+            let _rt_rfd = arrays.get(_rt_ready, _rt_ri)
+            let _rt_fi2 = 0
+            while _rt_fi2 < arrays.length(reactor.ioHandlers) {
+                let _rt_handler = arrays.get(reactor.ioHandlers, _rt_fi2)
+                if _rt_handler.fd == _rt_rfd {
+                    if _rt_handler.ioType == "server" {
                         // Server fd: accept new connection
-                        let newFd = tcp.accept(readyFd)
-                        if newFd >= 0 {
-                            tcp.setTimeout(newFd, 100)
-                            handler.onAccept({ fd: newFd, serverFd: readyFd, tick: reactor.tickCount })
-                            anyActivity = true
+                        let _rt_newFd = tcp.accept(_rt_rfd)
+                        if _rt_newFd >= 0 {
+                            tcp.setTimeout(_rt_newFd, 100)
+                            _rt_handler.onAccept({ fd: _rt_newFd, serverFd: _rt_rfd, tick: reactor.tickCount })
+                            _rt_any = true
                         }
                     } else {
                         // Client fd: recv data
-                        let data = tcp.recv(readyFd, 65536)
-                        if strings.length(data) > 0 {
-                            handler.onData({ fd: readyFd, data: data, tick: reactor.tickCount })
-                            anyActivity = true
+                        let _rt_data = tcp.recv(_rt_rfd, 65536)
+                        if strings.length(_rt_data) > 0 {
+                            _rt_handler.onData({ fd: _rt_rfd, data: _rt_data, tick: reactor.tickCount })
+                            _rt_any = true
                         } else {
                             // Connection closed
-                            if handler.onClose != null {
-                                handler.onClose({ fd: readyFd, tick: reactor.tickCount })
+                            if _rt_handler.onClose != null {
+                                _rt_handler.onClose({ fd: _rt_rfd, tick: reactor.tickCount })
                             }
-                            tcp.close(readyFd)
-                            removeFdHandlers(reactor, readyFd)
+                            tcp.close(_rt_rfd)
+                            removeFdHandlers(reactor, _rt_rfd)
                         }
                     }
                 }
-                fi2 = fi2 + 1
+                _rt_fi2 = _rt_fi2 + 1
             }
-            ri = ri + 1
+            _rt_ri = _rt_ri + 1
         }
     }
 
-    return anyActivity
+    return _rt_any
 }
 
 // Run the reactor for maxTicks ticks. Each tick waits up to selectTimeoutMs for IO.
 fn runReactor(reactor: map, maxTicks: int, selectTimeoutMs: int) -> void {
     reactor.running = true
-    let tick = 0
-    while tick < maxTicks && reactor.running {
+    let _rr_tick = 0
+    while _rr_tick < maxTicks && reactor.running {
         reactorTick(reactor, selectTimeoutMs)
-        tick = tick + 1
+        _rr_tick = _rr_tick + 1
     }
     reactor.running = false
 }

@@ -4,7 +4,21 @@
 #include "tllvm.h"
 #include <malloc.h>  /* MSVC alloca */
 #ifdef _WIN32
-#include <windows.h>  /* FILETIME, ULARGE_INTEGER, Sleep, DWORD for unified scheduler timer */
+/* winsock2.h not available in TCC; manual declarations below */
+#include <windows.h>   /* FILETIME, ULARGE_INTEGER, Sleep, DWORD for unified scheduler timer */
+/* Minimal Winsock select declarations (TCC lacks winsock2.h) */
+typedef UINT_PTR SOCKET;
+#define FD_SETSIZE 64
+typedef struct fd_set { unsigned int fd_count; SOCKET fd_array[FD_SETSIZE]; } fd_set;
+#define FD_ZERO(s) ((s)->fd_count = 0)
+#define FD_SET(fd,s) ((s)->fd_array[(s)->fd_count++] = (SOCKET)(fd))
+static int fd_isset(SOCKET fd, fd_set *s) { int _i=0; while(_i<s->fd_count){if(s->fd_array[_i]==fd) return 1;_i++;} return 0; }
+#define FD_ISSET(fd,s) fd_isset((SOCKET)(fd), s)
+#ifndef _TIMEVAL_DEFINED
+#define _TIMEVAL_DEFINED
+struct timeval { long tv_sec; long tv_usec; };
+#endif
+int PASCAL select(int, fd_set*, fd_set*, fd_set*, const struct timeval*);
 #endif
 
 /* === Frame Pool (P0-10.1) ===
@@ -303,7 +317,7 @@ static void coroutine_yield(TLLVM *vm) {
                 }
             }
 
-            /* Nothing to wait on (only channel-waiters) → exit cleanly */
+            /* Nothing to wait on (only channel-waiters) 鈫?exit cleanly */
             if (ioCount == 0 && sleepCount == 0) return;
 
             if (ioCount > 0) {
