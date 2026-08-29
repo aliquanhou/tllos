@@ -76,6 +76,91 @@ static int pop_try(TLLFrame *frame) {
     return frame->tryStack[--frame->tryStackSize];
 }
 
+/* Forward declarations for coroutine support */
+static TLLFrame *create_frame(TLLFunction *fn, int returnReg, TLLClosureEnv *env);
+
+/* === Coroutine support (P0-15.14: VM-level yield/resume) === */
+static TLLCoroutine **g_coroutines = NULL;
+static int g_coroutineCount = 0;
+static int g_coroutineCapacity = 0;
+static int g_currentCoroutine = 0;
+static TLLVM *g_coroutineVM = NULL;
+
+static void coroutine_init(TLLVM *vm) {
+    g_coroutineVM = vm;
+    g_coroutineCount = 0;
+    g_currentCoroutine = 0;
+    if (g_coroutines) { free(g_coroutines); g_coroutines = NULL; }
+    g_coroutineCapacity = 16;
+    g_coroutines = (TLLCoroutine**)calloc(16, sizeof(TLLCoroutine*));
+}
+
+static TLLCoroutine *coroutine_create(TLLFunction *fn, TLLValue *args, int argCount) {
+    TLLCoroutine *co = (TLLCoroutine*)calloc(1, sizeof(TLLCoroutine));
+    co->callStackCapacity = 64;
+    co->callStack = (TLLFrame**)calloc(64, sizeof(TLLFrame*));
+    co->callStackSize = 0;
+    co->state = 0;
+    co->invokeTargetStackSize = -1;
+    co->result = tll_null();
+
+    TLLFrame *frame = create_frame(fn, -1, NULL);
+    int i;
+    for (i = 0; i < argCount && i < fn->paramCount; i++) {
+        tll_value_free(frame->locals[i]);
+        tll_value_incref(args[i]);
+        frame->locals[i] = args[i];
+    }
+    co->callStack[co->callStackSize++] = frame;
+
+    if (g_coroutineCount >= g_coroutineCapacity) {
+        g_coroutineCapacity *= 2;
+        g_coroutines = (TLLCoroutine**)realloc(g_coroutines, g_coroutineCapacity * sizeof(TLLCoroutine*));
+    }
+    g_coroutines[g_coroutineCount++] = co;
+    return co;
+}
+
+static void coroutine_save_current(void) {
+    TLLCoroutine *co = g_coroutines[g_currentCoroutine];
+    co->callStack = g_coroutineVM->callStack;
+    co->callStackSize = g_coroutineVM->callStackSize;
+    co->callStackCapacity = g_coroutineVM->callStackCapacity;
+    co->invokeTargetStackSize = g_coroutineVM->invokeTargetStackSize;
+}
+
+static void coroutine_restore(int idx) {
+    TLLCoroutine *co = g_coroutines[idx];
+    g_coroutineVM->callStack = co->callStack;
+    g_coroutineVM->callStackSize = co->callStackSize;
+    g_coroutineVM->callStackCapacity = co->callStackCapacity;
+    g_coroutineVM->invokeTargetStackSize = co->invokeTargetStackSize;
+    g_currentCoroutine = idx;
+}
+
+static int coroutine_all_dead(void) {
+    int i;
+    for (i = 0; i < g_coroutineCount; i++) {
+        if (g_coroutines[i]->state != 2) return 0;
+    }
+    return 1;
+}
+
+static void coroutine_yield(void) {
+    coroutine_save_current();
+    int next = (g_currentCoroutine + 1) % g_coroutineCount;
+    int attempts = 0;
+    while (attempts < g_coroutineCount) {
+        if (g_coroutines[next]->state != 2) {
+            coroutine_restore(next);
+            return;
+        }
+        next = (next + 1) % g_coroutineCount;
+        attempts++;
+    }
+    coroutine_restore(g_currentCoroutine);
+}
+
 TLLVM *tll_vm_create(TLLProgram *prog) {
     TLLVM *vm = (TLLVM*)calloc(1, sizeof(TLLVM));
     vm->program = prog;
@@ -252,7 +337,16 @@ static void do_call(TLLVM *vm, TLLFrame *frame, int resultReg, int fnIdx, int ar
 
 static void tll_vm_exec(TLLVM *vm) {
     int targetStack = (vm->invokeTargetStackSize < 0) ? 0 : vm->invokeTargetStackSize;
-    while (vm->callStackSize > targetStack && !tll_should_exit) {
+    while (!tll_should_exit) {
+        /* If current coroutine finished, switch to next */
+        if (vm->callStackSize <= targetStack) {
+            if (g_coroutineCount > 0 && g_currentCoroutine < g_coroutineCount) {
+                g_coroutines[g_currentCoroutine]->state = 2; /* dead */
+            }
+            if (coroutine_all_dead()) break;
+            coroutine_yield();
+            continue;
+        }
         TLLFrame *frame = vm->callStack[vm->callStackSize - 1];
         if (frame->pc >= frame->function->instructionCount) {
             TLLFrame *f = pop_frame(vm);
@@ -645,8 +739,56 @@ static void tll_vm_exec(TLLVM *vm) {
                 }
                 break;
             }
-            case OP_HALT:
-                return;
+            case OP_SPAWN: {
+                /* Spawn coroutine: reg[a] = function, b = arg count */
+                TLLValue fnVal = regs[a];
+                int argCount = b;
+                int fnIdx = -1;
+                if (fnVal.type == TLL_FUNCTION) {
+                    fnIdx = fnVal.as.func.fnIdx;
+                } else if (fnVal.type == TLL_MAP) {
+                    TLLValue fnFlag = map_get(fnVal.as.map, "__fn");
+                    if (fnFlag.type == TLL_BOOL && fnFlag.as.boolean) {
+                        TLLValue idxVal = map_get(fnVal.as.map, "fnIdx");
+                        fnIdx = (idxVal.type == TLL_INT) ? (int)idxVal.as.integer : 0;
+                    }
+                }
+                if (fnIdx >= 0 && fnIdx < vm->program->functionCount) {
+                    TLLFunction *fn = &vm->program->functions[fnIdx];
+                    TLLValue args[16];
+                    int i;
+                    for (i = 0; i < argCount && i < 16; i++) {
+                        args[i] = pop_arg(frame);
+                    }
+                    /* Reverse args */
+                    for (i = 0; i < argCount / 2 && i < 16; i++) {
+                        TLLValue tmp = args[i];
+                        args[i] = args[argCount - 1 - i];
+                        args[argCount - 1 - i] = tmp;
+                    }
+                    coroutine_create(fn, args, argCount);
+                    regs[a] = tll_int((long long)(g_coroutineCount - 1));
+                } else {
+                    regs[a] = tll_int(-1);
+                }
+                break;
+            }
+            case OP_YIELD: {
+                coroutine_yield();
+                /* After yield, frame may have changed, re-fetch */
+                frame = vm->callStack[vm->callStackSize - 1];
+                regs = frame->registers;
+                break;
+            }
+            case OP_HALT: {
+                /* HALT: mark current coroutine dead, switch to next */
+                if (g_coroutineCount > 0 && g_currentCoroutine < g_coroutineCount) {
+                    g_coroutines[g_currentCoroutine]->state = 2; /* dead */
+                }
+                if (coroutine_all_dead()) return;
+                coroutine_yield();
+                break;
+            }
             case OP_NOP:
                 break;
             case OP_PUSH:
@@ -681,9 +823,23 @@ static void tll_vm_exec(TLLVM *vm) {
 }
 
 void tll_vm_run(TLLVM *vm) {
+    coroutine_init(vm);
+
     TLLFunction *mainFn = &vm->program->functions[vm->program->mainFunctionIndex];
     TLLFrame *mainFrame = create_frame(mainFn, -1, NULL);
     push_frame(vm, mainFrame);
+
+    /* Create main coroutine wrapping existing callStack */
+    TLLCoroutine *mainCo = (TLLCoroutine*)calloc(1, sizeof(TLLCoroutine));
+    mainCo->callStack = vm->callStack;
+    mainCo->callStackSize = vm->callStackSize;
+    mainCo->callStackCapacity = vm->callStackCapacity;
+    mainCo->state = 0;
+    mainCo->invokeTargetStackSize = vm->invokeTargetStackSize;
+    mainCo->result = tll_null();
+    g_coroutines[g_coroutineCount++] = mainCo;
+    g_currentCoroutine = 0;
+
     tll_vm_exec(vm);
 }
 

@@ -58,6 +58,10 @@ let OP_SHR = 51
 let OP_ROTR = 52
 let OP_ROTL = 53
 
+// Coroutine opcodes (P0-15.14: VM-level yield/resume)
+let OP_SPAWN = 54
+let OP_YIELD = 55
+
 // ============ Codegen state ============
 let cg_instructions: list = []
 let cg_constants: list = []
@@ -1371,6 +1375,36 @@ fn cg_compileCall(expr: map) -> int {
             cg_emit(OP_PRINT, [argReg])
         }
         cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
+        return resultReg
+    }
+
+    // Special handling: coroutine.yield -> YIELD opcode
+    if callee["kind"] == "Member" && callee.object["kind"] == "Ident" && callee.object["name"] == "coroutine" && callee["property"] == "yield" {
+        cg_emit(OP_YIELD, [resultReg])
+        return resultReg
+    }
+
+    // Special handling: coroutine.spawn(fn, args...) -> SPAWN opcode
+    if callee["kind"] == "Member" && callee.object["kind"] == "Ident" && callee.object["name"] == "coroutine" && callee["property"] == "spawn" {
+        if arrays.length(args) > 0 {
+            let fnReg = cg_compileExpression(arrays.get(args, 0))
+            let ai = 1
+            while ai < arrays.length(args) {
+                let argReg = cg_compileExpression(arrays.get(args, ai))
+                cg_emit(OP_PUSH, [argReg])
+                ai = ai + 1
+            }
+            cg_emit(OP_SPAWN, [fnReg, arrays.length(args) - 1])
+            // result is in fnReg after SPAWN
+            cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
+            // use OP_ADD with 0 to move value? No, just leave result in fnReg
+            // Actually we need to move fnReg to resultReg. Use a temp approach:
+            // Store fnReg to a local and load to resultReg? Too complex.
+            // Instead, just return fnReg as the result register.
+            return fnReg
+        } else {
+            cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(-1)])
+        }
         return resultReg
     }
 

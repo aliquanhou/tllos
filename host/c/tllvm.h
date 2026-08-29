@@ -203,8 +203,21 @@ enum {
     OP_SHL = 50,
     OP_SHR = 51,
     OP_ROTR = 52,
-    OP_ROTL = 53
+    OP_ROTL = 53,
+    /* Coroutine opcodes (P0-15.14: VM-level yield/resume) */
+    OP_SPAWN = 54,  /* spawn coroutine: reg[a] = fn, reg[b..] = args */
+    OP_YIELD = 55   /* yield current coroutine, switch to next */
 };
+
+/* === Coroutine === */
+typedef struct {
+    TLLFrame **callStack;
+    int callStackSize;
+    int callStackCapacity;
+    int state;  /* 0=running, 1=suspended, 2=dead */
+    TLLValue result;
+    int invokeTargetStackSize;
+} TLLCoroutine;
 
 /* === Function declarations === */
 
