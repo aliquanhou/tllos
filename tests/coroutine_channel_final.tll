@@ -1,0 +1,90 @@
+// P0-15.14-FINAL Channel + Coroutine Integration Test
+from "../stdlib/task" import createChannel, sendChannel, recvChannel, tryRecvChannel, lenChannel
+
+io.println("=== Channel + Coroutine Final Test ===")
+
+// Test 1: Producer/Consumer
+let ch1 = createChannel()
+let r1 = 0
+let p1done = false
+let c1done = false
+fn prod1() {
+    sendChannel(ch1, 100)
+    sendChannel(ch1, 200)
+    sendChannel(ch1, 300)
+    p1done = true
+}
+fn cons1() {
+    let g = 0
+    while r1 < 3 && g < 100 {
+        let r = tryRecvChannel(ch1)
+        if r.ok { r1 = r1 + 1 } else { coroutine.yield() }
+        g = g + 1
+    }
+    c1done = true
+}
+coroutine.spawn(prod1)
+coroutine.spawn(cons1)
+let g1 = 0
+while (!p1done || !c1done) && g1 < 200 { coroutine.yield(); g1 = g1 + 1 }
+if p1done && c1done && r1 == 3 {
+    io.println("Test 1 PASS: producer/consumer (3 msgs)")
+} else {
+    io.println("Test 1 FAIL: r1=" + convert.toString(r1))
+}
+
+// Test 2: Multi-producer
+let ch2 = createChannel()
+let r2 = 0
+let pa = false
+let pb = false
+let c2done = false
+fn prodA() { sendChannel(ch2, 1); sendChannel(ch2, 2); pa = true }
+fn prodB() { sendChannel(ch2, 3); sendChannel(ch2, 4); pb = true }
+fn cons2() {
+    let g = 0
+    while r2 < 4 && g < 100 {
+        let r = tryRecvChannel(ch2)
+        if r.ok { r2 = r2 + 1 } else { coroutine.yield() }
+        g = g + 1
+    }
+    c2done = true
+}
+coroutine.spawn(prodA)
+coroutine.spawn(prodB)
+coroutine.spawn(cons2)
+let g2 = 0
+while (!pa || !pb || !c2done) && g2 < 200 { coroutine.yield(); g2 = g2 + 1 }
+if pa && pb && c2done && r2 == 4 {
+    io.println("Test 2 PASS: multi-producer (4 msgs)")
+} else {
+    io.println("Test 2 FAIL: r2=" + convert.toString(r2))
+}
+
+// Test 3: String data
+let ch3 = createChannel()
+let s3 = ""
+let s3done = false
+fn strProd() { sendChannel(ch3, "hello"); sendChannel(ch3, "world") }
+fn strCons() {
+    let g = 0
+    let cnt = 0
+    while cnt < 2 && g < 50 {
+        let r = tryRecvChannel(ch3)
+        if r.ok { s3 = s3 + r.value; cnt = cnt + 1 } else { coroutine.yield() }
+        g = g + 1
+    }
+    s3done = true
+}
+coroutine.spawn(strProd)
+coroutine.spawn(strCons)
+let g3 = 0
+while !s3done && g3 < 100 { coroutine.yield(); g3 = g3 + 1 }
+if s3done && s3 == "helloworld" {
+    io.println("Test 3 PASS: channel string data")
+} else {
+    io.println("Test 3 FAIL: s3=" + s3)
+}
+
+io.println("=== All Channel Tests Done ===")
+

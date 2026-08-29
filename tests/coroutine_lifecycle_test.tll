@@ -1,0 +1,71 @@
+// P0-15.14-FINAL Coroutine Lifecycle & Memory Stress Test
+io.println("=== Lifecycle Stress Test ===")
+
+let completed = 0
+fn shortWorker() {
+    let x = 0
+    x = x + 1
+    completed = completed + 1
+}
+
+// Test: 10000 coroutines created and finished
+io.println("Creating 10000 coroutines...")
+let n = 0
+while n < 10000 {
+    coroutine.spawn(shortWorker)
+    n = n + 1
+}
+// Drive scheduler until all done
+let guard = 0
+while completed < 10000 && guard < 50000 {
+    coroutine.yield()
+    guard = guard + 1
+}
+if completed == 10000 {
+    io.println("Test PASS: 10000 coroutines completed")
+} else {
+    io.println("Test FAIL: completed=" + convert.toString(completed) + " guard=" + convert.toString(guard))
+}
+
+// Test: coroutines with yield cycles
+completed = 0
+fn cycleWorker() {
+    let i = 0
+    while i < 5 {
+        coroutine.yield()
+        i = i + 1
+    }
+    completed = completed + 1
+}
+io.println("Creating 1000 coroutines x 5 yields...")
+n = 0
+while n < 1000 {
+    coroutine.spawn(cycleWorker)
+    n = n + 1
+}
+guard = 0
+while completed < 1000 && guard < 100000 {
+    coroutine.yield()
+    guard = guard + 1
+}
+if completed == 1000 {
+    io.println("Test PASS: 1000 coroutines x 5 yields completed")
+} else {
+    io.println("Test FAIL: completed=" + convert.toString(completed))
+}
+
+// Test: main exits, workers continue
+let workerDone = false
+fn lateWorker() {
+    let i = 0
+    while i < 3 {
+        coroutine.yield()
+        i = i + 1
+    }
+    workerDone = true
+    io.println("  late worker finished after main")
+}
+io.println("Spawning late worker, main will exit...")
+coroutine.spawn(lateWorker)
+io.println("Main exiting now")
+// Main function ends here, OP_HALT should switch to worker

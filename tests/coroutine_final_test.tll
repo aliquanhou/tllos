@@ -1,0 +1,160 @@
+// P0-15.14-FINAL Coroutine Comprehensive Test
+io.println("=== Coroutine Final Test ===")
+
+// Test 1: Basic yield/resume
+let t1ok = false
+fn worker1() {
+    io.println("  w1 step1")
+    coroutine.yield()
+    io.println("  w1 step2")
+    t1ok = true
+}
+coroutine.spawn(worker1)
+coroutine.yield()
+coroutine.yield()
+coroutine.yield()
+if t1ok { io.println("Test 1 PASS: basic yield/resume") } else { io.println("Test 1 FAIL") }
+
+// Test 2: Multi-coroutine fairness
+let counts = [0, 0, 0]
+fn fairWorker(id: int) {
+    let i = 0
+    while i < 10 {
+        counts[id] = counts[id] + 1
+        coroutine.yield()
+        i = i + 1
+    }
+}
+coroutine.spawn(fairWorker, 0)
+coroutine.spawn(fairWorker, 1)
+coroutine.spawn(fairWorker, 2)
+let cycles = 0
+while cycles < 40 {
+    coroutine.yield()
+    cycles = cycles + 1
+}
+if counts[0] == 10 && counts[1] == 10 && counts[2] == 10 {
+    io.println("Test 2 PASS: fairness (3x10)")
+} else {
+    io.println("Test 2 FAIL: " + convert.toString(counts[0]) + "/" + convert.toString(counts[1]) + "/" + convert.toString(counts[2]))
+}
+
+// Test 3: Closure environment isolation
+fn makeCounter(start: int) {
+    let val = start
+    return fn() {
+        val = val + 1
+        return val
+    }
+}
+let cA = makeCounter(100)
+let cB = makeCounter(200)
+let results = [0, 0]
+fn closureWorkerA() {
+    let i = 0
+    while i < 3 {
+        results[0] = cA()
+        coroutine.yield()
+        i = i + 1
+    }
+}
+fn closureWorkerB() {
+    let i = 0
+    while i < 3 {
+        results[1] = cB()
+        coroutine.yield()
+        i = i + 1
+    }
+}
+coroutine.spawn(closureWorkerA)
+coroutine.spawn(closureWorkerB)
+cycles = 0
+while cycles < 20 {
+    coroutine.yield()
+    cycles = cycles + 1
+}
+if results[0] == 103 && results[1] == 203 {
+    io.println("Test 3 PASS: closure isolation (103/203)")
+} else {
+    io.println("Test 3 FAIL: " + convert.toString(results[0]) + "/" + convert.toString(results[1]))
+}
+
+// Test 4: Nested call yield
+fn inner() {
+    io.println("  inner before")
+    coroutine.yield()
+    io.println("  inner after")
+    return 42
+}
+fn middle() {
+    let r = inner()
+    return r
+}
+let nestedResult = 0
+fn nestedWorker() {
+    nestedResult = middle()
+}
+coroutine.spawn(nestedWorker)
+cycles = 0
+while cycles < 10 {
+    coroutine.yield()
+    cycles = cycles + 1
+}
+if nestedResult == 42 {
+    io.println("Test 4 PASS: nested call yield (42)")
+} else {
+    io.println("Test 4 FAIL: " + convert.toString(nestedResult))
+}
+
+// Test 5: Exception isolation
+let excA = false
+let excBok = true
+fn excWorkerA() {
+    try {
+        coroutine.yield()
+        throw "error A"
+    } catch e {
+        excA = true
+    }
+}
+fn excWorkerB() {
+    let i = 0
+    while i < 5 {
+        coroutine.yield()
+        i = i + 1
+    }
+}
+coroutine.spawn(excWorkerA)
+coroutine.spawn(excWorkerB)
+cycles = 0
+while cycles < 20 {
+    coroutine.yield()
+    cycles = cycles + 1
+}
+if excA && excBok {
+    io.println("Test 5 PASS: exception isolation")
+} else {
+    io.println("Test 5 FAIL")
+}
+
+// Test 6: Parameter types
+let paramResults = [0, "", 0, 0]
+fn paramWorker(a: int, b: string, c: int) {
+    paramResults[0] = a
+    paramResults[1] = b
+    paramResults[2] = c
+    paramResults[3] = a + c
+}
+coroutine.spawn(paramWorker, 42, "hello", 8)
+cycles = 0
+while cycles < 5 {
+    coroutine.yield()
+    cycles = cycles + 1
+}
+if paramResults[0] == 42 && paramResults[1] == "hello" && paramResults[2] == 8 && paramResults[3] == 50 {
+    io.println("Test 6 PASS: parameter types (int/string/int)")
+} else {
+    io.println("Test 6 FAIL: " + convert.toString(paramResults[0]) + "/" + paramResults[1] + "/" + convert.toString(paramResults[2]) + "/" + convert.toString(paramResults[3]))
+}
+
+io.println("=== All Core Tests Done ===")

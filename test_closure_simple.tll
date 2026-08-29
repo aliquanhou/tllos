@@ -1,7 +1,0 @@
-// Simple closure read test
-fn makeReader(val) {
-    return fn() { return val }
-}
-
-let r = makeReader(42)
-io.println("result=" + convert.toString(r()))

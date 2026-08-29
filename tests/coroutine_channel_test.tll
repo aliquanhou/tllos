@@ -1,0 +1,129 @@
+// P0-15.14-FINAL Channel + Coroutine Integration Test
+from "../stdlib/task" import createChannel, sendChannel, recvChannel, tryRecvChannel
+
+io.println("=== Channel + Coroutine Test ===")
+
+// Test 1: Simple send/recv between coroutines
+let ch1 = createChannel()
+let received = 0
+let producerDone = false
+let consumerDone = false
+
+fn producer1() {
+    sendChannel(ch1, 100)
+    sendChannel(ch1, 200)
+    sendChannel(ch1, 300)
+    producerDone = true
+}
+
+fn consumer1() {
+    let guard = 0
+    while received < 3 && guard < 100 {
+        let result = tryRecvChannel(ch1)
+        if result.ok {
+            received = received + 1
+        } else {
+            coroutine.yield()
+        }
+        guard = guard + 1
+    }
+    consumerDone = true
+}
+
+coroutine.spawn(producer1)
+coroutine.spawn(consumer1)
+let guard = 0
+while (!producerDone || !consumerDone) && guard < 200 {
+    coroutine.yield()
+    guard = guard + 1
+}
+if producerDone && consumerDone && received == 3 {
+    io.println("Test 1 PASS: producer/consumer send/recv (3 msgs)")
+} else {
+    io.println("Test 1 FAIL: p=" + convert.toString(producerDone) + " c=" + convert.toString(consumerDone) + " r=" + convert.toString(received))
+}
+
+// Test 2: Multiple producers, single consumer
+let ch2 = createChannel()
+let totalReceived = 0
+let p1done = false
+let p2done = false
+let cdone = false
+
+fn prodA() {
+    sendChannel(ch2, 1)
+    sendChannel(ch2, 2)
+    p1done = true
+}
+fn prodB() {
+    sendChannel(ch2, 3)
+    sendChannel(ch2, 4)
+    p2done = true
+}
+fn consumer2() {
+    let g = 0
+    while totalReceived < 4 && g < 100 {
+        let r = tryRecvChannel(ch2)
+        if r.ok {
+            totalReceived = totalReceived + 1
+        } else {
+            coroutine.yield()
+        }
+        g = g + 1
+    }
+    cdone = true
+}
+
+coroutine.spawn(prodA)
+coroutine.spawn(prodB)
+coroutine.spawn(consumer2)
+guard = 0
+while (!p1done || !p2done || !cdone) && guard < 200 {
+    coroutine.yield()
+    guard = guard + 1
+}
+if p1done && p2done && cdone && totalReceived == 4 {
+    io.println("Test 2 PASS: multi-producer single-consumer (4 msgs)")
+} else {
+    io.println("Test 2 FAIL: total=" + convert.toString(totalReceived))
+}
+
+// Test 3: Channel with string data
+let ch3 = createChannel()
+let strResult = ""
+let strDone = false
+fn strProd() {
+    sendChannel(ch3, "hello")
+    sendChannel(ch3, "world")
+}
+fn strCons() {
+    let g = 0
+    let count = 0
+    while count < 2 && g < 50 {
+        let r = tryRecvChannel(ch3)
+        if r.ok {
+            strResult = strResult + r.value
+            count = count + 1
+        } else {
+            coroutine.yield()
+        }
+        g = g + 1
+    }
+    strDone = true
+}
+coroutine.spawn(strProd)
+coroutine.spawn(strCons)
+guard = 0
+while !strDone && guard < 100 {
+    coroutine.yield()
+    guard = guard + 1
+}
+if strDone && strResult == "helloworld" {
+    io.println("Test 3 PASS: channel string data")
+} else {
+    io.println("Test 3 FAIL: result=" + strResult)
+}
+
+io.println("=== Channel Tests Done ===")
+
+

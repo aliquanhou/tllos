@@ -95,7 +95,7 @@ static void coroutine_init(TLLVM *vm) {
     g_coroutines = (TLLCoroutine**)calloc(16, sizeof(TLLCoroutine*));
 }
 
-static TLLCoroutine *coroutine_create(TLLFunction *fn, TLLValue *args, int argCount) {
+static TLLCoroutine *coroutine_create(TLLFunction *fn, TLLValue *args, int argCount, TLLClosureEnv *env) {
     TLLCoroutine *co = (TLLCoroutine*)calloc(1, sizeof(TLLCoroutine));
     co->callStackCapacity = 64;
     co->callStack = (TLLFrame**)calloc(64, sizeof(TLLFrame*));
@@ -104,7 +104,7 @@ static TLLCoroutine *coroutine_create(TLLFunction *fn, TLLValue *args, int argCo
     co->invokeTargetStackSize = -1;
     co->result = tll_null();
 
-    TLLFrame *frame = create_frame(fn, -1, NULL);
+    TLLFrame *frame = create_frame(fn, -1, env);
     int i;
     for (i = 0; i < argCount && i < fn->paramCount; i++) {
         tll_value_free(frame->locals[i]);
@@ -744,8 +744,10 @@ static void tll_vm_exec(TLLVM *vm) {
                 TLLValue fnVal = regs[a];
                 int argCount = b;
                 int fnIdx = -1;
+                TLLClosureEnv *env = NULL;
                 if (fnVal.type == TLL_FUNCTION) {
                     fnIdx = fnVal.as.func.fnIdx;
+                    env = fnVal.as.func.env;
                 } else if (fnVal.type == TLL_MAP) {
                     TLLValue fnFlag = map_get(fnVal.as.map, "__fn");
                     if (fnFlag.type == TLL_BOOL && fnFlag.as.boolean) {
@@ -766,7 +768,8 @@ static void tll_vm_exec(TLLVM *vm) {
                         args[i] = args[argCount - 1 - i];
                         args[argCount - 1 - i] = tmp;
                     }
-                    coroutine_create(fn, args, argCount);
+                    if (env) env->refCount++;
+                    coroutine_create(fn, args, argCount, env);
                     regs[a] = tll_int((long long)(g_coroutineCount - 1));
                 } else {
                     regs[a] = tll_int(-1);
