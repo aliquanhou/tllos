@@ -136,6 +136,17 @@ typedef struct {
     TLLClosureEnv *closureEnv;
 } TLLFrame;
 
+/* === Coroutine (P0-15.14 VM-level, P0-15.15 per-VM scheduler + unified timer) === */
+typedef struct {
+    TLLFrame **callStack;
+    int callStackSize;
+    int callStackCapacity;
+    int state;  /* 0=running, 1=suspended, 2=dead */
+    TLLValue result;
+    int invokeTargetStackSize;
+    long long wakeTime;  /* 0=runnable, >0=sleeping until this ms timestamp (P0-15.15 unified scheduler) */
+} TLLCoroutine;
+
 /* === VM === */
 typedef struct {
     TLLProgram *program;
@@ -145,6 +156,11 @@ typedef struct {
     TLLValue *globals;
     int globalCount;
     int invokeTargetStackSize; /* -1 = run until empty, N = stop when callStackSize <= N */
+    /* === Coroutine Scheduler (per-VM, P0-15.15) === */
+    TLLCoroutine **coroutines;
+    int coroutineCount;
+    int coroutineCapacity;
+    int currentCoroutine;
 } TLLVM;
 
 /* === Opcode constants === */
@@ -206,18 +222,9 @@ enum {
     OP_ROTL = 53,
     /* Coroutine opcodes (P0-15.14: VM-level yield/resume) */
     OP_SPAWN = 54,  /* spawn coroutine: reg[a] = fn, reg[b..] = args */
-    OP_YIELD = 55   /* yield current coroutine, switch to next */
+    OP_YIELD = 55,  /* yield current coroutine, switch to next */
+    OP_SLEEP = 56   /* sleep current coroutine for N ms, then yield (P0-15.15 unified scheduler) */
 };
-
-/* === Coroutine === */
-typedef struct {
-    TLLFrame **callStack;
-    int callStackSize;
-    int callStackCapacity;
-    int state;  /* 0=running, 1=suspended, 2=dead */
-    TLLValue result;
-    int invokeTargetStackSize;
-} TLLCoroutine;
 
 /* === Function declarations === */
 

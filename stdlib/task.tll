@@ -17,39 +17,72 @@
 // When TLL gains VM-level coroutines, a true Task layer can be built on top.
 
 // === Channel ===
-// Simple FIFO queue for passing data between event callbacks.
+// O(1) ring buffer FIFO queue for passing data between coroutines/callbacks.
+// P0-15.15: Replaced O(n) array-shift recv with O(1) circular buffer.
+// Internal layout: { buf, head, tail, count, capacity, closed }
 fn createChannel() -> map {
-    return { items: [], closed: false }
+    let cap = 16
+    let buf: list = []
+    let i = 0
+    while i < cap {
+        arrays.push(buf, null)
+        i = i + 1
+    }
+    return { buf: buf, head: 0, tail: 0, count: 0, capacity: cap, closed: false }
+}
+
+// Grow the ring buffer to double capacity. O(n) but amortized O(1) per send.
+fn channel_grow(ch: map) -> void {
+    let oldCap = ch.capacity
+    let newCap = oldCap * 2
+    let newBuf: list = []
+    let i = 0
+    while i < newCap {
+        arrays.push(newBuf, null)
+        i = i + 1
+    }
+    // Copy elements in order from old buffer starting at head
+    let j = 0
+    while j < ch.count {
+        let idx = (ch.head + j) % oldCap
+        newBuf[j] = ch.buf[idx]
+        j = j + 1
+    }
+    ch.buf = newBuf
+    ch.head = 0
+    ch.tail = ch.count
+    ch.capacity = newCap
 }
 
 fn sendChannel(ch: map, value) -> bool {
     if ch.closed { return false }
-    arrays.push(ch.items, value)
+    if ch.count >= ch.capacity {
+        channel_grow(ch)
+    }
+    ch.buf[ch.tail] = value
+    ch.tail = (ch.tail + 1) % ch.capacity
+    ch.count = ch.count + 1
     return true
 }
 
 fn recvChannel(ch: map) {
-    if arrays.length(ch.items) == 0 { return null }
-    let val = arrays.get(ch.items, 0)
-    let newItems: list = []
-    let i = 1
-    while i < arrays.length(ch.items) {
-        arrays.push(newItems, arrays.get(ch.items, i))
-        i = i + 1
-    }
-    ch.items = newItems
+    if ch.count == 0 { return null }
+    let val = ch.buf[ch.head]
+    ch.buf[ch.head] = null  // clear reference for GC
+    ch.head = (ch.head + 1) % ch.capacity
+    ch.count = ch.count - 1
     return val
 }
 
 fn tryRecvChannel(ch: map) -> map {
-    if arrays.length(ch.items) == 0 {
+    if ch.count == 0 {
         return { ok: false, value: null }
     }
     return { ok: true, value: recvChannel(ch) }
 }
 
 fn lenChannel(ch: map) -> int {
-    return arrays.length(ch.items)
+    return ch.count
 }
 
 fn closeChannel(ch: map) -> void {

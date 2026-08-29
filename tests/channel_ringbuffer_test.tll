@@ -1,0 +1,120 @@
+// P0-15.15: Channel Ring Buffer O(1) Test
+from "../stdlib/task" import createChannel, sendChannel, recvChannel, tryRecvChannel, lenChannel, closeChannel
+
+io.println("=== Channel Ring Buffer Test ===")
+
+// Test 1: Basic send/recv
+let ch1 = createChannel()
+sendChannel(ch1, 10)
+sendChannel(ch1, 20)
+sendChannel(ch1, 30)
+if lenChannel(ch1) == 3 && recvChannel(ch1) == 10 && recvChannel(ch1) == 20 && recvChannel(ch1) == 30 && lenChannel(ch1) == 0 {
+    io.println("Test 1 PASS: basic send/recv (3 items)")
+} else {
+    io.println("Test 1 FAIL")
+}
+
+// Test 2: Wrap-around - send/recv enough to move head past 0
+let ch2 = createChannel()
+let i = 0
+while i < 20 {
+    sendChannel(ch2, i)
+    i = i + 1
+}
+// Recv first 15 to move head forward
+i = 0
+let recvOk = true
+while i < 15 {
+    let v = recvChannel(ch2)
+    if v != i { recvOk = false }
+    i = i + 1
+}
+// Now send 10 more - this should wrap around the tail
+i = 0
+while i < 10 {
+    sendChannel(ch2, 100 + i)
+    i = i + 1
+}
+// Recv remaining 5 + 10 = 15 items
+let expected = 15
+let wrapOk = true
+i = 0
+while i < 15 {
+    let v = recvChannel(ch2)
+    if i < 5 {
+        if v != expected { wrapOk = false }
+        expected = expected + 1
+    } else {
+        if v != 100 + (i - 5) { wrapOk = false }
+    }
+    i = i + 1
+}
+if recvOk && wrapOk && lenChannel(ch2) == 0 {
+    io.println("Test 2 PASS: wrap-around (20 send, 15 recv, 10 send, 15 recv)")
+} else {
+    io.println("Test 2 FAIL: recvOk=" + convert.toString(recvOk) + " wrapOk=" + convert.toString(wrapOk))
+}
+
+// Test 3: Buffer growth - send more than initial capacity (16)
+let ch3 = createChannel()
+i = 0
+while i < 50 {
+    sendChannel(ch3, i * 2)
+    i = i + 1
+}
+if lenChannel(ch3) == 50 {
+    let growOk = true
+    i = 0
+    while i < 50 {
+        let v = recvChannel(ch3)
+        if v != i * 2 { growOk = false }
+        i = i + 1
+    }
+    if growOk && lenChannel(ch3) == 0 {
+        io.println("Test 3 PASS: buffer growth (50 items, capacity grew from 16)")
+    } else {
+        io.println("Test 3 FAIL: growOk=" + convert.toString(growOk))
+    }
+} else {
+    io.println("Test 3 FAIL: len=" + convert.toString(lenChannel(ch3)))
+}
+
+// Test 4: tryRecv on empty and non-empty
+let ch4 = createChannel()
+let r1 = tryRecvChannel(ch4)
+if r1.ok == false && r1.value == null {
+    sendChannel(ch4, "hello")
+    let r2 = tryRecvChannel(ch4)
+    if r2.ok == true && r2.value == "hello" {
+        io.println("Test 4 PASS: tryRecv empty then non-empty")
+    } else {
+        io.println("Test 4 FAIL: r2.ok=" + convert.toString(r2.ok))
+    }
+} else {
+    io.println("Test 4 FAIL: r1.ok should be false")
+}
+
+// Test 5: closeChannel prevents further sends
+let ch5 = createChannel()
+sendChannel(ch5, "before")
+closeChannel(ch5)
+let sendAfterClose = sendChannel(ch5, "after")
+if sendAfterClose == false && recvChannel(ch5) == "before" {
+    io.println("Test 5 PASS: closeChannel prevents sends, existing data readable")
+} else {
+    io.println("Test 5 FAIL")
+}
+
+// Test 6: Mixed types in channel
+let ch6 = createChannel()
+sendChannel(ch6, 42)
+sendChannel(ch6, "string")
+sendChannel(ch6, 3.14)
+sendChannel(ch6, true)
+if recvChannel(ch6) == 42 && recvChannel(ch6) == "string" {
+    io.println("Test 6 PASS: mixed types (int/string/float/bool)")
+} else {
+    io.println("Test 6 FAIL")
+}
+
+io.println("=== Ring Buffer Tests Done ===")

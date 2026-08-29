@@ -1,0 +1,81 @@
+// P0-15.15: Coroutine Memory Stress Test
+// Verifies that create/destroy lifecycle handles 100K coroutines without crash.
+io.println("=== Coroutine Memory Stress Test ===")
+
+// Test 1: 100K coroutines that immediately return
+let completed1 = 0
+fn quickWorker() {
+    completed1 = completed1 + 1
+}
+io.println("Test 1: Creating 100000 immediate-return coroutines...")
+let start1 = time.nowMs()
+let i = 0
+while i < 100000 {
+    coroutine.spawn(quickWorker)
+    i = i + 1
+}
+// Drive scheduler until all complete
+let guard = 0
+while completed1 < 100000 && guard < 200000 {
+    coroutine.yield()
+    guard = guard + 1
+}
+let elapsed1 = time.nowMs() - start1
+if completed1 == 100000 {
+    io.println("Test 1 PASS: 100000 coroutines completed in " + convert.toString(elapsed1) + "ms")
+} else {
+    io.println("Test 1 FAIL: completed=" + convert.toString(completed1) + " guard=" + convert.toString(guard))
+}
+
+// Test 2: 10K coroutines x 10 yields each
+let completed2 = 0
+fn yieldWorker() {
+    let j = 0
+    while j < 10 {
+        coroutine.yield()
+        j = j + 1
+    }
+    completed2 = completed2 + 1
+}
+io.println("Test 2: Creating 10000 coroutines x 10 yields...")
+let start2 = time.nowMs()
+i = 0
+while i < 10000 {
+    coroutine.spawn(yieldWorker)
+    i = i + 1
+}
+guard = 0
+while completed2 < 10000 && guard < 500000 {
+    coroutine.yield()
+    guard = guard + 1
+}
+let elapsed2 = time.nowMs() - start2
+if completed2 == 10000 {
+    io.println("Test 2 PASS: 10000 coroutines x 10 yields completed in " + convert.toString(elapsed2) + "ms")
+} else {
+    io.println("Test 2 FAIL: completed=" + convert.toString(completed2) + " guard=" + convert.toString(guard))
+}
+
+// Test 3: 1K coroutines with sleep (tests unified scheduler under load)
+let completed3 = 0
+fn sleepWorker() {
+    coroutine.sleep(10)
+    completed3 = completed3 + 1
+}
+io.println("Test 3: Creating 1000 coroutines with 10ms sleep...")
+let start3 = time.nowMs()
+i = 0
+while i < 1000 {
+    coroutine.spawn(sleepWorker)
+    i = i + 1
+}
+// Main sleeps to let workers finish
+coroutine.sleep(200)
+let elapsed3 = time.nowMs() - start3
+if completed3 == 1000 {
+    io.println("Test 3 PASS: 1000 sleep coroutines completed in " + convert.toString(elapsed3) + "ms")
+} else {
+    io.println("Test 3 FAIL: completed=" + convert.toString(completed3))
+}
+
+io.println("=== Stress Tests Done ===")

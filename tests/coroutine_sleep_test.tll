@@ -1,0 +1,65 @@
+// P0-15.15: Coroutine Sleep + Unified Scheduler Test
+io.println("=== Coroutine Sleep Test ===")
+
+// Test 1: Basic sleep - measure elapsed time
+let startMs = time.nowMs()
+let sleptOk = false
+fn sleeper() {
+    coroutine.sleep(100)
+    let elapsed = time.nowMs() - startMs
+    if elapsed >= 80 && elapsed <= 500 {
+        sleptOk = true
+    } else {
+        io.println("  sleep elapsed out of range: " + convert.toString(elapsed) + "ms")
+    }
+}
+coroutine.spawn(sleeper)
+// Wait for sleeper to finish: main sleeps a bit longer than the sleeper
+coroutine.sleep(150)
+if sleptOk {
+    io.println("Test 1 PASS: coroutine.sleep(100) waited ~100ms")
+} else {
+    io.println("Test 1 FAIL")
+}
+
+// Test 2: Two sleepers with different durations - shorter wakes first
+let order: list = []
+fn shortSleeper() {
+    coroutine.sleep(50)
+    arrays.push(order, "short")
+}
+fn longSleeper() {
+    coroutine.sleep(150)
+    arrays.push(order, "long")
+}
+coroutine.spawn(shortSleeper)
+coroutine.spawn(longSleeper)
+// Wait for both to finish
+coroutine.sleep(200)
+if arrays.length(order) == 2 && arrays.get(order, 0) == "short" && arrays.get(order, 1) == "long" {
+    io.println("Test 2 PASS: short sleeper (50ms) woke before long (150ms)")
+} else {
+    io.println("Test 2 FAIL: count=" + convert.toString(arrays.length(order)))
+}
+
+// Test 3: Sleeper + busy worker - worker runs while sleeper sleeps
+let workerTicks = 0
+fn busyWorker() {
+    let i = 0
+    while i < 50 {
+        workerTicks = workerTicks + 1
+        coroutine.yield()
+        i = i + 1
+    }
+}
+let start3 = time.nowMs()
+coroutine.spawn(busyWorker)
+coroutine.spawn(sleeper)  // 100ms sleeper from Test 1
+coroutine.sleep(200)
+if workerTicks >= 40 {
+    io.println("Test 3 PASS: busy worker ran " + convert.toString(workerTicks) + " ticks while sleeper slept")
+} else {
+    io.println("Test 3 FAIL: workerTicks=" + convert.toString(workerTicks))
+}
+
+io.println("=== Sleep Tests Done ===")
