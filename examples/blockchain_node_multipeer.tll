@@ -1,0 +1,262 @@
+// TLL Blockchain Node - Multi-Peer Polling Model (P0-15.11-R1)
+// Usage: tllvm node_multipeer.tllbc <nodeId> <port> [peer1:port1] [peer2:port2] ...
+//
+// Architecture:
+//   Main loop:
+//     1. tryAccept new peer (non-blocking, 10ms timeout)
+//     2. For each connected peer: try recv (with timeout)
+//     3. Process messages
+//     4. Broadcast pending transactions
+//     5. Detect dead peers and cleanup
+//     6. Repeat
+
+from "../../stdlib/blockchain" import createTransaction, signTransaction, validateTransaction, verifyTransactionSignature, createBlock, mineBlock, validateBlock, getBlockHash
+from "../../stdlib/crypto" import sha256
+from "../../stdlib/p2p" import encodeMessage, decodeMessages
+
+fn main() {
+    let argv = process.argv
+    let argc = arrays.length(argv)
+
+    if argc < 4 {
+        io.println("Usage: node_multipeer.tllbc <nodeId> <port> [peer1:port1] ...")
+        return
+    }
+
+    let nodeId = convert.toString(arrays.get(argv, 2))
+    let port = convert.toInt(convert.toString(arrays.get(argv, 3)))
+
+    io.println("=== TLL Multi-Peer Node " + nodeId + " ===")
+    io.println("Port: " + convert.toString(port))
+
+    // Parse bootstrap peers
+    let bootstrapPeers: list = []
+    let ai = 4
+    while ai < argc {
+        arrays.push(bootstrapPeers, convert.toString(arrays.get(argv, ai)))
+        ai = ai + 1
+    }
+    io.println("Bootstrap peers: " + convert.toString(arrays.length(bootstrapPeers)))
+
+    // Initialize blockchain
+    let chain: list = []
+    let genesis = createGenesisBlock()
+    arrays.push(chain, genesis)
+
+    // Mempool
+    let mempool: list = []
+    let seenTxIds: map = {}
+
+    // Connected peers: list of { fd, nodeId, host, port, lastActivity, timeouts }
+    let peers: list = []
+
+    // Start listening
+    let serverFd = tcp.listen("127.0.0.1", port)
+    if serverFd < 0 {
+        io.println("Failed to listen")
+        return
+    }
+    io.println("Listening on 127.0.0.1:" + convert.toString(port))
+
+    // Connect to bootstrap peers
+    let bi = 0
+    while bi < arrays.length(bootstrapPeers) {
+        let addr = arrays.get(bootstrapPeers, bi)
+        let parts = strings.split(addr, ":")
+        let peerHost = parts[0]
+        let peerPort = convert.toInt(parts[1])
+        io.println("Connecting to " + addr + "...")
+        let fd = tcp.connect(peerHost, peerPort)
+        if fd >= 0 {
+            tcp.setTimeout(fd, 100)
+            let peer = { fd: fd, nodeId: "unknown", host: peerHost, port: peerPort, lastActivity: time.nowMs(), timeouts: 0, handshaked: false }
+            arrays.push(peers, peer)
+            // Send handshake
+            let handshake = { nodeId: nodeId, host: "127.0.0.1", port: port, version: "0.2.0" }
+            tcp.send(fd, encodeMessage("handshake", handshake))
+            io.println("  Connected to " + addr)
+        } else {
+            io.println("  Failed to connect to " + addr)
+        }
+        bi = bi + 1
+    }
+
+    // Main loop
+    io.println("\n--- Main loop started (Ctrl+C to stop) ---")
+    let iteration = 0
+    let maxIterations = 200  // ~10 seconds with peers
+    let txBroadcastCount = 0
+
+    while iteration < maxIterations {
+        iteration = iteration + 1
+
+        // 1. Try to accept new peer (non-blocking, 10ms timeout)
+        let newFd = tcp.tryAccept(serverFd, 10)
+        if newFd >= 0 {
+            tcp.setTimeout(newFd, 100)
+            let peer = { fd: newFd, nodeId: "unknown", host: "127.0.0.1", port: 0, lastActivity: time.nowMs(), timeouts: 0, handshaked: false }
+            arrays.push(peers, peer)
+            io.println("[" + convert.toString(iteration) + "] New peer connected (fd=" + convert.toString(newFd) + "), total peers: " + convert.toString(arrays.length(peers)))
+        }
+
+        // 2. Poll each peer for incoming messages
+        let pi = 0
+        while pi < arrays.length(peers) {
+            let peer = arrays.get(peers, pi)
+            let fd = peer.fd
+
+            // Try to receive data (non-blocking due to 50ms timeout)
+            let chunk = tcp.recv(fd, 65536)
+            if strings.length(chunk) > 0 {
+                peer.lastActivity = time.nowMs()
+                peer.timeouts = 0
+
+                // Decode and process messages
+                let decoded = decodeMessages(chunk)
+                let mi = 0
+                while mi < arrays.length(decoded.messages) {
+                    let msg = arrays.get(decoded.messages, mi)
+
+                    if msg.type == "handshake" {
+                        peer.nodeId = msg.payload.nodeId
+                        if !peer.handshaked {
+                            peer.handshaked = true
+                            io.println("[" + convert.toString(iteration) + "] Handshake from " + peer.nodeId + " (fd=" + convert.toString(fd) + ")")
+                            // Send our handshake response
+                            let resp = { nodeId: nodeId, host: "127.0.0.1", port: port, version: "0.2.0" }
+                            tcp.send(fd, encodeMessage("handshake", resp))
+                        }
+                    }
+
+                    if msg.type == "ping" {
+                        tcp.send(fd, encodeMessage("pong", { timestamp: time.nowMs() }))
+                    }
+
+                    if msg.type == "pong" {
+                        // Peer is alive
+                    }
+
+                    if msg.type == "transaction" {
+                        let tx = msg.payload
+                        // Check if already seen
+                        let seen = false
+                        if seenTxIds[tx.id] != null { seen = true }
+                        if !seen {
+                            let valid = validateTransaction(tx) && verifyTransactionSignature(tx)
+                            if valid {
+                                seenTxIds[tx.id] = true
+                                arrays.push(mempool, tx)
+                                io.println("[" + convert.toString(iteration) + "] TX received: " + strings.substring(tx.id, 0, 12) + "... from " + tx.fromAddr + " (mempool=" + convert.toString(arrays.length(mempool)) + ")")
+                                // Broadcast to other peers
+                                broadcastTransaction(peers, tx, fd)
+                            }
+                        }
+                    }
+
+                    if msg.type == "get_chain" {
+                        tcp.send(fd, encodeMessage("chain", { blocks: chain, height: arrays.length(chain) }))
+                    }
+
+                    if msg.type == "chain" {
+                        // Could sync chain here
+                        io.println("[" + convert.toString(iteration) + "] Chain received: height=" + convert.toString(msg.payload.height))
+                    }
+
+                    mi = mi + 1
+                }
+            } else {
+                // No data - could be timeout or disconnect
+                peer.timeouts = peer.timeouts + 1
+            }
+
+            pi = pi + 1
+        }
+
+        // 3. Clean up dead peers (more than 30 consecutive timeouts = ~3 seconds)
+        let alivePeers: list = []
+        let ci = 0
+        while ci < arrays.length(peers) {
+            let peer = arrays.get(peers, ci)
+            if peer.timeouts >= 30 {
+                io.println("[" + convert.toString(iteration) + "] Peer " + peer.nodeId + " (fd=" + convert.toString(peer.fd) + ") timed out, disconnecting")
+                tcp.close(peer.fd)
+            } else {
+                arrays.push(alivePeers, peer)
+            }
+            ci = ci + 1
+        }
+        peers = alivePeers
+
+        // 3.5 Heartbeat: send ping every 10 iterations (~1 second) to keep connections alive
+        if iteration % 10 == 0 && arrays.length(peers) > 0 {
+            let pingData = encodeMessage("ping", { timestamp: time.nowMs(), nodeId: nodeId })
+            let hi = 0
+            while hi < arrays.length(peers) {
+                tcp.send(arrays.get(peers, hi).fd, pingData)
+                hi = hi + 1
+            }
+        }
+
+        // 4. Periodically broadcast a test transaction (every 20 iterations = ~1 second)
+        if iteration % 20 == 0 && arrays.length(peers) > 0 {
+            let txId = nodeId + "_tx_" + convert.toString(iteration)
+            let tx = createTransaction(nodeId, "network", 10, 1, 0, time.nowMs(), nodeId + "_pubkey")
+            tx = signTransaction(tx, nodeId + "_privkey")
+            // Override id for test tracking
+            tx.id = sha256(txId)
+            seenTxIds[tx.id] = true
+            arrays.push(mempool, tx)
+            broadcastTransaction(peers, tx, -1)
+            txBroadcastCount = txBroadcastCount + 1
+            io.println("[" + convert.toString(iteration) + "] Broadcast test TX " + strings.substring(tx.id, 0, 12) + "... (total broadcast=" + convert.toString(txBroadcastCount) + ")")
+        }
+
+        // 5. Print status every 50 iterations
+        if iteration % 50 == 0 {
+            io.println("[" + convert.toString(iteration) + "] Status: peers=" + convert.toString(arrays.length(peers)) + " mempool=" + convert.toString(arrays.length(mempool)) + " broadcast=" + convert.toString(txBroadcastCount))
+        }
+    }
+
+    // Cleanup
+    io.println("\n--- Main loop ended ---")
+    io.println("Final status: peers=" + convert.toString(arrays.length(peers)) + " mempool=" + convert.toString(arrays.length(mempool)) + " broadcast=" + convert.toString(txBroadcastCount))
+
+    // Close all peers
+    let ci2 = 0
+    while ci2 < arrays.length(peers) {
+        tcp.close(arrays.get(peers, ci2).fd)
+        ci2 = ci2 + 1
+    }
+    tcp.close(serverFd)
+    io.println("Cleanup complete")
+}
+
+// Broadcast transaction to all peers except the source
+fn broadcastTransaction(peers: list, tx: map, sourceFd: int) {
+    let data = encodeMessage("transaction", tx)
+    let pi = 0
+    while pi < arrays.length(peers) {
+        let peer = arrays.get(peers, pi)
+        if peer.fd != sourceFd {
+            tcp.send(peer.fd, data)
+        }
+        pi = pi + 1
+    }
+}
+
+// Create genesis block
+fn createGenesisBlock() -> map {
+    let block = {
+        index: 0,
+        timestamp: 0,
+        transactions: [],
+        previousHash: "0",
+        hash: "",
+        nonce: 0,
+        difficulty: 1
+    }
+    block.hash = sha256("genesis_block_tll_v2_multipeer")
+    return block
+}
+
+main()

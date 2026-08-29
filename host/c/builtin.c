@@ -1467,6 +1467,28 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
         }
         return tll_bool(0);
     }
+    if (idx == 140) { /* tcp.tryAccept(server_fd, timeout_ms) -> client_fd or -1 */
+        if (argCount > 0 && args[0].type == TLL_INT) {
+            SOCKET server = (SOCKET)args[0].as.integer;
+            int timeoutMs = (argCount > 1 && args[1].type == TLL_INT) ? (int)args[1].as.integer : 0;
+            fd_set readfds;
+            FD_ZERO(&readfds);
+            FD_SET(server, &readfds);
+            struct timeval tv;
+            tv.tv_sec = timeoutMs / 1000;
+            tv.tv_usec = (timeoutMs % 1000) * 1000;
+            int ready = select((int)server + 1, &readfds, NULL, NULL, &tv);
+            if (ready > 0 && FD_ISSET(server, &readfds)) {
+                struct sockaddr_in client_addr;
+                int client_len = sizeof(client_addr);
+                SOCKET client = accept(server, (struct sockaddr*)&client_addr, &client_len);
+                if (client == INVALID_SOCKET) return tll_int(-1);
+                return tll_int((long long)client);
+            }
+            return tll_int(-1);
+        }
+        return tll_int(-1);
+    }
 
     fprintf(stderr, "tllvm: unknown builtin index %d\n", idx);
     return tll_null();
