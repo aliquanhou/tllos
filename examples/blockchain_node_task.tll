@@ -1,53 +1,50 @@
-// TLL Blockchain Node - Task-based concurrent architecture (P0-15.13)
+// TLL Blockchain Node - Event-driven Reactor architecture (P0-15.13 refactored)
 //
-// Architecture:
-//   EventScheduler
-//     ├── Network Task: accept connections, receive messages
-//     ├── Mempool Task: validate transactions, manage pool
-//     ├── Mining Task: periodic block creation
-//     └── Broadcast Task: propagate transactions/blocks
+// Architecture: Reactor pattern (single-threaded, event-driven)
+//   - tcp.select for concurrent IO waiting
+//   - Timer callbacks for periodic tasks
+//   - Channels for passing data between callbacks
 //
-// Tasks communicate via Channels and share state via maps.
-// All tasks run in a single-threaded event loop with select-based IO.
+// NOT a Task scheduler: without VM-level yield, "tasks" are just callbacks.
+// This is the correct layer for TLL's current concurrency model.
 
 from "../../stdlib/blockchain" import createTransaction, signTransaction, validateTransaction, verifyTransactionSignature
 from "../../stdlib/crypto" import sha256
 from "../../stdlib/p2p" import encodeMessage, decodeMessages
-from "../../stdlib/task" import createEventScheduler, onIOEvent, onServerEvent, onTimerEvent, runEventScheduler, createChannel, sendChannel, recvChannel, tryRecvChannel, lenChannel
+from "../../stdlib/task" import createReactor, onServerEvent, onIOEvent, onTimerEvent, runReactor, createChannel, sendChannel, tryRecvChannel, lenChannel
 
 fn main() {
     let argv = process.argv
     let argc = arrays.length(argv)
 
     if argc < 4 {
-        io.println("Usage: node_task.tllbc <nodeId> <port> [peer1:port1] ...")
+        io.println("Usage: node_reactor.tllbc <nodeId> <port> [peer1:port1] ...")
         return
     }
 
     let nodeId = convert.toString(arrays.get(argv, 2))
     let port = convert.toInt(convert.toString(arrays.get(argv, 3)))
 
-    io.println("=== TLL Task-based Blockchain Node " + nodeId + " ===")
+    io.println("=== TLL Reactor-based Blockchain Node " + nodeId + " ===")
     io.println("Port: " + convert.toString(port))
 
-    // === Shared State ===
+    // === Shared state ===
     let chain: list = []
     let genesis = createGenesisBlock()
     arrays.push(chain, genesis)
 
     let mempool: list = []
     let seenTxIds: map = {}
-    let peers: list = []  // list of { fd, nodeId, lastActivity, timeouts, handshaked }
+    let peers: list = []  // { fd, nodeId, handshaked }
 
-    // === Channels ===
+    // === Channels for passing data between callbacks ===
     let txChannel = createChannel()
-    let blockChannel = createChannel()
     let broadcastChannel = createChannel()
 
-    // === Event Scheduler ===
-    let sched = createEventScheduler()
+    // === Reactor ===
+    let reactor = createReactor()
 
-    // === Network Task ===
+    // === Network: server socket (accept new connections) ===
     let serverFd = tcp.listen("127.0.0.1", port)
     if serverFd < 0 {
         io.println("Failed to listen")
@@ -55,33 +52,26 @@ fn main() {
     }
     io.println("Listening on 127.0.0.1:" + convert.toString(port))
 
-    // Register server fd for accept
-    onServerEvent(sched, serverFd, "network",
+    onServerEvent(reactor, serverFd,
         fn(ctx) {
-            // New connection
             let newFd = ctx.fd
-            if newFd >= 0 {
-                tcp.setTimeout(newFd, 100)
-                let peer = { fd: newFd, nodeId: "unknown", lastActivity: time.nowMs(), timeouts: 0, handshaked: false }
-                arrays.push(peers, peer)
-                io.println("[" + nodeId + "] New peer connected (fd=" + convert.toString(newFd) + "), total: " + convert.toString(arrays.length(peers)))
-                // Register peer fd for data
-                onIOEvent(sched, newFd, "peer-" + convert.toString(newFd),
-                    fn(ctx2) {
-                        handlePeerData(nodeId, peers, mempool, seenTxIds, broadcastChannel, ctx2.fd, ctx2.data)
-                    },
-                    fn(ctx2) {
-                        io.println("[" + nodeId + "] Peer fd=" + convert.toString(ctx2.fd) + " disconnected")
-                    }
-                )
-                // Send handshake
-                let handshake = { nodeId: nodeId, host: "127.0.0.1", port: port, version: "0.4.0" }
-                tcp.send(newFd, encodeMessage("handshake", handshake))
-            }
+            let peer = { fd: newFd, nodeId: "unknown", handshaked: false }
+            arrays.push(peers, peer)
+            io.println("[" + nodeId + "] New peer fd=" + convert.toString(newFd) + " total=" + convert.toString(arrays.length(peers)))
+            onIOEvent(reactor, newFd,
+                fn(ctx2) {
+                    handlePeerData(nodeId, peers, mempool, seenTxIds, broadcastChannel, ctx2.fd, ctx2.data)
+                },
+                fn(ctx2) {
+                    io.println("[" + nodeId + "] Peer fd=" + convert.toString(ctx2.fd) + " disconnected")
+                }
+            )
+            let handshake = { nodeId: nodeId, host: "127.0.0.1", port: port, version: "0.5.0" }
+            tcp.send(newFd, encodeMessage("handshake", handshake))
         }
     )
 
-    // Connect to bootstrap peers
+    // === Connect to bootstrap peers ===
     let ai = 4
     while ai < argc {
         let addr = convert.toString(arrays.get(argv, ai))
@@ -92,9 +82,9 @@ fn main() {
         let fd = tcp.connect(peerHost, peerPort)
         if fd >= 0 {
             tcp.setTimeout(fd, 100)
-            let peer = { fd: fd, nodeId: "unknown", lastActivity: time.nowMs(), timeouts: 0, handshaked: false }
+            let peer = { fd: fd, nodeId: "unknown", handshaked: false }
             arrays.push(peers, peer)
-            eventScheduler.onIO(sched, fd, "peer-" + convert.toString(fd),
+            onIOEvent(reactor, fd,
                 fn(ctx2) {
                     handlePeerData(nodeId, peers, mempool, seenTxIds, broadcastChannel, ctx2.fd, ctx2.data)
                 },
@@ -102,7 +92,7 @@ fn main() {
                     io.println("[" + nodeId + "] Peer fd=" + convert.toString(ctx2.fd) + " disconnected")
                 }
             )
-            let handshake = { nodeId: nodeId, host: "127.0.0.1", port: port, version: "0.4.0" }
+            let handshake = { nodeId: nodeId, host: "127.0.0.1", port: port, version: "0.5.0" }
             tcp.send(fd, encodeMessage("handshake", handshake))
             io.println("Connected to " + addr)
         } else {
@@ -111,10 +101,9 @@ fn main() {
         ai = ai + 1
     }
 
-    // === Mempool Task (timer: process pending transactions every 500ms) ===
-    onTimerEvent(sched, 500, "mempool",
+    // === Timer: Mempool processor (every 500ms) ===
+    onTimerEvent(reactor, 500,
         fn(ctx) {
-            // Process transactions from channel
             let processed = 0
             while lenChannel(txChannel) > 0 && processed < 10 {
                 let result = tryRecvChannel(txChannel)
@@ -128,23 +117,21 @@ fn main() {
                             seenTxIds[tx.id] = true
                             arrays.push(mempool, tx)
                             processed = processed + 1
-                            // Broadcast valid tx
                             sendChannel(broadcastChannel, { type: "transaction", payload: tx })
                         }
                     }
                 }
             }
             if processed > 0 {
-                io.println("[" + nodeId + "] Mempool: processed " + convert.toString(processed) + " tx, total=" + convert.toString(arrays.length(mempool)))
+                io.println("[" + nodeId + "] Mempool: +" + convert.toString(processed) + " total=" + convert.toString(arrays.length(mempool)))
             }
         }
     )
 
-    // === Mining Task (timer: create block every 5s) ===
-    onTimerEvent(sched, 5000, "mining",
+    // === Timer: Mining (every 5s) ===
+    onTimerEvent(reactor, 5000,
         fn(ctx) {
             if arrays.length(mempool) > 0 {
-                // Create block from mempool
                 let block = {
                     index: arrays.length(chain),
                     timestamp: time.nowMs(),
@@ -155,17 +142,15 @@ fn main() {
                 }
                 block.hash = sha256(convert.toString(block.index) + block.previousHash + convert.toString(block.timestamp))
                 arrays.push(chain, block)
-                io.println("[" + nodeId + "] Mined block #" + convert.toString(block.index) + " with " + convert.toString(arrays.length(mempool)) + " tx")
-                // Clear mempool
+                io.println("[" + nodeId + "] Mined block #" + convert.toString(block.index) + " tx=" + convert.toString(arrays.length(mempool)))
                 mempool = []
-                // Broadcast block
                 sendChannel(broadcastChannel, { type: "block", payload: block })
             }
         }
     )
 
-    // === Broadcast Task (timer: send pending messages every 200ms) ===
-    onTimerEvent(sched, 200, "broadcast",
+    // === Timer: Broadcast (every 200ms) ===
+    onTimerEvent(reactor, 200,
         fn(ctx) {
             let sent = 0
             while lenChannel(broadcastChannel) > 0 && sent < 20 {
@@ -184,8 +169,8 @@ fn main() {
         }
     )
 
-    // === Transaction Generator Task (timer: generate test tx every 2s) ===
-    onTimerEvent(sched, 2000, "txgen",
+    // === Timer: TX Generator (every 2s) ===
+    onTimerEvent(reactor, 2000,
         fn(ctx) {
             let txId = nodeId + "_tx_" + convert.toString(ctx.tick)
             let tx = createTransaction(nodeId, "network", 10, 1, 0, time.nowMs(), nodeId + "_pubkey")
@@ -196,8 +181,8 @@ fn main() {
         }
     )
 
-    // === Status Task (timer: print status every 10s) ===
-    onTimerEvent(sched, 10000, "status",
+    // === Timer: Status (every 10s) ===
+    onTimerEvent(reactor, 10000,
         fn(ctx) {
             io.println("[" + nodeId + "] Status: peers=" + convert.toString(arrays.length(peers)) +
                 " mempool=" + convert.toString(arrays.length(mempool)) +
@@ -206,13 +191,13 @@ fn main() {
         }
     )
 
-    // === Run ===
-    io.println("\n--- Task-based event loop started ---")
-    io.println("Tasks: network, mempool, mining, broadcast, txgen, status")
-    runEventScheduler(sched, 200, 50)
+    // === Run reactor ===
+    io.println("\n--- Reactor event loop started ---")
+    io.println("Handlers: 1 server + N client + 4 timers")
+    runReactor(reactor, 200, 50)  // 200 ticks * 50ms = 10s
 
     // === Cleanup ===
-    io.println("\n--- Event loop ended ---")
+    io.println("\n--- Reactor loop ended ---")
     io.println("Final: peers=" + convert.toString(arrays.length(peers)) +
         " mempool=" + convert.toString(arrays.length(mempool)) +
         " chain=" + convert.toString(arrays.length(chain)))
@@ -234,7 +219,6 @@ fn handlePeerData(nodeId: string, peers: list, mempool: list, seenTxIds: map, br
         let msg = arrays.get(decoded.messages, mi)
 
         if msg.type == "handshake" {
-            // Find peer and update nodeId
             let pi = 0
             while pi < arrays.length(peers) {
                 if arrays.get(peers, pi).fd == fd {
@@ -256,7 +240,6 @@ fn handlePeerData(nodeId: string, peers: list, mempool: list, seenTxIds: map, br
                 seenTxIds[tx.id] = true
                 arrays.push(mempool, tx)
                 io.println("[" + nodeId + "] RX tx " + strings.substring(tx.id, 0, 12) + "... (mempool=" + convert.toString(arrays.length(mempool)) + ")")
-                // Re-broadcast
                 sendChannel(broadcastChannel, { type: "transaction", payload: tx })
             }
         }
@@ -264,7 +247,6 @@ fn handlePeerData(nodeId: string, peers: list, mempool: list, seenTxIds: map, br
         if msg.type == "block" {
             let block = msg.payload
             io.println("[" + nodeId + "] RX block #" + convert.toString(block.index))
-            // TODO: validate and add to chain
         }
 
         if msg.type == "ping" {
@@ -284,7 +266,7 @@ fn createGenesisBlock() -> map {
         hash: "",
         nonce: 0
     }
-    block.hash = sha256("genesis_block_tll_v4_task")
+    block.hash = sha256("genesis_block_tll_v5_reactor")
     return block
 }
 

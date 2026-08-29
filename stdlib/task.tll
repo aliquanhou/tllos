@@ -1,9 +1,25 @@
-// TLL Task Scheduler - Cooperative multitasking for TLL (P0-15.13)
-// Reactor pattern: single-threaded, cooperative, event-driven.
+// TLL Event-driven Reactor + Channel (P0-15.13 refactored)
+//
+// ARCHITECTURE DECISION:
+// This module provides an Event-driven Reactor pattern (select + timers + callbacks)
+// and Channel (inter-callback data queue).
+//
+// NOTE: A true cooperative Task scheduler (with yield/resume) requires VM-level
+// coroutine support. Without VM yield, a "Task" is just a callback that runs to
+// completion — that is not real concurrency and was rolled back.
+//
+// The Reactor pattern here is the correct layer for now:
+//   - IO events (tcp.select) dispatch to callbacks
+//   - Timer events dispatch to callbacks
+//   - Channels pass data between callbacks
+//   - Single-threaded, event-driven, no preemption
+//
+// When TLL gains VM-level coroutines, a true Task layer can be built on top.
 
 // === Channel ===
+// Simple FIFO queue for passing data between event callbacks.
 fn createChannel() -> map {
-    return { items: [], capacity: 0, closed: false }
+    return { items: [], closed: false }
 }
 
 fn sendChannel(ch: map, value) -> bool {
@@ -40,133 +56,103 @@ fn closeChannel(ch: map) -> void {
     ch.closed = true
 }
 
-// === Task ===
-fn createTask(id: string, taskFn) -> map {
-    return { id: id, callback: taskFn, state: "pending", result: null, iterations: 0 }
+// === Event Reactor ===
+// Single-threaded event loop: tcp.select for IO + timer callbacks.
+fn createReactor() -> map {
+    return {
+        ioHandlers: [],   // { fd, ioType, onAccept, onData, onClose }
+        timerHandlers: [], // { intervalMs, lastRun, callback }
+        running: false,
+        tickCount: 0
+    }
 }
 
-// === Scheduler ===
-fn createScheduler() -> map {
-    return { tasks: [], currentIndex: 0, running: false, tickCount: 0 }
+// Register a server socket: when a connection arrives, onAccept(newFd) is called.
+fn onServerEvent(reactor: map, fd: int, onAcceptFn) -> void {
+    arrays.push(reactor.ioHandlers, { fd: fd, ioType: "server", onAccept: onAcceptFn })
 }
 
-fn spawnTask(sched: map, id: string, taskFn) -> void {
-    arrays.push(sched.tasks, createTask(id, taskFn))
+// Register a client socket: when data arrives, onData(ctx); when closed, onClose(ctx).
+fn onIOEvent(reactor: map, fd: int, onDataFn, onCloseFn) -> void {
+    arrays.push(reactor.ioHandlers, { fd: fd, ioType: "client", onData: onDataFn, onClose: onCloseFn })
 }
 
-fn tickScheduler(sched: map) -> bool {
-    sched.tickCount = sched.tickCount + 1
-    let anyRunning = false
+// Register a periodic timer: callback is called every intervalMs.
+fn onTimerEvent(reactor: map, intervalMs: int, callback) -> void {
+    arrays.push(reactor.timerHandlers, { intervalMs: intervalMs, lastRun: 0, callback: callback })
+}
+
+// Remove all handlers for a given fd (called when a connection closes).
+fn removeFdHandlers(reactor: map, fd: int) -> void {
+    let newHandlers: list = []
     let i = 0
-    while i < arrays.length(sched.tasks) {
-        let task = arrays.get(sched.tasks, i)
-        if task.state == "pending" || task.state == "running" {
-            task.state = "running"
-            task.iterations = task.iterations + 1
-            let ctx = { taskId: task.id, tick: sched.tickCount, scheduler: sched }
-            task.result = task.callback(ctx)
-            task.state = "done"
-            anyRunning = true
+    while i < arrays.length(reactor.ioHandlers) {
+        if arrays.get(reactor.ioHandlers, i).fd != fd {
+            arrays.push(newHandlers, arrays.get(reactor.ioHandlers, i))
         }
         i = i + 1
     }
-    return anyRunning
+    reactor.ioHandlers = newHandlers
 }
 
-fn runScheduler(sched: map, maxTicks: int) -> void {
-    sched.running = true
-    let tick = 0
-    while tick < maxTicks && sched.running {
-        if !tickScheduler(sched) { break }
-        tick = tick + 1
-    }
-    sched.running = false
-}
-
-fn stopScheduler(sched: map) -> void {
-    sched.running = false
-}
-
-// === Event-driven Scheduler (with select) ===
-fn createEventScheduler() -> map {
-    return { tasks: [], ioTasks: [], timerTasks: [], running: false, tickCount: 0 }
-}
-
-fn onIOEvent(sched: map, fd: int, taskId: string, onDataFn, onCloseFn) -> void {
-    arrays.push(sched.ioTasks, { fd: fd, taskId: taskId, onData: onDataFn, onClose: onCloseFn, ioType: "client" })
-}
-
-fn onServerEvent(sched: map, fd: int, taskId: string, onAcceptFn) -> void {
-    arrays.push(sched.ioTasks, { fd: fd, taskId: taskId, onAccept: onAcceptFn, ioType: "server" })
-}
-
-fn onTimerEvent(sched: map, intervalMs: int, taskId: string, timerFn) -> void {
-    arrays.push(sched.timerTasks, { intervalMs: intervalMs, lastRun: 0, taskId: taskId, callback: timerFn })
-}
-
-fn tickEventScheduler(sched: map, timeoutMs: int) -> bool {
-    sched.tickCount = sched.tickCount + 1
+// Run one reactor tick: process due timers, then select on IO fds, dispatch events.
+// Returns true if any event was processed.
+fn reactorTick(reactor: map, selectTimeoutMs: int) -> bool {
+    reactor.tickCount = reactor.tickCount + 1
     let now = time.nowMs()
     let anyActivity = false
 
-    // 1. Check timers
+    // 1. Process due timers
     let ti = 0
-    while ti < arrays.length(sched.timerTasks) {
-        let timer = arrays.get(sched.timerTasks, ti)
+    while ti < arrays.length(reactor.timerHandlers) {
+        let timer = arrays.get(reactor.timerHandlers, ti)
         if now - timer.lastRun >= timer.intervalMs {
             timer.lastRun = now
-            timer.callback({ taskId: timer.taskId, tick: sched.tickCount, now: now })
+            timer.callback({ tick: reactor.tickCount, now: now })
             anyActivity = true
         }
         ti = ti + 1
     }
 
     // 2. Build fd list and select
-    if arrays.length(sched.ioTasks) > 0 {
+    if arrays.length(reactor.ioHandlers) > 0 {
         let fdList: list = []
         let fi = 0
-        while fi < arrays.length(sched.ioTasks) {
-            arrays.push(fdList, arrays.get(sched.ioTasks, fi).fd)
+        while fi < arrays.length(reactor.ioHandlers) {
+            arrays.push(fdList, arrays.get(reactor.ioHandlers, fi).fd)
             fi = fi + 1
         }
-        let readyFds = tcp.select(fdList, timeoutMs)
+        let readyFds = tcp.select(fdList, selectTimeoutMs)
 
         // 3. Dispatch ready fds
         let ri = 0
         while ri < arrays.length(readyFds) {
             let readyFd = arrays.get(readyFds, ri)
             let fi2 = 0
-            while fi2 < arrays.length(sched.ioTasks) {
-                let ioTask = arrays.get(sched.ioTasks, fi2)
-                if ioTask.fd == readyFd {
-                    if ioTask.ioType == "server" {
+            while fi2 < arrays.length(reactor.ioHandlers) {
+                let handler = arrays.get(reactor.ioHandlers, fi2)
+                if handler.fd == readyFd {
+                    if handler.ioType == "server" {
                         // Server fd: accept new connection
                         let newFd = tcp.accept(readyFd)
                         if newFd >= 0 {
                             tcp.setTimeout(newFd, 100)
-                            ioTask.onAccept({ taskId: ioTask.taskId, fd: newFd, serverFd: readyFd })
+                            handler.onAccept({ fd: newFd, serverFd: readyFd, tick: reactor.tickCount })
                             anyActivity = true
                         }
                     } else {
                         // Client fd: recv data
                         let data = tcp.recv(readyFd, 65536)
                         if strings.length(data) > 0 {
-                            ioTask.onData({ taskId: ioTask.taskId, fd: readyFd, data: data })
+                            handler.onData({ fd: readyFd, data: data, tick: reactor.tickCount })
                             anyActivity = true
                         } else {
-                            if ioTask.onClose != null {
-                                ioTask.onClose({ taskId: ioTask.taskId, fd: readyFd })
+                            // Connection closed
+                            if handler.onClose != null {
+                                handler.onClose({ fd: readyFd, tick: reactor.tickCount })
                             }
                             tcp.close(readyFd)
-                            let newIoTasks: list = []
-                            let ri2 = 0
-                            while ri2 < arrays.length(sched.ioTasks) {
-                                if arrays.get(sched.ioTasks, ri2).fd != readyFd {
-                                    arrays.push(newIoTasks, arrays.get(sched.ioTasks, ri2))
-                                }
-                                ri2 = ri2 + 1
-                            }
-                            sched.ioTasks = newIoTasks
+                            removeFdHandlers(reactor, readyFd)
                         }
                     }
                 }
@@ -179,16 +165,17 @@ fn tickEventScheduler(sched: map, timeoutMs: int) -> bool {
     return anyActivity
 }
 
-fn runEventScheduler(sched: map, maxTicks: int, timeoutMs: int) -> void {
-    sched.running = true
+// Run the reactor for maxTicks ticks. Each tick waits up to selectTimeoutMs for IO.
+fn runReactor(reactor: map, maxTicks: int, selectTimeoutMs: int) -> void {
+    reactor.running = true
     let tick = 0
-    while tick < maxTicks && sched.running {
-        tickEventScheduler(sched, timeoutMs)
+    while tick < maxTicks && reactor.running {
+        reactorTick(reactor, selectTimeoutMs)
         tick = tick + 1
     }
-    sched.running = false
+    reactor.running = false
 }
 
-fn stopEventScheduler(sched: map) -> void {
-    sched.running = false
+fn stopReactor(reactor: map) -> void {
+    reactor.running = false
 }
