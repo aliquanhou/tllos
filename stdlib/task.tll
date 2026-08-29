@@ -1,0 +1,194 @@
+// TLL Task Scheduler - Cooperative multitasking for TLL (P0-15.13)
+// Reactor pattern: single-threaded, cooperative, event-driven.
+
+// === Channel ===
+fn createChannel() -> map {
+    return { items: [], capacity: 0, closed: false }
+}
+
+fn sendChannel(ch: map, value) -> bool {
+    if ch.closed { return false }
+    arrays.push(ch.items, value)
+    return true
+}
+
+fn recvChannel(ch: map) {
+    if arrays.length(ch.items) == 0 { return null }
+    let val = arrays.get(ch.items, 0)
+    let newItems: list = []
+    let i = 1
+    while i < arrays.length(ch.items) {
+        arrays.push(newItems, arrays.get(ch.items, i))
+        i = i + 1
+    }
+    ch.items = newItems
+    return val
+}
+
+fn tryRecvChannel(ch: map) -> map {
+    if arrays.length(ch.items) == 0 {
+        return { ok: false, value: null }
+    }
+    return { ok: true, value: recvChannel(ch) }
+}
+
+fn lenChannel(ch: map) -> int {
+    return arrays.length(ch.items)
+}
+
+fn closeChannel(ch: map) -> void {
+    ch.closed = true
+}
+
+// === Task ===
+fn createTask(id: string, taskFn) -> map {
+    return { id: id, callback: taskFn, state: "pending", result: null, iterations: 0 }
+}
+
+// === Scheduler ===
+fn createScheduler() -> map {
+    return { tasks: [], currentIndex: 0, running: false, tickCount: 0 }
+}
+
+fn spawnTask(sched: map, id: string, taskFn) -> void {
+    arrays.push(sched.tasks, createTask(id, taskFn))
+}
+
+fn tickScheduler(sched: map) -> bool {
+    sched.tickCount = sched.tickCount + 1
+    let anyRunning = false
+    let i = 0
+    while i < arrays.length(sched.tasks) {
+        let task = arrays.get(sched.tasks, i)
+        if task.state == "pending" || task.state == "running" {
+            task.state = "running"
+            task.iterations = task.iterations + 1
+            let ctx = { taskId: task.id, tick: sched.tickCount, scheduler: sched }
+            task.result = task.callback(ctx)
+            task.state = "done"
+            anyRunning = true
+        }
+        i = i + 1
+    }
+    return anyRunning
+}
+
+fn runScheduler(sched: map, maxTicks: int) -> void {
+    sched.running = true
+    let tick = 0
+    while tick < maxTicks && sched.running {
+        if !tickScheduler(sched) { break }
+        tick = tick + 1
+    }
+    sched.running = false
+}
+
+fn stopScheduler(sched: map) -> void {
+    sched.running = false
+}
+
+// === Event-driven Scheduler (with select) ===
+fn createEventScheduler() -> map {
+    return { tasks: [], ioTasks: [], timerTasks: [], running: false, tickCount: 0 }
+}
+
+fn onIOEvent(sched: map, fd: int, taskId: string, onDataFn, onCloseFn) -> void {
+    arrays.push(sched.ioTasks, { fd: fd, taskId: taskId, onData: onDataFn, onClose: onCloseFn, ioType: "client" })
+}
+
+fn onServerEvent(sched: map, fd: int, taskId: string, onAcceptFn) -> void {
+    arrays.push(sched.ioTasks, { fd: fd, taskId: taskId, onAccept: onAcceptFn, ioType: "server" })
+}
+
+fn onTimerEvent(sched: map, intervalMs: int, taskId: string, timerFn) -> void {
+    arrays.push(sched.timerTasks, { intervalMs: intervalMs, lastRun: 0, taskId: taskId, callback: timerFn })
+}
+
+fn tickEventScheduler(sched: map, timeoutMs: int) -> bool {
+    sched.tickCount = sched.tickCount + 1
+    let now = time.nowMs()
+    let anyActivity = false
+
+    // 1. Check timers
+    let ti = 0
+    while ti < arrays.length(sched.timerTasks) {
+        let timer = arrays.get(sched.timerTasks, ti)
+        if now - timer.lastRun >= timer.intervalMs {
+            timer.lastRun = now
+            timer.callback({ taskId: timer.taskId, tick: sched.tickCount, now: now })
+            anyActivity = true
+        }
+        ti = ti + 1
+    }
+
+    // 2. Build fd list and select
+    if arrays.length(sched.ioTasks) > 0 {
+        let fdList: list = []
+        let fi = 0
+        while fi < arrays.length(sched.ioTasks) {
+            arrays.push(fdList, arrays.get(sched.ioTasks, fi).fd)
+            fi = fi + 1
+        }
+        let readyFds = tcp.select(fdList, timeoutMs)
+
+        // 3. Dispatch ready fds
+        let ri = 0
+        while ri < arrays.length(readyFds) {
+            let readyFd = arrays.get(readyFds, ri)
+            let fi2 = 0
+            while fi2 < arrays.length(sched.ioTasks) {
+                let ioTask = arrays.get(sched.ioTasks, fi2)
+                if ioTask.fd == readyFd {
+                    if ioTask.ioType == "server" {
+                        // Server fd: accept new connection
+                        let newFd = tcp.accept(readyFd)
+                        if newFd >= 0 {
+                            tcp.setTimeout(newFd, 100)
+                            ioTask.onAccept({ taskId: ioTask.taskId, fd: newFd, serverFd: readyFd })
+                            anyActivity = true
+                        }
+                    } else {
+                        // Client fd: recv data
+                        let data = tcp.recv(readyFd, 65536)
+                        if strings.length(data) > 0 {
+                            ioTask.onData({ taskId: ioTask.taskId, fd: readyFd, data: data })
+                            anyActivity = true
+                        } else {
+                            if ioTask.onClose != null {
+                                ioTask.onClose({ taskId: ioTask.taskId, fd: readyFd })
+                            }
+                            tcp.close(readyFd)
+                            let newIoTasks: list = []
+                            let ri2 = 0
+                            while ri2 < arrays.length(sched.ioTasks) {
+                                if arrays.get(sched.ioTasks, ri2).fd != readyFd {
+                                    arrays.push(newIoTasks, arrays.get(sched.ioTasks, ri2))
+                                }
+                                ri2 = ri2 + 1
+                            }
+                            sched.ioTasks = newIoTasks
+                        }
+                    }
+                }
+                fi2 = fi2 + 1
+            }
+            ri = ri + 1
+        }
+    }
+
+    return anyActivity
+}
+
+fn runEventScheduler(sched: map, maxTicks: int, timeoutMs: int) -> void {
+    sched.running = true
+    let tick = 0
+    while tick < maxTicks && sched.running {
+        tickEventScheduler(sched, timeoutMs)
+        tick = tick + 1
+    }
+    sched.running = false
+}
+
+fn stopEventScheduler(sched: map) -> void {
+    sched.running = false
+}
