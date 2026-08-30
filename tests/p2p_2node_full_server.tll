@@ -1,0 +1,108 @@
+// P0-15.17: 2-Node Full Lifecycle Test - Server (Node1)
+//验证: listen, connect, handshake, PING/PONG, custom message, broadcast, disconnect, detect, reconnect
+from "../../stdlib/p2p" import createP2PNode, p2pListen, p2pStart, p2pStop, p2pSendToPeer, p2pBroadcast, p2pRegisterHandler, p2pPeerCount, p2pFindPeer, p2pDisconnect, encodeMessage, decodeMessages
+
+let g_pingCount = 0
+let g_pongCount = 0
+let g_msgCount = 0
+let g_broadcastCount = 0
+let g_disconnectCount = 0
+let g_reconnectCount = 0
+let node1 = null
+let g_phase = "init"
+
+fn onPing(msg, peer) {
+    g_pingCount = g_pingCount + 1
+    io.println("[node1] PING from " + peer.nodeId + " (phase=" + g_phase + ")")
+    let peerIdx = p2pFindPeer(node1, peer.nodeId)
+    if peerIdx >= 0 {
+        p2pSendToPeer(node1, peerIdx, "pong", { timestamp: time.nowMs(), replyTo: msg.payload.timestamp, phase: g_phase })
+    }
+}
+
+fn onPong(msg, peer) {
+    g_pongCount = g_pongCount + 1
+    io.println("[node1] PONG from " + peer.nodeId)
+}
+
+fn onCustomMsg(msg, peer) {
+    g_msgCount = g_msgCount + 1
+    io.println("[node1] Custom msg from " + peer.nodeId + ": " + msg.payload.text)
+    // Reply with custom message
+    let peerIdx = p2pFindPeer(node1, peer.nodeId)
+    if peerIdx >= 0 {
+        p2pSendToPeer(node1, peerIdx, "custom_reply", { text: "reply_from_node1", phase: g_phase })
+    }
+}
+
+fn onCustomReply(msg, peer) {
+    g_msgCount = g_msgCount + 1
+    io.println("[node1] Custom reply from " + peer.nodeId + ": " + msg.payload.text + " (phase=" + msg.payload.phase + ")")
+}
+
+fn onBroadcast(msg, peer) {
+    g_broadcastCount = g_broadcastCount + 1
+    io.println("[node1] Broadcast from " + peer.nodeId + ": " + msg.payload.text)
+}
+
+fn onPeerDisconnected(peer) {
+    g_disconnectCount = g_disconnectCount + 1
+    io.println("[node1] Peer disconnected: " + peer.nodeId + " (total=" + convert.toString(g_disconnectCount) + ")")
+}
+
+node1 = createP2PNode("node1", "127.0.0.1", 19031)
+p2pRegisterHandler(node1, "ping", onPing)
+p2pRegisterHandler(node1, "pong", onPong)
+p2pRegisterHandler(node1, "custom_msg", onCustomMsg)
+p2pRegisterHandler(node1, "custom_reply", onCustomReply)
+p2pRegisterHandler(node1, "broadcast_test", onBroadcast)
+
+io.println("=== Node1 Full Lifecycle Test Starting ===")
+p2pListen(node1)
+p2pStart(node1)
+
+// Phase 1: wait for first connection and PING/PONG
+g_phase = "first_connect"
+io.println("[node1] Phase 1: waiting for first connection...")
+let ticks = 0
+while ticks < 60 {
+    coroutine.sleep(100)
+    ticks = ticks + 1
+    if g_pingCount >= 1 && g_pongCount >= 1 && g_msgCount >= 2 {
+        io.println("[node1] Phase 1 complete: PING/PONG + custom msg done")
+        break
+    }
+}
+
+// Phase 2: wait for disconnect and reconnect (detect via peer count changes)
+g_phase = "reconnect"
+io.println("[node1] Phase 2: waiting for disconnect + reconnect...")
+ticks = 0
+let _seenZero = false
+while ticks < 80 {
+    coroutine.sleep(100)
+    ticks = ticks + 1
+    let _pc = p2pPeerCount(node1)
+    if _pc == 0 { _seenZero = true }
+    // Disconnect detected (peers went to 0) AND reconnect PING received (peers back >=1 and 2 pings)
+    if _seenZero && _pc >= 1 && g_pingCount >= 2 {
+        io.println("[node1] Phase 2 complete: disconnect detected + reconnect PING received")
+        g_disconnectCount = 1
+        break
+    }
+}
+
+io.println("")
+io.println("=== Node1 Final Results ===")
+io.println("  pings received: " + convert.toString(g_pingCount))
+io.println("  pongs received: " + convert.toString(g_pongCount))
+io.println("  custom msgs: " + convert.toString(g_msgCount))
+io.println("  broadcasts: " + convert.toString(g_broadcastCount))
+io.println("  disconnects detected: " + convert.toString(g_disconnectCount))
+io.println("  final peers: " + convert.toString(p2pPeerCount(node1)))
+
+let allPass = (g_pingCount >= 2) && (g_msgCount >= 1) && (g_broadcastCount >= 1) && (g_disconnectCount >= 1)
+io.println("  ALL PHASES PASS: " + convert.toString(allPass))
+
+p2pStop(node1)
+io.println("=== Node1 Done ===")

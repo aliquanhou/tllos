@@ -1,0 +1,113 @@
+// P0-15.17: 2-Node Full Lifecycle Test - Client (Node2)
+//验证: connect, handshake, PING/PONG, custom message, broadcast, disconnect, reconnect
+from "../../stdlib/p2p" import createP2PNode, p2pConnect, p2pStart, p2pStop, p2pSendToPeer, p2pBroadcast, p2pRegisterHandler, p2pPeerCount, p2pFindPeer, p2pDisconnect, encodeMessage, decodeMessages
+
+let g_pongCount = 0
+let g_customReplyCount = 0
+let g_broadcastCount = 0
+
+fn onPong(msg, peer) {
+    g_pongCount = g_pongCount + 1
+    io.println("[node2] PONG from " + peer.nodeId + " (phase=" + msg.payload.phase + ")")
+}
+
+fn onCustomReply(msg, peer) {
+    g_customReplyCount = g_customReplyCount + 1
+    io.println("[node2] Custom reply from " + peer.nodeId + ": " + msg.payload.text + " (phase=" + msg.payload.phase + ")")
+}
+
+fn onBroadcast(msg, peer) {
+    g_broadcastCount = g_broadcastCount + 1
+    io.println("[node2] Broadcast from " + peer.nodeId + ": " + msg.payload.text)
+}
+
+fn onPing(msg, peer) {
+    io.println("[node2] PING from " + peer.nodeId)
+}
+
+let node2 = createP2PNode("node2", "127.0.0.1", 19032)
+p2pRegisterHandler(node2, "ping", onPing)
+p2pRegisterHandler(node2, "pong", onPong)
+p2pRegisterHandler(node2, "custom_reply", onCustomReply)
+p2pRegisterHandler(node2, "broadcast_test", onBroadcast)
+
+io.println("=== Node2 Full Lifecycle Test Starting ===")
+
+// Phase 1: First connection
+io.println("[node2] Phase 1: Connecting to node1...")
+let ok = p2pConnect(node2, "127.0.0.1", 19031)
+io.println("[node2] Connect result: " + convert.toString(ok))
+if !ok {
+    io.println("[node2] FAILED to connect")
+    return
+}
+p2pStart(node2)
+io.println("[node2] Connected, peers=" + convert.toString(p2pPeerCount(node2)))
+
+// Send PING
+io.println("[node2] Sending PING...")
+p2pSendToPeer(node2, 0, "ping", { timestamp: time.nowMs() })
+
+// Wait for PONG
+let ticks = 0
+while ticks < 30 && g_pongCount < 1 {
+    coroutine.sleep(100)
+    ticks = ticks + 1
+}
+io.println("[node2] PONG received: " + convert.toString(g_pongCount >= 1))
+
+// Send custom message
+io.println("[node2] Sending custom message...")
+p2pSendToPeer(node2, 0, "custom_msg", { text: "hello_from_node2", seq: 1 })
+
+// Wait for custom reply
+ticks = 0
+while ticks < 30 && g_customReplyCount < 1 {
+    coroutine.sleep(100)
+    ticks = ticks + 1
+}
+io.println("[node2] Custom reply received: " + convert.toString(g_customReplyCount >= 1))
+
+// Send broadcast
+io.println("[node2] Sending broadcast...")
+p2pBroadcast(node2, "broadcast_test", { text: "broadcast_from_node2" })
+coroutine.sleep(500)
+
+// Phase 2: Disconnect
+io.println("[node2] Phase 2: Disconnecting...")
+p2pDisconnect(node2, 0)
+io.println("[node2] Disconnected, peers=" + convert.toString(p2pPeerCount(node2)))
+coroutine.sleep(1000)
+
+// Phase 3: Reconnect
+io.println("[node2] Phase 3: Reconnecting...")
+let ok2 = p2pConnect(node2, "127.0.0.1", 19031)
+io.println("[node2] Reconnect result: " + convert.toString(ok2))
+if ok2 {
+    io.println("[node2] Reconnected, peers=" + convert.toString(p2pPeerCount(node2)))
+    
+    // Send PING again after reconnect
+    io.println("[node2] Sending PING after reconnect...")
+    p2pSendToPeer(node2, 0, "ping", { timestamp: time.nowMs() })
+    
+    // Wait for PONG
+    ticks = 0
+    while ticks < 30 && g_pongCount < 2 {
+        coroutine.sleep(100)
+        ticks = ticks + 1
+    }
+    io.println("[node2] PONG after reconnect received: " + convert.toString(g_pongCount >= 2))
+}
+
+io.println("")
+io.println("=== Node2 Final Results ===")
+io.println("  pongs received: " + convert.toString(g_pongCount))
+io.println("  custom replies: " + convert.toString(g_customReplyCount))
+io.println("  broadcasts received: " + convert.toString(g_broadcastCount))
+io.println("  final peers: " + convert.toString(p2pPeerCount(node2)))
+
+let allPass = (g_pongCount >= 2) && (g_customReplyCount >= 1)
+io.println("  ALL PHASES PASS: " + convert.toString(allPass))
+
+p2pStop(node2)
+io.println("=== Node2 Done ===")
