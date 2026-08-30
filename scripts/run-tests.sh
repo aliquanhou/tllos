@@ -11,7 +11,21 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TLLVM_EXE="$REPO_ROOT/host/c/tllvm"
 TMPFILE="$REPO_ROOT/.test_out.txt"
 
+# Detect timeout command (Linux: timeout, macOS: gtimeout from coreutils)
+# If neither exists, run without timeout protection.
+TIMEOUT_CMD=""
+if command -v timeout >/dev/null 2>&1; then
+    TIMEOUT_CMD="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+    TIMEOUT_CMD="gtimeout"
+fi
+
 echo "=== TLL OS Run Tests (Linux/macOS) ==="
+if [ -n "$TIMEOUT_CMD" ]; then
+    echo "Using $TIMEOUT_CMD for test timeout (10s)"
+else
+    echo "WARNING: no timeout command found, running without timeout protection"
+fi
 echo ""
 
 # Ensure tllvm exists
@@ -34,9 +48,13 @@ run_test() {
     if [[ "$basename" == exit* ]]; then
         expected="${basename#exit}"
     fi
-    # Run test with timeout (prevents infinite loops from hanging CI)
+    # Run test with optional timeout (prevents infinite loops from hanging CI)
     set +e
-    timeout 10 "$TLLVM_EXE" "$tllbc" >"$TMPFILE" 2>&1
+    if [ -n "$TIMEOUT_CMD" ]; then
+        $TIMEOUT_CMD 10 "$TLLVM_EXE" "$tllbc" >"$TMPFILE" 2>&1
+    else
+        "$TLLVM_EXE" "$tllbc" >"$TMPFILE" 2>&1
+    fi
     local actual=$?
     set -e
     # timeout exit code 124 means test timed out
