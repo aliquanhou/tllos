@@ -1,0 +1,57 @@
+// P0-15.17: 4-Node test - Leader (Node1)
+// Star topology: node1 listens, node2/3/4 connect to node1
+from "../../stdlib/p2p" import createP2PNode, p2pListen, p2pStart, p2pStop, p2pSendToPeer, p2pBroadcast, p2pRegisterHandler, p2pPeerCount
+
+let g_msgCount = 0
+let g_connected = 0
+let leader = null
+
+fn onHello(msg, peer) {
+    g_msgCount = g_msgCount + 1
+    io.println("[leader] Received HELLO from " + peer.nodeId + " msg=" + convert.toString(msg.payload.seq))
+}
+
+fn onAck(msg, peer) {
+    g_msgCount = g_msgCount + 1
+    io.println("[leader] Received ACK from " + peer.nodeId)
+}
+
+leader = createP2PNode("node1", "127.0.0.1", 19031)
+p2pRegisterHandler(leader, "hello", onHello)
+p2pRegisterHandler(leader, "ack", onAck)
+
+io.println("=== Leader Node1 Starting ===")
+p2pListen(leader)
+p2pStart(leader)
+io.println("[leader] Listening on 19031, waiting for 3 peers...")
+
+// Wait for all 3 peers to connect
+let waitTicks = 0
+while waitTicks < 100 {
+    coroutine.sleep(100)
+    waitTicks = waitTicks + 1
+    let pc = p2pPeerCount(leader)
+    if pc >= 3 {
+        io.println("[leader] All 3 peers connected! peers=" + convert.toString(pc))
+        break
+    }
+}
+
+// Broadcast a message to all peers
+io.println("[leader] Broadcasting ANNOUNCE to all peers...")
+p2pBroadcast(leader, "announce", { src: "node1", seq: 1, text: "hello-from-leader" })
+
+// Wait for ACKs from all peers
+let ackTicks = 0
+while ackTicks < 80 {
+    coroutine.sleep(100)
+    ackTicks = ackTicks + 1
+    if g_msgCount >= 6 { // 3 HELLO + 3 ACK
+        io.println("[leader] Got all messages, stopping early")
+        break
+    }
+}
+
+io.println("[leader] Final: peers=" + convert.toString(p2pPeerCount(leader)) + " messages=" + convert.toString(g_msgCount))
+p2pStop(leader)
+io.println("=== Leader Done ===")

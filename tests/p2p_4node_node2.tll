@@ -1,0 +1,48 @@
+// P0-15.17: 4-Node test - Peer Node2
+from "../../stdlib/p2p" import createP2PNode, p2pConnect, p2pStart, p2pStop, p2pSendToPeer, p2pBroadcast, p2pRegisterHandler, p2pPeerCount
+
+let g_announceCount = 0
+let peer = null
+
+fn onAnnounce(msg, peerRef) {
+    g_announceCount = g_announceCount + 1
+    io.println("[node2] Received ANNOUNCE from " + peerRef.nodeId + " seq=" + convert.toString(msg.payload.seq) + " text=" + msg.payload.text)
+    // Reply with ACK
+    p2pSendToPeer(peer, 0, "ack", { src: "node2", seq: msg.payload.seq })
+    io.println("[node2] Sent ACK reply")
+}
+
+peer = createP2PNode("node2", "127.0.0.1", 19032)
+p2pRegisterHandler(peer, "announce", onAnnounce)
+
+io.println("=== Node2 Starting ===")
+io.println("[node2] Connecting to leader...")
+let ok = p2pConnect(peer, "127.0.0.1", 19031)
+io.println("[node2] Connect result: " + convert.toString(ok))
+if !ok {
+    io.println("[node2] FAILED to connect")
+    return
+}
+
+p2pStart(peer)
+io.println("[node2] Started, peers=" + convert.toString(p2pPeerCount(peer)))
+
+// Send HELLO to leader
+io.println("[node2] Sending HELLO to leader...")
+p2pSendToPeer(peer, 0, "hello", { src: "node2", seq: 1 })
+
+// Wait for ANNOUNCE
+let waitTicks = 0
+while waitTicks < 100 {
+    coroutine.sleep(100)
+    waitTicks = waitTicks + 1
+    if g_announceCount > 0 {
+        io.println("[node2] Got ANNOUNCE, waiting a bit for ACK to send...")
+        coroutine.sleep(500)
+        break
+    }
+}
+
+io.println("[node2] Final: announces=" + convert.toString(g_announceCount) + " peers=" + convert.toString(p2pPeerCount(peer)))
+p2pStop(peer)
+io.println("=== Node2 Done ===")
