@@ -1,4 +1,4 @@
-/* TLL Builtin functions - Host ABI + stdlib implementation for bootstrap VM.
+﻿/* TLL Builtin functions - Host ABI + stdlib implementation for bootstrap VM.
  * Note: In the final architecture, json/math/strings/arrays/convert should be
  * implemented in TLL stdlib. This C implementation is for bootstrap only.
  */
@@ -180,11 +180,20 @@ int WINAPI MultiByteToWideChar(UINT, DWORD, LPCCH, int, LPWSTR, int);
 #define CHDIR _chdir
 #define GETCWD _getcwd
 #else
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <sys/time.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <alloca.h>
+typedef int SOCKET;
+#define INVALID_SOCKET (-1)
+#define closesocket(s) close(s)
 #define CHDIR chdir
 #define GETCWD getcwd
 #endif
@@ -202,6 +211,7 @@ static char *str_sub(const char *s, int start, int end) {
 
 /* === Builtin dispatch === */
 
+#ifdef _WIN32
 /* HTTP task processor - called by worker threads from the pool.
    VM invocation is protected by g_vm_lock. */
 static void http_process_task(HttpTask *data) {
@@ -371,6 +381,7 @@ static void http_process_task(HttpTask *data) {
     send(client_fd, resp_buf, resp_len, 0);
     closesocket(client_fd);
 }
+#endif /* _WIN32 */
 
 TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
     (void)vm;
@@ -1129,6 +1140,7 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
             WinHttpCloseHandle(hRequest); WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession);
             return result;
         }
+#ifdef _WIN32
         if (idx == 94) { /* http.serve(addr, handler) - basic HTTP server (P0-4 dogfood) */
             const char *addr = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "0.0.0.0:8080";
             if (argCount < 2 || (args[1].type != TLL_FUNCTION && args[1].type != TLL_MAP)) {
@@ -1196,11 +1208,17 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
                 enqueue_task(task);
             }
             closesocket(server_fd);
-#ifdef _WIN32
             WSACleanup();
-#endif
             return tll_null();
         }
+#endif /* _WIN32 */
+#ifndef _WIN32
+        if (idx == 94) { /* http.serve - not supported on Linux/macOS */
+            fprintf(stderr, "tllvm: http.serve is not supported on this platform
+");
+            return tll_null();
+        }
+#endif
         if (idx == 95) { /* http.encodeURI */
             const char *s = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
             char *out = (char*)malloc(strlen(s) * 3 + 1);

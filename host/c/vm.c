@@ -1,9 +1,9 @@
-/* TLL Bootstrap VM - executes bytecode opcodes.
+﻿/* TLL Bootstrap VM - executes bytecode opcodes.
  * This is the Host/Bootstrap layer. Language semantics live in runtime/vm.tll.
  */
 #include "tllvm.h"
-#include <malloc.h>  /* MSVC alloca */
 #ifdef _WIN32
+#include <malloc.h>  /* MSVC alloca */
 /* winsock2.h not available in TCC; manual declarations below */
 #include <windows.h>   /* FILETIME, ULARGE_INTEGER, Sleep, DWORD for unified scheduler timer */
 /* Minimal Winsock select declarations (TCC lacks winsock2.h) */
@@ -19,6 +19,21 @@ static int fd_isset(SOCKET fd, fd_set *s) { int _i=0; while(_i<s->fd_count){if(s
 struct timeval { long tv_sec; long tv_usec; };
 #endif
 int PASCAL select(int, fd_set*, fd_set*, fd_set*, const struct timeval*);
+#else
+/* POSIX (Linux/macOS) headers */
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <sys/time.h>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <alloca.h>
+typedef int SOCKET;
+#define INVALID_SOCKET (-1)
+#define closesocket(s) close(s)
 #endif
 
 /* === Frame Pool (P0-10.1) ===

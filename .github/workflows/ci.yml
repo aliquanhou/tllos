@@ -27,7 +27,7 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           cd host/c
-          gcc -O2 -std=c99 -o tllvm main.c vm.c value.c json.c builtin.c -lm
+          gcc -O2 -std=c99 -D_POSIX_C_SOURCE=200809L -o tllvm main.c vm.c value.c json.c builtin.c -lm
           ./tllvm --version 2>/dev/null || true
 
       - name: Setup MSVC (Windows)
