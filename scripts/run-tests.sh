@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+﻿#!/usr/bin/env bash
 # ============================================================
 # TLL OS - Run All Tests (Linux/macOS)
 # Supports stdout comparison via .expected.txt files.
