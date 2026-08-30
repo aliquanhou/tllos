@@ -16,12 +16,14 @@
 #endif
 
 #ifdef _WIN32
-/* #include <winsock2.h> removed: TCC lacks it; manual declarations below */
+#ifdef _MSC_VER
+/* MSVC: use system headers */
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
-/* #include <winhttp.h> removed: TCC lacks it; manual declarations below */
-/* _WINHTTP_H_ defined in manual declarations block below */
-/* _WINSOCK2_H_ defined in manual declarations block below */
 #include <direct.h>
+#else
+/* TCC: winsock2.h/winhttp.h not available, manual declarations below */
 
 /* Global VM lock for concurrent HTTP requests - protects VM state during handler invocation */
 static CRITICAL_SECTION g_vm_lock;
@@ -179,6 +181,7 @@ int PASCAL select(int, fd_set*, fd_set*, fd_set*, const struct timeval*);
 int WINAPI MultiByteToWideChar(UINT, DWORD, LPCCH, int, LPWSTR, int);
 #define CHDIR _chdir
 #define GETCWD _getcwd
+#endif /* _MSC_VER */
 #else
 #include <stdlib.h>
 #include <string.h>
