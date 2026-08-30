@@ -1214,8 +1214,7 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
 #endif /* _WIN32 */
 #ifndef _WIN32
         if (idx == 94) { /* http.serve - not supported on Linux/macOS */
-            fprintf(stderr, "tllvm: http.serve is not supported on this platform
-");
+            fprintf(stderr, "tllvm: http.serve is not supported on this platform\n");
             return tll_null();
         }
 #endif
