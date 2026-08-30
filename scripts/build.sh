@@ -29,7 +29,7 @@ echo "Using compiler: $CC"
 # Step 2: Build tllvm
 echo "[2/3] Building tllvm..."
 cd "$HOST_C"
-$CC -O2 -std=c99 -D_WIN32=0 -o tllvm main.c vm.c value.c json.c builtin.c -lm
+$CC -O2 -std=c99 -o tllvm main.c vm.c value.c json.c builtin.c -lm
 
 # Step 3: Verify
 echo "[3/3] Verifying build..."
