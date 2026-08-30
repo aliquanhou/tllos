@@ -30,6 +30,10 @@ jobs:
           gcc -O2 -std=c99 -o tllvm main.c vm.c value.c json.c builtin.c -lm
           ./tllvm --version 2>/dev/null || true
 
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Build Native Launcher (Windows)
         if: runner.os == 'Windows'
         shell: cmd
