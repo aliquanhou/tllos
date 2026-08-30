@@ -23,8 +23,6 @@ typedef struct {
     TLLValue handler_fn;
 } HttpTask;
 static void http_process_task(HttpTask *task);
-static CRITICAL_SECTION g_vm_lock;
-static int g_vm_lock_initialized = 0;
 #ifdef _MSC_VER
 /* MSVC: use system headers */
 #include <winsock2.h>
@@ -37,70 +35,6 @@ static int g_vm_lock_initialized = 0;
 
 /* Global VM lock for concurrent HTTP requests - protects VM state during handler invocation */
 
-/* === Worker Pool === */
-/* Fixed pool of worker threads + thread-safe task queue.
-   Replaces thread-per-connection to avoid OS thread explosion at high connection counts. */
-#define WORKER_POOL_SIZE 8
-
-
-typedef struct TaskNode {
-    HttpTask *task;
-    struct TaskNode *next;
-} TaskNode;
-
-static TaskNode *g_task_head = NULL;
-static TaskNode *g_task_tail = NULL;
-static CRITICAL_SECTION g_queue_lock;
-static HANDLE g_task_sem = NULL;
-static int g_pool_initialized = 0;
-
-/* Forward declarations */
-static DWORD WINAPI worker_thread(LPVOID param);
-
-static void init_worker_pool(void) {
-    InitializeCriticalSection(&g_queue_lock);
-    g_task_sem = CreateSemaphore(NULL, 0, 1000000, NULL);
-    for (int i = 0; i < WORKER_POOL_SIZE; i++) {
-        CreateThread(NULL, 0, worker_thread, NULL, 0, NULL);
-    }
-    g_pool_initialized = 1;
-    fprintf(stderr, "tllvm: worker pool initialized with %d threads\n", WORKER_POOL_SIZE);
-}
-
-static void enqueue_task(HttpTask *task) {
-    TaskNode *node = (TaskNode*)malloc(sizeof(TaskNode));
-    node->task = task;
-    node->next = NULL;
-    EnterCriticalSection(&g_queue_lock);
-    if (g_task_tail) {
-        g_task_tail->next = node;
-    } else {
-        g_task_head = node;
-    }
-    g_task_tail = node;
-    LeaveCriticalSection(&g_queue_lock);
-    ReleaseSemaphore(g_task_sem, 1, NULL);
-}
-
-static DWORD WINAPI worker_thread(LPVOID param) {
-    (void)param;
-    while (1) {
-        WaitForSingleObject(g_task_sem, INFINITE);
-        EnterCriticalSection(&g_queue_lock);
-        TaskNode *node = g_task_head;
-        if (node) {
-            g_task_head = node->next;
-            if (!g_task_head) g_task_tail = NULL;
-        }
-        LeaveCriticalSection(&g_queue_lock);
-        if (node) {
-            http_process_task(node->task);
-            free(node->task);
-            free(node);
-        }
-    }
-    return 0;
-}
 /* Minimal WinHTTP declarations (TCC lacks winhttp.h) */
 #ifndef _WINHTTP_H_
 #define _WINHTTP_H_
@@ -184,6 +118,75 @@ int WINAPI MultiByteToWideChar(UINT, DWORD, LPCCH, int, LPWSTR, int);
 #define CHDIR _chdir
 #define GETCWD _getcwd
 #endif /* _MSC_VER */
+
+/* Global VM lock */
+static CRITICAL_SECTION g_vm_lock;
+static int g_vm_lock_initialized = 0;
+
+/* === Worker Pool === */
+/* Fixed pool of worker threads + thread-safe task queue.
+   Replaces thread-per-connection to avoid OS thread explosion at high connection counts. */
+#define WORKER_POOL_SIZE 8
+
+
+typedef struct TaskNode {
+    HttpTask *task;
+    struct TaskNode *next;
+} TaskNode;
+
+static TaskNode *g_task_head = NULL;
+static TaskNode *g_task_tail = NULL;
+static CRITICAL_SECTION g_queue_lock;
+static HANDLE g_task_sem = NULL;
+static int g_pool_initialized = 0;
+
+/* Forward declarations */
+static DWORD WINAPI worker_thread(LPVOID param);
+
+static void init_worker_pool(void) {
+    InitializeCriticalSection(&g_queue_lock);
+    g_task_sem = CreateSemaphore(NULL, 0, 1000000, NULL);
+    for (int i = 0; i < WORKER_POOL_SIZE; i++) {
+        CreateThread(NULL, 0, worker_thread, NULL, 0, NULL);
+    }
+    g_pool_initialized = 1;
+    fprintf(stderr, "tllvm: worker pool initialized with %d threads\n", WORKER_POOL_SIZE);
+}
+
+static void enqueue_task(HttpTask *task) {
+    TaskNode *node = (TaskNode*)malloc(sizeof(TaskNode));
+    node->task = task;
+    node->next = NULL;
+    EnterCriticalSection(&g_queue_lock);
+    if (g_task_tail) {
+        g_task_tail->next = node;
+    } else {
+        g_task_head = node;
+    }
+    g_task_tail = node;
+    LeaveCriticalSection(&g_queue_lock);
+    ReleaseSemaphore(g_task_sem, 1, NULL);
+}
+
+static DWORD WINAPI worker_thread(LPVOID param) {
+    (void)param;
+    while (1) {
+        WaitForSingleObject(g_task_sem, INFINITE);
+        EnterCriticalSection(&g_queue_lock);
+        TaskNode *node = g_task_head;
+        if (node) {
+            g_task_head = node->next;
+            if (!g_task_head) g_task_tail = NULL;
+        }
+        LeaveCriticalSection(&g_queue_lock);
+        if (node) {
+            http_process_task(node->task);
+            free(node->task);
+            free(node);
+        }
+    }
+    return 0;
+}
 #else
 #include <stdlib.h>
 #include <string.h>
