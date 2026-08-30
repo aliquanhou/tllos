@@ -1,0 +1,45 @@
+// P0-15.17: 2-Node async test - Server (Node1)
+from "../../stdlib/p2p" import createP2PNode, p2pListen, p2pStart, p2pStop, p2pSendToPeer, p2pBroadcast, p2pRegisterHandler, p2pPeerCount, p2pFindPeer, p2pDisconnect, encodeMessage, decodeMessages
+
+let g_pingCount = 0
+let g_pongCount = 0
+let node1 = null
+
+fn onPing(msg, peer) {
+    g_pingCount = g_pingCount + 1
+    io.println("[node1] Received PING from " + peer.nodeId)
+    let peerIdx = p2pFindPeer(node1, peer.nodeId)
+    if peerIdx >= 0 {
+        p2pSendToPeer(node1, peerIdx, "pong", { timestamp: time.nowMs(), replyTo: msg.payload.timestamp })
+        io.println("[node1] Sent PONG reply")
+    }
+}
+
+fn onPong(msg, peer) {
+    g_pongCount = g_pongCount + 1
+    io.println("[node1] Received PONG from " + peer.nodeId)
+}
+
+node1 = createP2PNode("node1", "127.0.0.1", 19021)
+p2pRegisterHandler(node1, "ping", onPing)
+p2pRegisterHandler(node1, "pong", onPong)
+
+io.println("=== Node1 Starting ===")
+p2pListen(node1)
+p2pStart(node1)
+io.println("[node1] Waiting for connections...")
+
+// Wait for connection and messages
+let waitTicks = 0
+while waitTicks < 80 {
+    coroutine.sleep(100)
+    waitTicks = waitTicks + 1
+    if g_pingCount > 0 && g_pongCount > 0 {
+        io.println("[node1] Got both PING and PONG, stopping early")
+        break
+    }
+}
+
+io.println("[node1] Results: pings=" + convert.toString(g_pingCount) + " pongs=" + convert.toString(g_pongCount) + " peers=" + convert.toString(p2pPeerCount(node1)))
+p2pStop(node1)
+io.println("=== Node1 Done ===")
