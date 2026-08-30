@@ -16,29 +16,32 @@
 #endif
 
 #ifdef _WIN32
+/* HttpTask type - shared by MSVC and TCC */
+typedef struct {
+    unsigned int client_fd;
+    TLLVM *vm;
+    TLLValue handler_fn;
+} HttpTask;
+static void http_process_task(HttpTask *task);
+static CRITICAL_SECTION g_vm_lock;
+static int g_vm_lock_initialized = 0;
 #ifdef _MSC_VER
 /* MSVC: use system headers */
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#include <winhttp.h>
 #include <direct.h>
 #else
 /* TCC: winsock2.h/winhttp.h not available, manual declarations below */
 
 /* Global VM lock for concurrent HTTP requests - protects VM state during handler invocation */
-static CRITICAL_SECTION g_vm_lock;
-static int g_vm_lock_initialized = 0;
 
 /* === Worker Pool === */
 /* Fixed pool of worker threads + thread-safe task queue.
    Replaces thread-per-connection to avoid OS thread explosion at high connection counts. */
 #define WORKER_POOL_SIZE 8
 
-typedef struct {
-    unsigned int client_fd;
-    TLLVM *vm;
-    TLLValue handler_fn;
-} HttpTask;
 
 typedef struct TaskNode {
     HttpTask *task;
@@ -52,7 +55,6 @@ static HANDLE g_task_sem = NULL;
 static int g_pool_initialized = 0;
 
 /* Forward declarations */
-static void http_process_task(HttpTask *task);
 static DWORD WINAPI worker_thread(LPVOID param);
 
 static void init_worker_pool(void) {
