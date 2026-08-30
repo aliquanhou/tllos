@@ -115,9 +115,9 @@ int PASCAL select(int, fd_set*, fd_set*, fd_set*, const struct timeval*);
 #define CP_UTF8 65001
 #endif
 int WINAPI MultiByteToWideChar(UINT, DWORD, LPCCH, int, LPWSTR, int);
+#endif /* _MSC_VER */
 #define CHDIR _chdir
 #define GETCWD _getcwd
-#endif /* _MSC_VER */
 
 /* Global VM lock */
 static CRITICAL_SECTION g_vm_lock;
