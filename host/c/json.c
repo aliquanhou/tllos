@@ -248,6 +248,7 @@ TLLProgram *tll_load_program(const char *filename) {
                     continue;
                 }
             }
+            tll_value_incref(v);
             prog->constants[i] = v;
         }
     }
