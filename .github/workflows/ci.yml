@@ -125,3 +125,54 @@ jobs:
           if errorlevel 1 exit /b 1
           host\c\tllvm.exe hello_e2e.tllbc
           if errorlevel 1 exit /b 1
+
+      - name: Blockchain unit test (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/blockchain_basic.tll -o tests/blockchain_basic.tllbc
+          host/c/tllvm tests/blockchain_basic.tllbc | grep -q "ALL TESTS PASSED"
+
+      - name: Blockchain unit test (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tests\blockchain_basic.tll -o tests\blockchain_basic.tllbc
+          if errorlevel 1 exit /b 1
+          host\c\tllvm.exe tests\blockchain_basic.tllbc
+          if errorlevel 1 exit /b 1
+
+      - name: P2P 2-Node test (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/p2p_2node_server.tll -o tests/p2p_2node_server.tllbc
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/p2p_2node_client.tll -o tests/p2p_2node_client.tllbc
+          host/c/tllvm tests/p2p_2node_server.tllbc > /tmp/p2p_server.log 2>&1 &
+          SERVER_PID=$!
+          sleep 2
+          host/c/tllvm tests/p2p_2node_client.tllbc > /tmp/p2p_client.log 2>&1
+          CLIENT_EXIT=$?
+          sleep 3
+          kill $SERVER_PID 2>/dev/null || true
+          cat /tmp/p2p_client.log
+          grep -q "Received PONG" /tmp/p2p_client.log
+
+      - name: P2P 4-Node test (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          for node in leader node2 node3 node4; do
+            host/c/tllvm tools/TLLC/tllc.tllbc compile tests/p2p_4node_${node}.tll -o tests/p2p_4node_${node}.tllbc
+          done
+          host/c/tllvm tests/p2p_4node_leader.tllbc > /tmp/p2p_leader.log 2>&1 &
+          sleep 1
+          host/c/tllvm tests/p2p_4node_node2.tllbc > /tmp/p2p_node2.log 2>&1 &
+          sleep 0.5
+          host/c/tllvm tests/p2p_4node_node3.tllbc > /tmp/p2p_node3.log 2>&1 &
+          sleep 0.5
+          host/c/tllvm tests/p2p_4node_node4.tllbc > /tmp/p2p_node4.log 2>&1 &
+          sleep 15
+          pkill -f "p2p_4node" 2>/dev/null || true
+          cat /tmp/p2p_leader.log
+          grep -q "All 3 peers connected" /tmp/p2p_leader.log
+          grep -q "Received ACK from node2" /tmp/p2p_leader.log
+          grep -q "Received ACK from node3" /tmp/p2p_leader.log
+          grep -q "Received ACK from node4" /tmp/p2p_leader.log

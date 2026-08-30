@@ -1,0 +1,44 @@
+// P0-15.17: Blockchain basic unit test
+// Tests: createTransaction, signTransaction, validateTransaction,
+//        createBlockchain, minePendingTransactions, isChainValid, getBalance
+from "../stdlib/blockchain" import createBlockchain, createTransaction, signTransaction, validateTransaction, minePendingTransactions, getLatestBlock, isChainValid, getBalance, addTransaction, transactionHash, blockHash
+
+io.println("=== Blockchain Basic Test ===")
+
+// Create blockchain with difficulty 1 (fast mining for test)
+let bc = createBlockchain(1, 100)
+io.println("Created blockchain, genesis height=" + convert.toString(getLatestBlock(bc).index))
+
+// Create and sign transactions
+let tx1 = createTransaction("addr1", "addr2", 50, 5, 1, time.nowMs(), "pubkey1")
+tx1 = signTransaction(tx1, "privkey1")
+io.println("tx1 hash=" + convert.toString(transactionHash(tx1)) + " valid=" + convert.toString(validateTransaction(tx1)))
+
+let tx2 = createTransaction("addr2", "addr3", 30, 3, 1, time.nowMs(), "pubkey2")
+tx2 = signTransaction(tx2, "privkey2")
+io.println("tx2 hash=" + convert.toString(transactionHash(tx2)) + " valid=" + convert.toString(validateTransaction(tx2)))
+
+// Add transactions to pending
+addTransaction(bc, tx1)
+addTransaction(bc, tx2)
+io.println("Added 2 transactions to pending")
+
+// Mine block
+let before = time.nowMs()
+let block = minePendingTransactions(bc, "miner-addr", time.nowMs())
+let elapsed = time.nowMs() - before
+io.println("Block mined: index=" + convert.toString(block.index) + " hash=" + convert.toString(blockHash(block)) + " txs=" + convert.toString(arrays.length(block.transactions)) + " time=" + convert.toString(elapsed) + "ms")
+
+// Check balances
+io.println("Balances: addr1=" + convert.toString(getBalance(bc, "addr1")) + " addr2=" + convert.toString(getBalance(bc, "addr2")) + " addr3=" + convert.toString(getBalance(bc, "addr3")) + " miner=" + convert.toString(getBalance(bc, "miner-addr")))
+
+// Verify chain
+let valid = isChainValid(bc)
+io.println("Chain valid: " + convert.toString(valid))
+io.println("Chain height: " + convert.toString(getLatestBlock(bc).index))
+
+if valid && getLatestBlock(bc).index == 1 {
+    io.println("ALL TESTS PASSED")
+} else {
+    io.println("TESTS FAILED")
+}
