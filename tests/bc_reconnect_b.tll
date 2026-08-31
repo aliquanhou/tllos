@@ -1,0 +1,39 @@
+// P0-15.17.2: Reconnect+AutoSync test - Node B (sync -> disconnect -> reconnect -> auto-sync)
+from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, reconnectToPeer, printNodeStatus, getNodeStatus
+from "../../stdlib/p2p" import p2pDisconnect, p2pStop, p2pListen, p2pStart
+
+let node = createBlockchainNode("nodeB", "127.0.0.1", 19502, 1, 50)
+startNode(node)
+
+// Phase 1: Initial connect and sync to 2 blocks
+io.println("=== Phase 1: Node B initial connect ===")
+connectToPeer(node, "127.0.0.1", 19501)
+io.println("=== Node B waiting 7s to sync blocks 1-2 ===")
+coroutine.sleep(7000)
+printNodeStatus(node)
+
+// Phase 2: Disconnect (real disconnect - stop p2p then restart)
+io.println("=== Phase 2: Node B disconnecting ===")
+p2pStop(node.p2p)
+coroutine.sleep(500)
+io.println("=== Node B disconnected, waiting 7s for Node A to mine blocks 3-4 ===")
+coroutine.sleep(7000)
+
+// Phase 3: Reconnect using reconnectToPeer (full loop: close old -> connect new -> auto-sync)
+io.println("=== Phase 3: Node B restarting p2p and reconnecting ===")
+p2pListen(node.p2p)
+p2pStart(node.p2p)
+coroutine.sleep(500)
+reconnectToPeer(node, "127.0.0.1", 19501)
+
+// Phase 4: Wait for auto-sync to complete
+io.println("=== Phase 4: Node B waiting 10s for auto-sync ===")
+coroutine.sleep(10000)
+
+printNodeStatus(node)
+let status = getNodeStatus(node)
+io.println("RESULT_NODE_B height=" + convert.toString(status.height) + " tip=" + status.tipHash + " valid=" + convert.toString(status.chainValid) + " peers=" + convert.toString(status.peerCount) + " disconnects=" + convert.toString(status.disconnectCount) + " forks=" + convert.toString(status.forkCount) + " invalid=" + convert.toString(status.invalidBlockCount))
+
+coroutine.sleep(500)
+stopNode(node)
+io.println("=== Node B Done ===")

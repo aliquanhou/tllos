@@ -1,0 +1,28 @@
+// P0-15.17.2: Reconnect+AutoSync test - Node A (continuous miner)
+from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, submitTransaction, mineBlockFromMempool, printNodeStatus, getNodeStatus
+from "../../stdlib/blockchain" import createTransaction, signTransaction
+
+let node = createBlockchainNode("nodeA", "127.0.0.1", 19501, 1, 50)
+startNode(node)
+
+io.println("=== Node A mining continuously (1 block per 3s) ===")
+let blockNum = 0
+while blockNum < 6 {
+    let amount = 100 + blockNum * 10
+    let tx = createTransaction("addrA", "addrB", amount, 1, blockNum, time.nowMs(), "keyA")
+    tx = signTransaction(tx, "privateA")
+    submitTransaction(node, tx)
+    coroutine.sleep(300)
+    mineBlockFromMempool(node, "minerA")
+    coroutine.sleep(2700)
+    blockNum = blockNum + 1
+}
+
+io.println("=== Node A final status ===")
+printNodeStatus(node)
+let status = getNodeStatus(node)
+io.println("RESULT_NODE_A height=" + convert.toString(status.height) + " tip=" + status.tipHash + " valid=" + convert.toString(status.chainValid) + " peers=" + convert.toString(status.peerCount) + " disconnects=" + convert.toString(status.disconnectCount))
+
+coroutine.sleep(1000)
+stopNode(node)
+io.println("=== Node A Done ===")

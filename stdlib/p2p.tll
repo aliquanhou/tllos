@@ -13,7 +13,8 @@ fn createP2PNode(nodeId: string, host: string, port: int) -> map {
         serverFd: -1,
         peers: [],        // list of { nodeId, host, port, fd, lastSeen, recvBuffer, alive }
         messageHandlers: {},  // type -> handler function(msg, peer)
-        running: false
+        running: false,
+        onDisconnect: null  // optional callback(peerNodeId) invoked when a peer disconnects
     }
 }
 
@@ -268,6 +269,10 @@ fn p2pPeerReceiveLoop(node: map, peerFd: int) -> void {
                 _pprl_retryPeer.alive = false
                 io.println("[" + node.nodeId + "] Peer " + _pprl_retryPeer.nodeId + " disconnected (EOF)")
                 tcp.close(_pprl_retryPeer.fd)
+                // Invoke disconnect callback if registered (for blockchain node disconnectCount etc.)
+                if node.onDisconnect != null {
+                    node.onDisconnect(node, _pprl_retryPeer.nodeId)
+                }
                 let _pprl_removeIdx = _p2pFindPeerByFd(node, peerFd)
                 if _pprl_removeIdx >= 0 {
                     _p2pRemovePeerAt(node, _pprl_removeIdx)
@@ -404,8 +409,13 @@ fn p2pReconnect(node: map, host: string, port: int) -> bool {
     let _pr_i = 0
     while _pr_i < arrays.length(node.peers) {
         if node.peers[_pr_i].host == host && node.peers[_pr_i].port == port {
+            let _pr_oldPeerId = node.peers[_pr_i].nodeId
             node.peers[_pr_i].alive = false
             tcp.close(node.peers[_pr_i].fd)
+            // Invoke disconnect callback for the old connection
+            if node.onDisconnect != null {
+                node.onDisconnect(node, _pr_oldPeerId)
+            }
             _p2pRemovePeerAt(node, _pr_i)
             break
         }

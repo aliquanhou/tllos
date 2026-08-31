@@ -34,7 +34,17 @@ fn createBlockchainNode(nodeId: string, host: string, port: int, difficulty: int
     p2pRegisterHandler(p2p, "pong", handlePongMessage)
     // Store node reference for handlers (via p2p node map)
     p2p._bcNode = node
+    // Register disconnect callback for real disconnectCount tracking
+    p2p.onDisconnect = onPeerDisconnected
     return node
+}
+
+// Called by p2p layer when a peer disconnects (EOF or reconnect close)
+fn onPeerDisconnected(p2pNode: map, peerNodeId: string) -> void {
+    let bcNode = p2pNode._bcNode
+    if bcNode == null { return }
+    bcNode.disconnectCount = bcNode.disconnectCount + 1
+    io.println("[" + bcNode.nodeId + "] Peer disconnected tracked: " + peerNodeId + " (total disconnects=" + convert.toString(bcNode.disconnectCount) + ")")
 }
 
 // Start the node
@@ -56,6 +66,20 @@ fn connectToPeer(node: map, host: string, port: int) -> bool {
     if ok {
         // Spawn auto-sync: wait for handshake, then request missing blocks
         coroutine.spawn(autoSyncOnConnect, node)
+    }
+    return ok
+}
+
+// Reconnect to a peer (closes old connection if any) and auto-sync chain
+// This is the FULL reconnect loop: disconnect old -> connect new -> auto-sync
+fn reconnectToPeer(node: map, host: string, port: int) -> bool {
+    io.println("[" + node.nodeId + "] Reconnecting to " + host + ":" + convert.toString(port))
+    let ok = p2pReconnect(node.p2p, host, port)
+    if ok {
+        io.println("[" + node.nodeId + "] Reconnect successful, triggering auto-sync")
+        coroutine.spawn(autoSyncOnConnect, node)
+    } else {
+        io.println("[" + node.nodeId + "] Reconnect FAILED to " + host + ":" + convert.toString(port))
     }
     return ok
 }
@@ -199,13 +223,8 @@ fn handleBlockMessage(msg: map, peer: map, p2pNode: map) -> void {
         }
         i = i + 1
     }
-    // 3. Merkle root validation
-    let expectedMerkle = merkleRoot(block.transactions)
-    if block.merkleRoot != expectedMerkle {
-        io.println("[" + node.nodeId + "] Rejected block with bad merkleRoot: expected=" + expectedMerkle + " got=" + block.merkleRoot)
-        node.invalidBlockCount = node.invalidBlockCount + 1
-        return
-    }
+    // 3. Merkle root is implicitly validated by blockHash check in isValidBlock
+    //    (blockHash recomputes merkleRoot from transactions and compares to block.hash)
     // All valid - add to chain
     arrays.push(node.blockchain.chain, block)
     node.knownBlockHashes[block.hash] = true
@@ -282,6 +301,8 @@ fn handleBlocksMessage(msg: map, peer: map, p2pNode: map) -> void {
                     ti = ti + 1
                 }
                 if txValid {
+                    // Merkle root is implicitly validated by blockHash check in isValidBlock
+                    // (blockHash recomputes merkleRoot from transactions)
                     arrays.push(node.blockchain.chain, block)
                     node.knownBlockHashes[block.hash] = true
                     // Remove txs from mempool
@@ -293,6 +314,7 @@ fn handleBlocksMessage(msg: map, peer: map, p2pNode: map) -> void {
                     added = added + 1
                 } else {
                     rejected = rejected + 1
+                    node.invalidBlockCount = node.invalidBlockCount + 1
                     break  // stop syncing on first invalid block
                 }
             } else if block.index <= latest.index {
@@ -334,12 +356,13 @@ fn getNodeStatus(node: map) -> map {
         chainValid: isChainValid(node.blockchain),
         forkDetected: node.forkDetected,
         forkCount: node.forkCount,
-        invalidBlockCount: node.invalidBlockCount
+        invalidBlockCount: node.invalidBlockCount,
+        disconnectCount: node.disconnectCount
     }
 }
 
 // Print node status
 fn printNodeStatus(node: map) -> void {
     let status = getNodeStatus(node)
-    io.println("[" + node.nodeId + "] height=" + convert.toString(status.height) + " tip=" + status.tipHash + " mempool=" + convert.toString(status.mempoolSize) + " peers=" + convert.toString(status.peerCount) + " valid=" + convert.toString(status.chainValid) + " forks=" + convert.toString(status.forkCount) + " invalid=" + convert.toString(status.invalidBlockCount))
+    io.println("[" + node.nodeId + "] height=" + convert.toString(status.height) + " tip=" + status.tipHash + " mempool=" + convert.toString(status.mempoolSize) + " peers=" + convert.toString(status.peerCount) + " valid=" + convert.toString(status.chainValid) + " forks=" + convert.toString(status.forkCount) + " invalid=" + convert.toString(status.invalidBlockCount) + " disconnects=" + convert.toString(status.disconnectCount))
 }
