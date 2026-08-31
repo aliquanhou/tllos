@@ -176,3 +176,54 @@ jobs:
           grep -q "Received ACK from node2" /tmp/p2p_leader.log
           grep -q "Received ACK from node3" /tmp/p2p_leader.log
           grep -q "Received ACK from node4" /tmp/p2p_leader.log
+
+      # === P0-15.17.3: Blockchain Network CI Gate Closure ===
+      # These tests use REAL independent processes + REAL TCP, no mocks.
+      # Each test has hard assertions: any failure -> exit 1 -> CI RED.
+
+      - name: Blockchain 4-Node network test (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x scripts/run-bc-network-test.sh
+          scripts/run-bc-network-test.sh bc_node
+
+      - name: Blockchain 4-Node network test (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: scripts\run-bc-network-test.ps1 bc_node
+
+      - name: Blockchain 5-Block multi-node sync (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: scripts/run-bc-network-test.sh bc_multi
+
+      - name: Blockchain 5-Block multi-node sync (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: scripts\run-bc-network-test.ps1 bc_multi
+
+      - name: Blockchain auto-sync on connect (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: scripts/run-bc-network-test.sh bc_sync
+
+      - name: Blockchain auto-sync on connect (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: scripts\run-bc-network-test.ps1 bc_sync
+
+      - name: Blockchain reconnect + auto-sync (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: scripts/run-bc-network-test.sh bc_reconnect
+
+      - name: Blockchain reconnect + auto-sync (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: scripts\run-bc-network-test.ps1 bc_reconnect
+
+      - name: Blockchain invalid block + fork detection (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: scripts/run-bc-network-test.sh bc_invalid
+
+      - name: Blockchain invalid block + fork detection (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: scripts\run-bc-network-test.ps1 bc_invalid
