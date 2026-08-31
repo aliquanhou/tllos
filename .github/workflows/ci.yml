@@ -284,16 +284,16 @@ jobs:
           if ($orphan) { throw "Orphan process still exists: $($orphan.Id)" }
           Write-Output "=== Coroutine 100K Stress Test PASSED ==="
 
-      # === P0-15.18.2: TCP/FD Boundary Black-Box Test ===
-      # Probes tcp.select() with >64 fds to detect buffer overflow on Windows TCC.
-      # Windows TCC FD_SET had no bounds check: fd_array[fd_count++] overflowed at 64.
-      # Fix: FD_SET now checks fd_count < FD_SETSIZE before writing.
+      # === P0-15.18.2R: TCP/FD Boundary Test with REAL sockets ===
+      # Creates 70 real TCP connections (unique fds), probes tcp.select() with 60/64/65/70 real fds.
+      # Windows TCC FD_SET had no bounds check: >64 fds caused stack buffer overflow.
+      # Fix: FD_SET now checks fd_count < FD_SETSIZE. Fds beyond 64 are silently ignored (no crash).
       - name: TCP/FD Boundary test (Linux/macOS)
         if: runner.os != 'Windows'
         timeout-minutes: 5
         run: |
-          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/fd_boundary_test.tll -o tests/fd_boundary_test.tllbc
-          host/c/tllvm tests/fd_boundary_test.tllbc 2>&1 | tee /tmp/fd_boundary.log
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/fd_boundary_real_test.tll -o tests/fd_boundary_real_test.tllbc
+          host/c/tllvm tests/fd_boundary_real_test.tllbc 2>&1 | tee /tmp/fd_boundary.log
           EXIT_CODE=${PIPESTATUS[0]}
           test "$EXIT_CODE" -eq 0
           grep -q "Test 1 PASS" /tmp/fd_boundary.log
@@ -302,23 +302,52 @@ jobs:
           grep -q "Test 4 PASS" /tmp/fd_boundary.log
           grep -q "Test 5 PASS" /tmp/fd_boundary.log
           grep -q "ALL TESTS PASSED" /tmp/fd_boundary.log
-          echo "=== TCP/FD Boundary Test PASSED ==="
+          echo "=== TCP/FD Boundary Test (REAL fds) PASSED ==="
 
-      - name: TCP/FD Boundary test (Windows)
+      # Windows: MSVC build test (system winsock2.h, not affected by TCC FD_SET bug)
+      - name: TCP/FD Boundary test (Windows MSVC)
         if: runner.os == 'Windows'
         timeout-minutes: 5
         shell: powershell
         run: |
-          host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tests\fd_boundary_test.tll -o tests\fd_boundary_test.tllbc
+          host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tests\fd_boundary_real_test.tll -o tests\fd_boundary_real_test.tllbc
           if ($LASTEXITCODE -ne 0) { throw "Compilation failed" }
-          & host\c\tllvm.exe tests\fd_boundary_test.tllbc 2>&1 | Tee-Object -FilePath fd_boundary.log
+          & host\c\tllvm.exe tests\fd_boundary_real_test.tllbc 2>&1 | Tee-Object -FilePath fd_boundary.log
           $EXIT_CODE = $LASTEXITCODE
           if ($EXIT_CODE -ne 0) { throw "Process exited with code $EXIT_CODE" }
           $log = Get-Content fd_boundary.log -Raw
           if ($log -notmatch "Test 1 PASS") { throw "Test 1 did not PASS" }
           if ($log -notmatch "Test 2 PASS") { throw "Test 2 did not PASS" }
-          if ($log -notmatch "Test 3 PASS") { throw "Test 3 did not PASS (65 fds beyond FD_SETSIZE)" }
+          if ($log -notmatch "Test 3 PASS") { throw "Test 3 did not PASS (65 real fds beyond FD_SETSIZE)" }
           if ($log -notmatch "Test 4 PASS") { throw "Test 4 did not PASS" }
           if ($log -notmatch "Test 5 PASS") { throw "Test 5 did not PASS" }
           if ($log -notmatch "ALL TESTS PASSED") { throw "Test did not complete" }
-          Write-Output "=== TCP/FD Boundary Test PASSED ==="
+          Write-Output "=== TCP/FD Boundary Test (Windows MSVC, REAL fds) PASSED ==="
+
+      # Windows TCC build: THIS is the critical test for the FD_SET fix.
+      # CI normally builds with MSVC (cl), which uses system winsock2.h (safe).
+      # But the official build.bat uses TCC, which has its own fd_set with FD_SETSIZE=64.
+      # The TCC FD_SET macro had NO bounds check -> >64 fds = stack buffer overflow.
+      # This step builds tllvm_tcc.exe with the repo's bundled TCC and runs the real-fd test.
+      - name: TCP/FD Boundary test (Windows TCC - critical)
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: cmd
+        run: |
+          cd host\c
+          if not exist tcc\tcc\tcc.exe (
+            echo Extracting TCC...
+            powershell -Command "Expand-Archive -Path 'tcc.zip' -DestinationPath 'tcc' -Force"
+          )
+          echo Building tllvm_tcc.exe with TCC...
+          tcc\tcc\tcc.exe -O2 -std=c99 -D_WIN32 "-Wl,-stack=0x4000000" -o tllvm_tcc.exe main.c vm.c value.c json.c builtin.c "%SystemRoot%\System32\ws2_32.dll" "%SystemRoot%\System32\winhttp.dll"
+          if errorlevel 1 exit /b 1
+          echo TCC build successful
+          cd ..\..
+          echo Compiling test with TCC-built tllvm...
+          host\c\tllvm_tcc.exe tools\TLLC\tllc.tllbc compile tests\fd_boundary_real_test.tll -o tests\fd_boundary_real_tcc.tllbc
+          if errorlevel 1 exit /b 1
+          echo Running REAL fd boundary test with TCC-built runtime...
+          host\c\tllvm_tcc.exe tests\fd_boundary_real_tcc.tllbc
+          if errorlevel 1 exit /b 1
+          echo === TCP/FD Boundary Test (Windows TCC, REAL fds) PASSED ===

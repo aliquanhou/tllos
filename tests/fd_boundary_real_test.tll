@@ -1,0 +1,159 @@
+// P0-15.18.2R: TCP/FD Boundary Test with REAL sockets (no fd reuse, no coroutine)
+// Creates 70 real TCP connections by alternating connect/accept in main loop.
+// Each connection is a unique fd. Verifies tcp.select() with 60/64/65/70 real fds.
+io.println("=== P0-15.18.2R FD Boundary Test (REAL sockets) ===")
+
+let PORT = 19878
+
+// Create server
+let serverFd = tcp.listen("127.0.0.1", PORT)
+if serverFd < 0 {
+    io.println("FAIL: Cannot listen on port " + convert.toString(PORT))
+    io.println("=== FD Boundary Test ABORTED ===")
+} else {
+    io.println("Server listening fd=" + convert.toString(serverFd))
+
+    let TARGET = 70
+    let clientFds = []
+    let acceptedFds = []
+    let connectOk = 0
+    let connectFail = 0
+
+    io.println("Creating " + convert.toString(TARGET) + " real TCP connections (alternating connect/accept)...")
+
+    // Main loop: create one connection, then accept all pending
+    let ci = 0
+    while ci < TARGET {
+        // Create one client connection
+        let fd = tcp.connect("127.0.0.1", PORT)
+        if fd >= 0 {
+            arrays.push(clientFds, fd)
+            connectOk = connectOk + 1
+        } else {
+            connectFail = connectFail + 1
+        }
+        ci = ci + 1
+
+        // Accept all pending connections (drain backlog)
+        // Use short timeout to avoid blocking too long
+        let acceptGuard = 0
+        while acceptGuard < 5 {
+            let cfd = tcp.tryAccept(serverFd, 5)
+            if cfd >= 0 {
+                arrays.push(acceptedFds, cfd)
+            } else {
+                acceptGuard = acceptGuard + 1
+            }
+        }
+    }
+
+    // Final accept drain
+    let drainGuard = 0
+    while drainGuard < 20 {
+        let cfd = tcp.tryAccept(serverFd, 10)
+        if cfd >= 0 {
+            arrays.push(acceptedFds, cfd)
+        } else {
+            drainGuard = drainGuard + 1
+        }
+    }
+
+    io.println("Client connections: ok=" + convert.toString(connectOk) + " fail=" + convert.toString(connectFail))
+    io.println("Server accepted: " + convert.toString(arrays.length(acceptedFds)))
+    io.println("Unique client fds: " + convert.toString(arrays.length(clientFds)))
+
+    let realCount = arrays.length(clientFds)
+
+    // Test 1: 60 real fds (safe zone)
+    io.println("")
+    io.println("--- Test 1: select with 60 REAL fds ---")
+    if realCount >= 60 {
+        let fds60 = []
+        let k = 0
+        while k < 60 {
+            arrays.push(fds60, clientFds[k])
+            k = k + 1
+        }
+        let ready60 = tcp.select(fds60, 50)
+        io.println("select(60 real fds) -> " + convert.toString(arrays.length(ready60)) + " ready")
+        io.println("Test 1 PASS: no crash with 60 real fds")
+    } else {
+        io.println("Test 1 FAIL: only " + convert.toString(realCount) + " real fds (need 60)")
+    }
+
+    // Test 2: 64 real fds (exact FD_SETSIZE boundary)
+    io.println("")
+    io.println("--- Test 2: select with 64 REAL fds (FD_SETSIZE boundary) ---")
+    if realCount >= 64 {
+        let fds64 = []
+        let k = 0
+        while k < 64 {
+            arrays.push(fds64, clientFds[k])
+            k = k + 1
+        }
+        let ready64 = tcp.select(fds64, 50)
+        io.println("select(64 real fds) -> " + convert.toString(arrays.length(ready64)) + " ready")
+        io.println("Test 2 PASS: no crash with 64 real fds")
+    } else {
+        io.println("Test 2 FAIL: only " + convert.toString(realCount) + " real fds (need 64)")
+    }
+
+    // Test 3: 65 real fds (one BEYOND FD_SETSIZE - critical!)
+    io.println("")
+    io.println("--- Test 3: select with 65 REAL fds (BEYOND FD_SETSIZE) ---")
+    if realCount >= 65 {
+        let fds65 = []
+        let k = 0
+        while k < 65 {
+            arrays.push(fds65, clientFds[k])
+            k = k + 1
+        }
+        let ready65 = tcp.select(fds65, 50)
+        io.println("select(65 real fds) -> " + convert.toString(arrays.length(ready65)) + " ready")
+        io.println("Test 3 PASS: no crash with 65 real fds (beyond FD_SETSIZE)")
+    } else {
+        io.println("Test 3 FAIL: only " + convert.toString(realCount) + " real fds (need 65)")
+    }
+
+    // Test 4: all real fds (70, well beyond boundary)
+    io.println("")
+    io.println("--- Test 4: select with ALL " + convert.toString(realCount) + " REAL fds ---")
+    if realCount >= 65 {
+        let readyAll = tcp.select(clientFds, 50)
+        io.println("select(" + convert.toString(realCount) + " real fds) -> " + convert.toString(arrays.length(readyAll)) + " ready")
+        io.println("Test 4 PASS: no crash with all real fds")
+    } else {
+        io.println("Test 4 FAIL: not enough real fds")
+    }
+
+    // Test 5: fd lifecycle - close all sockets and verify no crash
+    io.println("")
+    io.println("--- Test 5: fd lifecycle - close all sockets ---")
+    let closeCount = 0
+    let c = 0
+    while c < arrays.length(clientFds) {
+        tcp.close(clientFds[c])
+        closeCount = closeCount + 1
+        c = c + 1
+    }
+    c = 0
+    while c < arrays.length(acceptedFds) {
+        tcp.close(acceptedFds[c])
+        closeCount = closeCount + 1
+        c = c + 1
+    }
+    tcp.close(serverFd)
+    closeCount = closeCount + 1
+    io.println("Closed " + convert.toString(closeCount) + " sockets (client + server + accepted)")
+    io.println("Test 5 PASS: all sockets closed without crash")
+
+    io.println("")
+    io.println("=== FD Boundary Test (REAL sockets) Complete ===")
+    io.println("Real client connections: " + convert.toString(connectOk))
+    io.println("Real server accepted: " + convert.toString(arrays.length(acceptedFds)))
+    if realCount >= 65 {
+        io.println("ALL TESTS PASSED: tcp.select() handles 65+ real fds without crash")
+    } else {
+        io.println("TEST INCOMPLETE: could not create 65+ real connections (only " + convert.toString(realCount) + ")")
+    }
+}
