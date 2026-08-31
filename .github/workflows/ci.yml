@@ -237,23 +237,23 @@ jobs:
         if: runner.os != 'Windows'
         timeout-minutes: 10
         run: |
+          set -x
           host/c/tllvm tools/TLLC/tllc.tllbc compile tests/coroutine_stress_test.tll -o tests/coroutine_stress_test.tllbc
+          echo "Compile exit: $?"
+          ls -la tests/coroutine_stress_test.tllbc
           echo "=== Running 100K Coroutine Stress Test ==="
-          /usr/bin/time -v host/c/tllvm tests/coroutine_stress_test.tllbc 2>&1 | tee /tmp/coroutine_stress.log
+          host/c/tllvm tests/coroutine_stress_test.tllbc 2>&1 | tee /tmp/coroutine_stress.log
           EXIT_CODE=${PIPESTATUS[0]}
           echo "=== Exit code: $EXIT_CODE ==="
-          # Hard assertions: any failure -> exit 1 -> CI RED
+          echo "=== VM output log ==="
+          cat /tmp/coroutine_stress.log
+          # Hard assertions
           test "$EXIT_CODE" -eq 0
           grep -q "Test 1 PASS" /tmp/coroutine_stress.log
           grep -q "Test 2 PASS" /tmp/coroutine_stress.log
           grep -q "Test 3 PASS" /tmp/coroutine_stress.log
           ! grep -q "FAIL" /tmp/coroutine_stress.log
           grep -q "Stress Tests Done" /tmp/coroutine_stress.log
-          # External observability: peak RSS + runtime
-          echo "=== Runtime Metrics ==="
-          grep "Maximum resident set size" /tmp/coroutine_stress.log || echo "RSS data unavailable"
-          grep "Elapsed (wall clock) time" /tmp/coroutine_stress.log || echo "Time data unavailable"
-          # Verify process no longer exists (clean exit, no orphan)
           ! pgrep -f "coroutine_stress_test" 2>/dev/null
           echo "=== Coroutine 100K Stress Test PASSED ==="
 
