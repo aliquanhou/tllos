@@ -19,7 +19,11 @@ fn createBlockchainNode(nodeId: string, host: string, port: int, difficulty: int
         mining: false,
         knownBlockHashes: {},
         knownTxIds: {},
-        syncing: false
+        syncing: false,
+        forkDetected: false,
+        forkCount: 0,
+        invalidBlockCount: 0,
+        disconnectCount: 0
     }
     // Register message handlers
     p2pRegisterHandler(p2p, "transaction", handleTransactionMessage)
@@ -46,9 +50,32 @@ fn stopNode(node: map) -> void {
     io.println("[" + node.nodeId + "] Blockchain node stopped")
 }
 
-// Connect to a peer
+// Connect to a peer and auto-sync chain if behind
 fn connectToPeer(node: map, host: string, port: int) -> bool {
-    return p2pConnect(node.p2p, host, port)
+    let ok = p2pConnect(node.p2p, host, port)
+    if ok {
+        // Spawn auto-sync: wait for handshake, then request missing blocks
+        coroutine.spawn(autoSyncOnConnect, node)
+    }
+    return ok
+}
+
+// Auto-sync with the most recently connected peer
+fn autoSyncOnConnect(node: map) -> void {
+    coroutine.sleep(800)  // wait for handshake to complete
+    let peerCount = arrays.length(node.p2p.peers)
+    if peerCount == 0 { return }
+    // Find the last alive peer (most recently connected)
+    let peerIndex = peerCount - 1
+    while peerIndex >= 0 {
+        if node.p2p.peers[peerIndex].alive { break }
+        peerIndex = peerIndex - 1
+    }
+    if peerIndex < 0 { return }
+    let latest = getLatestBlock(node.blockchain)
+    let fromIndex = latest.index + 1
+    io.println("[" + node.nodeId + "] Auto-sync: requesting blocks from index " + convert.toString(fromIndex) + " via " + node.p2p.peers[peerIndex].nodeId)
+    requestBlocksFromPeer(node, peerIndex, fromIndex)
 }
 
 // Submit a transaction to the network
@@ -120,30 +147,66 @@ fn mineBlockFromMempool(node: map, minerAddress: string) -> map {
     return block
 }
 
-// Handle incoming block message
+// Handle incoming block message - with fork detection and full validation
 fn handleBlockMessage(msg: map, peer: map, p2pNode: map) -> void {
     let node = p2pNode._bcNode
     if node == null { return }
     let block = msg.payload
     if block == null { return }
-    // Check duplicate
+    // Check duplicate by hash
     if node.knownBlockHashes[block.hash] != null { return }
-    // Validate block
     let latest = getLatestBlock(node.blockchain)
-    if !isValidBlock(block, latest) {
-        io.println("[" + node.nodeId + "] Rejected invalid block: index=" + convert.toString(block.index) + " hash=" + block.hash)
+    // === Fork Detection ===
+    // If block index is within our current chain, check if it conflicts
+    if block.index <= latest.index {
+        if block.index >= 0 && block.index < arrays.length(node.blockchain.chain) {
+            let existing = node.blockchain.chain[block.index]
+            if existing.hash == block.hash {
+                return  // same block, duplicate
+            }
+            // Different hash at same index = FORK DETECTED
+            node.forkDetected = true
+            node.forkCount = node.forkCount + 1
+            io.println("[" + node.nodeId + "] *** FORK DETECTED *** at index " + convert.toString(block.index) + " from " + peer.nodeId)
+            io.println("[" + node.nodeId + "]   our hash=" + existing.hash)
+            io.println("[" + node.nodeId + "]   their hash=" + block.hash)
+            node.invalidBlockCount = node.invalidBlockCount + 1
+            return  // reject forked block
+        }
         return
     }
-    // Validate all transactions in block
+    // === Future block (gap) ===
+    if block.index > latest.index + 1 {
+        io.println("[" + node.nodeId + "] Rejected future block: index=" + convert.toString(block.index) + " expected=" + convert.toString(latest.index + 1))
+        node.invalidBlockCount = node.invalidBlockCount + 1
+        // Could trigger sync here, but for now reject
+        return
+    }
+    // === Normal next block: full validation ===
+    // 1. Block structure validation (index, prevHash, blockHash, PoW)
+    if !isValidBlock(block, latest) {
+        io.println("[" + node.nodeId + "] Rejected invalid block: index=" + convert.toString(block.index) + " hash=" + block.hash)
+        node.invalidBlockCount = node.invalidBlockCount + 1
+        return
+    }
+    // 2. Transaction validation (every tx must be valid)
     let i = 0
     while i < arrays.length(block.transactions) {
         if !validateTransaction(block.transactions[i]) {
             io.println("[" + node.nodeId + "] Rejected block with invalid tx: " + block.transactions[i].id)
+            node.invalidBlockCount = node.invalidBlockCount + 1
             return
         }
         i = i + 1
     }
-    // Add to chain
+    // 3. Merkle root validation
+    let expectedMerkle = merkleRoot(block.transactions)
+    if block.merkleRoot != expectedMerkle {
+        io.println("[" + node.nodeId + "] Rejected block with bad merkleRoot: expected=" + expectedMerkle + " got=" + block.merkleRoot)
+        node.invalidBlockCount = node.invalidBlockCount + 1
+        return
+    }
+    // All valid - add to chain
     arrays.push(node.blockchain.chain, block)
     node.knownBlockHashes[block.hash] = true
     // Remove txs from mempool
@@ -192,27 +255,58 @@ fn handleGetBlocksMessage(msg: map, peer: map, p2pNode: map) -> void {
     io.println("[" + node.nodeId + "] Sent " + convert.toString(arrays.length(blocksToSend)) + " blocks to " + peer.nodeId)
 }
 
-// Handle incoming blocks (sync response)
+// Handle incoming blocks (sync response) - validates each block including transactions
 fn handleBlocksMessage(msg: map, peer: map, p2pNode: map) -> void {
     let node = p2pNode._bcNode
     if node == null { return }
     let blocks = msg.payload.blocks
     let fromIndex = msg.payload.fromIndex
     let added = 0
+    let rejected = 0
     let i = 0
     while i < arrays.length(blocks) {
         let block = blocks[i]
         if node.knownBlockHashes[block.hash] == null {
             let latest = getLatestBlock(node.blockchain)
+            // Must be exactly next block in chain (no gaps, no forks)
             if block.index == latest.index + 1 && isValidBlock(block, latest) {
-                arrays.push(node.blockchain.chain, block)
-                node.knownBlockHashes[block.hash] = true
-                added = added + 1
+                // Validate all transactions in block
+                let txValid = true
+                let ti = 0
+                while ti < arrays.length(block.transactions) {
+                    if !validateTransaction(block.transactions[ti]) {
+                        txValid = false
+                        io.println("[" + node.nodeId + "] Sync reject block " + convert.toString(block.index) + ": invalid tx " + block.transactions[ti].id)
+                        break
+                    }
+                    ti = ti + 1
+                }
+                if txValid {
+                    arrays.push(node.blockchain.chain, block)
+                    node.knownBlockHashes[block.hash] = true
+                    // Remove txs from mempool
+                    let mi = 0
+                    while mi < arrays.length(block.transactions) {
+                        mempoolRemove(node.mempool, block.transactions[mi].id)
+                        mi = mi + 1
+                    }
+                    added = added + 1
+                } else {
+                    rejected = rejected + 1
+                    break  // stop syncing on first invalid block
+                }
+            } else if block.index <= latest.index {
+                // Already have this block or older - could be fork, skip
+                rejected = rejected + 1
+            } else {
+                // Gap or future block - stop
+                rejected = rejected + 1
+                break
             }
         }
         i = i + 1
     }
-    io.println("[" + node.nodeId + "] Synced " + convert.toString(added) + " blocks from " + peer.nodeId + ", height=" + convert.toString(arrays.length(node.blockchain.chain) - 1))
+    io.println("[" + node.nodeId + "] Synced " + convert.toString(added) + " blocks (rejected " + convert.toString(rejected) + ") from " + peer.nodeId + ", height=" + convert.toString(arrays.length(node.blockchain.chain) - 1))
 }
 
 // Handle ping
@@ -237,12 +331,15 @@ fn getNodeStatus(node: map) -> map {
         tipHash: getLatestBlock(node.blockchain).hash,
         mempoolSize: mempoolSize(node.mempool),
         peerCount: p2pPeerCount(node.p2p),
-        chainValid: isChainValid(node.blockchain)
+        chainValid: isChainValid(node.blockchain),
+        forkDetected: node.forkDetected,
+        forkCount: node.forkCount,
+        invalidBlockCount: node.invalidBlockCount
     }
 }
 
 // Print node status
 fn printNodeStatus(node: map) -> void {
     let status = getNodeStatus(node)
-    io.println("[" + node.nodeId + "] height=" + convert.toString(status.height) + " tip=" + status.tipHash + " mempool=" + convert.toString(status.mempoolSize) + " peers=" + convert.toString(status.peerCount) + " valid=" + convert.toString(status.chainValid))
+    io.println("[" + node.nodeId + "] height=" + convert.toString(status.height) + " tip=" + status.tipHash + " mempool=" + convert.toString(status.mempoolSize) + " peers=" + convert.toString(status.peerCount) + " valid=" + convert.toString(status.chainValid) + " forks=" + convert.toString(status.forkCount) + " invalid=" + convert.toString(status.invalidBlockCount))
 }

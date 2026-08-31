@@ -1,0 +1,40 @@
+// P0-15.17.1: Invalid Block test - Node B (sends invalid blocks)
+from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, getNodeStatus
+from "../../stdlib/blockchain" import createBlock, getLatestBlock
+from "../../stdlib/p2p" import p2pBroadcast
+
+let node = createBlockchainNode("nodeB", "127.0.0.1", 19402, 1, 50)
+startNode(node)
+connectToPeer(node, "127.0.0.1", 19401)
+
+io.println("=== Node B waiting for Node A to mine block 1 ===")
+coroutine.sleep(5000)
+
+// === Test 1: Invalid previousHash ===
+io.println("=== Node B sending block with WRONG prevHash ===")
+let badBlock1 = createBlock(2, "00000000000000000000000000000000000000000000000000000000000000", [], 1, time.nowMs())
+badBlock1.hash = "111111111111111111111111111111111111111111111111111111111111111"
+p2pBroadcast(node.p2p, "block", badBlock1)
+coroutine.sleep(1000)
+
+// === Test 2: Invalid index (future block with gap) ===
+io.println("=== Node B sending block with WRONG index (gap) ===")
+let badBlock2 = createBlock(99, getLatestBlock(node.blockchain).hash, [], 1, time.nowMs())
+badBlock2.hash = "222222222222222222222222222222222222222222222222222222222222222"
+p2pBroadcast(node.p2p, "block", badBlock2)
+coroutine.sleep(1000)
+
+// === Test 3: Fork block (same index=1 but different hash) ===
+io.println("=== Node B sending FORK block (index=1, different hash) ===")
+let forkBlock = createBlock(1, getLatestBlock(node.blockchain).hash, [], 1, time.nowMs())
+forkBlock.hash = "333333333333333333333333333333333333333333333333333333333333333"
+p2pBroadcast(node.p2p, "block", forkBlock)
+coroutine.sleep(2000)
+
+printNodeStatus(node)
+let status = getNodeStatus(node)
+io.println("RESULT_NODE_B height=" + convert.toString(status.height) + " tip=" + status.tipHash + " valid=" + convert.toString(status.chainValid) + " invalid=" + convert.toString(status.invalidBlockCount) + " forks=" + convert.toString(status.forkCount))
+
+coroutine.sleep(500)
+stopNode(node)
+io.println("=== Node B Done ===")

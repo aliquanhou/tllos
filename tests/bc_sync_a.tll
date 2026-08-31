@@ -1,0 +1,34 @@
+// P0-15.17.1: Auto-sync test - Node A (mines 3 blocks first, then waits)
+from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, submitTransaction, mineBlockFromMempool, printNodeStatus, getNodeStatus
+from "../../stdlib/blockchain" import createTransaction, signTransaction
+
+let node = createBlockchainNode("nodeA", "127.0.0.1", 19301, 1, 50)
+startNode(node)
+
+io.println("=== Node A mining 3 blocks (before Node B connects) ===")
+let blockNum = 0
+while blockNum < 3 {
+    let amount = 100 + blockNum * 10
+    let tx = createTransaction("addrA", "addrB", amount, 1, blockNum, time.nowMs(), "keyA")
+    tx = signTransaction(tx, "privateA")
+    submitTransaction(node, tx)
+    coroutine.sleep(200)
+    mineBlockFromMempool(node, "minerA")
+    coroutine.sleep(500)
+    blockNum = blockNum + 1
+}
+
+io.println("=== Node A now waiting for Node B to connect and auto-sync ===")
+let waitTicks = 0
+while waitTicks < 150 {
+    coroutine.sleep(100)
+    waitTicks = waitTicks + 1
+}
+
+printNodeStatus(node)
+let status = getNodeStatus(node)
+io.println("RESULT_NODE_A height=" + convert.toString(status.height) + " tip=" + status.tipHash + " valid=" + convert.toString(status.chainValid) + " peers=" + convert.toString(status.peerCount))
+
+coroutine.sleep(500)
+stopNode(node)
+io.println("=== Node A Done ===")
