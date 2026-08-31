@@ -227,3 +227,59 @@ jobs:
         if: runner.os == 'Windows'
         shell: powershell
         run: scripts\run-bc-network-test.ps1 bc_invalid
+
+      # === P0-15.18.1: Coroutine 100K Stress Test (black-box, zero Runtime changes) ===
+      # Verifies 100K immediate-return + 10K x10 yield + 1K sleep coroutines.
+      # External evidence: exit code + process lifecycle + runtime + peak RSS.
+      # No Runtime code modifications — if this fails, Runtime has a real bug.
+
+      - name: Coroutine 100K Stress Test (Linux/macOS)
+        if: runner.os != 'Windows'
+        timeout-minutes: 10
+        run: |
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/coroutine_stress_test.tll -o tests/coroutine_stress_test.tllbc
+          echo "=== Running 100K Coroutine Stress Test ==="
+          /usr/bin/time -v host/c/tllvm tests/coroutine_stress_test.tllbc 2>&1 | tee /tmp/coroutine_stress.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "=== Exit code: $EXIT_CODE ==="
+          # Hard assertions: any failure -> exit 1 -> CI RED
+          test "$EXIT_CODE" -eq 0
+          grep -q "Test 1 PASS" /tmp/coroutine_stress.log
+          grep -q "Test 2 PASS" /tmp/coroutine_stress.log
+          grep -q "Test 3 PASS" /tmp/coroutine_stress.log
+          ! grep -q "FAIL" /tmp/coroutine_stress.log
+          grep -q "Stress Tests Done" /tmp/coroutine_stress.log
+          # External observability: peak RSS + runtime
+          echo "=== Runtime Metrics ==="
+          grep "Maximum resident set size" /tmp/coroutine_stress.log || echo "RSS data unavailable"
+          grep "Elapsed (wall clock) time" /tmp/coroutine_stress.log || echo "Time data unavailable"
+          # Verify process no longer exists (clean exit, no orphan)
+          ! pgrep -f "coroutine_stress_test" 2>/dev/null
+          echo "=== Coroutine 100K Stress Test PASSED ==="
+
+      - name: Coroutine 100K Stress Test (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 10
+        shell: powershell
+        run: |
+          host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tests\coroutine_stress_test.tll -o tests\coroutine_stress_test.tllbc
+          if ($LASTEXITCODE -ne 0) { throw "Compilation failed" }
+          Write-Output "=== Running 100K Coroutine Stress Test ==="
+          $proc = Start-Process -FilePath "host\c\tllvm.exe" -ArgumentList "tests\coroutine_stress_test.tllbc" -RedirectStandardOutput "coroutine_stress.log" -RedirectStandardError "coroutine_stress_err.log" -PassThru -NoNewWindow
+          $proc.WaitForExit()
+          Write-Output "=== Exit code: $($proc.ExitCode) ==="
+          Write-Output "=== Runtime Metrics ==="
+          Write-Output "Peak working set: $([math]::Round($proc.PeakWorkingSet64 / 1MB, 2)) MB"
+          Write-Output "User CPU time: $($proc.UserProcessorTime.TotalSeconds)s"
+          # Hard assertions
+          $log = Get-Content coroutine_stress.log -Raw
+          if ($proc.ExitCode -ne 0) { throw "Process exited with code $($proc.ExitCode)" }
+          if ($log -notmatch "Test 1 PASS") { throw "Test 1 did not PASS" }
+          if ($log -notmatch "Test 2 PASS") { throw "Test 2 did not PASS" }
+          if ($log -notmatch "Test 3 PASS") { throw "Test 3 did not PASS" }
+          if ($log -match "FAIL") { throw "Test output contains FAIL" }
+          if ($log -notmatch "Stress Tests Done") { throw "Test did not complete" }
+          # Verify process no longer exists (clean exit)
+          $orphan = Get-Process -Name "tllvm" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*coroutine_stress*" }
+          if ($orphan) { throw "Orphan process still exists: $($orphan.Id)" }
+          Write-Output "=== Coroutine 100K Stress Test PASSED ==="
