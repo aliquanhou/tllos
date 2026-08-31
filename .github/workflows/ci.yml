@@ -343,9 +343,23 @@ jobs:
             echo Extracting TCC...
             powershell -Command "Expand-Archive -Path 'tcc.zip' -DestinationPath 'tcc' -Force"
           )
-          REM Patch TCC stddef.h: replace compiler builtin macros with concrete types
+          REM Patch TCC stddef.h: rewrite to avoid compiler builtin macros
           echo Patching TCC stddef.h...
-          powershell -Command "$f='tcc\tcc\include\stddef.h'; $c=Get-Content $f -Raw -Encoding UTF8; $c=$c -replace '__SIZE_TYPE__','unsigned'; $c=$c -replace '__PTRDIFF_TYPE__','int'; $c=$c -replace '__WCHAR_TYPE__','unsigned short'; $c=$c -replace '__INTMAX_TYPE__','long long'; $c=$c -replace '__UINTMAX_TYPE__','unsigned long long'; [System.IO.File]::WriteAllText($f,$c,[System.Text.UTF8Encoding]::new($false))"
+          powershell -Command "@'
+#ifndef _STDDEF_H
+#define _STDDEF_H
+typedef unsigned size_t;
+typedef int ssize_t;
+typedef unsigned short wchar_t;
+typedef int ptrdiff_t;
+typedef int intptr_t;
+typedef unsigned uintptr_t;
+typedef long long intmax_t;
+typedef unsigned long long uintmax_t;
+#define NULL ((void*)0)
+#define offsetof(type,member) ((size_t)&((type*)0)->member)
+#endif
+'@ | Set-Content -Path 'tcc\tcc\include\stddef.h' -Encoding UTF8 -NoNewline"
           echo Building tllvm_tcc.exe with TCC...
           tcc\tcc\tcc.exe -O2 -std=c99 -D_WIN32 "-Wl,-stack=0x4000000" -o tllvm_tcc.exe main.c vm.c value.c json.c builtin.c "%SystemRoot%\System32\ws2_32.dll" "%SystemRoot%\System32\winhttp.dll"
           if errorlevel 1 exit /b 1
