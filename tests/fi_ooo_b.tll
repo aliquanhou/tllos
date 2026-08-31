@@ -1,0 +1,59 @@
+// P0-15.18.4 Fault Injection: Out-of-Order Block - Node B (receiver)
+// Delays connection until Node A has mined 3 blocks, then receives them in reverse order
+// Verifies: Block 3 rejected (future), Block 2 rejected (future), Block 1 accepted
+// Then manually triggers sync to recover blocks 2 and 3
+from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, printNodeStatus, getNodeStatus, requestBlocksFromPeer
+from "../../stdlib/p2p" import p2pPeerCount
+
+let node = createBlockchainNode("nodeB", "127.0.0.1", 19602, 1, 50)
+startNode(node)
+
+// Delay connection to let Node A mine 3 blocks first
+io.println("=== Node B Delaying connection (waiting for Node A to mine 3 blocks) ===")
+coroutine.sleep(10000)
+
+// Connect to Node A
+io.println("=== Node B Connecting to Node A ===")
+connectToPeer(node, "127.0.0.1", 19601)
+coroutine.sleep(1000)
+
+// Track state during reverse-order block delivery
+io.println("=== Node B Waiting for reverse-order blocks ===")
+let rejectedFuture = 0
+let acceptedBlocks = 0
+let waitTicks = 0
+while waitTicks < 30 {
+    coroutine.sleep(500)
+    waitTicks = waitTicks + 1
+    let h = arrays.length(node.blockchain.chain) - 1
+    if h > acceptedBlocks {
+        acceptedBlocks = h
+        io.println("=== Node B Accepted block, height now " + convert.toString(h) + " ===")
+    }
+    // Track invalid block count (future blocks increment this)
+    if node.invalidBlockCount > rejectedFuture {
+        rejectedFuture = node.invalidBlockCount
+        io.println("=== Node B Rejected future block, invalidCount=" + convert.toString(rejectedFuture) + " ===")
+    }
+}
+
+io.println("=== Node B After reverse delivery: height=" + convert.toString(arrays.length(node.blockchain.chain) - 1) + " rejectedFuture=" + convert.toString(rejectedFuture) + " ===")
+
+// Manually trigger sync (current design gap: future blocks don't auto-trigger sync)
+io.println("=== Node B Manually requesting sync from peer ===")
+if p2pPeerCount(node.p2p) > 0 {
+    requestBlocksFromPeer(node, 0, arrays.length(node.blockchain.chain))
+}
+
+// Wait for sync to complete
+coroutine.sleep(8000)
+
+printNodeStatus(node)
+let status = getNodeStatus(node)
+io.println("RESULT_NODE_B height=" + convert.toString(status.height) + " tip=" + status.tipHash + " valid=" + convert.toString(status.chainValid))
+io.println("OOO_REJECTED_FUTURE=" + convert.toString(rejectedFuture))
+io.println("OOO_FINAL_HEIGHT=" + convert.toString(status.height))
+
+coroutine.sleep(1000)
+stopNode(node)
+io.println("=== Node B Done ===")

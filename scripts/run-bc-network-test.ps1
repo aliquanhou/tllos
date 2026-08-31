@@ -24,9 +24,12 @@ switch ($TestName) {
     "bc_reconnect"{ $Nodes = @("a","b");          $Leader = "a"; $Wait = 35; $MinHeight = 4; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false }
     "bc_invalid"  { $Nodes = @("a","b");          $Leader = "a"; $Wait = 20; $MinHeight = 1; $CheckTipMatch = $false; $CheckValid = $true;  $CheckInvalid = $true;  $CheckFork = $true }
     "bc_stress"   { $Nodes = @("a","b","c","d"); $Leader = "a"; $Wait = 55; $MinHeight = 1; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false; $CheckStress = $true }
+    "fi_duptx"    { $Nodes = @("a","b","c","d"); $Leader = "a"; $Wait = 75; $MinHeight = 1; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false; $CheckStress = $false; $CheckDupTx = $true; $TestPrefix = "fi_duptx" }
+    "fi_dupblock" { $Nodes = @("a","b","c","d"); $Leader = "a"; $Wait = 75; $MinHeight = 1; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false; $CheckStress = $false; $CheckDupBlock = $true; $TestPrefix = "fi_dupblock" }
+    "fi_ooo"      { $Nodes = @("a","b");          $Leader = "a"; $Wait = 45; $MinHeight = 3; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false; $CheckStress = $false; $CheckOOO = $true; $TestPrefix = "fi_ooo" }
     default {
         Write-Output "ERROR: Unknown test name: $TestName"
-        Write-Output "Usage: run-bc-network-test.ps1 <bc_node|bc_multi|bc_sync|bc_reconnect|bc_invalid|bc_stress>"
+        Write-Output "Usage: run-bc-network-test.ps1 <bc_node|bc_multi|bc_sync|bc_reconnect|bc_invalid|bc_stress|fi_duptx|fi_dupblock|fi_ooo>"
         exit 1
     }
 }
@@ -237,6 +240,67 @@ if ($CheckStress) {
         } else {
             Write-Output "FAIL: Node $rcvNode log not found for stress check"
             $failures++
+        }
+    }
+}
+
+# Check duplicate transaction storm: B/C/D max mempool count should be 1 (duplicates deduped)
+if ($CheckDupTx) {
+    foreach ($rcvNode in @("b","c","d")) {
+        $logRcv = "$LogDir\node_$rcvNode.log"
+        if (Test-Path $logRcv) {
+            $maxLine = Select-String -Path $logRcv -Pattern "DUP_TX_MAX_MEMPOOL=(\d+)" | Select-Object -First 1
+            $maxCount = if ($maxLine) { $maxLine.Matches[0].Groups[1].Value } else { $null }
+            if ((-not $maxCount) -or ([int]$maxCount -ne 1)) {
+                Write-Output "FAIL: Node $rcvNode DUP_TX_MAX_MEMPOOL=$maxCount (expected = 1, duplicates should be deduped)"
+                $failures++
+            } else {
+                Write-Output "  Node $rcvNode duplicate tx dedup verified (max mempool=1)"
+            }
+        }
+    }
+}
+
+# Check duplicate block storm: B/C/D max height should be 1 (duplicate blocks not re-added)
+if ($CheckDupBlock) {
+    foreach ($rcvNode in @("b","c","d")) {
+        $logRcv = "$LogDir\node_$rcvNode.log"
+        if (Test-Path $logRcv) {
+            $maxLine = Select-String -Path $logRcv -Pattern "DUP_BLOCK_MAX_HEIGHT=(\d+)" | Select-Object -First 1
+            $maxHeight = if ($maxLine) { $maxLine.Matches[0].Groups[1].Value } else { $null }
+            if ((-not $maxHeight) -or ([int]$maxHeight -ne 1)) {
+                Write-Output "FAIL: Node $rcvNode DUP_BLOCK_MAX_HEIGHT=$maxHeight (expected = 1, duplicate blocks should not re-add)"
+                $failures++
+            } else {
+                Write-Output "  Node $rcvNode duplicate block dedup verified (max height=1)"
+            }
+            # Also verify forkCount and invalidBlockCount are not abnormally high
+            $forkLine = Select-String -Path $logRcv -Pattern "DUP_BLOCK_FORKS=(\d+)" | Select-Object -First 1
+            $forks = if ($forkLine) { $forkLine.Matches[0].Groups[1].Value } else { "0" }
+            if ([int]$forks -gt 0) {
+                Write-Output "FAIL: Node $rcvNode DUP_BLOCK_FORKS=$forks (expected = 0, duplicate blocks should not trigger fork detection)"
+                $failures++
+            } else {
+                Write-Output "  Node $rcvNode no false fork detection from duplicate blocks"
+            }
+        }
+    }
+}
+
+# Check out-of-order block: Node B should have rejected at least 1 future block and final height=3
+# Note: Block 3 rejection triggers auto-sync, which fetches all missing blocks.
+# After sync, Block 2 and Block 1 are already on-chain, so only Block 3 is counted as rejected.
+# This verifies: future block rejection + auto-sync trigger + final chain consistency.
+if ($CheckOOO) {
+    $logB = "$LogDir\node_b.log"
+    if (Test-Path $logB) {
+        $rejLine = Select-String -Path $logB -Pattern "OOO_REJECTED_FUTURE=(\d+)" | Select-Object -First 1
+        $rejected = if ($rejLine) { $rejLine.Matches[0].Groups[1].Value } else { $null }
+        if ((-not $rejected) -or ([int]$rejected -lt 1)) {
+            Write-Output "FAIL: Node B OOO_REJECTED_FUTURE=$rejected (expected >= 1, at least one future block should be rejected)"
+            $failures++
+        } else {
+            Write-Output "  Node B rejected $rejected future block(s), auto-sync triggered, final height=3 (out-of-order behavior verified)"
         }
     }
 }

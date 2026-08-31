@@ -1,0 +1,33 @@
+// P0-15.18.4 Fault Injection: Duplicate Block Storm - Node C (receiver)
+from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, printNodeStatus, getNodeStatus
+
+let node = createBlockchainNode("nodeC", "127.0.0.1", 19503, 1, 50)
+startNode(node)
+
+io.println("=== Node C Connecting to Node A ===")
+connectToPeer(node, "127.0.0.1", 19501)
+coroutine.sleep(500)
+
+io.println("=== Node C Waiting for duplicate block storm ===")
+let maxHeight = 0
+let waitTicks = 0
+while waitTicks < 100 {
+    coroutine.sleep(500)
+    waitTicks = waitTicks + 1
+    let h = arrays.length(node.blockchain.chain) - 1
+    if h > maxHeight { maxHeight = h }
+    if waitTicks >= 80 { break }
+}
+
+coroutine.sleep(3000)
+
+printNodeStatus(node)
+let status = getNodeStatus(node)
+io.println("RESULT_NODE_C height=" + convert.toString(status.height) + " tip=" + status.tipHash + " valid=" + convert.toString(status.chainValid) + " mempool=" + convert.toString(node.mempool.count))
+io.println("DUP_BLOCK_MAX_HEIGHT=" + convert.toString(maxHeight))
+io.println("DUP_BLOCK_FORKS=" + convert.toString(node.forkCount))
+io.println("DUP_BLOCK_INVALID=" + convert.toString(node.invalidBlockCount))
+
+coroutine.sleep(1000)
+stopNode(node)
+io.println("=== Node C Done ===")

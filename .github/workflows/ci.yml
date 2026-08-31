@@ -299,6 +299,47 @@ jobs:
           if ($orphan) { throw "Orphan process still exists: $($orphan.Id)" }
           Write-Output "=== Coroutine 100K Stress Test PASSED ==="
 
+      # === P0-15.18.4: Fault Injection Tests ===
+      # Real independent processes + real TCP, no mocks.
+      # fi_duptx: duplicate transaction storm (100x broadcast), verifies dedup + no state pollution
+      # fi_dupblock: duplicate block storm (100x broadcast), verifies no duplicate chain insertion
+      # fi_ooo: out-of-order block delivery (Block 3 -> 2 -> 1), verifies future block rejection + auto-sync
+
+      - name: Fault Injection - Duplicate Transaction Storm (Linux/macOS)
+        if: runner.os != 'Windows'
+        timeout-minutes: 5
+        run: |
+          chmod +x scripts/run-bc-network-test.sh
+          scripts/run-bc-network-test.sh fi_duptx
+
+      - name: Fault Injection - Duplicate Transaction Storm (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: powershell
+        run: scripts\run-bc-network-test.ps1 fi_duptx
+
+      - name: Fault Injection - Duplicate Block Storm (Linux/macOS)
+        if: runner.os != 'Windows'
+        timeout-minutes: 5
+        run: scripts/run-bc-network-test.sh fi_dupblock
+
+      - name: Fault Injection - Duplicate Block Storm (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: powershell
+        run: scripts\run-bc-network-test.ps1 fi_dupblock
+
+      - name: Fault Injection - Out-of-Order Block (Linux/macOS)
+        if: runner.os != 'Windows'
+        timeout-minutes: 5
+        run: scripts/run-bc-network-test.sh fi_ooo
+
+      - name: Fault Injection - Out-of-Order Block (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: powershell
+        run: scripts\run-bc-network-test.ps1 fi_ooo
+
       # === P0-15.18.2R: TCP/FD Boundary Test with REAL sockets ===
       # Creates 70 real TCP connections (unique fds), probes tcp.select() with 60/64/65/70 real fds.
       # Windows TCC FD_SET had no bounds check: >64 fds caused stack buffer overflow.

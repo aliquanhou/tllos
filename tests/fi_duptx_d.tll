@@ -1,0 +1,32 @@
+// P0-15.18.4 Fault Injection: Duplicate Transaction Storm - Node D (receiver)
+from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, printNodeStatus, getNodeStatus
+
+let node = createBlockchainNode("nodeD", "127.0.0.1", 19404, 1, 50)
+startNode(node)
+
+io.println("=== Node D Connecting to Node A ===")
+connectToPeer(node, "127.0.0.1", 19401)
+coroutine.sleep(500)
+
+io.println("=== Node D Waiting for duplicate storm ===")
+let maxMempoolCount = 0
+let waitTicks = 0
+while waitTicks < 120 {
+    coroutine.sleep(500)
+    waitTicks = waitTicks + 1
+    if node.mempool.count > maxMempoolCount {
+        maxMempoolCount = node.mempool.count
+    }
+    if node.blockchain.chain.length >= 2 { break }
+}
+
+coroutine.sleep(3000)
+
+printNodeStatus(node)
+let status = getNodeStatus(node)
+io.println("RESULT_NODE_D height=" + convert.toString(status.height) + " tip=" + status.tipHash + " valid=" + convert.toString(status.chainValid) + " mempool=" + convert.toString(node.mempool.count))
+io.println("DUP_TX_MAX_MEMPOOL=" + convert.toString(maxMempoolCount))
+
+coroutine.sleep(1000)
+stopNode(node)
+io.println("=== Node D Done ===")

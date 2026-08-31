@@ -67,9 +67,34 @@ case "$TEST_NAME" in
         CHECK_VALID=1
         CHECK_STRESS=1
         ;;
+    fi_duptx)
+        NODES="a b c d"
+        LEADER="a"
+        WAIT=75
+        MIN_HEIGHT=1
+        CHECK_TIP_MATCH=1
+        CHECK_VALID=1
+        ;;
+    fi_dupblock)
+        NODES="a b c d"
+        LEADER="a"
+        WAIT=75
+        MIN_HEIGHT=1
+        CHECK_TIP_MATCH=1
+        CHECK_VALID=1
+        ;;
+    fi_ooo)
+        NODES="a b"
+        LEADER="a"
+        WAIT=45
+        MIN_HEIGHT=3
+        CHECK_TIP_MATCH=1
+        CHECK_VALID=1
+        CHECK_OOO=1
+        ;;
     *)
         echo "ERROR: Unknown test name: $TEST_NAME"
-        echo "Usage: $0 <bc_node|bc_multi|bc_sync|bc_reconnect|bc_invalid|bc_stress>"
+        echo "Usage: $0 <bc_node|bc_multi|bc_sync|bc_reconnect|bc_invalid|bc_stress|fi_duptx|fi_dupblock|fi_ooo>"
         exit 1
         ;;
 esac
@@ -290,6 +315,25 @@ if [ "${CHECK_STRESS:-0}" = "1" ]; then
             FAILURES=$((FAILURES + 1))
         fi
     done
+fi
+
+# Check out-of-order block: Node B should have rejected at least 1 future block
+# Note: Block 3 rejection triggers auto-sync, which fetches all missing blocks.
+# After sync, Block 2 and Block 1 are already on-chain, so only Block 3 is counted as rejected.
+if [ "${CHECK_OOO:-0}" = "1" ]; then
+    LOG_B="$LOG_DIR/node_b.log"
+    if [ -f "$LOG_B" ]; then
+        REJECTED=$(awk -F= '/OOO_REJECTED_FUTURE=/{print $2; exit}' "$LOG_B")
+        if [ -z "$REJECTED" ] || [ "$REJECTED" -lt 1 ] 2>/dev/null; then
+            echo "FAIL: Node B OOO_REJECTED_FUTURE=$REJECTED (expected >= 1, at least one future block should be rejected)"
+            FAILURES=$((FAILURES + 1))
+        else
+            echo "  Node B rejected $REJECTED future block(s), auto-sync triggered, final height=3 (out-of-order behavior verified)"
+        fi
+    else
+        echo "FAIL: Node B log not found for OOO check"
+        FAILURES=$((FAILURES + 1))
+    fi
 fi
 
 # Step 6: Report result

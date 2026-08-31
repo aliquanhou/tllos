@@ -1,0 +1,77 @@
+// P0-15.18.4 Fault Injection: Out-of-Order Block - Node A
+// Mines 3 blocks with no peers (no auto-broadcast), then when peer connects,
+// sends blocks in REVERSE order: Block 3 -> Block 2 -> Block 1
+// Verifies current behavior: future blocks are rejected, then sync recovers
+from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, submitTransaction, mineBlockFromMempool, printNodeStatus, getNodeStatus, requestBlocksFromPeer
+from "../../stdlib/blockchain" import createTransaction, signTransaction, getLatestBlock
+from "../../stdlib/p2p" import p2pSendToPeer, p2pFindPeer
+
+let node = createBlockchainNode("nodeA", "127.0.0.1", 19601, 1, 50)
+startNode(node)
+
+// Mine 3 blocks with NO peers connected (no auto-broadcast happens)
+io.println("=== Node A Mining 3 blocks (no peers yet) ===")
+let blockNum = 0
+while blockNum < 3 {
+    let tx = createTransaction("addrA", "addrB", 100 + blockNum * 10, 1, blockNum, time.nowMs(), "keyA")
+    tx = signTransaction(tx, "privateA")
+    submitTransaction(node, tx)
+    coroutine.sleep(500)
+    mineBlockFromMempool(node, "minerA")
+    io.println("=== Node A Mined block " + convert.toString(blockNum + 1) + " ===")
+    blockNum = blockNum + 1
+}
+
+let latest = getLatestBlock(node.blockchain)
+io.println("=== Node A height=" + convert.toString(arrays.length(node.blockchain.chain) - 1) + " tip=" + latest.hash + " ===")
+
+// Wait for peers to connect (Node B connects after delay)
+io.println("=== Node A Waiting for peer connection ===")
+let waitTicks = 0
+while waitTicks < 60 {
+    coroutine.sleep(500)
+    waitTicks = waitTicks + 1
+    if node.p2p.peers.length >= 1 { break }
+}
+io.println("=== Node A peers=" + convert.toString(node.p2p.peers.length) + " ===")
+
+if node.p2p.peers.length >= 1 {
+    let peerIdx = 0
+    let peerId = node.p2p.peers[peerIdx].nodeId
+    io.println("=== Node A Sending blocks in REVERSE order to " + peerId + " ===")
+
+    // Send Block 3 FIRST (future block - should be rejected by receiver)
+    let block3 = node.blockchain.chain[3]
+    io.println("=== Node A Sending Block 3 (index=3) ===")
+    p2pSendToPeer(node.p2p, peerIdx, "block", block3)
+    coroutine.sleep(1000)
+
+    // Send Block 2 (also future - should be rejected)
+    let block2 = node.blockchain.chain[2]
+    io.println("=== Node A Sending Block 2 (index=2) ===")
+    p2pSendToPeer(node.p2p, peerIdx, "block", block2)
+    coroutine.sleep(1000)
+
+    // Send Block 1 (normal next block - should be accepted)
+    let block1 = node.blockchain.chain[1]
+    io.println("=== Node A Sending Block 1 (index=1) ===")
+    p2pSendToPeer(node.p2p, peerIdx, "block", block1)
+    coroutine.sleep(2000)
+
+    // Now trigger sync: receiver should request missing blocks 2 and 3
+    // Actually receiver won't auto-request (current design gap), so we manually trigger
+    io.println("=== Node A Waiting for receiver to sync ===")
+    coroutine.sleep(3000)
+}
+
+// Wait for final consistency
+coroutine.sleep(5000)
+
+printNodeStatus(node)
+let status = getNodeStatus(node)
+io.println("RESULT_NODE_A height=" + convert.toString(status.height) + " tip=" + status.tipHash + " valid=" + convert.toString(status.chainValid))
+io.println("OOO_TOTAL_BLOCKS=3")
+
+coroutine.sleep(1000)
+stopNode(node)
+io.println("=== Node A Done ===")

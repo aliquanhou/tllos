@@ -1,0 +1,55 @@
+// P0-15.18.4 Fault Injection: Duplicate Block Storm - Node A
+// Mines 1 block, broadcasts once normally, then directly broadcasts 99 duplicates
+// Verifies that receiving nodes dedupe via knownBlockHashes
+from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, submitTransaction, mineBlockFromMempool, printNodeStatus, getNodeStatus
+from "../../stdlib/blockchain" import createTransaction, signTransaction
+from "../../stdlib/p2p" import p2pBroadcast
+
+let node = createBlockchainNode("nodeA", "127.0.0.1", 19501, 1, 50)
+startNode(node)
+
+io.println("=== Node A Waiting for 3 peers ===")
+let waitTicks = 0
+while waitTicks < 60 {
+    coroutine.sleep(100)
+    waitTicks = waitTicks + 1
+    if node.p2p.peers.length >= 3 { break }
+}
+io.println("=== Node A peers=" + convert.toString(node.p2p.peers.length) + " ===")
+
+// Create a transaction and mine a block
+let tx = createTransaction("addrA", "addrB", 100, 1, 0, time.nowMs(), "keyA")
+tx = signTransaction(tx, "privateA")
+submitTransaction(node, tx)
+coroutine.sleep(2000)
+
+let block = mineBlockFromMempool(node, "minerA")
+io.println("=== Mined block index=" + convert.toString(block.index) + " hash=" + block.hash + " ===")
+
+// Wait for normal block propagation
+coroutine.sleep(3000)
+
+// Duplicate block storm: directly broadcast the SAME block 99 more times
+io.println("=== Starting duplicate block storm: 99 direct broadcasts ===")
+let dupCount = 0
+while dupCount < 99 {
+    p2pBroadcast(node.p2p, "block", block)
+    dupCount = dupCount + 1
+    if (dupCount % 33) == 0 {
+        coroutine.sleep(200)
+    }
+}
+io.println("=== Duplicate block storm complete: 99 broadcasts sent ===")
+
+// Wait for all duplicates to be processed
+coroutine.sleep(5000)
+
+printNodeStatus(node)
+let status = getNodeStatus(node)
+io.println("RESULT_NODE_A height=" + convert.toString(status.height) + " tip=" + status.tipHash + " valid=" + convert.toString(status.chainValid) + " mempool=" + convert.toString(node.mempool.count))
+io.println("DUP_BLOCK_HEIGHT=" + convert.toString(status.height))
+io.println("DUP_BLOCK_BROADCAST_TOTAL=100")
+
+coroutine.sleep(1000)
+stopNode(node)
+io.println("=== Node A Done ===")
