@@ -1,0 +1,21 @@
+﻿// P0-15.17: Multi-block sync test - Follower Node B
+from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, printNodeStatus, getNodeStatus
+
+let node = createBlockchainNode("nodeD", "127.0.0.1", 19204, 1, 50)
+startNode(node)
+connectToPeer(node, "127.0.0.1", 19201)
+
+io.println("=== Node B connected, waiting for blocks ===")
+let waitTicks = 0
+while waitTicks < 200 {
+    coroutine.sleep(100)
+    waitTicks = waitTicks + 1
+}
+
+printNodeStatus(node)
+let status = getNodeStatus(node)
+io.println("RESULT_NODE_D height=" + convert.toString(status.height) + " tip=" + status.tipHash + " valid=" + convert.toString(status.chainValid))
+
+coroutine.sleep(500)
+stopNode(node)
+io.println("=== Node B Done ===")

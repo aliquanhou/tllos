@@ -115,8 +115,8 @@ fn mineBlockFromMempool(node: map, minerAddress: string) -> map {
     }
     node.knownBlockHashes[block.hash] = true
     // Broadcast block
-    p2pBroadcast(node.p2p, "block", block)
-    io.println("[" + node.nodeId + "] Block mined: index=" + convert.toString(block.index) + " hash=" + block.hash + " txs=" + convert.toString(arrays.length(block.transactions)))
+    let bcCount = p2pBroadcast(node.p2p, "block", block)
+    io.println("[" + node.nodeId + "] Block mined: index=" + convert.toString(block.index) + " hash=" + block.hash + " txs=" + convert.toString(arrays.length(block.transactions)) + " broadcast=" + convert.toString(bcCount))
     return block
 }
 

@@ -39,13 +39,22 @@ fn hexToInt(hex: string) -> int {
     while _hi_i < _hi_len {
         let _hi_c = strings.charAt(hex, _hi_i)
         let _hi_digit = 0
-        if _hi_c >= "0" && _hi_c <= "9" {
-            _hi_digit = convert.toInt(_hi_c)
-        } else if _hi_c >= "a" && _hi_c <= "f" {
-            _hi_digit = convert.toInt(_hi_c) - convert.toInt("a") + 10
-        } else if _hi_c >= "A" && _hi_c <= "F" {
-            _hi_digit = convert.toInt(_hi_c) - convert.toInt("A") + 10
-        }
+        if _hi_c == "0" { _hi_digit = 0 }
+        else if _hi_c == "1" { _hi_digit = 1 }
+        else if _hi_c == "2" { _hi_digit = 2 }
+        else if _hi_c == "3" { _hi_digit = 3 }
+        else if _hi_c == "4" { _hi_digit = 4 }
+        else if _hi_c == "5" { _hi_digit = 5 }
+        else if _hi_c == "6" { _hi_digit = 6 }
+        else if _hi_c == "7" { _hi_digit = 7 }
+        else if _hi_c == "8" { _hi_digit = 8 }
+        else if _hi_c == "9" { _hi_digit = 9 }
+        else if _hi_c == "a" || _hi_c == "A" { _hi_digit = 10 }
+        else if _hi_c == "b" || _hi_c == "B" { _hi_digit = 11 }
+        else if _hi_c == "c" || _hi_c == "C" { _hi_digit = 12 }
+        else if _hi_c == "d" || _hi_c == "D" { _hi_digit = 13 }
+        else if _hi_c == "e" || _hi_c == "E" { _hi_digit = 14 }
+        else if _hi_c == "f" || _hi_c == "F" { _hi_digit = 15 }
         _hi_result = _hi_result * 16 + _hi_digit
         _hi_i = _hi_i + 1
     }
