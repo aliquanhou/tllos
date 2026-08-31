@@ -240,8 +240,8 @@ fi
 if [ "${CHECK_STRESS:-0}" = "1" ]; then
     LOG_A="$LOG_DIR/node_a.log"
     if [ -f "$LOG_A" ]; then
-        # STRESS_SUBMITTED is on its own line
-        SUBMITTED=$(grep -oP 'STRESS_SUBMITTED=\K\d+' "$LOG_A" | head -1)
+        # STRESS_SUBMITTED is on its own line (use awk for BSD grep compatibility on macOS)
+        SUBMITTED=$(awk -F= '/STRESS_SUBMITTED=/{print $2; exit}' "$LOG_A")
         if [ -z "$SUBMITTED" ] || [ "$SUBMITTED" -lt 100 ] 2>/dev/null; then
             echo "FAIL: Node A STRESS_SUBMITTED=$SUBMITTED (expected >= 100)"
             FAILURES=$((FAILURES + 1))
