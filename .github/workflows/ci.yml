@@ -335,6 +335,10 @@ jobs:
         shell: cmd
         run: |
           cd host\c
+          REM Clear MSVC env vars to avoid TCC header conflicts
+          set INCLUDE=
+          set LIB=
+          set LIBPATH=
           if not exist tcc\tcc\tcc.exe (
             echo Extracting TCC...
             powershell -Command "Expand-Archive -Path 'tcc.zip' -DestinationPath 'tcc' -Force"
