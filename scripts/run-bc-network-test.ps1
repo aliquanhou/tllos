@@ -34,12 +34,13 @@ Write-Output "=== Blockchain Network Test: $TestName ==="
 Write-Output "Nodes: $($Nodes -join ' ')"
 Write-Output "Wait: ${Wait}s, Timeout: ${Timeout}s"
 
-# Helper: extract field from RESULT line
+# Helper: extract field from RESULT line (node name is case-insensitive, RESULT uses uppercase)
 function Get-Field {
     param([string]$Node, [string]$Field)
+    $nodeUpper = $Node.ToUpper()
     $log = "$LogDir\node_$Node.log"
     if (Test-Path $log) {
-        $line = Select-String -Path $log -Pattern "RESULT_NODE_$Node" | Select-Object -First 1
+        $line = Select-String -Path $log -Pattern "RESULT_NODE_$nodeUpper" | Select-Object -First 1
         if ($line) {
             $match = [regex]::Match($line.Line, "${Field}=([^\s]+)")
             if ($match.Success) { return $match.Groups[1].Value }
@@ -113,7 +114,7 @@ foreach ($node in $Nodes) {
         $failures++
         continue
     }
-    if (-not (Select-String -Path $log -Pattern "RESULT_NODE_${node}" -Quiet)) {
+    if (-not (Select-String -Path $log -Pattern "RESULT_NODE_${node}" -Quiet -CaseSensitive:$false)) {
         Write-Output "FAIL: Node $node has no RESULT line (may have crashed or timed out)"
         Write-Output "  Last 10 lines of node_${node}.log:"
         Get-Content $log -Tail 10 | ForEach-Object { Write-Output "    $_" }

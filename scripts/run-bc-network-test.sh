@@ -139,11 +139,12 @@ pkill -f "${TEST_NAME}_" 2>/dev/null || true
 echo "--- Running assertions ---"
 FAILURES=0
 
-# Helper: extract field from RESULT line
+# Helper: extract field from RESULT line (node name is case-insensitive, RESULT uses uppercase)
 get_field() {
     local node="$1"
     local field="$2"
-    grep "RESULT_NODE_${node}" "$LOG_DIR/node_${node}.log" 2>/dev/null | \
+    local node_upper=$(echo "$node" | tr '[:lower:]' '[:upper:]')
+    grep "RESULT_NODE_${node_upper}" "$LOG_DIR/node_${node}.log" 2>/dev/null | \
         grep -o "${field}=[^ ]*" | head -1 | cut -d= -f2
 }
 
@@ -155,7 +156,7 @@ for node in $NODES; do
         FAILURES=$((FAILURES + 1))
         continue
     fi
-    if ! grep -q "RESULT_NODE_${node}" "$LOG"; then
+    if ! grep -qi "RESULT_NODE_${node}" "$LOG"; then
         echo "FAIL: Node $node has no RESULT line (may have crashed or timed out)"
         echo "  Last 10 lines of node_${node}.log:"
         tail -10 "$LOG" | sed 's/^/    /'
