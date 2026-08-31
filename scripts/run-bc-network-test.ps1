@@ -23,9 +23,10 @@ switch ($TestName) {
     "bc_sync"     { $Nodes = @("a","b");          $Leader = "a"; $Wait = 30; $MinHeight = 2; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false }
     "bc_reconnect"{ $Nodes = @("a","b");          $Leader = "a"; $Wait = 35; $MinHeight = 4; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false }
     "bc_invalid"  { $Nodes = @("a","b");          $Leader = "a"; $Wait = 20; $MinHeight = 1; $CheckTipMatch = $false; $CheckValid = $true;  $CheckInvalid = $true;  $CheckFork = $true }
+    "bc_stress"   { $Nodes = @("a","b","c","d"); $Leader = "a"; $Wait = 55; $MinHeight = 1; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false; $CheckStress = $true }
     default {
         Write-Output "ERROR: Unknown test name: $TestName"
-        Write-Output "Usage: run-bc-network-test.ps1 <bc_node|bc_multi|bc_sync|bc_reconnect|bc_invalid>"
+        Write-Output "Usage: run-bc-network-test.ps1 <bc_node|bc_multi|bc_sync|bc_reconnect|bc_invalid|bc_stress>"
         exit 1
     }
 }
@@ -176,6 +177,41 @@ if ($CheckFork) {
         $failures++
     } else {
         Write-Output "  Node A detected $forks forks"
+    }
+}
+
+# Check stress test metrics (mempool overflow + high transaction count)
+if ($CheckStress) {
+    $logA = "$LogDir\node_a.log"
+    if (Test-Path $logA) {
+        # STRESS_SUBMITTED is on its own line, not in RESULT_NODE_A
+        $submittedLine = Select-String -Path $logA -Pattern "STRESS_SUBMITTED=(\d+)" | Select-Object -First 1
+        $submitted = if ($submittedLine) { $submittedLine.Matches[0].Groups[1].Value } else { $null }
+        if ((-not $submitted) -or ([int]$submitted -lt 100)) {
+            Write-Output "FAIL: Node A STRESS_SUBMITTED=$submitted (expected >= 100)"
+            $failures++
+        } else {
+            Write-Output "  Node A submitted $submitted transactions"
+        }
+        # Verify mempool capacity=50 overflow behavior
+        $mempoolLine = Select-String -Path $logA -Pattern "Mempool size after submission: 50" | Select-Object -First 1
+        if (-not $mempoolLine) {
+            Write-Output "FAIL: Node A mempool capacity=50 not enforced (expected 'Mempool size after submission: 50')"
+            $failures++
+        } else {
+            Write-Output "  Node A mempool capacity=50 enforced (size=50 after 120 submissions)"
+        }
+        # Verify block contains 50 transactions (mempool full block)
+        $blockLine = Select-String -Path $logA -Pattern "Block mined:.*txs=50" | Select-Object -First 1
+        if (-not $blockLine) {
+            Write-Output "FAIL: Node A did not mine a block with 50 transactions"
+            $failures++
+        } else {
+            Write-Output "  Node A mined block with 50 transactions (full mempool block)"
+        }
+    } else {
+        Write-Output "FAIL: Node A log not found for stress check"
+        $failures++
     }
 }
 

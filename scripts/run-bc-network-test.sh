@@ -58,9 +58,18 @@ case "$TEST_NAME" in
         CHECK_INVALID_COUNT=1
         CHECK_FORK_COUNT=1
         ;;
+    bc_stress)
+        NODES="a b c d"
+        LEADER="a"
+        WAIT=55
+        MIN_HEIGHT=1
+        CHECK_TIP_MATCH=1
+        CHECK_VALID=1
+        CHECK_STRESS=1
+        ;;
     *)
         echo "ERROR: Unknown test name: $TEST_NAME"
-        echo "Usage: $0 <bc_node|bc_multi|bc_sync|bc_reconnect|bc_invalid>"
+        echo "Usage: $0 <bc_node|bc_multi|bc_sync|bc_reconnect|bc_invalid|bc_stress>"
         exit 1
         ;;
 esac
@@ -224,6 +233,38 @@ if [ "${CHECK_FORK_COUNT:-0}" = "1" ]; then
         FAILURES=$((FAILURES + 1))
     else
         echo "  Node A detected $FORKS forks"
+    fi
+fi
+
+# Check stress test metrics (mempool overflow + high transaction count)
+if [ "${CHECK_STRESS:-0}" = "1" ]; then
+    LOG_A="$LOG_DIR/node_a.log"
+    if [ -f "$LOG_A" ]; then
+        # STRESS_SUBMITTED is on its own line
+        SUBMITTED=$(grep -oP 'STRESS_SUBMITTED=\K\d+' "$LOG_A" | head -1)
+        if [ -z "$SUBMITTED" ] || [ "$SUBMITTED" -lt 100 ] 2>/dev/null; then
+            echo "FAIL: Node A STRESS_SUBMITTED=$SUBMITTED (expected >= 100)"
+            FAILURES=$((FAILURES + 1))
+        else
+            echo "  Node A submitted $SUBMITTED transactions"
+        fi
+        # Verify mempool capacity=50 overflow behavior
+        if grep -q "Mempool size after submission: 50" "$LOG_A"; then
+            echo "  Node A mempool capacity=50 enforced (size=50 after 120 submissions)"
+        else
+            echo "FAIL: Node A mempool capacity=50 not enforced (expected 'Mempool size after submission: 50')"
+            FAILURES=$((FAILURES + 1))
+        fi
+        # Verify block contains 50 transactions (mempool full block)
+        if grep -q "Block mined:.*txs=50" "$LOG_A"; then
+            echo "  Node A mined block with 50 transactions (full mempool block)"
+        else
+            echo "FAIL: Node A did not mine a block with 50 transactions"
+            FAILURES=$((FAILURES + 1))
+        fi
+    else
+        echo "FAIL: Node A log not found for stress check"
+        FAILURES=$((FAILURES + 1))
     fi
 fi
 

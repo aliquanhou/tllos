@@ -228,6 +228,21 @@ jobs:
         shell: powershell
         run: scripts\run-bc-network-test.ps1 bc_invalid
 
+      # === P0-15.18.3: Blockchain High-Message Stress Test ===
+      # 4 Node real TCP, 120 high-frequency transactions (fee递增 triggers mempool capacity=50 overflow),
+      # transaction propagation, block propagation, final 4-node consistency.
+      # No Runtime changes — if this fails, Runtime/P2P/Blockchain has a real bug.
+      - name: Blockchain high-message stress 120 txs (Linux/macOS)
+        if: runner.os != 'Windows'
+        timeout-minutes: 5
+        run: scripts/run-bc-network-test.sh bc_stress
+
+      - name: Blockchain high-message stress 120 txs (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: powershell
+        run: scripts\run-bc-network-test.ps1 bc_stress
+
       # === P0-15.18.1: Coroutine 100K Stress Test (black-box, zero Runtime changes) ===
       # Verifies 100K immediate-return + 10K x10 yield + 1K sleep coroutines.
       # External evidence: exit code + process lifecycle + runtime + peak RSS.
