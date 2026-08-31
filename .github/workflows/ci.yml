@@ -265,21 +265,21 @@ jobs:
           host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tests\coroutine_stress_test.tll -o tests\coroutine_stress_test.tllbc
           if ($LASTEXITCODE -ne 0) { throw "Compilation failed" }
           Write-Output "=== Running 100K Coroutine Stress Test ==="
-          $proc = Start-Process -FilePath "host\c\tllvm.exe" -ArgumentList "tests\coroutine_stress_test.tllbc" -RedirectStandardOutput "coroutine_stress.log" -RedirectStandardError "coroutine_stress_err.log" -PassThru -NoNewWindow
-          $proc.WaitForExit()
-          Write-Output "=== Exit code: $($proc.ExitCode) ==="
-          Write-Output "=== Runtime Metrics ==="
-          Write-Output "Peak working set: $([math]::Round($proc.PeakWorkingSet64 / 1MB, 2)) MB"
-          Write-Output "User CPU time: $($proc.UserProcessorTime.TotalSeconds)s"
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
+          & host\c\tllvm.exe tests\coroutine_stress_test.tllbc 2>&1 | Tee-Object -FilePath coroutine_stress.log
+          $EXIT_CODE = $LASTEXITCODE
+          $sw.Stop()
+          Write-Output "=== Exit code: $EXIT_CODE ==="
+          Write-Output "=== Elapsed: $($sw.ElapsedMilliseconds)ms ==="
           # Hard assertions
+          if ($EXIT_CODE -ne 0) { throw "Process exited with code $EXIT_CODE" }
           $log = Get-Content coroutine_stress.log -Raw
-          if ($proc.ExitCode -ne 0) { throw "Process exited with code $($proc.ExitCode)" }
           if ($log -notmatch "Test 1 PASS") { throw "Test 1 did not PASS" }
           if ($log -notmatch "Test 2 PASS") { throw "Test 2 did not PASS" }
           if ($log -notmatch "Test 3 PASS") { throw "Test 3 did not PASS" }
           if ($log -match "FAIL") { throw "Test output contains FAIL" }
           if ($log -notmatch "Stress Tests Done") { throw "Test did not complete" }
-          # Verify process no longer exists (clean exit)
+          # Verify no orphan process
           $orphan = Get-Process -Name "tllvm" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*coroutine_stress*" }
           if ($orphan) { throw "Orphan process still exists: $($orphan.Id)" }
           Write-Output "=== Coroutine 100K Stress Test PASSED ==="
