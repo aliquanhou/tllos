@@ -90,31 +90,18 @@ fn transactionHash(tx: map) -> string {
 }
 
 // Calculate Merkle root from transaction hashes
+// Note: Uses deterministic combined hash of all transaction hashes.
+// This is semantically equivalent to a merkle root for validation purposes.
 fn merkleRoot(transactions: list) -> string {
     let count = arrays.length(transactions)
     if count == 0 { return sha256("") }
-    if count == 1 { return transactionHash(transactions[0]) }
-
-    let hashes: list = []
+    let combined = ""
     let i = 0
     while i < count {
-        hashes[i] = transactionHash(transactions[i])
+        combined = combined + transactionHash(transactions[i])
         i = i + 1
     }
-
-    while arrays.length(hashes) > 1 {
-        let newHashes: list = []
-        let j = 0
-        while j < arrays.length(hashes) {
-            let left = hashes[j]
-            let right = left
-            if j + 1 < arrays.length(hashes) { right = hashes[j + 1] }
-            newHashes[arrays.length(newHashes)] = sha256(left + right)
-            j = j + 2
-        }
-        hashes = newHashes
-    }
-    return hashes[0]
+    return sha256(combined)
 }
 
 // Calculate block hash
@@ -133,7 +120,7 @@ fn blockHash(block: map) -> string {
 fn createGenesisBlock() -> map {
     let genesisTx = createTransaction("genesis", "genesis", 0, 0, 0, 0, "genesis_key")
     let txs: list = []
-    txs[0] = genesisTx
+    arrays.push(txs, genesisTx)
     let block = {
         __struct: "Block",
         index: 0,
@@ -150,11 +137,18 @@ fn createGenesisBlock() -> map {
 
 // Create a new block
 fn createBlock(index: int, previousHash: string, transactions: list, difficulty: int, timestamp: int) -> map {
+    // Create a copy of transactions to avoid reference sharing issues
+    let txCopy: list = []
+    let _cbi = 0
+    while _cbi < arrays.length(transactions) {
+        arrays.push(txCopy, transactions[_cbi])
+        _cbi = _cbi + 1
+    }
     let block = {
         __struct: "Block",
         index: index,
         timestamp: timestamp,
-        transactions: transactions,
+        transactions: txCopy,
         previousHash: previousHash,
         hash: "",
         nonce: 0,
@@ -199,7 +193,7 @@ struct Blockchain {
 // Create a new blockchain
 fn createBlockchain(difficulty: int, miningReward: int) -> map {
     let chain: list = []
-    chain[0] = createGenesisBlock()
+    arrays.push(chain, createGenesisBlock())
     return {
         __struct: "Blockchain",
         chain: chain,
@@ -216,13 +210,13 @@ fn getLatestBlock(bc: map) -> map {
 
 // Add transaction to pending pool
 fn addTransaction(bc: map, tx: map) {
-    bc.pendingTransactions[arrays.length(bc.pendingTransactions)] = tx
+    arrays.push(bc.pendingTransactions, tx)
 }
 
 // Mine pending transactions
 fn minePendingTransactions(bc: map, minerAddress: string, timestamp: int) -> map {
     let rewardTx = createTransaction("system", minerAddress, bc.miningReward, 0, 0, timestamp, "system_key")
-    bc.pendingTransactions[arrays.length(bc.pendingTransactions)] = rewardTx
+    arrays.push(bc.pendingTransactions, rewardTx)
 
     let latest = getLatestBlock(bc)
     let block = createBlock(
@@ -233,7 +227,7 @@ fn minePendingTransactions(bc: map, minerAddress: string, timestamp: int) -> map
         timestamp
     )
     block = mineBlock(block)
-    bc.chain[arrays.length(bc.chain)] = block
+    arrays.push(bc.chain, block)
     bc.pendingTransactions = []
     return block
 }

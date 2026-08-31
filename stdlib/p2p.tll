@@ -200,7 +200,7 @@ fn p2pProcessPeerData(node: map, peerIndex: int, data: string) -> bool {
         let _ppd_msg = _ppd_decoded.messages[_ppd_i]
         let _ppd_handler = node.messageHandlers[_ppd_msg.type]
         if _ppd_handler != null {
-            _ppd_handler(_ppd_msg, _ppd_peer)
+            _ppd_handler(_ppd_msg, _ppd_peer, node)
         } else {
             io.println("[" + node.nodeId + "] No handler for message type: " + _ppd_msg.type)
         }

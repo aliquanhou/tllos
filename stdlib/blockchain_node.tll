@@ -1,0 +1,248 @@
+// TLL Blockchain Node - P0-15.17 4-Node Real Blockchain Network
+// Integrates: blockchain.tll + mempool.tll + p2p.tll
+// Full lifecycle: Tx propagation -> Block mining -> Block broadcast -> Chain sync -> Reconnect -> Invalid block rejection
+
+from "../../stdlib/blockchain" import createBlockchain, createTransaction, signTransaction, validateTransaction, verifyTransactionSignature, transactionHash, blockHash, merkleRoot, mineBlock, isValidBlock, getLatestBlock, minePendingTransactions, isChainValid, createGenesisBlock, createBlock
+from "../../stdlib/mempool" import createMempool, mempoolAdd, mempoolContains, mempoolRemove, mempoolSize, getPendingForMining, clearMempool
+from "../../stdlib/p2p" import createP2PNode, p2pListen, p2pConnect, p2pStart, p2pStop, p2pBroadcast, p2pSendToPeer, p2pRegisterHandler, p2pPeerCount, p2pFindPeer, p2pDisconnect, p2pReconnect
+
+// Create a blockchain node
+fn createBlockchainNode(nodeId: string, host: string, port: int, difficulty: int, miningReward: int) -> map {
+    let bc = createBlockchain(difficulty, miningReward)
+    let mp = createMempool(1000, 0, 3600000)
+    let p2p = createP2PNode(nodeId, host, port)
+    let node = {
+        nodeId: nodeId,
+        blockchain: bc,
+        mempool: mp,
+        p2p: p2p,
+        mining: false,
+        knownBlockHashes: {},
+        knownTxIds: {},
+        syncing: false
+    }
+    // Register message handlers
+    p2pRegisterHandler(p2p, "transaction", handleTransactionMessage)
+    p2pRegisterHandler(p2p, "block", handleBlockMessage)
+    p2pRegisterHandler(p2p, "get_blocks", handleGetBlocksMessage)
+    p2pRegisterHandler(p2p, "blocks", handleBlocksMessage)
+    p2pRegisterHandler(p2p, "ping", handlePingMessage)
+    p2pRegisterHandler(p2p, "pong", handlePongMessage)
+    // Store node reference for handlers (via p2p node map)
+    p2p._bcNode = node
+    return node
+}
+
+// Start the node
+fn startNode(node: map) -> void {
+    p2pListen(node.p2p)
+    p2pStart(node.p2p)
+    io.println("[" + node.nodeId + "] Blockchain node started, height=" + convert.toString(arrays.length(node.blockchain.chain) - 1))
+}
+
+// Stop the node
+fn stopNode(node: map) -> void {
+    p2pStop(node.p2p)
+    io.println("[" + node.nodeId + "] Blockchain node stopped")
+}
+
+// Connect to a peer
+fn connectToPeer(node: map, host: string, port: int) -> bool {
+    return p2pConnect(node.p2p, host, port)
+}
+
+// Submit a transaction to the network
+fn submitTransaction(node: map, tx: map) -> int {
+    let result = mempoolAdd(node.mempool, tx)
+    if result == 0 {
+        node.knownTxIds[tx.id] = true
+        // Broadcast to peers
+        p2pBroadcast(node.p2p, "transaction", tx)
+        io.println("[" + node.nodeId + "] Tx submitted: " + tx.id + " from=" + tx.fromAddr + " to=" + tx.toAddr + " amount=" + convert.toString(tx.amount))
+    }
+    return result
+}
+
+// Handle incoming transaction message
+fn handleTransactionMessage(msg: map, peer: map, p2pNode: map) -> void {
+    let node = p2pNode._bcNode
+    if node == null { return }
+    let tx = msg.payload
+    if tx == null { return }
+    // Check duplicate
+    if node.knownTxIds[tx.id] != null { return }
+    if mempoolContains(node.mempool, tx.id) { return }
+    // Validate
+    if !validateTransaction(tx) {
+        io.println("[" + node.nodeId + "] Rejected invalid tx: " + tx.id)
+        return
+    }
+    // Add to mempool
+    let result = mempoolAdd(node.mempool, tx)
+    if result == 0 {
+        node.knownTxIds[tx.id] = true
+        io.println("[" + node.nodeId + "] Tx received from " + peer.nodeId + ": " + tx.id)
+        // Relay to other peers (except sender)
+        relayTransaction(node, tx, peer.nodeId)
+    }
+}
+
+// Relay transaction to all peers except the one who sent it
+fn relayTransaction(node: map, tx: map, exceptPeerId: string) -> void {
+    let i = 0
+    while i < arrays.length(node.p2p.peers) {
+        if node.p2p.peers[i].alive && node.p2p.peers[i].nodeId != exceptPeerId {
+            p2pSendToPeer(node.p2p, i, "transaction", tx)
+        }
+        i = i + 1
+    }
+}
+
+// Mine a block from pending transactions
+fn mineBlockFromMempool(node: map, minerAddress: string) -> map {
+    let pending = getPendingForMining(node.mempool, 100)
+    let latest = getLatestBlock(node.blockchain)
+    let timestamp = time.nowMs()
+    let block = createBlock(latest.index + 1, latest.hash, pending, node.blockchain.difficulty, timestamp)
+    block = mineBlock(block)
+    // Add to chain
+    arrays.push(node.blockchain.chain, block)
+    // Remove mined txs from mempool
+    let i = 0
+    while i < arrays.length(pending) {
+        mempoolRemove(node.mempool, pending[i].id)
+        i = i + 1
+    }
+    node.knownBlockHashes[block.hash] = true
+    // Broadcast block
+    p2pBroadcast(node.p2p, "block", block)
+    io.println("[" + node.nodeId + "] Block mined: index=" + convert.toString(block.index) + " hash=" + block.hash + " txs=" + convert.toString(arrays.length(block.transactions)))
+    return block
+}
+
+// Handle incoming block message
+fn handleBlockMessage(msg: map, peer: map, p2pNode: map) -> void {
+    let node = p2pNode._bcNode
+    if node == null { return }
+    let block = msg.payload
+    if block == null { return }
+    // Check duplicate
+    if node.knownBlockHashes[block.hash] != null { return }
+    // Validate block
+    let latest = getLatestBlock(node.blockchain)
+    if !isValidBlock(block, latest) {
+        io.println("[" + node.nodeId + "] Rejected invalid block: index=" + convert.toString(block.index) + " hash=" + block.hash)
+        return
+    }
+    // Validate all transactions in block
+    let i = 0
+    while i < arrays.length(block.transactions) {
+        if !validateTransaction(block.transactions[i]) {
+            io.println("[" + node.nodeId + "] Rejected block with invalid tx: " + block.transactions[i].id)
+            return
+        }
+        i = i + 1
+    }
+    // Add to chain
+    arrays.push(node.blockchain.chain, block)
+    node.knownBlockHashes[block.hash] = true
+    // Remove txs from mempool
+    i = 0
+    while i < arrays.length(block.transactions) {
+        mempoolRemove(node.mempool, block.transactions[i].id)
+        i = i + 1
+    }
+    io.println("[" + node.nodeId + "] Block received from " + peer.nodeId + ": index=" + convert.toString(block.index) + " hash=" + block.hash + " height=" + convert.toString(arrays.length(node.blockchain.chain) - 1))
+    // Relay to other peers
+    relayBlock(node, block, peer.nodeId)
+}
+
+// Relay block to all peers except the one who sent it
+fn relayBlock(node: map, block: map, exceptPeerId: string) -> void {
+    let i = 0
+    while i < arrays.length(node.p2p.peers) {
+        if node.p2p.peers[i].alive && node.p2p.peers[i].nodeId != exceptPeerId {
+            p2pSendToPeer(node.p2p, i, "block", block)
+        }
+        i = i + 1
+    }
+}
+
+// Request missing blocks from a peer (chain sync)
+fn requestBlocksFromPeer(node: map, peerIndex: int, fromIndex: int) -> void {
+    let payload = { fromIndex: fromIndex }
+    p2pSendToPeer(node.p2p, peerIndex, "get_blocks", payload)
+    io.println("[" + node.nodeId + "] Requesting blocks from index " + convert.toString(fromIndex))
+}
+
+// Handle get_blocks request
+fn handleGetBlocksMessage(msg: map, peer: map, p2pNode: map) -> void {
+    let node = p2pNode._bcNode
+    if node == null { return }
+    let fromIndex = msg.payload.fromIndex
+    // Send up to 100 blocks starting from fromIndex
+    let blocksToSend: list = []
+    let i = fromIndex
+    while i < arrays.length(node.blockchain.chain) && arrays.length(blocksToSend) < 100 {
+        arrays.push(blocksToSend, node.blockchain.chain[i])
+        i = i + 1
+    }
+    let payload = { blocks: blocksToSend, fromIndex: fromIndex }
+    p2pSendToPeer(node.p2p, p2pFindPeer(node.p2p, peer.nodeId), "blocks", payload)
+    io.println("[" + node.nodeId + "] Sent " + convert.toString(arrays.length(blocksToSend)) + " blocks to " + peer.nodeId)
+}
+
+// Handle incoming blocks (sync response)
+fn handleBlocksMessage(msg: map, peer: map, p2pNode: map) -> void {
+    let node = p2pNode._bcNode
+    if node == null { return }
+    let blocks = msg.payload.blocks
+    let fromIndex = msg.payload.fromIndex
+    let added = 0
+    let i = 0
+    while i < arrays.length(blocks) {
+        let block = blocks[i]
+        if node.knownBlockHashes[block.hash] == null {
+            let latest = getLatestBlock(node.blockchain)
+            if block.index == latest.index + 1 && isValidBlock(block, latest) {
+                arrays.push(node.blockchain.chain, block)
+                node.knownBlockHashes[block.hash] = true
+                added = added + 1
+            }
+        }
+        i = i + 1
+    }
+    io.println("[" + node.nodeId + "] Synced " + convert.toString(added) + " blocks from " + peer.nodeId + ", height=" + convert.toString(arrays.length(node.blockchain.chain) - 1))
+}
+
+// Handle ping
+fn handlePingMessage(msg: map, peer: map, p2pNode: map) -> void {
+    let node = p2pNode._bcNode
+    if node == null { return }
+    let payload = { timestamp: time.nowMs(), pongTimestamp: msg.payload.timestamp }
+    p2pSendToPeer(node.p2p, p2pFindPeer(node.p2p, peer.nodeId), "pong", payload)
+}
+
+// Handle pong
+fn handlePongMessage(msg: map, peer: map, p2pNode: map) -> void {
+    // Update peer lastSeen
+    peer.lastSeen = time.nowMs()
+}
+
+// Get node status summary
+fn getNodeStatus(node: map) -> map {
+    return {
+        nodeId: node.nodeId,
+        height: arrays.length(node.blockchain.chain) - 1,
+        tipHash: getLatestBlock(node.blockchain).hash,
+        mempoolSize: mempoolSize(node.mempool),
+        peerCount: p2pPeerCount(node.p2p),
+        chainValid: isChainValid(node.blockchain)
+    }
+}
+
+// Print node status
+fn printNodeStatus(node: map) -> void {
+    let status = getNodeStatus(node)
+    io.println("[" + node.nodeId + "] height=" + convert.toString(status.height) + " tip=" + status.tipHash + " mempool=" + convert.toString(status.mempoolSize) + " peers=" + convert.toString(status.peerCount) + " valid=" + convert.toString(status.chainValid))
+}

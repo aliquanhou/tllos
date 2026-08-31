@@ -1,0 +1,21 @@
+// P0-15.17: 4-Node Blockchain Network Test - Node C
+from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, printNodeStatus, getNodeStatus
+
+let node = createBlockchainNode("nodeC", "127.0.0.1", 19103, 1, 50)
+startNode(node)
+connectToPeer(node, "127.0.0.1", 19101)
+
+io.println("=== Node C connected, waiting ===")
+let waitTicks = 0
+while waitTicks < 120 {
+    coroutine.sleep(100)
+    waitTicks = waitTicks + 1
+}
+
+printNodeStatus(node)
+let status = getNodeStatus(node)
+io.println("RESULT_NODE_C height=" + convert.toString(status.height) + " tip=" + status.tipHash + " valid=" + convert.toString(status.chainValid))
+
+coroutine.sleep(500)
+stopNode(node)
+io.println("=== Node C Done ===")
