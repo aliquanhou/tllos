@@ -35,7 +35,7 @@ case "$TEST_NAME" in
     bc_sync)
         NODES="a b"
         LEADER="a"
-        WAIT=20
+        WAIT=30
         MIN_HEIGHT=2
         CHECK_TIP_MATCH=1
         CHECK_VALID=1

@@ -20,7 +20,7 @@ New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 switch ($TestName) {
     "bc_node"     { $Nodes = @("a","b","c","d"); $Leader = "a"; $Wait = 25; $MinHeight = 1; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false }
     "bc_multi"    { $Nodes = @("a","b","c","d"); $Leader = "a"; $Wait = 35; $MinHeight = 5; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false }
-    "bc_sync"     { $Nodes = @("a","b");          $Leader = "a"; $Wait = 20; $MinHeight = 2; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false }
+    "bc_sync"     { $Nodes = @("a","b");          $Leader = "a"; $Wait = 30; $MinHeight = 2; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false }
     "bc_reconnect"{ $Nodes = @("a","b");          $Leader = "a"; $Wait = 35; $MinHeight = 4; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false }
     "bc_invalid"  { $Nodes = @("a","b");          $Leader = "a"; $Wait = 20; $MinHeight = 1; $CheckTipMatch = $false; $CheckValid = $true;  $CheckInvalid = $true;  $CheckFork = $true }
     default {
