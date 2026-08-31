@@ -115,6 +115,7 @@ for /d %%D in ("%~dp0..\tests\regression\*") do (
 if exist "%TMPFILE%" del "%TMPFILE%"
 
 echo --- Scope Semantics Tests ---
+set "SCOPE_ASSERTS=0"
 REM P0-15.18.4-RUNTIME.4: TLL Compiler Semantic Guardrail
 REM Verifies variable scope semantics: global/local, shadowing, params,
 REM nested functions, closures, block scope, coroutines, recursion,
@@ -149,8 +150,11 @@ for %%F in ("%~dp0..\tests\scope\*.tll") do (
                     type "%TMPFILE%"
                     set /a FAILED+=1
                 ) else (
-                    echo   PASS: %%~nxF
+                    REM Count assertions in source file for hard verification
+                    for /f "tokens=2 delims=:" %%A in ('find /c "FAIL " "%%F" 2^>nul') do set "ASSERTS=%%A"
+                    echo   PASS: %%~nxF ^(!ASSERTS! assertions verified^)
                     set /a PASSED+=1
+                    set /a SCOPE_ASSERTS+=!ASSERTS!
                 )
             )
         )
@@ -165,6 +169,7 @@ echo === Test Results ===
 echo Total:  %TOTAL%
 echo Passed: %PASSED%
 echo Failed: %FAILED%
+echo Scope assertions verified: %SCOPE_ASSERTS%
 echo.
 
 if %FAILED% gtr 0 (

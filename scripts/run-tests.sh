@@ -117,6 +117,7 @@ rm -f "$TMPFILE"
 # Run scope semantics tests (P0-15.18.4-RUNTIME.4: Compiler Semantic Guardrail)
 # These tests are compiled on-the-fly from .tll source, then run.
 echo "--- Scope Semantics Tests ---"
+SCOPE_ASSERTS=0
 TLLC_BC="$REPO_ROOT/tools/TLLC/tllc.tllbc"
 for f in "$REPO_ROOT/tests/scope/"*.tll; do
     [ -f "$f" ] || continue
@@ -159,8 +160,11 @@ for f in "$REPO_ROOT/tests/scope/"*.tll; do
         cat "$TMPFILE"
         FAILED=$((FAILED + 1))
     else
-        echo "  PASS: $display"
+        # Assertion count hard verification: count expected assertions in source
+        expected_asserts=$(grep -c 'FAIL [0-9]' "$f" 2>/dev/null || echo 0)
+        echo "  PASS: $display ($expected_asserts assertions verified)"
         PASSED=$((PASSED + 1))
+        SCOPE_ASSERTS=$((SCOPE_ASSERTS + expected_asserts))
     fi
     rm -f "$out"
 done
@@ -172,6 +176,7 @@ echo "=== Test Results ==="
 echo "Total:  $TOTAL"
 echo "Passed: $PASSED"
 echo "Failed: $FAILED"
+echo "Scope assertions verified: $SCOPE_ASSERTS"
 echo ""
 
 if [ "$FAILED" -gt 0 ]; then

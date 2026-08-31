@@ -340,6 +340,32 @@ jobs:
         shell: powershell
         run: scripts\run-bc-network-test.ps1 fi_ooo
 
+      # fi_kill9: Kill-9 Node B, restart, auto-sync. Verifies hard fault recovery.
+      # fi_multi: Kill B, kill C, restart both, auto-sync. Verifies multi-node consecutive faults.
+      - name: Fault Injection - Kill-9 Node Restart (Linux/macOS)
+        if: runner.os != 'Windows'
+        timeout-minutes: 5
+        run: |
+          chmod +x scripts/run-fi-kill-test.sh
+          scripts/run-fi-kill-test.sh fi_kill9
+
+      - name: Fault Injection - Kill-9 Node Restart (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: powershell
+        run: scripts\run-fi-kill-test.ps1 -TestName fi_kill9
+
+      - name: Fault Injection - Multi-Node Consecutive Faults (Linux/macOS)
+        if: runner.os != 'Windows'
+        timeout-minutes: 6
+        run: scripts/run-fi-kill-test.sh fi_multi
+
+      - name: Fault Injection - Multi-Node Consecutive Faults (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 6
+        shell: powershell
+        run: scripts\run-fi-kill-test.ps1 -TestName fi_multi
+
       # === P0-15.18.2R: TCP/FD Boundary Test with REAL sockets ===
       # Creates 70 real TCP connections (unique fds), probes tcp.select() with 60/64/65/70 real fds.
       # Windows TCC FD_SET had no bounds check: >64 fds caused stack buffer overflow.

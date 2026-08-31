@@ -1,0 +1,30 @@
+// P0-15.18.4 Fault Injection: Kill-9 Test - Node D (receiver)
+from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, printNodeStatus, getNodeStatus
+
+let node = createBlockchainNode("nodeD", "127.0.0.1", 19704, 1, 50)
+startNode(node)
+
+io.println("=== Node D Connecting to Node A ===")
+connectToPeer(node, "127.0.0.1", 19701)
+coroutine.sleep(1000)
+
+io.println("=== Node D Running (will sync with Node A) ===")
+let runTicks = 0
+while runTicks < 100 {
+    coroutine.sleep(1000)
+    runTicks = runTicks + 1
+    if (runTicks % 10) == 0 {
+        io.println("=== Node D alive tick=" + convert.toString(runTicks) + " height=" + convert.toString(arrays.length(node.blockchain.chain) - 1) + " peers=" + convert.toString(node.p2p.peers.length) + " ===")
+    }
+}
+
+coroutine.sleep(3000)
+
+printNodeStatus(node)
+let status = getNodeStatus(node)
+io.println("RESULT_NODE_D height=" + convert.toString(status.height) + " tip=" + status.tipHash + " valid=" + convert.toString(status.chainValid))
+io.println("KILL_TEST_FINAL_HEIGHT=" + convert.toString(status.height))
+
+coroutine.sleep(1000)
+stopNode(node)
+io.println("=== Node D Done ===")

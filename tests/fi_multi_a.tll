@@ -1,0 +1,45 @@
+// P0-15.18.4 Fault Injection: Kill-9 Test - Node A (continuous miner)
+// Mines blocks continuously, used for kill-9 and multi-node fault tests
+from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, submitTransaction, mineBlockFromMempool, printNodeStatus, getNodeStatus
+from "../../stdlib/blockchain" import createTransaction, signTransaction
+
+let node = createBlockchainNode("nodeA", "127.0.0.1", 19701, 1, 50)
+startNode(node)
+
+io.println("=== Node A Waiting for 3 peers ===")
+let waitTicks = 0
+while waitTicks < 40 {
+    coroutine.sleep(500)
+    waitTicks = waitTicks + 1
+    if node.p2p.peers.length >= 3 { break }
+}
+io.println("=== Node A peers=" + convert.toString(node.p2p.peers.length) + " ===")
+
+// Mine blocks continuously (one every 6 seconds)
+let nonce = 0
+let mineRound = 0
+while mineRound < 15 {
+    let tx = createTransaction("addrA", "addrB", 100 + mineRound * 10, 1, nonce, time.nowMs(), "keyA")
+    tx = signTransaction(tx, "privateA")
+    submitTransaction(node, tx)
+    nonce = nonce + 1
+    coroutine.sleep(1000)
+    if node.mempool.count > 0 {
+        mineBlockFromMempool(node, "minerA")
+        io.println("=== Node A Mined block round " + convert.toString(mineRound) + " height=" + convert.toString(arrays.length(node.blockchain.chain) - 1) + " ===")
+    }
+    mineRound = mineRound + 1
+    coroutine.sleep(5000)
+}
+
+// Wait for final propagation
+coroutine.sleep(8000)
+
+printNodeStatus(node)
+let status = getNodeStatus(node)
+io.println("RESULT_NODE_A height=" + convert.toString(status.height) + " tip=" + status.tipHash + " valid=" + convert.toString(status.chainValid))
+io.println("KILL_TEST_FINAL_HEIGHT=" + convert.toString(status.height))
+
+coroutine.sleep(1000)
+stopNode(node)
+io.println("=== Node A Done ===")
