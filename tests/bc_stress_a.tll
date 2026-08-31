@@ -59,12 +59,15 @@ coroutine.sleep(5000)
 // Phase 2: Mine blocks from mempool
 io.println("=== Phase 2: Mining blocks ===")
 let blocksMined = 0
+let blockTxTotal = 0
 let mineAttempt = 0
 while mineAttempt < 3 {
     if node.mempool.count > 0 {
         let block = mineBlockFromMempool(node, "minerA")
         blocksMined = blocksMined + 1
-        io.println("Mined block " + convert.toString(block.index) + " with " + convert.toString(arrays.length(block.transactions)) + " txs")
+        let txCount = arrays.length(block.transactions)
+        blockTxTotal = blockTxTotal + txCount
+        io.println("Mined block " + convert.toString(block.index) + " with " + convert.toString(txCount) + " txs")
     } else {
         io.println("Mempool empty, skipping mine attempt " + convert.toString(mineAttempt))
     }
@@ -74,6 +77,7 @@ while mineAttempt < 3 {
 
 io.println("=== Phase 2 Results ===")
 io.println("Blocks mined: " + convert.toString(blocksMined))
+io.println("Total transactions in mined blocks: " + convert.toString(blockTxTotal))
 
 // Wait for block propagation
 io.println("=== Waiting for block propagation ===")
@@ -86,6 +90,7 @@ io.println("STRESS_SUBMITTED=" + convert.toString(txSubmitted))
 io.println("STRESS_ACCEPTED=" + convert.toString(txAccepted))
 io.println("STRESS_REJECTED=" + convert.toString(txRejected))
 io.println("STRESS_BLOCKS=" + convert.toString(blocksMined))
+io.println("STRESS_BLOCK_TX_TOTAL=" + convert.toString(blockTxTotal))
 
 coroutine.sleep(1000)
 stopNode(node)

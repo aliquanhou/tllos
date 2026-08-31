@@ -1,4 +1,4 @@
-// P0-15.18.3: Blockchain High-Message Stress Test - Node B (receiver)
+// P0-15.18.3R: Blockchain High-Message Stress Test - Node B (receiver with tx count)
 from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, printNodeStatus, getNodeStatus
 
 let node = createBlockchainNode("nodeB", "127.0.0.1", 19302, 1, 50)
@@ -9,22 +9,33 @@ io.println("=== Node B Connecting to Node A ===")
 connectToPeer(node, "127.0.0.1", 19301)
 coroutine.sleep(500)
 
-// Wait for stress test to complete (Node A submits 120 txs + mines blocks)
+// Wait for stress test: track max mempool count BEFORE block arrives
+// (max mempool count = unique transactions received via P2P)
 io.println("=== Node B Waiting for stress test completion ===")
+let maxMempoolCount = 0
 let waitTicks = 0
+let blockArrived = false
 while waitTicks < 200 {
     coroutine.sleep(500)
     waitTicks = waitTicks + 1
-    // Check if we have at least 1 block (genesis + mined)
-    if node.blockchain.chain.length >= 2 { break }
+    let currentCount = node.mempool.count
+    if currentCount > maxMempoolCount {
+        maxMempoolCount = currentCount
+    }
+    if node.blockchain.chain.length >= 2 {
+        blockArrived = true
+        break
+    }
 }
 
-// Additional wait for final propagation
+// Additional wait for final block propagation
 coroutine.sleep(5000)
 
 printNodeStatus(node)
 let status = getNodeStatus(node)
 io.println("RESULT_NODE_B height=" + convert.toString(status.height) + " tip=" + status.tipHash + " valid=" + convert.toString(status.chainValid) + " mempool=" + convert.toString(node.mempool.count))
+io.println("STRESS_TX_RECEIVED=" + convert.toString(maxMempoolCount))
+io.println("STRESS_BLOCK_ARRIVED=" + convert.toString(blockArrived))
 
 coroutine.sleep(1000)
 stopNode(node)

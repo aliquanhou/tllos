@@ -262,10 +262,34 @@ if [ "${CHECK_STRESS:-0}" = "1" ]; then
             echo "FAIL: Node A did not mine a block with 50 transactions"
             FAILURES=$((FAILURES + 1))
         fi
+        # Verify total transactions in all mined blocks >= 50
+        BLOCK_TX_TOTAL=$(awk -F= '/STRESS_BLOCK_TX_TOTAL=/{print $2; exit}' "$LOG_A")
+        if [ -z "$BLOCK_TX_TOTAL" ] || [ "$BLOCK_TX_TOTAL" -lt 50 ] 2>/dev/null; then
+            echo "FAIL: Node A STRESS_BLOCK_TX_TOTAL=$BLOCK_TX_TOTAL (expected >= 50)"
+            FAILURES=$((FAILURES + 1))
+        else
+            echo "  Node A total transactions in mined blocks: $BLOCK_TX_TOTAL"
+        fi
     else
         echo "FAIL: Node A log not found for stress check"
         FAILURES=$((FAILURES + 1))
     fi
+    # Verify B/C/D received >= 120 unique transactions via P2P (max mempool count before block arrival)
+    for rcv_node in b c d; do
+        LOG_RCV="$LOG_DIR/node_${rcv_node}.log"
+        if [ -f "$LOG_RCV" ]; then
+            RX_COUNT=$(awk -F= '/STRESS_TX_RECEIVED=/{print $2; exit}' "$LOG_RCV")
+            if [ -z "$RX_COUNT" ] || [ "$RX_COUNT" -lt 120 ] 2>/dev/null; then
+                echo "FAIL: Node $rcv_node STRESS_TX_RECEIVED=$RX_COUNT (expected >= 120)"
+                FAILURES=$((FAILURES + 1))
+            else
+                echo "  Node $rcv_node received $RX_COUNT unique transactions via P2P"
+            fi
+        else
+            echo "FAIL: Node $rcv_node log not found for stress check"
+            FAILURES=$((FAILURES + 1))
+        fi
+    done
 fi
 
 # Step 6: Report result

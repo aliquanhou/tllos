@@ -1,4 +1,4 @@
-// P0-15.18.3: Blockchain High-Message Stress Test - Node C (receiver)
+// P0-15.18.3R: Blockchain High-Message Stress Test - Node C (receiver with tx count)
 from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, printNodeStatus, getNodeStatus
 
 let node = createBlockchainNode("nodeC", "127.0.0.1", 19303, 1, 50)
@@ -9,11 +9,20 @@ connectToPeer(node, "127.0.0.1", 19301)
 coroutine.sleep(500)
 
 io.println("=== Node C Waiting for stress test completion ===")
+let maxMempoolCount = 0
 let waitTicks = 0
+let blockArrived = false
 while waitTicks < 200 {
     coroutine.sleep(500)
     waitTicks = waitTicks + 1
-    if node.blockchain.chain.length >= 2 { break }
+    let currentCount = node.mempool.count
+    if currentCount > maxMempoolCount {
+        maxMempoolCount = currentCount
+    }
+    if node.blockchain.chain.length >= 2 {
+        blockArrived = true
+        break
+    }
 }
 
 coroutine.sleep(5000)
@@ -21,6 +30,8 @@ coroutine.sleep(5000)
 printNodeStatus(node)
 let status = getNodeStatus(node)
 io.println("RESULT_NODE_C height=" + convert.toString(status.height) + " tip=" + status.tipHash + " valid=" + convert.toString(status.chainValid) + " mempool=" + convert.toString(node.mempool.count))
+io.println("STRESS_TX_RECEIVED=" + convert.toString(maxMempoolCount))
+io.println("STRESS_BLOCK_ARRIVED=" + convert.toString(blockArrived))
 
 coroutine.sleep(1000)
 stopNode(node)

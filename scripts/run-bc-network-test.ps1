@@ -209,9 +209,35 @@ if ($CheckStress) {
         } else {
             Write-Output "  Node A mined block with 50 transactions (full mempool block)"
         }
+        # Verify total transactions in all mined blocks >= 50
+        $blockTxTotalLine = Select-String -Path $logA -Pattern "STRESS_BLOCK_TX_TOTAL=(\d+)" | Select-Object -First 1
+        $blockTxTotal = if ($blockTxTotalLine) { $blockTxTotalLine.Matches[0].Groups[1].Value } else { $null }
+        if ((-not $blockTxTotal) -or ([int]$blockTxTotal -lt 50)) {
+            Write-Output "FAIL: Node A STRESS_BLOCK_TX_TOTAL=$blockTxTotal (expected >= 50)"
+            $failures++
+        } else {
+            Write-Output "  Node A total transactions in mined blocks: $blockTxTotal"
+        }
     } else {
         Write-Output "FAIL: Node A log not found for stress check"
         $failures++
+    }
+    # Verify B/C/D received >= 120 unique transactions via P2P (max mempool count before block arrival)
+    foreach ($rcvNode in @("b","c","d")) {
+        $logRcv = "$LogDir\node_$rcvNode.log"
+        if (Test-Path $logRcv) {
+            $rxLine = Select-String -Path $logRcv -Pattern "STRESS_TX_RECEIVED=(\d+)" | Select-Object -First 1
+            $rxCount = if ($rxLine) { $rxLine.Matches[0].Groups[1].Value } else { $null }
+            if ((-not $rxCount) -or ([int]$rxCount -lt 120)) {
+                Write-Output "FAIL: Node $rcvNode STRESS_TX_RECEIVED=$rxCount (expected >= 120)"
+                $failures++
+            } else {
+                Write-Output "  Node $rcvNode received $rxCount unique transactions via P2P"
+            }
+        } else {
+            Write-Output "FAIL: Node $rcvNode log not found for stress check"
+            $failures++
+        }
     }
 }
 
