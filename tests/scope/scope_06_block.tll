@@ -1,0 +1,103 @@
+// scope_06: Block scope (TLL has function-level scope)
+// if/while variables are function-scoped in TLL.
+
+fn ifFunctionVar() -> list {
+    let x = 1
+    let results: list = []
+    if true {
+        // In TLL, this x is function-scoped
+        x = 2
+    }
+    arrays.push(results, x) // x is 2 (function-scoped)
+    return results
+}
+
+fn whileFunctionVar() -> list {
+    let x = 10
+    let results: list = []
+    let i = 0
+    while i < 5 {
+        x = i * 10
+        arrays.push(results, x)
+        i = i + 1
+    }
+    arrays.push(results, x) // x is 40 (last loop value, function-scoped)
+    return results
+}
+
+fn nestedIfFunctionVar() -> list {
+    let x = 1
+    let results: list = []
+    if true {
+        x = 2
+        if true {
+            x = 3
+        }
+        arrays.push(results, x) // 3
+    }
+    arrays.push(results, x) // 3 (function-scoped)
+    return results
+}
+
+fn whileLoopVarPreserved() -> list {
+    let result: list = []
+    let i = 0
+    while i < 3 {
+        let temp = i * 100
+        arrays.push(result, temp)
+        i = i + 1
+    }
+    arrays.push(result, i) // i is 3
+    return result
+}
+
+fn separateFunctionVars() -> list {
+    // Each function gets its own x
+    let x = 100
+    fn inner() -> int {
+        let x = 200
+        return x
+    }
+    let result: list = []
+    arrays.push(result, x)       // 100
+    arrays.push(result, inner()) // 200
+    arrays.push(result, x)       // 100 (unchanged)
+    return result
+}
+
+let pass = true
+
+// Test 1: if modifies function-level x
+let r1 = ifFunctionVar()
+if r1[0] != 2 { io.println("FAIL 1: x after if should be 2 (function-scoped), got " + convert.toString(r1[0])); pass = false }
+
+// Test 2: while modifies function-level x
+let r2 = whileFunctionVar()
+if arrays.length(r2) != 6 { io.println("FAIL 2: should have 6 elements"); pass = false }
+if r2[0] != 0 { io.println("FAIL 2a: first should be 0"); pass = false }
+if r2[4] != 40 { io.println("FAIL 2b: fifth should be 40"); pass = false }
+if r2[5] != 40 { io.println("FAIL 2c: x after loop should be 40, got " + convert.toString(r2[5])); pass = false }
+
+// Test 3: nested if
+let r3 = nestedIfFunctionVar()
+if r3[0] != 3 { io.println("FAIL 3a: inner should be 3"); pass = false }
+if r3[1] != 3 { io.println("FAIL 3b: outer should be 3 (function-scoped)"); pass = false }
+
+// Test 4: while loop variable preserved
+let r4 = whileLoopVarPreserved()
+if r4[0] != 0 { io.println("FAIL 4a: first should be 0"); pass = false }
+if r4[1] != 100 { io.println("FAIL 4b: second should be 100"); pass = false }
+if r4[2] != 200 { io.println("FAIL 4c: third should be 200"); pass = false }
+if r4[3] != 3 { io.println("FAIL 4d: i after loop should be 3, got " + convert.toString(r4[3])); pass = false }
+
+// Test 5: separate function vars
+let r5 = separateFunctionVars()
+if r5[0] != 100 { io.println("FAIL 5a: outer should be 100"); pass = false }
+if r5[1] != 200 { io.println("FAIL 5b: inner should return 200"); pass = false }
+if r5[2] != 100 { io.println("FAIL 5c: outer should remain 100"); pass = false }
+
+if pass {
+    io.println("scope_06 PASS: function-level block scope verified (TLL semantics)")
+} else {
+    io.println("scope_06 FAIL")
+}

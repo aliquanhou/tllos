@@ -823,7 +823,17 @@ fn cg_compileStatement(stmt: map) -> void {
     }
 
     if kind == "Let" || kind == "Const" {
-        let resolved = cg_resolveVar(stmt.name)
+        // P0-15.18.4-RUNTIME.3 fix: in non-main functions, let/const must create a NEW local
+        // variable, not fall back to a global with the same name. cg_resolveVar would return
+        // the global, causing function-local assignments to silently overwrite globals.
+        // In main (top-level), variables ARE globals, so cg_resolveVar is correct there.
+        let resolved = null
+        if cg_currentFn != null && cg_currentFn.name == "__main__" {
+            resolved = cg_resolveVar(stmt.name)
+        } else {
+            let localIdx = cg_getOrCreateVar(stmt.name)
+            resolved = { index: localIdx, isGlobal: false }
+        }
         let isSelfRef = false
         let selfSlot = -1
         // Detect self-referencing closure: lambda that captures the variable being assigned.

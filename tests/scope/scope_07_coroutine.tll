@@ -1,0 +1,113 @@
+// scope_07: Coroutine variable scope
+// Note: coroutine counters use globals to avoid lifetime issues with function-local vars
+
+let scope07_result = 0
+let scope07_captured = 0
+let scope07_params: list = []
+let scope07_loopCount = 0
+
+fn worker(id: int) -> void {
+    let localVal = id * 10
+    coroutine.sleep(10)
+    // localVal should still be id*10, not corrupted by other coroutines
+    if localVal == id * 10 {
+        scope07_result = scope07_result + 1
+    }
+}
+
+fn incrementer() -> void {
+    scope07_captured = scope07_captured + 1
+}
+
+fn paramWorker(n: int) -> void {
+    let local = n
+    coroutine.sleep(20)
+    arrays.push(scope07_params, local)
+}
+
+fn loopWorker(val: int) -> void {
+    coroutine.sleep(10)
+    if val == 0 || val == 1 || val == 2 || val == 3 || val == 4 {
+        scope07_loopCount = scope07_loopCount + 1
+    }
+}
+
+fn coroutineLocalIsolation() -> void {
+    scope07_result = 0
+    coroutine.spawn(worker, 1)
+    coroutine.spawn(worker, 2)
+    coroutine.spawn(worker, 3)
+}
+
+fn coroutineCapture() -> void {
+    scope07_captured = 0
+    coroutine.spawn(incrementer)
+    coroutine.spawn(incrementer)
+    coroutine.spawn(incrementer)
+}
+
+fn coroutineParamIsolation() -> void {
+    scope07_params = []
+    coroutine.spawn(paramWorker, 10)
+    coroutine.spawn(paramWorker, 20)
+    coroutine.spawn(paramWorker, 30)
+}
+
+fn coroutineLoopVar() -> void {
+    scope07_loopCount = 0
+    let i = 0
+    while i < 5 {
+        coroutine.spawn(loopWorker, i)
+        i = i + 1
+    }
+}
+
+let pass = true
+
+// Test 1: coroutine local variables isolated
+coroutineLocalIsolation()
+coroutine.sleep(100)
+if scope07_result != 3 {
+    io.println("FAIL 1: all 3 coroutines should have correct locals, got " + convert.toString(scope07_result))
+    pass = false
+}
+
+// Test 2: coroutines can share captured global
+coroutineCapture()
+coroutine.sleep(50)
+if scope07_captured != 3 {
+    io.println("FAIL 2: captured should be incremented 3 times, got " + convert.toString(scope07_captured))
+    pass = false
+}
+
+// Test 3: coroutine parameters isolated
+coroutineParamIsolation()
+coroutine.sleep(100)
+if arrays.length(scope07_params) != 3 {
+    io.println("FAIL 3: should have 3 results, got " + convert.toString(arrays.length(scope07_params)))
+    pass = false
+}
+let sum = 0
+let ri = 0
+while ri < arrays.length(scope07_params) {
+    sum = sum + scope07_params[ri]
+    ri = ri + 1
+}
+if sum != 60 {
+    io.println("FAIL 3a: sum should be 60, got " + convert.toString(sum))
+    pass = false
+}
+
+// Test 4: loop variable captured correctly
+coroutineLoopVar()
+coroutine.sleep(100)
+if scope07_loopCount != 5 {
+    io.println("FAIL 4: all 5 coroutines should get correct values, got " + convert.toString(scope07_loopCount))
+    pass = false
+}
+
+if pass {
+    io.println("scope_07 PASS: coroutine variable scope verified")
+} else {
+    io.println("scope_07 FAIL")
+}

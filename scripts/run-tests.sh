@@ -114,6 +114,59 @@ done
 
 rm -f "$TMPFILE"
 
+# Run scope semantics tests (P0-15.18.4-RUNTIME.4: Compiler Semantic Guardrail)
+# These tests are compiled on-the-fly from .tll source, then run.
+echo "--- Scope Semantics Tests ---"
+TLLC_BC="$REPO_ROOT/tools/TLLC/tllc.tllbc"
+for f in "$REPO_ROOT/tests/scope/"*.tll; do
+    [ -f "$f" ] || continue
+    TOTAL=$((TOTAL + 1))
+    display="$(basename "$f")"
+    out="${f%.tll}.tllbc"
+    # Compile
+    set +e
+    "$TLLVM_EXE" "$TLLC_BC" compile "$f" -o "$out" >"$TMPFILE" 2>&1
+    compile_rc=$?
+    set -e
+    if [ "$compile_rc" -ne 0 ]; then
+        echo "  FAIL: $display (compile error)"
+        cat "$TMPFILE"
+        FAILED=$((FAILED + 1))
+        continue
+    fi
+    # Run
+    set +e
+    if [ -n "$TIMEOUT_CMD" ]; then
+        $TIMEOUT_CMD 10 "$TLLVM_EXE" "$out" >"$TMPFILE" 2>&1
+    else
+        "$TLLVM_EXE" "$out" >"$TMPFILE" 2>&1
+    fi
+    run_rc=$?
+    set -e
+    if [ "$run_rc" -eq 124 ]; then
+        echo "  FAIL: $display (timeout - possible infinite loop)"
+        FAILED=$((FAILED + 1))
+    elif [ "$run_rc" -ne 0 ]; then
+        echo "  FAIL: $display (exit=$run_rc)"
+        cat "$TMPFILE"
+        FAILED=$((FAILED + 1))
+    elif ! grep -q "PASS" "$TMPFILE" 2>/dev/null; then
+        echo "  FAIL: $display (no PASS marker)"
+        cat "$TMPFILE"
+        FAILED=$((FAILED + 1))
+    elif grep -q "FAIL" "$TMPFILE" 2>/dev/null; then
+        echo "  FAIL: $display (contains FAIL)"
+        cat "$TMPFILE"
+        FAILED=$((FAILED + 1))
+    else
+        echo "  PASS: $display"
+        PASSED=$((PASSED + 1))
+    fi
+    rm -f "$out"
+done
+
+rm -f "$TMPFILE"
+
 echo ""
 echo "=== Test Results ==="
 echo "Total:  $TOTAL"

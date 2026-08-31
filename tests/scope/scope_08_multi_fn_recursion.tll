@@ -1,0 +1,83 @@
+// scope_08: Multiple functions with same-named locals
+
+let shared = 0
+
+fn funcA() -> int {
+    let x = 100
+    let y = 200
+    return x + y
+}
+
+fn funcB() -> int {
+    let x = 300
+    let y = 400
+    return x + y
+}
+
+fn funcC() -> int {
+    let x = 500
+    return x
+}
+
+fn recursiveSum(n: int) -> int {
+    let x = n
+    if n <= 0 {
+        return 0
+    }
+    let result = x + recursiveSum(n - 1)
+    // x should still be n after recursive call
+    if x != n {
+        return -1
+    }
+    return result
+}
+
+fn mutualA(n: int) -> int {
+    let x = n * 2
+    if n <= 0 {
+        return x
+    }
+    return mutualB(n - 1) + x
+}
+
+fn mutualB(n: int) -> int {
+    let y = n * 3
+    if n <= 0 {
+        return y
+    }
+    return mutualA(n - 1) + y
+}
+
+let pass = true
+
+// Test 1: same-named locals in different functions don't interfere
+let r1 = funcA()
+let r2 = funcB()
+let r3 = funcC()
+if r1 != 300 { io.println("FAIL 1: funcA should return 300, got " + convert.toString(r1)); pass = false }
+if r2 != 700 { io.println("FAIL 2: funcB should return 700, got " + convert.toString(r2)); pass = false }
+if r3 != 500 { io.println("FAIL 3: funcC should return 500, got " + convert.toString(r3)); pass = false }
+
+// Test 2: repeated calls preserve local isolation
+let r4 = funcA()
+let r5 = funcA()
+if r4 != 300 || r5 != 300 { io.println("FAIL 4: repeated funcA calls should both return 300"); pass = false }
+
+// Test 3: recursion preserves frame-local variables
+let r6 = recursiveSum(5)
+if r6 != 15 { io.println("FAIL 5: recursiveSum(5) should be 15, got " + convert.toString(r6)); pass = false }
+
+// Test 4: mutual recursion preserves frame-local variables
+let r7 = mutualA(3)
+// mutualA(3) = mutualB(2) + 6
+// mutualB(2) = mutualA(1) + 6
+// mutualA(1) = mutualB(0) + 2
+// mutualB(0) = 0
+// So mutualA(1) = 2, mutualB(2) = 8, mutualA(3) = 14
+if r7 != 14 { io.println("FAIL 6: mutualA(3) should be 14, got " + convert.toString(r7)); pass = false }
+
+if pass {
+    io.println("scope_08 PASS: multi-function same-named locals + recursion verified")
+} else {
+    io.println("scope_08 FAIL")
+}

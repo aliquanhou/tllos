@@ -1,0 +1,82 @@
+// scope_04: Nested function scope
+
+let globalVal = 100
+
+fn outer() -> list {
+    let outerVal = 200
+
+    fn middle() -> list {
+        let middleVal = 300
+
+        fn inner() -> list {
+            let innerVal = 400
+            let result: list = []
+            arrays.push(result, globalVal)   // 100
+            arrays.push(result, outerVal)    // 200
+            arrays.push(result, middleVal)   // 300
+            arrays.push(result, innerVal)    // 400
+            return result
+        }
+
+        return inner()
+    }
+
+    return middle()
+}
+
+fn nestedModification() -> int {
+    let x = 1
+
+    fn increment() -> void {
+        x = x + 1
+    }
+
+    increment()
+    increment()
+    increment()
+    return x
+}
+
+fn nestedShadowOuter() -> list {
+    let x = 10
+
+    fn inner() -> int {
+        let x = 20
+        return x
+    }
+
+    let result: list = []
+    arrays.push(result, x)       // 10
+    arrays.push(result, inner()) // 20
+    arrays.push(result, x)       // 10 (unchanged)
+    return result
+}
+
+let pass = true
+
+// Test 1: nested functions can access all enclosing scopes
+let r1 = outer()
+if arrays.length(r1) != 4 { io.println("FAIL 1: should return 4 values"); pass = false }
+if r1[0] != 100 { io.println("FAIL 1a: globalVal should be 100, got " + convert.toString(r1[0])); pass = false }
+if r1[1] != 200 { io.println("FAIL 1b: outerVal should be 200, got " + convert.toString(r1[1])); pass = false }
+if r1[2] != 300 { io.println("FAIL 1c: middleVal should be 300, got " + convert.toString(r1[2])); pass = false }
+if r1[3] != 400 { io.println("FAIL 1d: innerVal should be 400, got " + convert.toString(r1[3])); pass = false }
+
+// Test 2: nested function can modify outer local (closure-like)
+let r2 = nestedModification()
+if r2 != 4 { io.println("FAIL 2: nestedModification should return 4, got " + convert.toString(r2)); pass = false }
+
+// Test 3: nested function local shadows outer
+let r3 = nestedShadowOuter()
+if r3[0] != 10 { io.println("FAIL 3a: should be 10, got " + convert.toString(r3[0])); pass = false }
+if r3[1] != 20 { io.println("FAIL 3b: inner should return 20, got " + convert.toString(r3[1])); pass = false }
+if r3[2] != 10 { io.println("FAIL 3c: outer should remain 10, got " + convert.toString(r3[2])); pass = false }
+
+// Test 4: global unchanged
+if globalVal != 100 { io.println("FAIL 4: globalVal should be 100"); pass = false }
+
+if pass {
+    io.println("scope_04 PASS: nested function scope verified")
+} else {
+    io.println("scope_04 FAIL")
+}

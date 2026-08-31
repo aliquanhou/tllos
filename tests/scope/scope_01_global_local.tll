@@ -1,0 +1,58 @@
+// scope_01: Global vs local variable with same name
+// Critical: function-local let must NOT overwrite global
+
+let x = 1
+
+fn getLocal() -> int {
+    let x = 2
+    return x
+}
+
+fn getGlobal() -> int {
+    return x
+}
+
+fn modifyLocal() -> void {
+    let x = 99
+}
+
+fn modifyGlobalParam(x: int) -> int {
+    x = x + 100
+    return x
+}
+
+let pass = true
+
+// Test 1: global before call
+if x != 1 { io.println("FAIL 1: global x should be 1, got " + convert.toString(x)); pass = false }
+
+// Test 2: function returns local, not global
+let r1 = getLocal()
+if r1 != 2 { io.println("FAIL 2: getLocal should return 2, got " + convert.toString(r1)); pass = false }
+
+// Test 3: global unchanged after local-only function
+if x != 1 { io.println("FAIL 3: global x should still be 1 after getLocal, got " + convert.toString(x)); pass = false }
+
+// Test 4: function can read global
+let r2 = getGlobal()
+if r2 != 1 { io.println("FAIL 4: getGlobal should return 1, got " + convert.toString(r2)); pass = false }
+
+// Test 5: modifyLocal must not affect global
+modifyLocal()
+if x != 1 { io.println("FAIL 5: global x should still be 1 after modifyLocal, got " + convert.toString(x)); pass = false }
+
+// Test 6: parameter modification must not affect global
+let r3 = modifyGlobalParam(5)
+if r3 != 105 { io.println("FAIL 6: modifyGlobalParam(5) should return 105, got " + convert.toString(r3)); pass = false }
+if x != 1 { io.println("FAIL 7: global x should still be 1 after param modification, got " + convert.toString(x)); pass = false }
+
+// Test 8: multiple calls, each gets fresh local
+let r4 = getLocal()
+let r5 = getLocal()
+if r4 != 2 || r5 != 2 { io.println("FAIL 8: repeated getLocal calls should both return 2"); pass = false }
+
+if pass {
+    io.println("scope_01 PASS: global/local isolation verified")
+} else {
+    io.println("scope_01 FAIL")
+}

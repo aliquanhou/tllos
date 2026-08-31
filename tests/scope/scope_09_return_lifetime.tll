@@ -1,0 +1,91 @@
+// scope_09: Return value lifetime and complex object scope
+
+fn returnMap() -> map {
+    let local = { value: 42, name: "test" }
+    return local
+}
+
+fn returnList() -> list {
+    let local: list = []
+    arrays.push(local, 1)
+    arrays.push(local, 2)
+    arrays.push(local, 3)
+    return local
+}
+
+fn returnNested() -> map {
+    let inner = { a: 1, b: 2 }
+    let outer = { nested: inner, count: 2 }
+    return outer
+}
+
+fn modifyReturned() -> map {
+    let obj = { value: 10 }
+    obj.value = obj.value + 5
+    return obj
+}
+
+fn chainCalls() -> int {
+    fn first() -> map {
+        return { value: 100 }
+    }
+    fn second(obj: map) -> int {
+        return obj.value + 50
+    }
+    return second(first())
+}
+
+fn makeScope09Obj(idx: int) -> map {
+    return { index: idx, square: idx * idx }
+}
+
+fn complexInLoop() -> list {
+    let results: list = []
+    let i = 0
+    while i < 5 {
+        let obj = makeScope09Obj(i)
+        arrays.push(results, obj.index)
+        arrays.push(results, obj.square)
+        i = i + 1
+    }
+    return results
+}
+
+let pass = true
+
+// Test 1: returned map survives function scope
+let r1 = returnMap()
+if r1.value != 42 { io.println("FAIL 1: returned map value should be 42, got " + convert.toString(r1.value)); pass = false }
+if r1.name != "test" { io.println("FAIL 1a: returned map name should be 'test'"); pass = false }
+
+// Test 2: returned list survives
+let r2 = returnList()
+if arrays.length(r2) != 3 { io.println("FAIL 2: returned list should have 3 elements"); pass = false }
+if r2[0] != 1 || r2[1] != 2 || r2[2] != 3 { io.println("FAIL 2a: list elements should be [1,2,3]"); pass = false }
+
+// Test 3: nested objects survive
+let r3 = returnNested()
+if r3.count != 2 { io.println("FAIL 3: count should be 2"); pass = false }
+if r3.nested.a != 1 || r3.nested.b != 2 { io.println("FAIL 3a: nested object should have a=1,b=2"); pass = false }
+
+// Test 4: modified returned object correct
+let r4 = modifyReturned()
+if r4.value != 15 { io.println("FAIL 4: modified value should be 15, got " + convert.toString(r4.value)); pass = false }
+
+// Test 5: chained function calls
+let r5 = chainCalls()
+if r5 != 150 { io.println("FAIL 5: chainCalls should return 150, got " + convert.toString(r5)); pass = false }
+
+// Test 6: complex objects in loop
+let r6 = complexInLoop()
+if arrays.length(r6) != 10 { io.println("FAIL 6: should have 10 elements (5 pairs)"); pass = false }
+// Expected: [0,0, 1,1, 2,4, 3,9, 4,16]
+if r6[0] != 0 || r6[1] != 0 { io.println("FAIL 6a: first pair should be [0,0]"); pass = false }
+if r6[4] != 2 || r6[5] != 4 { io.println("FAIL 6b: third pair should be [2,4]"); pass = false }
+if r6[8] != 4 || r6[9] != 16 { io.println("FAIL 6c: fifth pair should be [4,16]"); pass = false }
+
+if pass {
+    io.println("scope_09 PASS: return value lifetime and complex object scope verified")
+} else {
+    io.println("scope_09 FAIL")
+}

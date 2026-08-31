@@ -1,0 +1,79 @@
+// scope_02: Variable shadowing (TLL has function-level scope, not block-level)
+// Block variables (if/while) are function-scoped, so they DO modify function-level x.
+// This tests function-level shadowing and nested function shadowing.
+
+let x = 1
+
+fn functionShadow() -> list {
+    let x = 10
+    fn inner() -> int {
+        let x = 20
+        return x
+    }
+    let result: list = []
+    arrays.push(result, x)       // 10 (function-level)
+    arrays.push(result, inner()) // 20 (inner function-level)
+    arrays.push(result, x)       // 10 (unchanged by inner)
+    return result
+}
+
+fn whileFunctionVar() -> list {
+    let x = 5
+    let results: list = []
+    let i = 0
+    while i < 3 {
+        // In TLL, this x is function-scoped, so it modifies the outer x
+        x = i * 100
+        arrays.push(results, x)
+        i = i + 1
+    }
+    arrays.push(results, x) // x is now 200 (last loop value)
+    return results
+}
+
+fn nestedFunctionShadow() -> list {
+    let x = 1
+    fn inner() -> int {
+        let x = 2
+        fn innermost() -> int {
+            let x = 3
+            return x
+        }
+        return innermost()
+    }
+    let result: list = []
+    arrays.push(result, x)       // 1
+    arrays.push(result, inner()) // 3
+    arrays.push(result, x)       // 1 (unchanged)
+    return result
+}
+
+let pass = true
+
+// Test 1: function-level shadowing (nested functions)
+let r1 = functionShadow()
+if r1[0] != 10 { io.println("FAIL 1a: should be 10, got " + convert.toString(r1[0])); pass = false }
+if r1[1] != 20 { io.println("FAIL 1b: inner should return 20, got " + convert.toString(r1[1])); pass = false }
+if r1[2] != 10 { io.println("FAIL 1c: outer should remain 10, got " + convert.toString(r1[2])); pass = false }
+
+// Test 2: while loop modifies function-level x (TLL semantics)
+let r2 = whileFunctionVar()
+if r2[0] != 0 { io.println("FAIL 2a: first should be 0, got " + convert.toString(r2[0])); pass = false }
+if r2[1] != 100 { io.println("FAIL 2b: second should be 100, got " + convert.toString(r2[1])); pass = false }
+if r2[2] != 200 { io.println("FAIL 2c: third should be 200, got " + convert.toString(r2[2])); pass = false }
+if r2[3] != 200 { io.println("FAIL 2d: x after loop should be 200 (function-scoped), got " + convert.toString(r2[3])); pass = false }
+
+// Test 3: nested function shadowing
+let r3 = nestedFunctionShadow()
+if r3[0] != 1 { io.println("FAIL 3a: should be 1"); pass = false }
+if r3[1] != 3 { io.println("FAIL 3b: innermost should return 3"); pass = false }
+if r3[2] != 1 { io.println("FAIL 3c: outer should remain 1"); pass = false }
+
+// Test 4: global unchanged
+if x != 1 { io.println("FAIL 4: global x should be 1, got " + convert.toString(x)); pass = false }
+
+if pass {
+    io.println("scope_02 PASS: function-level variable shadowing verified (TLL semantics)")
+} else {
+    io.println("scope_02 FAIL")
+}

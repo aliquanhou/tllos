@@ -1,0 +1,126 @@
+// scope_10: Complete scope chain - global -> function -> nested -> closure -> coroutine
+// This is the comprehensive integration test for the entire scope system.
+
+let globalCounter = 0
+
+fn createSystem() -> map {
+    let systemValue = 100
+
+    fn createWorker(name: string) -> map {
+        let workerValue = 200
+
+        fn work(task: int) -> int {
+            let workValue = 300
+            globalCounter = globalCounter + 1
+            return systemValue + workerValue + workValue + task
+        }
+
+        fn getState() -> list {
+            let state: list = []
+            arrays.push(state, globalCounter)
+            arrays.push(state, systemValue)
+            arrays.push(state, workerValue)
+            return state
+        }
+
+        return { name: name, work: work, getState: getState }
+    }
+
+    return { createWorker: createWorker, systemValue: systemValue }
+}
+
+let scope10_completed = 0
+let scope10_system = null
+
+fn scope10_runWorker(worker: map, tasks: int) -> void {
+    let localSum = 0
+    let i = 0
+    while i < tasks {
+        let result = worker.work(i)
+        localSum = localSum + result
+        i = i + 1
+    }
+    if localSum > 0 {
+        scope10_completed = scope10_completed + 1
+    }
+}
+
+fn coroutineScopeTest() -> int {
+    scope10_completed = 0
+    let system = createSystem()
+
+    let w1 = system.createWorker("A")
+    let w2 = system.createWorker("B")
+
+    coroutine.spawn(scope10_runWorker, w1, 3)
+    coroutine.spawn(scope10_runWorker, w2, 3)
+    coroutine.sleep(200)
+
+    return scope10_completed
+}
+
+fn closureChainTest() -> list {
+    fn makeMultiplier(factor: int) -> any {
+        fn multiply(x: int) -> int {
+            return x * factor
+        }
+        return multiply
+    }
+
+    fn makeComposed(f: any, g: any) -> any {
+        fn composed(x: int) -> int {
+            return f(g(x))
+        }
+        return composed
+    }
+
+    let double = makeMultiplier(2)
+    let triple = makeMultiplier(3)
+    let sextuple = makeComposed(double, triple)
+
+    let results: list = []
+    arrays.push(results, double(5))    // 10
+    arrays.push(results, triple(5))    // 15
+    arrays.push(results, sextuple(5))  // double(triple(5)) = double(15) = 30
+    return results
+}
+
+let pass = true
+
+// Test 1: complete scope chain - nested functions access all levels
+let system = createSystem()
+let worker = system.createWorker("test")
+let state1 = worker.getState()
+if state1[0] != 0 { io.println("FAIL 1a: globalCounter should be 0 initially"); pass = false }
+if state1[1] != 100 { io.println("FAIL 1b: systemValue should be 100"); pass = false }
+if state1[2] != 200 { io.println("FAIL 1c: workerValue should be 200"); pass = false }
+
+// Test 2: work function accesses all scope levels
+let workResult = worker.work(50)
+// 100 + 200 + 300 + 50 = 650
+if workResult != 650 { io.println("FAIL 2: work(50) should be 650, got " + convert.toString(workResult)); pass = false }
+
+// Test 3: globalCounter was incremented
+let state2 = worker.getState()
+if state2[0] != 1 { io.println("FAIL 3: globalCounter should be 1 after one work call, got " + convert.toString(state2[0])); pass = false }
+
+// Test 4: independent workers have independent workerValue
+let worker2 = system.createWorker("B")
+let state3 = worker2.getState()
+if state3[2] != 200 { io.println("FAIL 4: worker2 should have independent workerValue=200"); pass = false }
+
+// Test 5: coroutine scope integration
+let coroResult = coroutineScopeTest()
+if coroResult != 2 { io.println("FAIL 5: both coroutines should complete, got " + convert.toString(coroResult)); pass = false }
+
+// Test 6: closure composition chain
+let closureResults = closureChainTest()
+if closureResults[0] != 10 { io.println("FAIL 6a: double(5) should be 10, got " + convert.toString(closureResults[0])); pass = false }
+if closureResults[1] != 15 { io.println("FAIL 6b: triple(5) should be 15, got " + convert.toString(closureResults[1])); pass = false }
+if closureResults[2] != 30 { io.println("FAIL 6c: sextuple(5) should be 30, got " + convert.toString(closureResults[2])); pass = false }
+
+if pass {
+    io.println("scope_10 PASS: complete scope chain (global->function->nested->closure->coroutine) verified")
+} else {
+    io.println("scope_10 FAIL")
+}

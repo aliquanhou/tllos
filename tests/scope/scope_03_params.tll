@@ -1,0 +1,66 @@
+// scope_03: Function parameters vs local variables vs globals
+
+let counter = 0
+
+fn paramIsolation(a: int, b: int) -> int {
+    a = a + 1
+    b = b + 2
+    return a + b
+}
+
+fn paramShadow(x: int) -> int {
+    let x = x + 100
+    return x
+}
+
+fn paramSameAsGlobal(counter: int) -> int {
+    counter = counter * 2
+    return counter
+}
+
+fn multiParams(a: int, b: int, c: int, d: int) -> list {
+    let result: list = []
+    arrays.push(result, a)
+    arrays.push(result, b)
+    arrays.push(result, c)
+    arrays.push(result, d)
+    return result
+}
+
+let pass = true
+
+// Test 1: parameter modifications don't affect caller
+let x = 5
+let y = 10
+let r1 = paramIsolation(x, y)
+if r1 != 18 { io.println("FAIL 1: paramIsolation(5,10) should return 18, got " + convert.toString(r1)); pass = false }
+if x != 5 { io.println("FAIL 1a: x should be 5, got " + convert.toString(x)); pass = false }
+if y != 10 { io.println("FAIL 1b: y should be 10, got " + convert.toString(y)); pass = false }
+
+// Test 2: parameter shadowing by local
+let r2 = paramShadow(5)
+if r2 != 105 { io.println("FAIL 2: paramShadow(5) should return 105, got " + convert.toString(r2)); pass = false }
+
+// Test 3: parameter same name as global must not affect global
+let r3 = paramSameAsGlobal(10)
+if r3 != 20 { io.println("FAIL 3: paramSameAsGlobal(10) should return 20, got " + convert.toString(r3)); pass = false }
+if counter != 0 { io.println("FAIL 3a: global counter should be 0, got " + convert.toString(counter)); pass = false }
+
+// Test 4: multiple parameters preserved
+let r4 = multiParams(1, 2, 3, 4)
+if arrays.length(r4) != 4 { io.println("FAIL 4: should return 4 elements"); pass = false }
+if r4[0] != 1 || r4[1] != 2 || r4[2] != 3 || r4[3] != 4 {
+    io.println("FAIL 4a: elements should be [1,2,3,4]"); pass = false
+}
+
+// Test 5: repeated calls with same param names
+let r5 = paramIsolation(1, 1)
+let r6 = paramIsolation(2, 2)
+if r5 != 5 { io.println("FAIL 5: paramIsolation(1,1) should be 5, got " + convert.toString(r5)); pass = false }
+if r6 != 7 { io.println("FAIL 6: paramIsolation(2,2) should be 7, got " + convert.toString(r6)); pass = false }
+
+if pass {
+    io.println("scope_03 PASS: parameter isolation verified")
+} else {
+    io.println("scope_03 FAIL")
+}

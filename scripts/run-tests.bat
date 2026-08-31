@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 REM ============================================================
 REM TLL OS - Run All Tests (Windows)
 REM Supports stdout comparison via .expected.txt files.
@@ -109,6 +109,52 @@ for /d %%D in ("%~dp0..\tests\regression\*") do (
                 set /a PASSED+=1
             )
         )
+    )
+)
+
+if exist "%TMPFILE%" del "%TMPFILE%"
+
+echo --- Scope Semantics Tests ---
+REM P0-15.18.4-RUNTIME.4: TLL Compiler Semantic Guardrail
+REM Verifies variable scope semantics: global/local, shadowing, params,
+REM nested functions, closures, block scope, coroutines, recursion,
+REM return value lifetime, and complete scope chain.
+set "TLLC_BC=%~dp0..\tools\TLLC\tllc.tllbc"
+for %%F in ("%~dp0..\tests\scope\*.tll") do (
+    set /a TOTAL+=1
+    set "NAME=%%~nF"
+    set "OUT=%%~dpnF.tllbc"
+    "%TLLVM_EXE%" "%TLLC_BC%" compile "%%F" -o "!OUT!" >"%TMPFILE%" 2>&1
+    if errorlevel 1 (
+        echo   FAIL: %%~nxF ^(compile error^)
+        type "%TMPFILE%"
+        set /a FAILED+=1
+    ) else (
+        "%TLLVM_EXE%" "!OUT!" >"%TMPFILE%" 2>&1
+        set "ACTUAL=!ERRORLEVEL!"
+        if not "!ACTUAL!"=="0" (
+            echo   FAIL: %%~nxF ^(exit=!ACTUAL!^)
+            type "%TMPFILE%"
+            set /a FAILED+=1
+        ) else (
+            findstr /c:"PASS" "%TMPFILE%" >nul 2>&1
+            if errorlevel 1 (
+                echo   FAIL: %%~nxF ^(no PASS marker^)
+                type "%TMPFILE%"
+                set /a FAILED+=1
+            ) else (
+                findstr /c:"FAIL" "%TMPFILE%" >nul 2>&1
+                if not errorlevel 1 (
+                    echo   FAIL: %%~nxF ^(contains FAIL^)
+                    type "%TMPFILE%"
+                    set /a FAILED+=1
+                ) else (
+                    echo   PASS: %%~nxF
+                    set /a PASSED+=1
+                )
+            )
+        )
+        if exist "!OUT!" del "!OUT!"
     )
 )
 
