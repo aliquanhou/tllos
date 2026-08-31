@@ -283,3 +283,42 @@ jobs:
           $orphan = Get-Process -Name "tllvm" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*coroutine_stress*" }
           if ($orphan) { throw "Orphan process still exists: $($orphan.Id)" }
           Write-Output "=== Coroutine 100K Stress Test PASSED ==="
+
+      # === P0-15.18.2: TCP/FD Boundary Black-Box Test ===
+      # Probes tcp.select() with >64 fds to detect buffer overflow on Windows TCC.
+      # Windows TCC FD_SET had no bounds check: fd_array[fd_count++] overflowed at 64.
+      # Fix: FD_SET now checks fd_count < FD_SETSIZE before writing.
+      - name: TCP/FD Boundary test (Linux/macOS)
+        if: runner.os != 'Windows'
+        timeout-minutes: 5
+        run: |
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/fd_boundary_test.tll -o tests/fd_boundary_test.tllbc
+          host/c/tllvm tests/fd_boundary_test.tllbc 2>&1 | tee /tmp/fd_boundary.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          test "$EXIT_CODE" -eq 0
+          grep -q "Test 1 PASS" /tmp/fd_boundary.log
+          grep -q "Test 2 PASS" /tmp/fd_boundary.log
+          grep -q "Test 3 PASS" /tmp/fd_boundary.log
+          grep -q "Test 4 PASS" /tmp/fd_boundary.log
+          grep -q "Test 5 PASS" /tmp/fd_boundary.log
+          grep -q "ALL TESTS PASSED" /tmp/fd_boundary.log
+          echo "=== TCP/FD Boundary Test PASSED ==="
+
+      - name: TCP/FD Boundary test (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: powershell
+        run: |
+          host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tests\fd_boundary_test.tll -o tests\fd_boundary_test.tllbc
+          if ($LASTEXITCODE -ne 0) { throw "Compilation failed" }
+          & host\c\tllvm.exe tests\fd_boundary_test.tllbc 2>&1 | Tee-Object -FilePath fd_boundary.log
+          $EXIT_CODE = $LASTEXITCODE
+          if ($EXIT_CODE -ne 0) { throw "Process exited with code $EXIT_CODE" }
+          $log = Get-Content fd_boundary.log -Raw
+          if ($log -notmatch "Test 1 PASS") { throw "Test 1 did not PASS" }
+          if ($log -notmatch "Test 2 PASS") { throw "Test 2 did not PASS" }
+          if ($log -notmatch "Test 3 PASS") { throw "Test 3 did not PASS (65 fds beyond FD_SETSIZE)" }
+          if ($log -notmatch "Test 4 PASS") { throw "Test 4 did not PASS" }
+          if ($log -notmatch "Test 5 PASS") { throw "Test 5 did not PASS" }
+          if ($log -notmatch "ALL TESTS PASSED") { throw "Test did not complete" }
+          Write-Output "=== TCP/FD Boundary Test PASSED ==="

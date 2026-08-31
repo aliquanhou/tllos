@@ -16,7 +16,7 @@ typedef UINT_PTR SOCKET;
 #define FD_SETSIZE 64
 typedef struct fd_set { unsigned int fd_count; SOCKET fd_array[FD_SETSIZE]; } fd_set;
 #define FD_ZERO(s) ((s)->fd_count = 0)
-#define FD_SET(fd,s) ((s)->fd_array[(s)->fd_count++] = (SOCKET)(fd))
+#define FD_SET(fd,s) do { if ((s)->fd_count < FD_SETSIZE) (s)->fd_array[(s)->fd_count++] = (SOCKET)(fd); } while(0)
 static int fd_isset(SOCKET fd, fd_set *s) { int _i=0; while(_i<s->fd_count){if(s->fd_array[_i]==fd) return 1;_i++;} return 0; }
 #define FD_ISSET(fd,s) fd_isset((SOCKET)(fd), s)
 #ifndef _TIMEVAL_DEFINED

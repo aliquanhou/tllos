@@ -1,0 +1,133 @@
+// P0-15.18.2: TCP/FD Boundary Black-Box Test
+// Probes tcp.select() with >64 fds to detect buffer overflow on Windows TCC.
+// Windows TCC FD_SET has no bounds check: fd_array[fd_count++] can overflow at 64.
+// Linux/macOS use system fd_set (FD_SETSIZE=1024), should be safe.
+io.println("=== P0-15.18.2 FD Boundary Test ===")
+
+// Create server
+let serverFd = tcp.listen("127.0.0.1", 19876)
+if serverFd < 0 {
+    io.println("FAIL: Cannot listen on 19876")
+    io.println("=== FD Boundary Test ABORTED ===")
+} else {
+    io.println("Server listening fd=" + convert.toString(serverFd))
+
+    // Accept coroutine
+    let acceptedCount = 0
+    fn acceptLoop() {
+        while acceptedCount < 10 {
+            let cfd = tcp.tryAccept(serverFd, 50)
+            if cfd >= 0 {
+                acceptedCount = acceptedCount + 1
+            } else {
+                coroutine.yield()
+            }
+        }
+    }
+    coroutine.spawn(acceptLoop)
+
+    // Create 10 real client connections
+    let clientFds = []
+    let ci = 0
+    while ci < 10 {
+        let fd = tcp.connect("127.0.0.1", 19876)
+        if fd >= 0 {
+            arrays.push(clientFds, fd)
+        }
+        ci = ci + 1
+        coroutine.yield()
+    }
+
+    // Wait for accept
+    let guard = 0
+    while acceptedCount < 10 && guard < 50 {
+        coroutine.yield()
+        guard = guard + 1
+    }
+
+    io.println("Created " + convert.toString(arrays.length(clientFds)) + " client connections, server accepted " + convert.toString(acceptedCount))
+
+    // Build fd arrays for boundary testing
+    // We reuse the same fds multiple times to reach >64 count without needing 70 real connections.
+    // This directly probes FD_SET bounds check in tcp.select().
+
+    // Test 1: 60 fds (safe zone)
+    io.println("")
+    io.println("--- Test 1: select with 60 fds ---")
+    let fds60 = []
+    let k = 0
+    while k < 60 {
+        arrays.push(fds60, clientFds[k % arrays.length(clientFds)])
+        k = k + 1
+    }
+    let ready60 = tcp.select(fds60, 50)
+    io.println("select(60 fds) -> " + convert.toString(arrays.length(ready60)) + " ready")
+    io.println("Test 1 PASS: no crash with 60 fds")
+
+    // Test 2: 64 fds (exact boundary)
+    io.println("")
+    io.println("--- Test 2: select with 64 fds (FD_SETSIZE boundary) ---")
+    let fds64 = []
+    k = 0
+    while k < 64 {
+        arrays.push(fds64, clientFds[k % arrays.length(clientFds)])
+        k = k + 1
+    }
+    let ready64 = tcp.select(fds64, 50)
+    io.println("select(64 fds) -> " + convert.toString(arrays.length(ready64)) + " ready")
+    io.println("Test 2 PASS: no crash with 64 fds")
+
+    // Test 3: 65 fds (one beyond boundary - critical!)
+    io.println("")
+    io.println("--- Test 3: select with 65 fds (BEYOND FD_SETSIZE) ---")
+    let fds65 = []
+    k = 0
+    while k < 65 {
+        arrays.push(fds65, clientFds[k % arrays.length(clientFds)])
+        k = k + 1
+    }
+    let ready65 = tcp.select(fds65, 50)
+    io.println("select(65 fds) -> " + convert.toString(arrays.length(ready65)) + " ready")
+    io.println("Test 3 PASS: no crash with 65 fds")
+
+    // Test 4: 70 fds (well beyond boundary)
+    io.println("")
+    io.println("--- Test 4: select with 70 fds ---")
+    let fds70 = []
+    k = 0
+    while k < 70 {
+        arrays.push(fds70, clientFds[k % arrays.length(clientFds)])
+        k = k + 1
+    }
+    let ready70 = tcp.select(fds70, 50)
+    io.println("select(70 fds) -> " + convert.toString(arrays.length(ready70)) + " ready")
+    io.println("Test 4 PASS: no crash with 70 fds")
+
+    // Test 5: 100 fds (far beyond boundary)
+    io.println("")
+    io.println("--- Test 5: select with 100 fds ---")
+    let fds100 = []
+    k = 0
+    while k < 100 {
+        arrays.push(fds100, clientFds[k % arrays.length(clientFds)])
+        k = k + 1
+    }
+    let ready100 = tcp.select(fds100, 50)
+    io.println("select(100 fds) -> " + convert.toString(arrays.length(ready100)) + " ready")
+    io.println("Test 5 PASS: no crash with 100 fds")
+
+    // Cleanup
+    io.println("")
+    io.println("--- Cleanup ---")
+    let c = 0
+    while c < arrays.length(clientFds) {
+        tcp.close(clientFds[c])
+        c = c + 1
+    }
+    tcp.close(serverFd)
+    io.println("All sockets closed")
+
+    io.println("")
+    io.println("=== FD Boundary Test Complete ===")
+    io.println("ALL TESTS PASSED: tcp.select() handles >64 fds without crash")
+}
