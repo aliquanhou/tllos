@@ -8,18 +8,6 @@ from "./ed25519_curve" import point_add, point_double, point_scalarmul, point_en
 from "./ed25519_scalar" import scalar_L, scalar_from_bytes, scalar_to_bytes, scalar_add, scalar_mul, scalar_reduce_64, scalar_reduce_once, scalar_is_zero, scalar_ge, scalar_sub
 
 // Convert hex string to byte array
-fn hex_to_bytes(hex: string) -> list {
-    let bytes = []
-    let i = 0
-    while i < hex.length {
-        let high = hex_char_val(hex[i])
-        let low = hex_char_val(hex[i + 1])
-        bytes[i / 2] = (high << 4) | low
-        i = i + 2
-    }
-    return bytes
-}
-
 fn hex_char_val(c: string) -> int {
     if c == "0" { return 0 }
     if c == "1" { return 1 }
@@ -36,22 +24,9 @@ fn hex_char_val(c: string) -> int {
     if c == "c" || c == "C" { return 12 }
     if c == "d" || c == "D" { return 13 }
     if c == "e" || c == "E" { return 14 }
-    if c == "f" || c == "F" { return 15 }
-    return 0
+    return 15
 }
 
-// Convert byte array to hex string
-fn bytes_to_hex(bytes: list) -> string {
-    let hex = ""
-    let i = 0
-    while i < bytes.length {
-        let high = (bytes[i] >> 4) & 0xF
-        let low = bytes[i] & 0xF
-        hex = hex + hex_digit(high) + hex_digit(low)
-        i = i + 1
-    }
-    return hex
-}
 
 fn hex_digit(n: int) -> string {
     if n < 10 { return convert.toString(n) }
@@ -63,17 +38,46 @@ fn hex_digit(n: int) -> string {
     return "f"
 }
 
+fn hex_to_bytes(hex: string) -> list {
+    let bytes = []
+    let len = strings.length(hex)
+    let i = 0
+    while i < len {
+        let high = hex_char_val(strings.charAt(hex, i))
+        let low = hex_char_val(strings.charAt(hex, i + 1))
+        bytes[i >> 1] = (high << 4) | low
+        i = i + 2
+    }
+    return bytes
+}
+
+
+// Convert byte array to hex string
+fn bytes_to_hex(bytes: list) -> string {
+    let hex = ""
+    let len = arrays.length(bytes)
+    let i = 0
+    while i < len {
+        let high = (bytes[i] >> 4) & 0xF
+        let low = bytes[i] & 0xF
+        hex = hex + hex_digit(high) + hex_digit(low)
+        i = i + 1
+    }
+    return hex
+}
+
+
 // Concatenate byte arrays
 fn bytes_concat(a: list, b: list) -> list {
     let result = []
     let i = 0
-    while i < a.length {
+    while i < arrays.length(a) {
         result[i] = a[i]
         i = i + 1
     }
     i = 0
-    while i < b.length {
-        result[a.length + i] = b[i]
+    while i < arrays.length(b) {
+        result[arrays.length(a) + i] = b[i]
         i = i + 1
     }
     return result
@@ -95,7 +99,7 @@ fn bytes_tail(b: list, n: int) -> list {
     let result = []
     let i = 0
     while i < n {
-        result[i] = b[b.length - n + i]
+        result[i] = b[arrays.length(b) - n + i]
         i = i + 1
     }
     return result
@@ -185,7 +189,7 @@ fn sign(privateKey: list, message: list) -> list {
 // Returns 1 if valid, 0 if invalid
 fn verify(publicKey: list, message: list, signature: list) -> int {
     // Check signature length
-    if signature.length != 64 { return 0 }
+    if arrays.length(signature) != 64 { return 0 }
 
     // Extract R and S from signature
     let RBytes = bytes_head(signature, 32)
