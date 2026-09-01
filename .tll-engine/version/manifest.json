@@ -1,0 +1,128 @@
+{
+  "schema_version": "1.0",
+  "name": "TLL OS Engineering Foundation Version Manifest",
+  "description": "Version manifest for the TLL OS AI Native Engineering Foundation. Tracks the version of all .tll-engine/ components and their hash chain.",
+  "foundation_version": "0.1.0-bootstrap",
+  "foundation_status": "bootstrap",
+  "foundation_phase": "P0-16.0",
+  "created_at": "2026-09-01",
+  "created_by": "agent_doubao_bootstrap_001",
+  "verified_by": "human_maintainer_001",
+  "components": {
+    "identity": {
+      "version": "1.0.0",
+      "status": "bootstrap",
+      "files": [
+        "identity/root.json",
+        "identity/agents.json"
+      ],
+      "note": "Identity system in bootstrap phase. Ed25519 key-based identity pending P0-15.19. Current identity is git-commit-author based."
+    },
+    "truth": {
+      "version": "1.0.0",
+      "status": "bootstrap",
+      "files": [
+        "truth/architecture.json",
+        "truth/language.json",
+        "truth/runtime.json",
+        "truth/capability.json"
+      ],
+      "note": "Truth files in bootstrap phase. Structure and schema established. Full population with fine-grained data is future work."
+    },
+    "protocol": {
+      "version": "0.1",
+      "status": "bootstrap",
+      "files": [
+        "protocol/development.yaml",
+        "protocol/testing.yaml",
+        "protocol/audit.yaml"
+      ],
+      "note": "Protocol v0.1 in bootstrap phase. 8-phase development workflow, testing standards, and audit procedure defined. Enforcement via CI hooks is future work."
+    },
+    "cognition": {
+      "version": "1.0.0",
+      "status": "bootstrap",
+      "files": [
+        "cognition/graph.json",
+        "cognition/dependency.json",
+        "cognition/decisions.json"
+      ],
+      "note": "Engineering Cognition Graph in bootstrap phase. NOT a neural network. Structure and schema established with example nodes/edges/decisions. Full population and query API is future work."
+    },
+    "evidence": {
+      "version": "1.0.0",
+      "status": "bootstrap",
+      "files": [
+        "evidence/ci/run_123.json",
+        "evidence/benchmark/perf_coroutine.json",
+        "evidence/audit/p0_15_18_4_seal.json"
+      ],
+      "note": "Evidence system in bootstrap phase. Schema established with 3 example evidence records. Automated evidence collection from CI is future work."
+    }
+  },
+  "immutable_core_rules": [
+    "P001: No construction report = completion",
+    "P002: Truth is not README",
+    "P003: First audit, then construct",
+    "P004: Bug only, no Runtime modification without evidence",
+    "P005: No test standard lowering for CI green",
+    "P006: Capability claim requires evidence",
+    "P007: Scope boundary respected",
+    "P008: Independent audit before seal",
+    "P009: Three-platform CI required",
+    "P010: First Principle: TLL is a high frame rate programming language"
+  ],
+  "known_limitations": [
+    "Ed25519 identity not yet implemented (pending P0-15.19)",
+    "CI enforcement of protocol not yet implemented (future work)",
+    "Automated evidence collection from CI not yet implemented",
+    "Full population of cognition graph not yet complete",
+    "Query API for cognition graph not yet implemented",
+    "Truth update automation not yet implemented (manual update in bootstrap phase)"
+  ],
+  "next_phases": [
+    {
+      "phase": "P0-15.19",
+      "name": "TLL Native Cryptographic Foundation",
+      "description": "Add Ed25519, SHA-512, secure random, Identity primitives, upgrade blockchain signatures from HMAC to Ed25519.",
+      "status": "planned",
+      "blocks": ["real cryptographic identity", "secure agent identity", "production blockchain signatures"]
+    },
+    {
+      "phase": "P0-16.1",
+      "name": "AI Foundation CI Enforcement",
+      "description": "Add CI validation of .tll-engine/ schema, protocol compliance checks, automated evidence collection.",
+      "status": "planned",
+      "blocks": ["automated protocol enforcement", "automated truth validation"]
+    },
+    {
+      "phase": "P0-16.2",
+      "name": "Engineering Cognition Query API",
+      "description": "Add query API for cognition graph: What is X? Why? Depends? Proves? Constrains? Changed? Safely change? Must verify?",
+      "status": "planned",
+      "blocks": ["agent-friendly engineering cognition"]
+    },
+    {
+      "phase": "P0-17.0",
+      "name": "tllos.com Official Portal",
+      "description": "Build official website with Truth Browser, Agent Developer Center, and Engineering Cognition Graph visualization.",
+      "status": "planned",
+      "blocks": ["public-facing engineering truth", "external agent onboarding"],
+      "note": "Website comes AFTER foundation is established. Website shows results, foundation makes results."
+    }
+  ],
+  "version_chain": {
+    "current_version": "0.1.0-bootstrap",
+    "previous_version": null,
+    "parent_hash": null,
+    "current_hash": "foundation-manifest-0.1.0-bootstrap-v1",
+    "note": "Version chain established. Future versions will have parent_hash pointing to previous version's hash."
+  },
+  "production_readiness": {
+    "foundation": "NOT READY (bootstrap phase)",
+    "language": "READY for experimentation and development",
+    "runtime": "READY for development, NOT verified for production memory safety",
+    "blockchain": "NOT READY for production (missing real cryptography, account state, persistence, chain reorg)",
+    "ai_foundation": "NOT READY (bootstrap phase, structure established, automation pending)"
+  }
+}

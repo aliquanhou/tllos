@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "evidence_type": "benchmark",
+  "id": "bench-perf-coroutine-001",
+  "description": "Coroutine performance benchmark - 10K create, 100K yield, 1K sleep",
+  "repository": "aliquanhou/tllos",
+  "commit_sha": "df6d838",
+  "platform": "windows_msvc",
+  "compiler": "MSVC cl /O2",
+  "test_file": "tests/perf_coroutine.tll",
+  "run_at": "2026-08-30",
+  "results": {
+    "coroutine_create": {
+      "count": 10000,
+      "total_time_ms": 954,
+      "avg_time_us": 95.4,
+      "unit": "microseconds per coroutine"
+    },
+    "coroutine_yield": {
+      "count": 100000,
+      "total_time_ms": 219,
+      "avg_time_us": 2.19,
+      "unit": "microseconds per yield/resume"
+    },
+    "coroutine_sleep": {
+      "count": 1000,
+      "total_time_ms": 111,
+      "avg_time_ms": 0.111,
+      "unit": "milliseconds per sleep coroutine"
+    }
+  },
+  "proves": [
+    "TLL coroutine creation is performant (~95us each)",
+    "TLL coroutine yield/resume is fast (~2.2us each)",
+    "TLL sleep coroutine overhead is low (~0.1ms each)"
+  ],
+  "does_not_prove": [
+    "100K concurrent ACTIVE coroutines (test uses immediate-return, not concurrent active)",
+    "Memory efficiency (RSS not measured in this benchmark)",
+    "Long-term stability (benchmark is short-running)"
+  ],
+  "confidence": "medium",
+  "note": "Benchmarks are recorded but not yet enforced as hard gates (no performance regression detection in CI). Future phase will add performance regression detection.",
+  "hash": "bench-perf-coroutine-df6d838-v1",
+  "provenance_chain": [
+    "tests/perf_coroutine.tll",
+    "local Windows MSVC run",
+    "CI Run #123 verified test passes (but does not enforce performance thresholds)"
+  ]
+}

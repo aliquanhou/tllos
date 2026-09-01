@@ -1,0 +1,77 @@
+{
+  "schema_version": "1.0",
+  "name": "TLL OS Architecture Truth",
+  "description": "Canonical architecture truth for TLL OS. This file is machine-readable and defines the official architecture. It is NOT documentation for humans — it is engineering truth for Agents, CI, and tools.",
+  "project": {
+    "name": "TLL OS",
+    "tagline": "High Frame Rate Programming Language + AI Native Engineering Foundation",
+    "first_principle": "TLL is a high frame rate programming language. TLL OS is the operating-system-level ecosystem that runs this language and amplifies its value. AI Engineering Layer is the wing that enhances TLL, not the soul that replaces it.",
+    "repository": "https://github.com/aliquanhou/tllos",
+    "license": "See LICENSE file"
+  },
+  "architecture_layers": [
+    {
+      "layer": "TLL Language",
+      "description": "The programming language itself.",
+      "components": ["Lexer", "Parser", "Compiler", "VM", "Standard Library", "Package System"],
+      "status": "active",
+      "confidence": "verified",
+      "last_verified": "2026-09-01",
+      "evidence_refs": ["evidence/ci/run_123.json", "evidence/benchmark/perf_coroutine.json"]
+    },
+    {
+      "layer": "TLL Runtime",
+      "description": "The runtime that executes TLL bytecode.",
+      "components": ["VM", "Coroutine Scheduler", "Timer", "IO", "TCP", "Reactor", "Memory Management", "Value System"],
+      "status": "active",
+      "confidence": "verified",
+      "last_verified": "2026-09-01",
+      "evidence_refs": ["evidence/ci/run_123.json", "evidence/audit/p0_15_18_4_seal.json"]
+    },
+    {
+      "layer": "TLL Standard Library",
+      "description": "Built-in libraries for TLL.",
+      "components": ["crypto", "json", "math", "string", "array", "blockchain", "blockchain_node", "mempool", "p2p", "task", "future", "eventbus", "observable", "state", "stream", "agent", "capability", "tool", "events"],
+      "status": "active",
+      "confidence": "verified",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "layer": "AI Engineering Layer",
+      "description": "The layer that makes TLL AI-native. Enhances TLL, does not replace it.",
+      "components": ["Truth Engine", "Agent Protocol", "Engineering Cognition Graph", "CI Verification", "Evidence System"],
+      "status": "bootstrap",
+      "confidence": "partial",
+      "last_verified": "2026-09-01",
+      "note": "This layer is in bootstrap phase (P0-16.0). It provides structure and schema, but full automation is future work."
+    }
+  ],
+  "key_principles": [
+    {
+      "principle": "First Principle: TLL is a high frame rate programming language",
+      "description": "Everything else serves this. AI Engineering Layer is an enhancement, not a replacement.",
+      "immutable": true
+    },
+    {
+      "principle": "Truth is not README",
+      "description": "README is for humans. .tll-engine/ is for Agents, CI, and tools. Truth must be machine-readable, versioned, and evidence-backed.",
+      "immutable": true
+    },
+    {
+      "principle": "Agent can change, Truth cannot be casually changed",
+      "description": "Models, Agents, and frameworks can be swapped. Truth, Protocol, Identity, Authority, Evidence, Verification, and World Model must remain consistent.",
+      "immutable": true
+    },
+    {
+      "principle": "No construction report = completion",
+      "description": "An Agent's self-report of completion is not evidence. Completion requires CI pass + independent audit + Truth update.",
+      "immutable": true
+    }
+  ],
+  "version": "1.0.0",
+  "parent_hash": null,
+  "hash": "bootstrap_architecture_truth_v1",
+  "created_at": "2026-09-01",
+  "created_by": "agent_doubao_bootstrap_001",
+  "verified_by": "human_maintainer_001"
+}

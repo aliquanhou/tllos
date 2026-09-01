@@ -1,0 +1,152 @@
+{
+  "schema_version": "1.0",
+  "name": "TLL Engineering Dependency Graph",
+  "description": "Machine-readable dependency graph for TLL OS. Defines module dependencies, test dependencies, and capability dependencies. Used for impact analysis when code changes.",
+  "module_dependencies": [
+    {
+      "module": "compiler",
+      "path": "compiler/",
+      "depends_on": [],
+      "depended_by": ["vm", "stdlib", "tests", "tools"],
+      "core": true,
+      "modification_risk": "high",
+      "required_tests_on_change": ["all core tests", "all scope tests", "bootstrap self-host", "all blockchain tests"]
+    },
+    {
+      "module": "vm",
+      "path": "host/c/vm.c",
+      "depends_on": ["value", "json", "builtin"],
+      "depended_by": ["runtime", "stdlib", "tests", "tools"],
+      "core": true,
+      "modification_risk": "high",
+      "required_tests_on_change": ["all core tests", "all scope tests", "coroutine_stress", "all blockchain tests", "all fault injection tests", "long-run stability"]
+    },
+    {
+      "module": "value",
+      "path": "host/c/value.c",
+      "depends_on": [],
+      "depended_by": ["vm", "json", "builtin"],
+      "core": true,
+      "modification_risk": "high",
+      "required_tests_on_change": ["all core tests", "all scope tests", "json tests", "coroutine_stress"]
+    },
+    {
+      "module": "json",
+      "path": "host/c/json.c",
+      "depends_on": ["value"],
+      "depended_by": ["vm", "builtin", "stdlib/json"],
+      "core": true,
+      "modification_risk": "medium",
+      "required_tests_on_change": ["json tests", "all scope tests", "blockchain tests (JSON encoding)"]
+    },
+    {
+      "module": "builtin",
+      "path": "host/c/builtin.c",
+      "depends_on": ["vm", "value", "json"],
+      "depended_by": ["runtime", "stdlib", "tests"],
+      "core": true,
+      "modification_risk": "high",
+      "note": "Contains TCP, HTTP, file IO, timer, and future crypto native functions.",
+      "required_tests_on_change": ["all core tests", "TCP tests", "P2P tests", "all blockchain tests", "all fault injection tests"]
+    },
+    {
+      "module": "stdlib/crypto",
+      "path": "stdlib/crypto.tll",
+      "depends_on": ["stdlib/string", "stdlib/array"],
+      "depended_by": ["stdlib/blockchain", "stdlib/mempool", "tests/crypto"],
+      "core": false,
+      "modification_risk": "medium",
+      "required_tests_on_change": ["crypto tests", "blockchain tests", "scope tests (if bitwise ops changed)"]
+    },
+    {
+      "module": "stdlib/blockchain",
+      "path": "stdlib/blockchain.tll",
+      "depends_on": ["stdlib/crypto", "stdlib/json", "stdlib/array", "stdlib/math"],
+      "depended_by": ["stdlib/blockchain_node", "stdlib/mempool", "tests/bc_*", "tests/fi_*", "tests/lrs_*"],
+      "core": false,
+      "modification_risk": "medium",
+      "required_tests_on_change": ["all blockchain tests", "all fault injection tests", "long-run stability", "blockchain stress"]
+    },
+    {
+      "module": "stdlib/blockchain_node",
+      "path": "stdlib/blockchain_node.tll",
+      "depends_on": ["stdlib/blockchain", "stdlib/p2p", "stdlib/mempool", "stdlib/task"],
+      "depended_by": ["tests/bc_*", "tests/fi_*", "tests/lrs_*"],
+      "core": false,
+      "modification_risk": "medium",
+      "required_tests_on_change": ["all blockchain network tests", "all fault injection tests", "long-run stability"]
+    },
+    {
+      "module": "stdlib/p2p",
+      "path": "stdlib/p2p.tll",
+      "depends_on": ["stdlib/json", "stdlib/string", "builtin(TCP)"],
+      "depended_by": ["stdlib/blockchain_node", "tests/p2p_*", "tests/bc_*"],
+      "core": false,
+      "modification_risk": "medium",
+      "required_tests_on_change": ["P2P tests", "all blockchain network tests", "all fault injection tests"]
+    },
+    {
+      "module": "stdlib/mempool",
+      "path": "stdlib/mempool.tll",
+      "depends_on": ["stdlib/array", "stdlib/string"],
+      "depended_by": ["stdlib/blockchain_node", "tests/bc_stress"],
+      "core": false,
+      "modification_risk": "low",
+      "required_tests_on_change": ["blockchain stress test", "mempool tests"]
+    }
+  ],
+  "test_dependencies": {
+    "scope_tests": {
+      "depends_on": ["compiler", "vm", "value"],
+      "covers": ["variable resolution", "shadowing", "closure", "coroutine", "nested function", "recursion", "return lifetime"]
+    },
+    "coroutine_stress": {
+      "depends_on": ["vm", "builtin(timer)", "value"],
+      "covers": ["coroutine creation", "yield/resume", "sleep/wakeup", "100K concurrency"]
+    },
+    "blockchain_network": {
+      "depends_on": ["compiler", "vm", "builtin(TCP)", "stdlib/crypto", "stdlib/blockchain", "stdlib/p2p", "stdlib/blockchain_node", "stdlib/mempool"],
+      "covers": ["4-node network", "transaction propagation", "block propagation", "chain sync", "reconnect", "invalid block", "fork detection"]
+    },
+    "fault_injection": {
+      "depends_on": ["blockchain_network"],
+      "covers": ["duplicate tx", "duplicate block", "out-of-order block", "kill-9 restart", "multi-node consecutive fault"]
+    },
+    "long_run_stability": {
+      "depends_on": ["blockchain_network"],
+      "covers": ["120s continuous run", "20 blocks mined", "resource stability", "no crash/deadlock"]
+    }
+  },
+  "capability_dependencies": {
+    "100K_coroutine": {
+      "requires": ["vm", "builtin(timer)", "value"],
+      "blocked_by": []
+    },
+    "4node_blockchain": {
+      "requires": ["vm", "builtin(TCP)", "stdlib/crypto", "stdlib/blockchain", "stdlib/p2p", "stdlib/blockchain_node"],
+      "blocked_by": []
+    },
+    "real_cryptography": {
+      "requires": ["stdlib/crypto(ed25519)", "builtin(crypto_native)"],
+      "blocked_by": ["P0-15.19 not started"]
+    },
+    "production_blockchain": {
+      "requires": ["real_cryptography", "account_state", "persistence", "chain_reorg", "memory_safety_verified"],
+      "blocked_by": ["real_cryptography missing", "account_state missing", "persistence missing", "chain_reorg missing", "memory_safety not verified"]
+    }
+  },
+  "impact_analysis_example": {
+    "change": "Modify coroutine scheduler in vm.c",
+    "impacted_modules": ["vm", "runtime", "stdlib", "all tests"],
+    "impacted_tests": ["scope_07", "coroutine_stress", "perf_coroutine", "bc_stress", "fi_kill9", "fi_multi", "lrs_a/b/c/d"],
+    "impacted_capabilities": ["100K_coroutine", "4node_blockchain", "long_run_stability"],
+    "risk_level": "high",
+    "required_verification": "all 3 platforms, full regression, performance benchmark comparison"
+  },
+  "version": "1.0.0",
+  "parent_hash": null,
+  "hash": "bootstrap_dependency_graph_v1",
+  "created_at": "2026-09-01",
+  "created_by": "agent_doubao_bootstrap_001",
+  "note": "This is the bootstrap dependency graph. Full population with all functions and fine-grained dependencies is future work."
+}

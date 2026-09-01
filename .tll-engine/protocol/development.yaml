@@ -1,0 +1,237 @@
+# TLL OS Agent Development Protocol v0.1
+# This file defines the protocol that ALL agents (AI or human) must follow when developing TLL OS.
+# This is NOT documentation for humans. This is machine-readable protocol for Agents, CI, and tools.
+
+schema_version: "1.0"
+protocol_name: "TLL OS Agent Development Protocol"
+version: "0.1"
+status: "bootstrap"
+
+# Core principle: Agent can change, Protocol cannot be casually changed.
+# Models, Agents, and frameworks can be swapped.
+# Truth, Protocol, Identity, Authority, Evidence, Verification, and World Model must remain consistent.
+
+core_principles:
+  - id: "P001"
+    principle: "No construction report = completion"
+    description: "An Agent's self-report of completion is NOT evidence. Completion requires CI pass + independent audit + Truth update."
+    immutable: true
+
+  - id: "P002"
+    principle: "Truth is not README"
+    description: "README is for humans. .tll-engine/ is for Agents, CI, and tools. Truth must be machine-readable, versioned, and evidence-backed."
+    immutable: true
+
+  - id: "P003"
+    principle: "First audit, then construct"
+    description: "Before any code change, Agent must audit current repository state. No blind construction based on self-report."
+    immutable: true
+
+  - id: "P004"
+    principle: "Bug only, no Runtime modification without evidence"
+    description: "Runtime/VM/Compiler modification is only allowed when a real bug is found with minimal reproduction. No speculative refactoring."
+    immutable: true
+
+  - id: "P005"
+    principle: "No test standard lowering for CI green"
+    description: "Never skip, delete, weaken, or continue-on-error tests to make CI green. If CI fails, fix the code or the test infrastructure, not the standard."
+    immutable: true
+
+  - id: "P006"
+    principle: "Capability claim requires evidence"
+    description: "Any capability claim must have evidence (CI, benchmark, audit). No 'I think it works' or 'it should work'."
+    immutable: true
+
+  - id: "P007"
+    principle: "Scope boundary respected"
+    description: "Each phase has explicit allowed and forbidden actions. Agent must not expand scope without explicit authorization."
+    immutable: true
+
+  - id: "P008"
+    principle: "Independent audit before seal"
+    description: "No phase can be sealed by the constructing Agent itself. Independent audit (human or different Agent) is required."
+    immutable: true
+
+  - id: "P009"
+    principle: "Three-platform CI required"
+    description: "All runtime/stdlib/blockchain changes must pass Ubuntu, Windows (MSVC), and macOS CI. TCC is UNVERIFIED and does not count."
+    immutable: true
+
+  - id: "P010"
+    principle: "First Principle: TLL is a high frame rate programming language"
+    description: "AI Engineering Layer is the wing that enhances TLL, not the soul that replaces it. All work must serve the language first."
+    immutable: true
+
+# 8-Phase Development Workflow
+workflow:
+  phase_1_identity:
+    name: "Identity Verification"
+    description: "Agent must verify its identity before starting work."
+    required_actions:
+      - "Agent reads .tll-engine/identity/agents.json"
+      - "Agent confirms its agent_id is registered"
+      - "Agent confirms its level and permissions"
+    exit_criteria:
+      - "agent_id found in agents.json"
+      - "level >= required_level_for_task"
+
+  phase_2_truth:
+    name: "Truth Reading"
+    description: "Agent must read current Truth before planning."
+    required_actions:
+      - "Agent reads .tll-engine/truth/architecture.json"
+      - "Agent reads .tll-engine/truth/language.json"
+      - "Agent reads .tll-engine/truth/runtime.json"
+      - "Agent reads .tll-engine/truth/capability.json"
+      - "Agent reads .tll-engine/cognition/dependency.json"
+    exit_criteria:
+      - "Agent can state current capabilities and limitations"
+      - "Agent knows what is verified vs not verified"
+
+  phase_3_plan:
+    name: "Plan Generation"
+    description: "Agent must generate a plan before modifying code."
+    required_actions:
+      - "Agent creates a task list (TodoWrite)"
+      - "Agent defines scope: allowed and forbidden actions"
+      - "Agent defines acceptance criteria"
+      - "Agent defines verification method"
+    exit_criteria:
+      - "Plan has explicit scope boundary"
+      - "Plan has measurable acceptance criteria"
+      - "Plan has verification method"
+
+  phase_4_code:
+    name: "Code Modification"
+    description: "Agent modifies code according to plan."
+    required_actions:
+      - "Agent only modifies files within allowed scope"
+      - "Agent does not modify forbidden files (VM, Compiler, Blockchain core unless explicitly authorized)"
+      - "Agent does not lower test standards"
+      - "Agent runs local tests before commit"
+    exit_criteria:
+      - "All modified files are within allowed scope"
+      - "Local tests pass"
+      - "No test standard lowering detected"
+
+  phase_5_ci:
+    name: "CI Execution"
+    description: "Agent commits and pushes, then waits for CI."
+    required_actions:
+      - "Agent commits with clear message"
+      - "Agent pushes to main"
+      - "Agent waits for GitHub Actions to complete"
+      - "Agent records CI Run ID and results"
+    exit_criteria:
+      - "CI Run ID recorded"
+      - "Ubuntu: PASS"
+      - "Windows (MSVC): PASS"
+      - "macOS: PASS"
+    failure_handling:
+      - "If CI fails: Agent reads logs, identifies root cause, fixes, re-runs"
+      - "Agent must NOT skip tests or continue-on-error"
+      - "Agent must NOT delete failing tests"
+
+  phase_6_evidence:
+    name: "Evidence Submission"
+    description: "Agent submits evidence for all claims."
+    required_actions:
+      - "Agent records CI results as evidence"
+      - "Agent records benchmark results as evidence"
+      - "Agent records audit results as evidence"
+      - "Each evidence has: type, commit, platform, result, timestamp, hash"
+    exit_criteria:
+      - "All claims have corresponding evidence"
+      - "Evidence has provenance chain"
+      - "Evidence scope matches claim scope"
+
+  phase_7_cognition:
+    name: "Cognition Graph Update"
+    description: "Agent updates the engineering cognition graph."
+    required_actions:
+      - "Agent updates .tll-engine/cognition/graph.json with new nodes and edges"
+      - "Agent updates .tll-engine/cognition/dependency.json if dependencies changed"
+      - "Agent updates .tll-engine/cognition/decisions.json with key decisions"
+    exit_criteria:
+      - "New capabilities added to graph"
+      - "Changed dependencies updated"
+      - "Key decisions recorded with rationale"
+
+  phase_8_verification:
+    name: "Independent Verification"
+    description: "Independent audit verifies the work."
+    required_actions:
+      - "Constructing Agent does NOT verify its own work"
+      - "Independent auditor (human or different Agent) audits repository"
+      - "Auditor checks: code changes, CI results, evidence, truth updates"
+      - "Auditor gives PASS or FAIL with specific findings"
+    exit_criteria:
+      - "Independent audit PASS"
+      - "All findings addressed"
+      - "Truth files updated to reflect new state"
+    on_fail:
+      - "If audit FAIL: Agent addresses findings, re-runs CI, re-submits for audit"
+      - "No phase seal without independent audit PASS"
+
+# Forbidden Behaviors
+forbidden_behaviors:
+  - id: "F001"
+    behavior: "Modify code then write README then announce completion"
+    description: "Agent must follow 8-phase workflow. No shortcut."
+
+  - id: "F002"
+    behavior: "Skip or delete failing tests to make CI green"
+    description: "Never skip, delete, weaken, or continue-on-error tests. Fix the code or test infrastructure."
+
+  - id: "F003"
+    behavior: "Claim capability without evidence"
+    description: "All capability claims must have evidence (CI, benchmark, audit). No self-report as evidence."
+
+  - id: "F004"
+    behavior: "Modify Runtime/VM/Compiler without real bug evidence"
+    description: "Runtime modification only allowed when real bug found with minimal reproduction. No speculative refactoring."
+
+  - id: "F005"
+    behavior: "Expand scope beyond authorized boundary"
+    description: "Each phase has explicit allowed/forbidden actions. No scope expansion without authorization."
+
+  - id: "F006"
+    behavior: "Self-verify own work"
+    description: "Constructing Agent cannot verify its own work. Independent audit required."
+
+  - id: "F007"
+    behavior: "Modify Truth or Protocol directly"
+    description: "Agent Level 3 cannot modify Truth or Protocol. Truth changes require Level 4+ and independent audit. Protocol core rules (P001-P010) require Level 5."
+
+  - id: "F008"
+    behavior: "Use TCC build as verification evidence"
+    description: "Windows TCC build is UNVERIFIED. Only MSVC build counts for Windows verification."
+
+  - id: "F009"
+    behavior: "Claim production readiness for blockchain"
+    description: "Blockchain is NOT production ready. Missing: real cryptography, account state, persistence, chain reorg. Do not claim production readiness."
+
+  - id: "F010"
+    behavior: "Call Engineering Cognition Graph a 'Neural Network'"
+    description: "It is an Engineering Cognition Graph, not a neural network. Do not drift to model training."
+
+# Phase Seal Criteria
+phase_seal_criteria:
+  required:
+    - "8-phase workflow completed"
+    - "CI 3-platform PASS (Ubuntu, Windows MSVC, macOS)"
+    - "All claims have evidence"
+    - "Evidence scope matches claim scope"
+    - "Cognition graph updated"
+    - "Truth files updated"
+    - "Independent audit PASS"
+  forbidden_for_seal:
+    - "Constructing Agent self-verification"
+    - "Skipped or deleted tests"
+    - "Lowered test standards"
+    - "Unverified capability claims"
+    - "Scope expansion beyond authorization"
+
+created_at: "2026-09-01"
+created_by: "agent_doubao_bootstrap_001"
+verified_by: "human_maintainer_001"

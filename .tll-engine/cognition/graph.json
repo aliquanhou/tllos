@@ -1,0 +1,185 @@
+{
+  "schema_version": "1.0",
+  "name": "TLL Engineering Cognition Graph",
+  "description": "Machine-readable engineering cognition graph for TLL OS. This is NOT a neural network. It is a machine-verifiable engineering world model. Nodes = engineering facts, Edges = engineering relations, Weights = evidence/confidence/impact, Time = history, Feedback = CI.",
+  "graph_model": {
+    "node_types": ["module", "function", "capability", "test", "evidence", "constraint", "decision", "dependency", "risk", "agent", "truth", "protocol"],
+    "edge_types": ["calls", "depends_on", "verified_by", "constrains", "conflicts_with", "supersedes", "created_by", "modified_by", "proves", "does_not_prove", "requires", "blocks", "related_to"],
+    "weight_dimensions": ["evidence_strength", "confidence", "impact_level", "risk_level"]
+  },
+  "nodes": [
+    {
+      "id": "module.compiler",
+      "type": "module",
+      "name": "TLL Compiler",
+      "description": "Compiles TLL source to bytecode.",
+      "status": "active",
+      "confidence": "verified",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "id": "module.vm",
+      "type": "module",
+      "name": "TLL VM",
+      "description": "Executes TLL bytecode.",
+      "status": "active",
+      "confidence": "verified",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "id": "module.runtime",
+      "type": "module",
+      "name": "TLL Runtime",
+      "description": "Coroutine, TCP, IO, Timer, Memory.",
+      "status": "active",
+      "confidence": "verified",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "id": "module.stdlib.crypto",
+      "type": "module",
+      "name": "Crypto Standard Library",
+      "description": "SHA-256, HMAC-SHA256, hex conversion, constant-time compare.",
+      "status": "active",
+      "confidence": "verified",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "id": "module.stdlib.blockchain",
+      "type": "module",
+      "name": "Blockchain Standard Library",
+      "description": "Block, Transaction, Chain, Merkle, PoW, Validation.",
+      "status": "active",
+      "confidence": "verified",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "id": "module.stdlib.p2p",
+      "type": "module",
+      "name": "P2P Standard Library",
+      "description": "Peer management, message framing, broadcast, connect, disconnect, reconnect.",
+      "status": "active",
+      "confidence": "verified",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "id": "capability.coroutine_100k",
+      "type": "capability",
+      "name": "100K Coroutine Stress",
+      "claim": "TLL supports 100K concurrent coroutines.",
+      "status": "ready",
+      "confidence": "verified",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "id": "capability.blockchain_4node",
+      "type": "capability",
+      "name": "4-Node Blockchain Network",
+      "claim": "TLL can run 4-node blockchain network with real TCP and real processes.",
+      "status": "ready",
+      "confidence": "verified",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "id": "capability.ed25519",
+      "type": "capability",
+      "name": "Ed25519 Asymmetric Signature",
+      "claim": "TLL supports Ed25519 key generation, signing, verification.",
+      "status": "missing",
+      "confidence": "none",
+      "last_verified": "never"
+    },
+    {
+      "id": "constraint.fd_setsize_64",
+      "type": "constraint",
+      "name": "FD_SETSIZE=64",
+      "description": "Maximum 64 concurrent file descriptors. Exceeding results in silent ignore.",
+      "status": "active",
+      "confidence": "verified",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "id": "constraint.scope_function_level",
+      "type": "constraint",
+      "name": "Function-Level Scope",
+      "description": "TLL uses function-level scope. if/while/for do NOT create new lexical scope.",
+      "status": "active",
+      "confidence": "verified",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "id": "risk.tcc_unverified",
+      "type": "risk",
+      "name": "Windows TCC UNVERIFIED",
+      "description": "TCC build environment damaged. TCC runtime not verified. Only MSVC counts for Windows.",
+      "status": "open",
+      "confidence": "verified",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "id": "risk.memory_leak_unverified",
+      "type": "risk",
+      "name": "Runtime Memory Leak Unverified",
+      "description": "Source audit found no obvious leaks, but ASAN/valgrind runtime leak detection not performed.",
+      "status": "open",
+      "confidence": "medium",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "id": "decision.p0_15_19_crypto_foundation",
+      "type": "decision",
+      "name": "P0-15.19 Cryptographic Foundation",
+      "description": "Next phase: add Ed25519, SHA-512, secure random, Identity primitives, upgrade blockchain signatures.",
+      "status": "planned",
+      "created_at": "2026-09-01",
+      "created_by": "human_maintainer_001"
+    },
+    {
+      "id": "decision.p0_16_0_ai_native_bootstrap",
+      "type": "decision",
+      "name": "P0-16.0 AI Native Foundation Bootstrap",
+      "description": "Establish .tll-engine/ as official engineering cognition layer. No Runtime/Compiler modification.",
+      "status": "in_progress",
+      "created_at": "2026-09-01",
+      "created_by": "human_maintainer_001"
+    }
+  ],
+  "edges": [
+    {"from": "module.compiler", "to": "module.vm", "type": "depends_on", "weight": 1.0},
+    {"from": "module.vm", "to": "module.runtime", "type": "depends_on", "weight": 1.0},
+    {"from": "module.stdlib.crypto", "to": "module.stdlib.blockchain", "type": "depends_on", "weight": 0.9},
+    {"from": "module.stdlib.p2p", "to": "module.stdlib.blockchain", "type": "depends_on", "weight": 0.9},
+    {"from": "module.runtime", "to": "capability.coroutine_100k", "type": "proves", "weight": 0.9},
+    {"from": "module.stdlib.blockchain", "to": "capability.blockchain_4node", "type": "proves", "weight": 0.9},
+    {"from": "capability.ed25519", "to": "module.stdlib.blockchain", "type": "requires", "weight": 1.0},
+    {"from": "constraint.fd_setsize_64", "to": "module.runtime", "type": "constrains", "weight": 0.8},
+    {"from": "constraint.scope_function_level", "to": "module.compiler", "type": "constrains", "weight": 1.0},
+    {"from": "risk.tcc_unverified", "to": "module.vm", "type": "related_to", "weight": 0.5},
+    {"from": "risk.memory_leak_unverified", "to": "module.runtime", "type": "related_to", "weight": 0.7},
+    {"from": "decision.p0_15_19_crypto_foundation", "to": "capability.ed25519", "type": "blocks", "weight": 1.0},
+    {"from": "decision.p0_16_0_ai_native_bootstrap", "to": "module.compiler", "type": "constrains", "weight": 0.3, "note": "P0-16.0 forbids modifying Compiler"}
+  ],
+  "query_examples": [
+    {
+      "query": "What depends on coroutine scheduler?",
+      "expected_answer": "stdlib/crypto (indirect), stdlib/blockchain, stdlib/p2p, all blockchain tests, all fault injection tests, all long-run tests.",
+      "note": "This is an example. Full query API is future work."
+    },
+    {
+      "query": "What proves TLL supports 100K coroutines?",
+      "expected_answer": "coroutine_stress_test.tll, CI Run #123, 3 platforms, 100K immediate-return + 10Kx10 yield + 1K sleep, all pass.",
+      "note": "This is an example. Full query API is future work."
+    },
+    {
+      "query": "What must I verify after modifying coroutine scheduler?",
+      "expected_answer": "scope_07, coroutine_stress_test, perf_coroutine, bc_stress, fi_kill9, lrs_a/b/c/d, all 3 platforms.",
+      "note": "This is an example. Full query API is future work."
+    }
+  ],
+  "version": "1.0.0",
+  "parent_hash": null,
+  "hash": "bootstrap_cognition_graph_v1",
+  "created_at": "2026-09-01",
+  "created_by": "agent_doubao_bootstrap_001",
+  "note": "This is the bootstrap graph. Full population with all modules, functions, tests, and evidence is future work. The structure and schema are established."
+}

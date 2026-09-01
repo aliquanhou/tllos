@@ -1,0 +1,276 @@
+# TLL OS Audit Protocol v0.1
+# Defines independent audit standards and verification procedures.
+
+schema_version: "1.0"
+protocol_name: "TLL OS Audit Protocol"
+version: "0.1"
+status: "bootstrap"
+
+# Core Principle: No construction report = completion.
+# An Agent's self-report is NOT evidence. Independent audit is required.
+
+audit_principles:
+  - id: "A001"
+    principle: "Independent auditor required"
+    description: "Constructing Agent cannot audit its own work. Auditor must be different (human or different Agent)."
+    immutable: true
+
+  - id: "A002"
+    principle: "Audit repository, not report"
+    description: "Auditor must read actual repository code and CI results, not rely on constructing Agent's self-report."
+    immutable: true
+
+  - id: "A003"
+    principle: "Evidence over claim"
+    description: "Every claim must have corresponding evidence. Auditor must verify evidence exists and matches claim scope."
+    immutable: true
+
+  - id: "A004"
+    principle: "No scope expansion"
+    description: "Audit is limited to the authorized phase scope. Auditor must verify no unauthorized modifications."
+    immutable: true
+
+  - id: "A005"
+    principle: "CI results verified, not assumed"
+    description: "Auditor must verify actual CI Run ID, job statuses, and platform results. No 'CI should be green' assumptions."
+    immutable: true
+
+  - id: "A006"
+    principle: "Known limitations must be disclosed"
+    description: "Auditor must identify and disclose known limitations, unverified claims, and evidence gaps. No 'perfect' rating without full evidence."
+    immutable: true
+
+# Audit Procedure
+audit_procedure:
+  step_1_repository_verification:
+    name: "Repository State Verification"
+    description: "Verify actual repository state, not Agent report."
+    actions:
+      - "Read current main HEAD commit SHA"
+      - "Verify commit exists on remote (not local-only)"
+      - "Read git diff of the phase commits"
+      - "Verify only authorized files were modified"
+      - "Check for unexpected modifications to VM, Compiler, Blockchain core"
+    pass_criteria:
+      - "HEAD commit matches Agent report"
+      - "Commit exists on remote"
+      - "Modified files within authorized scope"
+      - "No unexpected core modifications"
+
+  step_2_ci_verification:
+    name: "CI Results Verification"
+    description: "Verify actual CI results, not Agent report."
+    actions:
+      - "Query GitHub Actions for the commit's CI Run"
+      - "Verify Run ID and head_sha match"
+      - "Check all 3 platform jobs: Ubuntu, Windows, Windows (MSVC), macOS"
+      - "Verify each required test step actually executed (not skipped)"
+      - "Check for continue-on-error or skipped tests"
+      - "Record actual job statuses"
+    pass_criteria:
+      - "CI Run exists for the commit"
+      - "head_sha matches"
+      - "All 3 platforms: SUCCESS"
+      - "No skipped or continue-on-error tests"
+      - "All required test steps executed"
+
+  step_3_evidence_verification:
+    name: "Evidence Verification"
+    description: "Verify all claims have corresponding evidence."
+    actions:
+      - "List all capability claims in Agent report"
+      - "For each claim, find corresponding evidence (test file, CI result, benchmark)"
+      - "Verify evidence scope matches claim scope"
+      - "Identify overclaims (claim exceeds evidence)"
+      - "Identify unverified claims (no evidence)"
+    pass_criteria:
+      - "All claims have evidence"
+      - "Evidence scope matches claim scope"
+      - "No overclaims"
+      - "No unverified claims (or clearly marked as unverified)"
+
+  step_4_test_verification:
+    name: "Test Integrity Verification"
+    description: "Verify tests are real, not fake."
+    actions:
+      - "Check test files exist in repository"
+      - "Verify tests use real processes and real TCP (for network tests)"
+      - "Check for hard assertions (exit 1 on failure)"
+      - "Verify no mock peer, mock network, or shared chain objects"
+      - "Check test runner actually executes the tests (not just compiles)"
+      - "Verify assertion count hard gate (scope tests: 95)"
+    pass_criteria:
+      - "Test files exist"
+      - "Real processes, real TCP"
+      - "Hard assertions, exit 1 on failure"
+      - "No mocks"
+      - "Test runner executes tests"
+      - "Assertion count hard gate in place"
+
+  step_5_scope_verification:
+    name: "Scope Boundary Verification"
+    description: "Verify work stayed within authorized scope."
+    actions:
+      - "Read phase construction order's allowed/forbidden actions"
+      - "Verify no forbidden actions were taken"
+      - "Check for scope expansion (features not in the order)"
+      - "Verify no Runtime/VM/Compiler modification without real bug evidence"
+      - "Check for test standard lowering"
+    pass_criteria:
+      - "No forbidden actions"
+      - "No scope expansion"
+      - "No unauthorized Runtime modification"
+      - "No test standard lowering"
+
+  step_6_known_limitations:
+    name: "Known Limitations Disclosure"
+    description: "Identify and disclose known limitations and evidence gaps."
+    actions:
+      - "List all capabilities marked as partial/missing/unverified"
+      - "Verify they are clearly marked in Truth files"
+      - "Identify any claim that exceeds current evidence"
+      - "Record technical debt (TCC UNVERIFIED, memory leak not verified, etc.)"
+    pass_criteria:
+      - "All limitations clearly disclosed"
+      - "No overclaiming"
+      - "Technical debt recorded"
+
+  step_7_audit_report:
+    name: "Audit Report"
+    description: "Produce structured audit report."
+    actions:
+      - "Summarize repository verification results"
+      - "Summarize CI verification results"
+      - "Summarize evidence verification results"
+      - "Summarize test integrity results"
+      - "Summarize scope boundary results"
+      - "List known limitations"
+      - "Give final verdict: PASS / FAIL / PARTIAL"
+      - "If FAIL: list specific blockers and required fixes"
+    pass_criteria:
+      - "Report covers all 6 verification areas"
+      - "Verdict is clear and justified"
+      - "Blockers are specific and actionable"
+
+# Audit Verdict Definitions
+verdicts:
+  PASS:
+    description: "All verification areas pass. Phase can be sealed."
+    requirements:
+      - "Repository state verified"
+      - "CI 3-platform PASS"
+      - "All claims have evidence"
+      - "Tests are real with hard assertions"
+      - "Scope boundary respected"
+      - "Known limitations disclosed"
+
+  FAIL:
+    description: "One or more blockers found. Phase cannot be sealed."
+    common_blockers:
+      - "CI not actually green (job failed or cancelled)"
+      - "Tests skipped or continue-on-error"
+      - "Claim without evidence"
+      - "Overclaim (claim exceeds evidence)"
+      - "Unauthorized Runtime/VM/Compiler modification"
+      - "Test standard lowering"
+      - "Fake tests (mock, shared objects, no real TCP)"
+      - "Commit not pushed to remote"
+
+  PARTIAL:
+    description: "Core capabilities pass, but non-blocking limitations exist. Phase can be sealed with caveats."
+    requirements:
+      - "All core verification areas pass"
+      - "Known limitations are clearly disclosed"
+      - "No blockers"
+      - "Limitations recorded as technical debt"
+
+# Common Audit Findings (from TLL OS history)
+common_findings:
+  - id: "CF001"
+    finding: "Self-report as evidence"
+    description: "Agent claims completion but provides no CI Run ID or test results. Auditor must verify actual CI."
+    severity: "blocker"
+
+  - id: "CF002"
+    finding: "Assertion count self-verification"
+    description: "Test runner counts assertions from source file and reports 'N assertions verified', but has no independent expected value. If an assertion is deleted, count automatically decreases and test still passes."
+    severity: "blocker"
+    fix: "Hard-code expected assertion count (95 for scope tests). Actual != expected = FAIL."
+
+  - id: "CF003"
+    finding: "MSVC results used as TCC evidence"
+    description: "Agent claims 'Windows TCC fix verified' but CI uses MSVC (cl), not TCC. TCC build environment is damaged."
+    severity: "blocker"
+    fix: "Clearly separate MSVC and TCC. TCC is UNVERIFIED and does not count."
+
+  - id: "CF004"
+    finding: "Final tip consistency used as transaction propagation proof"
+    description: "Agent claims '120 transactions propagated to B/C/D' but only verifies final chain tip consistency. Transaction propagation and block propagation are different."
+    severity: "partial"
+    fix: "Verify B/C/D max mempool count or received transaction count separately."
+
+  - id: "CF005"
+    finding: "Import namespace conflict assumed without evidence"
+    description: "Agent assumes compiler bug is 'import namespace conflict' but binary search shows all import combinations pass. Root cause is actually codegen variable scope resolution."
+    severity: "blocker"
+    fix: "Minimal reproduction + binary search before root cause attribution."
+
+  - id: "CF006"
+    finding: "VM register conflict assumed without A/B baseline"
+    description: "Agent assumes VM OP_RET register bug, but cannot roll back to original vm.c for A/B comparison. Root cause is actually compiler codegen, not VM."
+    severity: "blocker"
+    fix: "A/B baseline comparison before attributing to VM vs Compiler."
+
+  - id: "CF007"
+    finding: "CI green assumed without checking job details"
+    description: "Agent claims CI green but auditor finds a job was cancelled or a test step was skipped."
+    severity: "blocker"
+    fix: "Auditor must check actual job statuses and step execution."
+
+  - id: "CF008"
+    finding: "Production readiness overclaim"
+    description: "Agent claims 'blockchain production ready' but missing real cryptography, account state, persistence, chain reorg."
+    severity: "blocker"
+    fix: "Clearly mark as NOT READY. List missing capabilities."
+
+# Audit Output Template
+audit_output_template:
+  repository:
+    head_commit: "string"
+    head_verified: "boolean"
+    remote_verified: "boolean"
+    modified_files: "list"
+    scope_violations: "list"
+
+  ci:
+    run_id: "string"
+    head_sha: "string"
+    ubuntu: "PASS/FAIL/SKIP"
+    windows_msvc: "PASS/FAIL/SKIP"
+    macos: "PASS/FAIL/SKIP"
+    skipped_tests: "list"
+    continue_on_error: "list"
+
+  evidence:
+    total_claims: "number"
+    claims_with_evidence: "number"
+    overclaims: "list"
+    unverified_claims: "list"
+
+  tests:
+    real_processes: "boolean"
+    real_tcp: "boolean"
+    hard_assertions: "boolean"
+    no_mocks: "boolean"
+    assertion_count_gate: "boolean"
+
+  known_limitations:
+    - "capability: status"
+
+  verdict: "PASS/FAIL/PARTIAL"
+  blockers: "list (if FAIL)"
+  caveats: "list (if PARTIAL)"
+
+created_at: "2026-09-01"
+created_by: "agent_doubao_bootstrap_001"
+verified_by: "human_maintainer_001"

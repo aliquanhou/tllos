@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "name": "TLL OS Identity Root",
+  "description": "Root of identity for TLL OS engineering ecosystem. This file defines the identity trust anchor. Identities are verified by public key signatures, not by file contents alone.",
+  "trust_model": {
+    "type": "public_key_infrastructure",
+    "algorithm": "ed25519",
+    "note": "Ed25519 is planned for P0-15.19. Until then, identity records are self-declared and must be verified by external means (git commit author, CI logs, human confirmation).",
+    "current_status": "bootstrap_phase",
+    "bootstrap_verification": "git_commit_author + ci_run_verification + human_audit"
+  },
+  "root_authority": {
+    "name": "TLL OS Project Maintainers",
+    "description": "Human maintainers with commit access to aliquanhou/tllos. Final authority on Truth changes and Protocol amendments.",
+    "verification": "git commit signature + GitHub account + human confirmation",
+    "note": "This is the bootstrap root authority. Future versions may transition to a multi-signature DAO or similar mechanism."
+  },
+  "identity_levels": {
+    "level_0": {
+      "name": "anonymous",
+      "description": "No identity verified. Can read Truth and Evidence, cannot submit changes.",
+      "permissions": ["read_truth", "read_evidence", "read_cognition"]
+    },
+    "level_1": {
+      "name": "observer",
+      "description": "Identity verified by public key, but no track record. Can submit Issues and Proposals, cannot commit code.",
+      "permissions": ["read_truth", "read_evidence", "read_cognition", "submit_issue", "submit_proposal"]
+    },
+    "level_2": {
+      "name": "contributor",
+      "description": "Has submitted at least one verified PR that passed CI and audit. Can commit to non-core branches.",
+      "permissions": ["read_truth", "read_evidence", "read_cognition", "submit_issue", "submit_proposal", "commit_non_core", "run_tests"]
+    },
+    "level_3": {
+      "name": "developer",
+      "description": "Regular contributor with verified track record. Can commit to core branches (compiler, vm, runtime, stdlib). Default level for AI Agents in bootstrap phase.",
+      "permissions": ["read_truth", "read_evidence", "read_cognition", "submit_issue", "submit_proposal", "commit_core", "run_tests", "submit_evidence"],
+      "note": "AI Agents default to Level 3 in bootstrap phase. They can modify code and submit evidence, but cannot modify Truth or Protocol directly."
+    },
+    "level_4": {
+      "name": "maintainer",
+      "description": "Can merge PRs, update Truth files, and approve Protocol extensions. Cannot modify Protocol core rules (R001-R010).",
+      "permissions": ["read_truth", "read_evidence", "read_cognition", "submit_issue", "submit_proposal", "commit_core", "run_tests", "submit_evidence", "merge_pr", "update_truth", "approve_protocol_extension"]
+    },
+    "level_5": {
+      "name": "root_maintainer",
+      "description": "Can modify Protocol core rules (R001-R010) and Identity Root. Requires human confirmation + multi-signature in future versions.",
+      "permissions": ["all"],
+      "note": "Reserved for human maintainers. AI Agents cannot reach Level 5."
+    }
+  },
+  "agent_identity_policy": {
+    "default_level": 3,
+    "required_fields": ["agent_id", "agent_name", "model_provider", "model_name", "public_key", "created_at", "created_by"],
+    "verification": "agent_id = sha256(public_key + created_at + agent_name)",
+    "note": "AI Agents must register in agents.json before submitting changes. Their identity is verified by git commit author and CI run attribution."
+  },
+  "immutable_fields": ["schema_version", "trust_model.type", "trust_model.algorithm", "root_authority.name", "identity_levels.level_5.permissions"],
+  "created_at": "2026-09-01",
+  "created_by": "TLL OS Bootstrap (human-initiated)",
+  "version": "1.0.0",
+  "parent_hash": null,
+  "hash": "bootstrap_identity_root_v1"
+}

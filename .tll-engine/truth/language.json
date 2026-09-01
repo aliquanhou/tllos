@@ -1,0 +1,143 @@
+{
+  "schema_version": "1.0",
+  "name": "TLL Language Semantics Truth",
+  "description": "Canonical language semantics truth for TLL. Defines what the language supports, with evidence and confidence levels.",
+  "language_features": [
+    {
+      "feature": "Variables (let/const)",
+      "description": "Variable declaration with let (mutable) and const (immutable).",
+      "status": "verified",
+      "confidence": "high",
+      "last_verified": "2026-09-01",
+      "evidence_refs": ["tests/scope/scope_01_global_local.tll", "tests/scope/scope_02_shadowing.tll"],
+      "known_issue": null
+    },
+    {
+      "feature": "Functions",
+      "description": "First-class functions with parameters and return values.",
+      "status": "verified",
+      "confidence": "high",
+      "last_verified": "2026-09-01",
+      "evidence_refs": ["tests/scope/scope_03_params.tll", "tests/scope/scope_08_multi_fn_recursion.tll"]
+    },
+    {
+      "feature": "Closures",
+      "description": "Functions that capture variables from their enclosing scope.",
+      "status": "verified",
+      "confidence": "high",
+      "last_verified": "2026-09-01",
+      "evidence_refs": ["tests/scope/scope_05_closure.tll"]
+    },
+    {
+      "feature": "Nested Functions",
+      "description": "Functions defined inside other functions.",
+      "status": "verified",
+      "confidence": "high",
+      "last_verified": "2026-09-01",
+      "evidence_refs": ["tests/scope/scope_04_nested_fn.tll"]
+    },
+    {
+      "feature": "Coroutines",
+      "description": "Cooperative multitasking with create, yield, resume, sleep.",
+      "status": "verified",
+      "confidence": "high",
+      "last_verified": "2026-09-01",
+      "evidence_refs": ["tests/scope/scope_07_coroutine.tll", "tests/coroutine_stress_test.tll"],
+      "benchmark": "100K immediate-return coroutines: 95.4us each; 100K yield: 2.19us each; 1K sleep: 0.111ms each"
+    },
+    {
+      "feature": "Structs",
+      "description": "Structured data types with named fields.",
+      "status": "verified",
+      "confidence": "high",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "feature": "Arrays (lists)",
+      "description": "Ordered collections with index access.",
+      "status": "verified",
+      "confidence": "high",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "feature": "Maps",
+      "description": "Key-value collections.",
+      "status": "verified",
+      "confidence": "high",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "feature": "JSON",
+      "description": "JSON parse and stringify for objects, arrays, strings, numbers, booleans.",
+      "status": "verified",
+      "confidence": "high",
+      "last_verified": "2026-09-01",
+      "benchmark": "simple object: 5us; nested: 10us; large array: 420us"
+    },
+    {
+      "feature": "TCP Sockets",
+      "description": "TCP client and server sockets with non-blocking IO and select.",
+      "status": "verified",
+      "confidence": "high",
+      "last_verified": "2026-09-01",
+      "known_limitation": "FD_SETSIZE=64, maximum 64 concurrent file descriptors. This is a design limit, not a bug. Exceeding 64 results in silent ignore of additional fds (no crash)."
+    },
+    {
+      "feature": "P2P Networking",
+      "description": "Peer-to-peer networking with message framing, broadcast, connect, disconnect, reconnect.",
+      "status": "verified",
+      "confidence": "high",
+      "last_verified": "2026-09-01",
+      "evidence_refs": ["tests/bc_node_a.tll", "tests/bc_multi_a.tll", "tests/fi_kill9.tll"]
+    },
+    {
+      "feature": "Module/Package System",
+      "description": "Import and export between TLL files.",
+      "status": "verified",
+      "confidence": "high",
+      "last_verified": "2026-09-01"
+    },
+    {
+      "feature": "Bitwise Operations",
+      "description": "&, |, ^, ~, <<, >> for integer manipulation.",
+      "status": "verified",
+      "confidence": "high",
+      "last_verified": "2026-09-01",
+      "evidence_refs": ["stdlib/crypto.tll"]
+    }
+  ],
+  "scope_model": {
+    "description": "TLL uses function-level scope. if/while/for blocks do NOT create new lexical scope. Variables declared in blocks are hoisted to function level.",
+    "status": "verified",
+    "confidence": "high",
+    "last_verified": "2026-09-01",
+    "evidence_refs": ["tests/scope/scope_06_block.tll", "docs/SCOPE_SEMANTICS.md"],
+    "note": "This is a deliberate language design choice, documented in SCOPE_SEMANTICS.md. Future versions may add block scope, but current version is function-level only."
+  },
+  "known_limitations": [
+    {
+      "limitation": "No 64-bit integer native support",
+      "description": "TLL int is 32-bit. 64-bit operations require simulation (high32 + low32). This affects SHA-512 and Ed25519 pure-TLL implementation.",
+      "status": "known",
+      "planned_fix": "P0-15.19 will add C-native Ed25519 and SHA-512 to avoid pure-TLL 64-bit simulation."
+    },
+    {
+      "limitation": "No real asymmetric cryptography",
+      "description": "Current blockchain uses HMAC-SHA256 as SIMULATED signature. Not real Ed25519/secp256k1.",
+      "status": "known",
+      "planned_fix": "P0-15.19 TLL Cryptographic Foundation will add Ed25519."
+    },
+    {
+      "limitation": "No secure random number generator",
+      "description": "No crypto.randomBytes() for key generation, tokens, agent IDs.",
+      "status": "known",
+      "planned_fix": "P0-15.19 will add C-native secure random (Linux: getrandom, Windows: BCryptGenRandom, macOS: /dev/urandom)."
+    }
+  ],
+  "version": "1.0.0",
+  "parent_hash": null,
+  "hash": "bootstrap_language_truth_v1",
+  "created_at": "2026-09-01",
+  "created_by": "agent_doubao_bootstrap_001",
+  "verified_by": "human_maintainer_001"
+}

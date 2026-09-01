@@ -1,0 +1,104 @@
+{
+  "schema_version": "1.0",
+  "evidence_type": "ci_run",
+  "id": "ci-run-123",
+  "description": "GitHub Actions Run #123 - P0-15.18.5-7 Long-Run Stability, Performance Benchmark, Production Hardening",
+  "repository": "aliquanhou/tllos",
+  "commit_sha": "df6d838",
+  "branch": "main",
+  "run_id": "123",
+  "run_url": "https://github.com/aliquanhou/tllos/actions/runs/123",
+  "status": "completed",
+  "conclusion": "success",
+  "created_at": "2026-08-30",
+  "updated_at": "2026-08-30",
+  "platforms": {
+    "ubuntu": {
+      "job_name": "native-build-test (ubuntu-latest)",
+      "status": "success",
+      "conclusion": "success",
+      "tests_executed": [
+        "native_build",
+        "bootstrap_self_host",
+        "core_tests_38",
+        "scope_tests_10_95_assertions",
+        "coroutine_stress_100k",
+        "tcp_fd_boundary",
+        "blockchain_network_5_tests",
+        "blockchain_stress",
+        "fault_injection_5_tests",
+        "long_run_stability_120s",
+        "performance_benchmark_3_tests"
+      ]
+    },
+    "windows_msvc": {
+      "job_name": "native-build-test (windows-latest)",
+      "status": "success",
+      "conclusion": "success",
+      "compiler": "MSVC cl /O2",
+      "tests_executed": [
+        "native_build",
+        "bootstrap_self_host",
+        "core_tests_38",
+        "scope_tests_10_95_assertions",
+        "coroutine_stress_100k",
+        "tcp_fd_boundary",
+        "blockchain_network_5_tests",
+        "blockchain_stress",
+        "fault_injection_5_tests",
+        "long_run_stability_120s",
+        "performance_benchmark_3_tests"
+      ]
+    },
+    "macos": {
+      "job_name": "native-build-test (macos-latest)",
+      "status": "success",
+      "conclusion": "success",
+      "tests_executed": [
+        "native_build",
+        "bootstrap_self_host",
+        "core_tests_38",
+        "scope_tests_10_95_assertions",
+        "coroutine_stress_100k",
+        "tcp_fd_boundary",
+        "blockchain_network_5_tests",
+        "blockchain_stress",
+        "fault_injection_5_tests",
+        "long_run_stability_120s",
+        "performance_benchmark_3_tests"
+      ]
+    }
+  },
+  "windows_tcc": {
+    "status": "unverified",
+    "note": "TCC build environment damaged (stddef.h error). TCC runtime not verified. Only MSVC counts for Windows."
+  },
+  "proves": [
+    "TLL compiles and self-hosts on 3 platforms",
+    "All 38 core tests pass on 3 platforms",
+    "All 10 scope tests (95 assertions) pass on 3 platforms",
+    "100K coroutine stress passes on 3 platforms",
+    "TCP FD boundary (64 limit) passes on 3 platforms",
+    "5 blockchain network tests pass on 3 platforms (15 gates)",
+    "Blockchain stress (120 tx) passes on 3 platforms",
+    "5 fault injection tests pass on 3 platforms (15 gates)",
+    "Long-run stability (120s, 4 nodes, 20 blocks) passes on 3 platforms",
+    "Performance benchmark (coroutine, json, blockchain) passes on 3 platforms"
+  ],
+  "does_not_prove": [
+    "Production readiness (missing real cryptography, account state, persistence, chain reorg)",
+    "Memory safety (ASAN/valgrind not run)",
+    "TCC runtime (UNVERIFIED)",
+    "10+ minute long-run (only 120s verified)",
+    "High-concurrency beyond 64 fd (FD_SETSIZE=64)"
+  ],
+  "confidence": "high",
+  "hash": "ci-run-123-df6d838-evidence-v1",
+  "provenance_chain": [
+    "GitHub Actions Run #123",
+    "commit df6d838",
+    "3 platform jobs all success",
+    "no skipped tests",
+    "no continue-on-error"
+  ]
+}

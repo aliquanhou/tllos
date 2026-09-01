@@ -1,0 +1,84 @@
+{
+  "schema_version": "1.0",
+  "evidence_type": "audit",
+  "id": "audit-p0-15-18-4-seal-001",
+  "description": "P0-15.18.4 Independent Audit - Runtime Scope Correctness + Fault Injection Seal",
+  "repository": "aliquanhou/tllos",
+  "commit_sha": "effe492",
+  "audited_by": "human_maintainer_001",
+  "audit_date": "2026-08-28",
+  "verdict": "PASS",
+  "audit_areas": {
+    "repository_verification": {
+      "result": "PASS",
+      "findings": [
+        "HEAD commit effe492 exists on remote",
+        "Modified files: compiler/codegen.tll, docs/SCOPE_SEMANTICS.md, scripts/run-tests.bat, scripts/run-tests.sh, tests/scope/scope_01~10",
+        "No unexpected VM/Compiler/Blockchain core modifications",
+        "No scope expansion beyond authorized P0-15.18.4"
+      ]
+    },
+    "ci_verification": {
+      "result": "PASS",
+      "findings": [
+        "CI Run #118 corresponds to commit effe492",
+        "Ubuntu: SUCCESS",
+        "Windows (MSVC): SUCCESS",
+        "macOS: SUCCESS",
+        "No skipped tests",
+        "No continue-on-error"
+      ]
+    },
+    "evidence_verification": {
+      "result": "PASS",
+      "findings": [
+        "Codegen scope fix verified: non-main functions use cg_getOrCreateVar, main uses cg_resolveVar",
+        "10 scope tests exist with 95 total assertions",
+        "Assertion count hard gate: expected=95, actual must match",
+        "5 fault injection tests exist and pass",
+        "All claims have corresponding evidence"
+      ]
+    },
+    "test_integrity": {
+      "result": "PASS",
+      "findings": [
+        "Scope tests use real TLL execution, no mocks",
+        "Fault injection tests use real processes and real TCP",
+        "Hard assertions with exit 1 on failure",
+        "No shared chain objects between test nodes"
+      ]
+    },
+    "known_limitations": {
+      "result": "DISCLOSED",
+      "findings": [
+        "Windows TCC: UNVERIFIED (does not count)",
+        "Runtime memory leak: not verified (ASAN/valgrind not run)",
+        "10+ minute long-run: not verified (only 120s in P0-15.18.5)",
+        "Real cryptography: missing (HMAC simulation)",
+        "Chain Reorg: missing",
+        "Persistence: missing"
+      ]
+    }
+  },
+  "proves": [
+    "Compiler codegen variable scope bug is fixed",
+    "10 scope tests (95 assertions) guard scope semantics",
+    "5 fault injection tests pass on 3 platforms",
+    "P0-15.18.4 core Runtime/Compiler correctness is sealed"
+  ],
+  "does_not_prove": [
+    "Production readiness",
+    "Memory safety",
+    "TCC runtime",
+    "Long-run beyond 120s",
+    "Real cryptographic security"
+  ],
+  "confidence": "high",
+  "hash": "audit-p0-15-18-4-effe492-v1",
+  "provenance_chain": [
+    "Independent human audit of repository at commit effe492",
+    "CI Run #118 verification",
+    "Source code review of codegen.tll fix",
+    "Test file review of scope_01~10 and fi_*"
+  ]
+}

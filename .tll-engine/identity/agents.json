@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "name": "TLL OS Agent Registry",
+  "description": "Registry of AI Agents and human contributors authorized to participate in TLL OS development. Agents must register here before submitting changes.",
+  "agents": [
+    {
+      "agent_id": "agent_doubao_bootstrap_001",
+      "agent_name": "Doubao (TLL OS Bootstrap Agent)",
+      "model_provider": "ByteDance",
+      "model_name": "Doubao",
+      "level": 3,
+      "status": "active",
+      "public_key": "pending_ed25519_p0_15_19",
+      "created_at": "2026-09-01",
+      "created_by": "human_maintainer",
+      "description": "Primary AI Agent for TLL OS bootstrap development. Responsible for compiler, vm, runtime, stdlib, blockchain, and AI Engineering Foundation implementation.",
+      "verification_note": "Identity verified by git commit author attribution and CI run logs. Ed25519 key pending P0-15.19 cryptographic foundation.",
+      "permissions_note": "Level 3: can commit core code, run tests, submit evidence. Cannot modify Truth or Protocol directly."
+    }
+  ],
+  "human_contributors": [
+    {
+      "contributor_id": "human_maintainer_001",
+      "name": "TLL OS Project Maintainer",
+      "github_account": "aliquanhou",
+      "level": 5,
+      "status": "active",
+      "created_at": "2026-09-01",
+      "description": "Human maintainer with final authority on Truth changes, Protocol amendments, and project direction."
+    }
+  ],
+  "registration_policy": {
+    "required_for_ai_agents": true,
+    "required_for_humans": false,
+    "approval_process": "human_maintainer_review",
+    "note": "AI Agents must be registered before their commits are accepted by CI. Human contributors are verified by GitHub account."
+  },
+  "version": "1.0.0",
+  "parent_hash": null,
+  "hash": "bootstrap_agent_registry_v1"
+}

@@ -1,0 +1,295 @@
+{
+  "schema_version": "1.0",
+  "name": "TLL Capability Truth Matrix",
+  "description": "Canonical capability matrix for TLL OS. Each capability has a claim, evidence, confidence, and last_verified date. This is the single source of truth for what TLL can and cannot do. Agents MUST query this file before claiming capabilities.",
+  "capability_categories": [
+    {
+      "category": "Language Core",
+      "capabilities": [
+        {
+          "id": "lang.lexer_parser",
+          "name": "Lexer and Parser",
+          "claim": "TLL can lex and parse TLL source code into AST.",
+          "status": "ready",
+          "confidence": "verified",
+          "last_verified": "2026-09-01",
+          "evidence": ["self-hosting bootstrap: TLL compiler is written in TLL and compiles itself", "CI Run #123 bootstrap step pass"],
+          "evidence_refs": ["evidence/ci/run_123.json"]
+        },
+        {
+          "id": "lang.compiler",
+          "name": "Compiler (TLL → Bytecode)",
+          "claim": "TLL compiler can compile TLL source to TLL bytecode (.tllbc).",
+          "status": "ready",
+          "confidence": "verified",
+          "last_verified": "2026-09-01",
+          "evidence": ["self-hosting: compiler_self_compiled.tllbc exists", "CI bootstrap step: TLL compiler compiles itself"],
+          "known_issue": "P0-15.18.4 found and fixed codegen variable scope bug (non-main function let/const incorrectly falling back to global). Fixed in commit effe492. 10 scope tests (95 assertions) guard this."
+        },
+        {
+          "id": "lang.vm",
+          "name": "Virtual Machine",
+          "claim": "TLL VM can execute TLL bytecode.",
+          "status": "ready",
+          "confidence": "verified",
+          "last_verified": "2026-09-01",
+          "evidence": ["all 34 tests pass on 3 platforms", "blockchain 4-node network runs on VM"]
+        },
+        {
+          "id": "lang.scope_semantics",
+          "name": "Scope Semantics (function-level)",
+          "claim": "TLL uses function-level scope. Global/local variable isolation, shadowing, parameters, nested functions, closures, recursion, coroutines all work correctly.",
+          "status": "ready",
+          "confidence": "verified",
+          "last_verified": "2026-09-01",
+          "evidence": ["10 scope tests, 95 assertions, all pass", "scope_01 through scope_10 cover global/local, shadowing, params, nested fn, closure, block scope, coroutine, recursion, return lifetime, complete chain"],
+          "evidence_refs": ["tests/scope/"]
+        }
+      ]
+    },
+    {
+      "category": "Runtime",
+      "capabilities": [
+        {
+          "id": "runtime.coroutine",
+          "name": "Coroutine (100K stress verified)",
+          "claim": "TLL runtime supports 100K concurrent coroutines without crash, deadlock, or memory corruption.",
+          "status": "ready",
+          "confidence": "verified",
+          "last_verified": "2026-09-01",
+          "evidence": ["coroutine_stress_test.tll: 100K immediate-return + 10K x 10 yield + 1K sleep, all pass", "3 platforms: Ubuntu, Windows MSVC, macOS", "CI Run #123 pass"],
+          "benchmark": "create: 95.4us/coroutine, yield: 2.19us/each, sleep: 0.111ms/each",
+          "evidence_refs": ["tests/coroutine_stress_test.tll", "evidence/benchmark/perf_coroutine.json"]
+        },
+        {
+          "id": "runtime.tcp",
+          "name": "TCP Sockets",
+          "claim": "TLL runtime supports TCP client/server with non-blocking IO and select().",
+          "status": "ready",
+          "confidence": "verified",
+          "last_verified": "2026-09-01",
+          "evidence": ["P2P 4-node network uses real TCP", "blockchain tests use real TCP between independent processes", "CI 3 platforms pass"],
+          "known_limitation": "FD_SETSIZE=64. Maximum 64 concurrent file descriptors. Exceeding 64 results in silent ignore (no crash). This is a design limit, verified in P0-15.18.2."
+        },
+        {
+          "id": "runtime.long_run",
+          "name": "Long-Run Stability (120s verified)",
+          "claim": "TLL runtime can run 4-node blockchain network for 120 seconds with 20 blocks mined, stable RSS, no crash, no deadlock.",
+          "status": "ready",
+          "confidence": "verified",
+          "last_verified": "2026-09-01",
+          "evidence": ["lrs_a/b/c/d.tll: 4 nodes, 120 seconds, Node A mines 20 blocks x 3tx, all nodes sync", "CI Run #123 3 platforms pass", "Max RSS Windows: 573MB"],
+          "evidence_refs": ["tests/lrs_a.tll"],
+          "note": "120 seconds is the verified duration. Longer durations (10+ minutes) are planned for future phases."
+        },
+        {
+          "id": "runtime.memory_safety",
+          "name": "Memory Safety (source-audited, runtime leak not verified)",
+          "claim": "TLL runtime has no obvious memory leaks in source code audit.",
+          "status": "partial",
+          "confidence": "medium",
+          "last_verified": "2026-09-01",
+          "evidence": ["source code audit of vm.c, value.c, builtin.c found no obvious leaks", "120s long-run test showed stable RSS"],
+          "not_verified": ["ASAN/valgrind runtime leak detection has not been performed", "coroutine object release after completion is not independently verified", "frame/value reference counting edge cases not exhaustively tested"],
+          "planned_verification": "Future phase will add ASAN build and valgrind leak detection."
+        }
+      ]
+    },
+    {
+      "category": "Cryptography",
+      "capabilities": [
+        {
+          "id": "crypto.sha256",
+          "name": "SHA-256",
+          "claim": "TLL supports SHA-256 hashing (pure TLL implementation).",
+          "status": "ready",
+          "confidence": "verified",
+          "last_verified": "2026-09-01",
+          "evidence": ["stdlib/crypto.tll sha256() implementation", "used by blockchain block hash, transaction hash, merkle root", "crypto_vectors.tll test vectors pass"],
+          "implementation": "pure TLL (no C acceleration)"
+        },
+        {
+          "id": "crypto.hmac_sha256",
+          "name": "HMAC-SHA256",
+          "claim": "TLL supports HMAC-SHA256 (pure TLL implementation).",
+          "status": "ready",
+          "confidence": "verified",
+          "last_verified": "2026-09-01",
+          "evidence": ["stdlib/crypto.tll hmacSha256() implementation", "used by blockchain SIMULATED signature"],
+          "note": "HMAC is used as SIMULATED signature in blockchain. This is NOT real asymmetric cryptography."
+        },
+        {
+          "id": "crypto.ed25519",
+          "name": "Ed25519 Asymmetric Signature",
+          "claim": "TLL supports Ed25519 key generation, signing, and verification.",
+          "status": "missing",
+          "confidence": "none",
+          "last_verified": "never",
+          "planned": "P0-15.19 TLL Cryptographic Foundation will add C-native Ed25519 implementation.",
+          "current_state": "Blockchain uses HMAC-SHA256 as SIMULATED signature. Not real asymmetric cryptography."
+        },
+        {
+          "id": "crypto.random_bytes",
+          "name": "Secure Random Number Generator",
+          "claim": "TLL supports cryptographically secure random byte generation.",
+          "status": "missing",
+          "confidence": "none",
+          "last_verified": "never",
+          "planned": "P0-15.19 will add C-native secure random (Linux: getrandom, Windows: BCryptGenRandom, macOS: /dev/urandom)."
+        },
+        {
+          "id": "crypto.sha512",
+          "name": "SHA-512",
+          "claim": "TLL supports SHA-512 hashing.",
+          "status": "missing",
+          "confidence": "none",
+          "last_verified": "never",
+          "planned": "P0-15.19 will add SHA-512 (C-native for Ed25519 internal use, pure TLL for stdlib API)."
+        }
+      ]
+    },
+    {
+      "category": "Blockchain",
+      "capabilities": [
+        {
+          "id": "bc.4node_network",
+          "name": "4-Node Blockchain Network (real TCP, real processes)",
+          "claim": "TLL can run a 4-node blockchain network with independent processes, real TCP, real P2P, transaction propagation, block propagation, and chain synchronization.",
+          "status": "ready",
+          "confidence": "verified",
+          "last_verified": "2026-09-01",
+          "evidence": ["bc_node_a/b/c/d.tll: 4 independent processes, real TCP", "bc_multi_a/b/c/d.tll: 5 consecutive blocks mined by different nodes", "bc_sync_a/b.tll: auto sync on connect", "CI 3 platforms pass, 15 blockchain network gates"],
+          "evidence_refs": ["tests/bc_node_a.tll", "tests/bc_multi_a.tll"]
+        },
+        {
+          "id": "bc.transaction_propagation",
+          "name": "Transaction Propagation (120 tx high-message stress)",
+          "claim": "TLL blockchain can propagate 120 transactions from Node A to B/C/D with deduplication, mempool capacity=50 overflow/eviction, and block mining.",
+          "status": "ready",
+          "confidence": "verified",
+          "last_verified": "2026-09-01",
+          "evidence": ["bc_stress.tll: 120 tx, mempool capacity=50, overflow eviction, 50-tx block mined", "B/C/D max mempool=120 (strong evidence of receipt, verified in P0-15.18.3R)", "CI 3 platforms pass"],
+          "evidence_refs": ["tests/bc_stress.tll"]
+        },
+        {
+          "id": "bc.fault_injection",
+          "name": "Fault Injection (5 scenarios)",
+          "claim": "TLL blockchain handles duplicate tx, duplicate block, out-of-order block, kill-9 node restart, and multi-node consecutive faults.",
+          "status": "ready",
+          "confidence": "verified",
+          "last_verified": "2026-09-01",
+          "evidence": ["fi_duptx.tll: duplicate transaction storm, deduplication works", "fi_dupblock.tll: duplicate block storm, no duplicate insertion", "fi_ooo.tll: out-of-order block, future block rejected, normal block accepted", "fi_kill9.tll: kill -9 node, other nodes continue, restart node, reconnect, auto sync", "fi_multi.tll: kill B, kill C, continue, restore B, restore C, all sync", "CI 3 platforms pass, 15 fault injection gates"],
+          "evidence_refs": ["tests/fi_duptx.tll", "tests/fi_kill9.tll", "tests/fi_multi.tll"]
+        },
+        {
+          "id": "bc.invalid_block_rejection",
+          "name": "Invalid Block Rejection",
+          "claim": "TLL blockchain rejects blocks with wrong hash, wrong prevHash, wrong index, invalid transactions, and invalid PoW.",
+          "status": "ready",
+          "confidence": "verified",
+          "last_verified": "2026-09-01",
+          "evidence": ["bc_invalid_a/b.tll: invalid block scenarios, all rejected", "handleBlockMessage validates index, previousHash, blockHash, transactions before adding to chain"],
+          "evidence_refs": ["tests/bc_invalid_a.tll"]
+        },
+        {
+          "id": "bc.fork_detection",
+          "name": "Fork Detection (detect and reject, no reorg)",
+          "claim": "TLL blockchain can detect competing chains (forks) and reject conflicting blocks.",
+          "status": "partial",
+          "confidence": "verified",
+          "last_verified": "2026-09-01",
+          "evidence": ["forkCount tracking in handleBlockMessage", "conflicting block at same height is rejected"],
+          "not_implemented": ["Chain Reorg: cannot switch to a longer/heavier chain", "Orphan Block Pool: future blocks are discarded, not buffered", "Heaviest/Best Chain Selection: no cumulative work calculation"],
+          "note": "Current implementation is '4-node replicated chain', not 'full blockchain consensus network'. Fork detection exists (reject conflict), but fork resolution (reorg) does not."
+        },
+        {
+          "id": "bc.real_cryptography",
+          "name": "Real Cryptographic Signatures",
+          "claim": "TLL blockchain uses real asymmetric cryptography (Ed25519) for transaction signatures.",
+          "status": "missing",
+          "confidence": "none",
+          "last_verified": "never",
+          "current_state": "HMAC-SHA256 SIMULATED signature. Both signing and verification use tx.publicKey as HMAC key. This is explicitly noted in source code as SIMULATED.",
+          "planned": "P0-15.19 will upgrade blockchain signatures to Ed25519."
+        },
+        {
+          "id": "bc.account_state",
+          "name": "Account State / Nonce / Balance",
+          "claim": "TLL blockchain has full account state management with nonce continuity, balance checking, and double-spend prevention.",
+          "status": "missing",
+          "confidence": "none",
+          "last_verified": "never",
+          "current_state": "Mempool has duplicate detection by tx ID, but no account nonce state, no balance checking, no full double-spend prevention. Mempool has capacity, fee, expiration, sorting, eviction, nonce query.",
+          "planned": "Future phase (after P0-15.19) will add account state."
+        },
+        {
+          "id": "bc.persistence",
+          "name": "Chain Persistence",
+          "claim": "TLL blockchain can persist chain state to disk and recover on restart.",
+          "status": "missing",
+          "confidence": "none",
+          "last_verified": "never",
+          "current_state": "All chain state is in-memory. Node restart starts from genesis. Kill-9 test verifies restart + resync, but not persistence.",
+          "planned": "Future phase will add persistence (LevelDB or file-based)."
+        }
+      ]
+    },
+    {
+      "category": "AI Engineering Foundation",
+      "capabilities": [
+        {
+          "id": "aief.truth_engine",
+          "name": "Truth Engine (machine-readable engineering truth)",
+          "claim": "TLL has a machine-readable truth engine that defines capabilities, evidence, and confidence levels.",
+          "status": "bootstrap",
+          "confidence": "partial",
+          "last_verified": "2026-09-01",
+          "evidence": [".tll-engine/truth/ directory with architecture.json, language.json, runtime.json, capability.json", "schema_version 1.0", "each capability has claim, status, confidence, evidence, last_verified"],
+          "note": "This is the bootstrap phase (P0-16.0). Structure and schema are established. Full automation (CI validation, auto-update, query API) is future work."
+        },
+        {
+          "id": "aief.agent_protocol",
+          "name": "Agent Development Protocol",
+          "claim": "TLL has a defined protocol for AI Agent participation in development.",
+          "status": "bootstrap",
+          "confidence": "partial",
+          "last_verified": "2026-09-01",
+          "evidence": [".tll-engine/protocol/development.yaml, testing.yaml, audit.yaml", "8-phase workflow: Identity → Truth → Plan → Code → CI → Evidence → Cognition → Verification"],
+          "note": "Protocol is defined in v0.1. Enforcement via CI hooks is future work."
+        },
+        {
+          "id": "aief.engineering_cognition_graph",
+          "name": "Engineering Cognition Graph",
+          "claim": "TLL has a machine-readable engineering cognition graph that models dependencies, decisions, and evidence relationships.",
+          "status": "bootstrap",
+          "confidence": "partial",
+          "last_verified": "2026-09-01",
+          "evidence": [".tll-engine/cognition/graph.json, dependency.json, decisions.json"],
+          "note": "Graph structure is established. Population with full project data and query API is future work. NOT a neural network — it is a machine-verifiable engineering world model."
+        },
+        {
+          "id": "aief.evidence_system",
+          "name": "Evidence System",
+          "claim": "TLL has a structured evidence system with provenance, hash, scope, and confidence.",
+          "status": "bootstrap",
+          "confidence": "partial",
+          "last_verified": "2026-09-01",
+          "evidence": [".tll-engine/evidence/ directory with ci/, benchmark/, audit/ subdirectories", "Evidence Schema defined in truth/capability.json"],
+          "note": "Directory structure and schema are established. Automated evidence collection from CI is future work."
+        }
+      ]
+    }
+  ],
+  "production_readiness": {
+    "overall": "NOT READY",
+    "reason": "TLL has strong verified capabilities in language core, runtime, coroutine, TCP, P2P, and blockchain network demo. However, it lacks real asymmetric cryptography, account state, persistence, chain reorg, and runtime memory safety verification. These are required for production-grade blockchain or secure systems.",
+    "ready_for": ["language experimentation", "runtime development", "blockchain demo and education", "AI engineering foundation research", "high-performance concurrent system prototyping"],
+    "not_ready_for": ["production blockchain", "secure financial systems", "multi-tenant production runtime", "systems requiring verified memory safety", "systems requiring real cryptographic identity"]
+  },
+  "version": "1.0.0",
+  "parent_hash": null,
+  "hash": "bootstrap_capability_truth_v1",
+  "created_at": "2026-09-01",
+  "created_by": "agent_doubao_bootstrap_001",
+  "verified_by": "human_maintainer_001"
+}

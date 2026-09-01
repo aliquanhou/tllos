@@ -1,0 +1,247 @@
+# TLL OS Testing Protocol v0.1
+# Defines testing standards, CI gates, and verification requirements.
+
+schema_version: "1.0"
+protocol_name: "TLL OS Testing Protocol"
+version: "0.1"
+status: "bootstrap"
+
+# Testing Principles
+principles:
+  - id: "T001"
+    principle: "Test standard cannot be lowered for CI green"
+    description: "Never skip, delete, weaken, or continue-on-error tests. If CI fails, fix code or test infrastructure."
+    immutable: true
+
+  - id: "T002"
+    principle: "Real processes, real TCP, no mock"
+    description: "Network tests must use real independent processes and real TCP. No mock peer, no mock network, no shared chain objects."
+    immutable: true
+
+  - id: "T003"
+    principle: "Hard assertions, exit 1 on failure"
+    description: "All tests must have hard assertions. Any assertion failure must result in non-zero exit code. CI must RED."
+    immutable: true
+
+  - id: "T004"
+    principle: "Three-platform verification"
+    description: "All runtime/stdlib/blockchain tests must pass on Ubuntu, Windows (MSVC), and macOS. TCC is UNVERIFIED."
+    immutable: true
+
+  - id: "T005"
+    principle: "Assertion count hard gate"
+    description: "Scope tests have expected assertion count (95 total). Actual count must match expected. Mismatch = CI FAIL."
+    immutable: true
+
+  - id: "T006"
+    principle: "No orphan processes"
+    description: "Multi-process tests must clean up all processes. Orphan tllvm.exe/tllbc processes = test failure."
+    immutable: true
+
+  - id: "T007"
+    principle: "Logs preserved on failure"
+    description: "Multi-process tests must preserve node logs on failure for debugging."
+    immutable: true
+
+# Test Categories
+test_categories:
+  core_tests:
+    description: "Basic language and runtime tests"
+    count: 38
+    ci_required: true
+    platforms: ["ubuntu", "windows_msvc", "macos"]
+    test_runner: "scripts/run-tests.sh / scripts/run-tests.bat"
+
+  scope_tests:
+    description: "Scope semantics tests (variable resolution, shadowing, closure, coroutine)"
+    count: 10
+    total_assertions: 95
+    assertion_breakdown:
+      scope_01_global_local: 8
+      scope_02_shadowing: 11
+      scope_03_params: 10
+      scope_04_nested_fn: 10
+      scope_05_closure: 9
+      scope_06_block: 14
+      scope_07_coroutine: 5
+      scope_08_multi_fn_recursion: 6
+      scope_09_return_lifetime: 12
+      scope_10_complete_chain: 10
+    ci_required: true
+    platforms: ["ubuntu", "windows_msvc", "macos"]
+    hard_gate: "assertion_count == 95, mismatch = FAIL"
+
+  coroutine_stress:
+    description: "100K coroutine stress test"
+    scenarios:
+      - "100K immediate-return coroutines"
+      - "10K x 10 yield"
+      - "1K sleep"
+    ci_required: true
+    platforms: ["ubuntu", "windows_msvc", "macos"]
+    acceptance:
+      - "created == 100000"
+      - "completed == 100000"
+      - "active == 0"
+      - "no crash"
+      - "no deadlock"
+    note: "Peak RSS is NOT currently verified in CI. Runtime leak detection is future work."
+
+  tcp_fd_boundary:
+    description: "TCP file descriptor boundary test"
+    ci_required: true
+    platforms: ["ubuntu", "windows_msvc", "macos"]
+    verified:
+      - "60 fds: PASS"
+      - "64 fds: PASS"
+      - "65+ fds: no crash (silently ignored beyond FD_SETSIZE=64)"
+    known_limit: "FD_SETSIZE=64. Exceeding 64 results in silent ignore. This is a design limit, not a bug."
+    note: "Windows TCC FD_SET fix is UNVERIFIED. Only MSVC build counts."
+
+  blockchain_network:
+    description: "Blockchain network tests (real processes, real TCP)"
+    tests:
+      - name: "bc_node"
+        description: "4-node basic network"
+        real_processes: true
+        real_tcp: true
+      - name: "bc_multi"
+        description: "5 consecutive blocks mined by different nodes"
+        real_processes: true
+        real_tcp: true
+      - name: "bc_sync"
+        description: "Auto sync on connect"
+        real_processes: true
+        real_tcp: true
+      - name: "bc_reconnect"
+        description: "Disconnect, reconnect, auto sync"
+        real_processes: true
+        real_tcp: true
+      - name: "bc_invalid"
+        description: "Invalid block rejection and fork detection"
+        real_processes: true
+        real_tcp: true
+    ci_required: true
+    platforms: ["ubuntu", "windows_msvc", "macos"]
+    total_gates: 15
+    gate_calculation: "5 tests x 3 platforms = 15 CI gates"
+
+  blockchain_stress:
+    description: "Blockchain high-message stress test"
+    test: "bc_stress"
+    scenarios:
+      - "120 transactions submitted by Node A"
+      - "Mempool capacity=50, overflow eviction"
+      - "50-tx block mined"
+      - "B/C/D receive transactions (max mempool=120)"
+      - "Final 4-node tip consistency"
+    ci_required: true
+    platforms: ["ubuntu", "windows_msvc", "macos"]
+    acceptance:
+      - "Node A: submitted >= 100, mempool=50, block txs>=50"
+      - "Node B: max mempool >= 120"
+      - "Node C: max mempool >= 120"
+      - "Node D: max mempool >= 120"
+      - "All nodes: valid=true, tip hash identical"
+    note: "B/C/D max mempool=120 is strong evidence of transaction receipt, but not direct proof of 120 unique tx IDs. This is a known evidence gap, not a blocker."
+
+  fault_injection:
+    description: "Fault injection tests"
+    tests:
+      - name: "fi_duptx"
+        description: "Duplicate transaction storm (100x broadcast)"
+        acceptance: "mempool stays 1, no duplicate, no infinite relay"
+      - name: "fi_dupblock"
+        description: "Duplicate block storm (100x broadcast)"
+        acceptance: "chain height unchanged, no duplicate insertion, no crash"
+      - name: "fi_ooo"
+        description: "Out-of-order block (Block 3 before Block 2)"
+        acceptance: "Block 3 rejected, Block 2 accepted, final chain correct"
+      - name: "fi_kill9"
+        description: "Kill -9 one node, others continue, restart, reconnect, auto sync"
+        acceptance: "other nodes continue, restart succeeds, reconnect succeeds, sync succeeds, final consistency"
+      - name: "fi_multi"
+        description: "Kill B, kill C, continue, restore B, restore C, all sync"
+        acceptance: "all 4 nodes final consistency, no crash, no deadlock"
+    ci_required: true
+    platforms: ["ubuntu", "windows_msvc", "macos"]
+    total_gates: 15
+    gate_calculation: "5 tests x 3 platforms = 15 CI gates"
+
+  long_run_stability:
+    description: "Long-run stability test (120 seconds)"
+    test: "lrs_a/b/c/d"
+    duration: "120 seconds"
+    scenarios:
+      - "4 independent processes"
+      - "Node A mines 20 blocks x 3tx"
+      - "Node B/C/D passive receive"
+      - "Resource monitoring (RSS/fd every 10s)"
+    ci_required: true
+    platforms: ["ubuntu", "windows_msvc", "macos"]
+    ci_timeout: "6 minutes"
+    acceptance:
+      - "All 4 nodes: height=20, tip hash identical, valid=true"
+      - "No crash, no deadlock"
+      - "Max RSS recorded (Windows: 573MB)"
+    note: "120 seconds is verified. 10+ minute long-run is future work."
+
+  performance_benchmark:
+    description: "Performance benchmark tests"
+    tests:
+      - name: "perf_coroutine"
+        results:
+          create: "95.4us/coroutine (10K)"
+          yield: "2.19us/each (100K)"
+          sleep: "0.111ms/each (1K)"
+      - name: "perf_json"
+        results:
+          simple_object: "5us"
+          nested: "10us"
+          large_array: "420us"
+      - name: "perf_blockchain"
+        results:
+          tx_create_sign: "2.6ms/tx"
+          merkle: "0.01ms"
+          block_hash: "0.001ms"
+          mining: "143ms/block (diff=1)"
+    ci_required: true
+    platforms: ["ubuntu", "windows_msvc", "macos"]
+    ci_timeout: "5 minutes"
+    note: "Benchmarks are recorded but not yet enforced as hard gates (no performance regression detection)."
+
+# CI Gates Summary
+ci_gates_summary:
+  total_gates: "50+ (core 38 + scope 10 + stress 3 + blockchain 15 + fault 15 + lrs 3 + perf 3, across 3 platforms)"
+  required_for_seal:
+    - "All core tests: PASS"
+    - "All scope tests: PASS (95 assertions)"
+    - "Coroutine stress: PASS"
+    - "TCP FD boundary: PASS"
+    - "Blockchain network (5 tests): PASS x 3 platforms"
+    - "Blockchain stress: PASS x 3 platforms"
+    - "Fault injection (5 tests): PASS x 3 platforms"
+    - "Long-run stability: PASS x 3 platforms"
+    - "Performance benchmark: PASS x 3 platforms (no regression)"
+
+# Platform Compatibility Notes
+platform_notes:
+  macos:
+    bash_version: "3.2 (no declare -A)"
+    grep: "BSD grep (no -P option)"
+    sed: "BSD sed"
+    requirement: "All test scripts must be bash 3.2 and BSD tool compatible."
+
+  windows_msvc:
+    compiler: "MSVC cl /O2"
+    shell: "PowerShell"
+    requirement: "All tests must have PowerShell driver (.ps1) in addition to bash driver."
+
+  windows_tcc:
+    status: "UNVERIFIED"
+    issue: "TCC build environment damaged (stddef.h error)"
+    requirement: "TCC does NOT count for verification. Only MSVC counts for Windows."
+
+created_at: "2026-09-01"
+created_by: "agent_doubao_bootstrap_001"
+verified_by: "human_maintainer_001"

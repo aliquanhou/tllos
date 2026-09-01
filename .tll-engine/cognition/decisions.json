@@ -1,0 +1,153 @@
+{
+  "schema_version": "1.0",
+  "name": "TLL Engineering Decision Log",
+  "description": "Machine-readable decision log for TLL OS. Records key engineering decisions with rationale, alternatives considered, and impact. This is NOT a changelog. It is a decision history for Agents to understand why things are the way they are.",
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "title": "TLL is a high frame rate programming language, AI Engineering Layer is enhancement not replacement",
+      "date": "2026-09-01",
+      "status": "accepted",
+      "created_by": "human_maintainer_001",
+      "context": "After P0-15.18.x Runtime/Blockchain completion, there was a risk of AI Engineering Foundation becoming the primary focus, overshadowing the language itself.",
+      "decision": "TLL's first principle is 'high frame rate programming language'. AI Engineering Layer is the wing that enhances TLL, not the soul that replaces it. All work must serve the language first.",
+      "alternatives_considered": [
+        "Make AI Engineering Foundation the primary product, language as implementation detail",
+        "Equal focus on language and AI Foundation",
+        "Language first, AI Foundation as enhancement layer"
+      ],
+      "rationale": "TLL's unique value is as a high-performance language. AI Foundation makes it easier for Agents to develop TLL, but does not replace TLL itself. Without a strong language, AI Foundation has nothing to enhance.",
+      "impact": "All phases must prioritize language/runtime/stdlib capability. AI Foundation work must not expand scope to become a standalone product.",
+      "related_decisions": ["DEC-002", "DEC-003"]
+    },
+    {
+      "id": "DEC-002",
+      "title": "P0-16.0 establishes .tll-engine/ as official engineering cognition layer, no Runtime/Compiler modification",
+      "date": "2026-09-01",
+      "status": "accepted",
+      "created_by": "human_maintainer_001",
+      "context": "After v0.1-v0.4 AI Engineering Foundation architecture design, need to bootstrap the actual implementation without disrupting language development.",
+      "decision": "P0-16.0 creates .tll-engine/ directory structure with Truth, Protocol, Cognition, Evidence, Identity, Version files. No modification to VM, Compiler, Blockchain, or Runtime. Only new files and CI validation tools.",
+      "alternatives_considered": [
+        "Implement full AI Foundation with Runtime integration immediately",
+        "Start with website first, then backend",
+        "Bootstrap with directory structure and schemas only, no code modification"
+      ],
+      "rationale": "Bootstrap phase establishes structure and schema without risking language stability. Full automation and Runtime integration come in later phases.",
+      "impact": "P0-16.0 is low-risk. It adds files and tools but does not modify existing code.",
+      "related_decisions": ["DEC-001"]
+    },
+    {
+      "id": "DEC-003",
+      "title": "Engineering Cognition Graph is NOT a neural network",
+      "date": "2026-09-01",
+      "status": "accepted",
+      "created_by": "human_maintainer_001",
+      "context": "Earlier discussions used the term 'neural network' to describe the engineering cognition layer. This risked drifting to model training, embeddings, RAG, and fine-tuning.",
+      "decision": "The official name is 'Engineering Cognition Graph'. It behaves like a neural network (nodes=facts, edges=relations, weights=evidence/confidence/impact, time=history, feedback=CI) but the foundation is a machine-verifiable engineering world model, not a trained neural network.",
+      "alternatives_considered": [
+        "Call it 'TLL Neural Network' and start training models",
+        "Call it 'Knowledge Graph' (too generic, doesn't capture engineering cognition aspect)",
+        "Call it 'Engineering Cognition Graph' and focus on machine-verifiable world model"
+      ],
+      "rationale": "TLL's need is not another AI model. It is a reliable engineering world that any LLM can query and understand. Model training can come later, built on top of the world model.",
+      "impact": "No model training, embeddings, RAG, or fine-tuning in current phases. Focus on structured, machine-verifiable engineering data.",
+      "related_decisions": ["DEC-001", "DEC-002"]
+    },
+    {
+      "id": "DEC-004",
+      "title": "Blockchain uses HMAC-SHA256 as SIMULATED signature, not real asymmetric cryptography",
+      "date": "2026-08-15",
+      "status": "accepted",
+      "created_by": "agent_doubao_bootstrap_001",
+      "context": "Blockchain demo needed transaction signatures for testing, but Ed25519 implementation was not yet available.",
+      "decision": "Use HMAC-SHA256 with publicKey as key as a SIMULATED signature. Clearly mark in source code as SIMULATED. Plan real Ed25519 for P0-15.19.",
+      "alternatives_considered": [
+        "Implement Ed25519 immediately (too complex for blockchain demo phase)",
+        "No signatures at all (would not test signature validation path)",
+        "HMAC simulation with clear marking"
+      ],
+      "rationale": "HMAC simulation allows testing the signature validation path (sign, verify, tamper detection) without implementing full asymmetric cryptography. Clear marking prevents confusion about production readiness.",
+      "impact": "Blockchain is NOT production ready. Signatures are simulated. P0-15.19 will upgrade to real Ed25519.",
+      "related_decisions": ["DEC-005"]
+    },
+    {
+      "id": "DEC-005",
+      "title": "P0-15.19 next phase: TLL Native Cryptographic Foundation (Ed25519, SHA-512, secure random, Identity)",
+      "date": "2026-09-01",
+      "status": "planned",
+      "created_by": "human_maintainer_001",
+      "context": "After P0-15.18.x Runtime/Blockchain completion and P0-16.0 AI Foundation bootstrap, the language needs real cryptographic primitives for Identity, secure communication, and blockchain signature upgrade.",
+      "decision": "P0-15.19 adds: SHA-512 (pure TLL + C native for Ed25519), Ed25519 (C native), secure random (C native, platform-specific), Identity primitives (stdlib/identity.tll), blockchain signature upgrade (HMAC → Ed25519). No website, no Agent platform, no UI, no LLM, no VM architecture change.",
+      "alternatives_considered": [
+        "Continue blockchain feature development (consensus, persistence) before cryptography",
+        "Start website first",
+        "Cryptographic foundation first, then blockchain features"
+      ],
+      "rationale": "Real cryptography is a language-level capability needed by Identity, secure communication, and blockchain. Without it, all higher-level security features are simulated. This aligns with 'language first' principle.",
+      "impact": "P0-15.19 will modify builtin.c (add crypto native functions) and stdlib/crypto.tll, stdlib/identity.tll, stdlib/blockchain.tll. Full regression required.",
+      "related_decisions": ["DEC-001", "DEC-004"],
+      "blocked_by": ["P0-16.0 completion and audit"]
+    },
+    {
+      "id": "DEC-006",
+      "title": "Windows TCC build is UNVERIFIED, only MSVC counts for Windows verification",
+      "date": "2026-08-20",
+      "status": "accepted",
+      "created_by": "human_maintainer_001",
+      "context": "TCC build environment is damaged (stddef.h error). TCC runtime has never been verified. There was a risk of using MSVC test results as evidence for TCC.",
+      "decision": "TCC status is UNVERIFIED. Only MSVC (cl /O2) build counts for Windows verification. TCC results must never be used as evidence. TCC repair is future work, not a blocker.",
+      "alternatives_considered": [
+        "Repair TCC immediately (time-consuming, not core to language development)",
+        "Use MSVC results as TCC evidence (incorrect, different compiler)",
+        "Mark TCC as UNVERIFIED, use MSVC for Windows, repair TCC later"
+      ],
+      "rationale": "TCC is a secondary build target. MSVC is the primary Windows compiler. Marking TCC as UNVERIFIED is honest and prevents false claims.",
+      "impact": "All CI and audit reports must clearly separate MSVC and TCC. No claim of 'TCC verified' is allowed.",
+      "related_decisions": []
+    },
+    {
+      "id": "DEC-007",
+      "title": "Compiler codegen variable scope bug: non-main function let/const incorrectly falls back to global",
+      "date": "2026-08-25",
+      "status": "fixed",
+      "created_by": "agent_doubao_bootstrap_001",
+      "context": "P0-15.18.4 Fault Injection exposed blockchain validation failure. Root cause traced through minimal reproduction to compiler codegen: non-main function let/const variables were incorrectly resolved as global variables, causing function-local i to overwrite main's i.",
+      "decision": "Fix codegen.tll: non-main functions use cg_getOrCreateVar() for local variable creation, main function continues to use cg_resolveVar(). Add 10 scope tests (95 assertions) as hard gate. Fixed in commit effe492.",
+      "alternatives_considered": [
+        "Reset cg_varMap after each function (broke nested functions and closures)",
+        "Modify VM to handle scope (wrong layer, bug is in compiler)",
+        "Fix codegen variable resolution for non-main functions"
+      ],
+      "rationale": "The bug is in compiler codegen, not VM. The fix is minimal and targeted. Scope tests prevent regression.",
+      "impact": "All blockchain and fault injection tests pass after fix. Scope semantics now correctly isolated. 10 tests guard this.",
+      "related_decisions": [],
+      "fixed_in_commit": "effe492",
+      "regression_tests": ["tests/scope/scope_01 through scope_10"]
+    },
+    {
+      "id": "DEC-008",
+      "title": "FD_SETSIZE=64 is a design limit, not a bug. Exceeding 64 results in silent ignore, no crash.",
+      "date": "2026-08-20",
+      "status": "accepted",
+      "created_by": "human_maintainer_001",
+      "context": "P0-15.18.2 TCP/FD boundary testing found that passing more than 64 file descriptors to select() could cause FD_SET array overflow. Fix added boundary check (fd_count < FD_SETSIZE before writing).",
+      "decision": "FD_SETSIZE=64 is a design limit. The fix prevents buffer overflow by silently ignoring fds beyond 64. This is not a bug — it is a defined behavior. The limitation is documented. Increasing FD_SETSIZE or using epoll/kqueue/iocp is future work.",
+      "alternatives_considered": [
+        "Increase FD_SETSIZE to 1024 (platform-dependent, may break Windows)",
+        "Use epoll on Linux, kqueue on macOS, IOCP on Windows (major refactor)",
+        "Keep FD_SETSIZE=64 with boundary check, document as design limit"
+      ],
+      "rationale": "64 concurrent connections is sufficient for current TLL use cases (4-node blockchain, demo systems). The boundary check prevents crash. Full async IO refactor is future work.",
+      "impact": "TCP is limited to 64 concurrent file descriptors. This is documented in Truth files and PRODUCTION_HARDENING.md.",
+      "related_decisions": []
+    }
+  ],
+  "decision_statuses": ["accepted", "planned", "fixed", "deprecated", "rejected"],
+  "version": "1.0.0",
+  "parent_hash": null,
+  "hash": "bootstrap_decision_log_v1",
+  "created_at": "2026-09-01",
+  "created_by": "agent_doubao_bootstrap_001",
+  "note": "This is the bootstrap decision log with 8 key decisions. Full history from P0-1 through P0-15 is not yet recorded. Future decisions will be appended."
+}
