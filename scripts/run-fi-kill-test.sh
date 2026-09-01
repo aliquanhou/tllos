@@ -5,6 +5,7 @@
 # Exit code: 0 = all assertions pass, 1 = any assertion fails
 #
 # Uses real independent processes + real TCP, no mocks.
+# Compatible with bash 3.2 (macOS default) - no associative arrays.
 
 set -u
 
@@ -13,6 +14,17 @@ TLLVM="host/c/tllvm"
 TLLC="tools/TLLC/tllc.tllbc"
 LOG_DIR="/tmp/tll_fi_${TEST_NAME}"
 NODES="a b c d"
+
+# Individual variables for each node (bash 3.2 compatible)
+PID_A=0; PID_B=0; PID_C=0; PID_D=0
+HEIGHT_A=0; HEIGHT_B=0; HEIGHT_C=0; HEIGHT_D=0
+TIP_A=""; TIP_B=""; TIP_C=""; TIP_D=""
+VALID_A=""; VALID_B=""; VALID_C=""; VALID_D=""
+
+# Helper: get PID by node name
+get_pid() { case $1 in a) echo $PID_A;; b) echo $PID_B;; c) echo $PID_C;; d) echo $PID_D;; esac; }
+# Helper: set PID by node name
+set_pid() { case $1 in a) PID_A=$2;; b) PID_B=$2;; c) PID_C=$2;; d) PID_D=$2;; esac; }
 
 # Determine test file prefix
 if [ "$TEST_NAME" = "fi_multi" ]; then
@@ -45,12 +57,12 @@ done
 
 # Step 2: Start all nodes
 echo "--- Starting all nodes ---"
-declare -A PIDS
 for node in $NODES; do
     bin="tests/${TEST_PREFIX}_${node}.tllbc"
     $TLLVM "$bin" > "$LOG_DIR/node_${node}.log" 2>&1 &
-    PIDS[$node]=$!
-    echo "  Started node $node (PID=${PIDS[$node]})"
+    pid=$!
+    set_pid $node $pid
+    echo "  Started node $node (PID=$pid)"
     sleep 2
 done
 
@@ -61,8 +73,9 @@ sleep 20
 # Step 4: Fault injection based on test type
 if [ "$TEST_NAME" = "fi_kill9" ]; then
     # Scenario 1: Kill-9 Node B
-    echo "--- KILL-9 Node B (PID=${PIDS[b]}) ---"
-    kill -9 ${PIDS[b]} 2>/dev/null
+    pid_b=$(get_pid b)
+    echo "--- KILL-9 Node B (PID=$pid_b) ---"
+    kill -9 $pid_b 2>/dev/null
     sleep 2
     echo "  Node B killed. Other nodes continue."
 
@@ -74,8 +87,9 @@ if [ "$TEST_NAME" = "fi_kill9" ]; then
     echo "--- Restarting Node B ---"
     bin="tests/${TEST_PREFIX}_b.tllbc"
     $TLLVM "$bin" > "$LOG_DIR/node_b_restart.log" 2>&1 &
-    PIDS[b]=$!
-    echo "  Node B restarted (PID=${PIDS[b]})"
+    pid=$!
+    set_pid b $pid
+    echo "  Node B restarted (PID=$pid)"
 
     # Wait for reconnect and sync
     echo "--- Waiting for Node B reconnect and sync (35s) ---"
@@ -84,16 +98,18 @@ if [ "$TEST_NAME" = "fi_kill9" ]; then
 elif [ "$TEST_NAME" = "fi_multi" ]; then
     # Scenario 6: Multi-node consecutive faults
     # Kill B
-    echo "--- KILL-9 Node B (PID=${PIDS[b]}) ---"
-    kill -9 ${PIDS[b]} 2>/dev/null
+    pid_b=$(get_pid b)
+    echo "--- KILL-9 Node B (PID=$pid_b) ---"
+    kill -9 $pid_b 2>/dev/null
     sleep 2
     echo "  Node B killed."
 
     # Wait, then kill C
     echo "--- Waiting (15s), then KILL-9 Node C ---"
     sleep 15
-    kill -9 ${PIDS[c]} 2>/dev/null
-    echo "  Node C killed (PID=${PIDS[c]})."
+    pid_c=$(get_pid c)
+    kill -9 $pid_c 2>/dev/null
+    echo "  Node C killed (PID=$pid_c)."
 
     # Wait for Node A to mine more blocks
     echo "--- Waiting for Node A to mine blocks (20s) ---"
@@ -103,16 +119,18 @@ elif [ "$TEST_NAME" = "fi_multi" ]; then
     echo "--- Restarting Node B ---"
     bin="tests/${TEST_PREFIX}_b.tllbc"
     $TLLVM "$bin" > "$LOG_DIR/node_b_restart.log" 2>&1 &
-    PIDS[b]=$!
-    echo "  Node B restarted (PID=${PIDS[b]})"
+    pid=$!
+    set_pid b $pid
+    echo "  Node B restarted (PID=$pid)"
 
     # Wait for B sync, then restart C
     echo "--- Waiting for B sync (20s), then restart Node C ---"
     sleep 20
     bin="tests/${TEST_PREFIX}_c.tllbc"
     $TLLVM "$bin" > "$LOG_DIR/node_c_restart.log" 2>&1 &
-    PIDS[c]=$!
-    echo "  Node C restarted (PID=${PIDS[c]})"
+    pid=$!
+    set_pid c $pid
+    echo "  Node C restarted (PID=$pid)"
 
     # Wait for all sync
     echo "--- Waiting for all nodes sync (30s) ---"
@@ -126,8 +144,9 @@ sleep 30
 # Step 6: Kill remaining processes
 echo "--- Cleaning up processes ---"
 for node in $NODES; do
-    if [ -n "${PIDS[$node]}" ]; then
-        kill -9 ${PIDS[$node]} 2>/dev/null
+    pid=$(get_pid $node)
+    if [ -n "$pid" ] && [ "$pid" != "0" ]; then
+        kill -9 $pid 2>/dev/null || true
     fi
 done
 sleep 1
@@ -136,10 +155,6 @@ pkill -9 -f "${TEST_PREFIX}_" 2>/dev/null || true
 # Step 7: Parse results and run assertions
 echo "--- Running assertions ---"
 FAILURES=0
-
-declare -A HEIGHTS
-declare -A TIPS
-declare -A VALIDS
 
 for node in $NODES; do
     # Use restart log if exists and non-empty, otherwise original log
@@ -157,7 +172,8 @@ for node in $NODES; do
     log_size=$(wc -c < "$log" 2>/dev/null || echo 0)
     echo "  Node $node log: $log ($log_size bytes)"
 
-    result_line=$(grep "RESULT_NODE_$(echo $node | tr '[:lower:]' '[:upper:]')" "$log" | tail -1)
+    node_upper=$(echo $node | tr '[:lower:]' '[:upper:]')
+    result_line=$(grep "RESULT_NODE_${node_upper}" "$log" | tail -1)
     if [ -z "$result_line" ]; then
         echo "FAIL: Node $node has no RESULT line (may have crashed or timed out)"
         echo "  Last 10 lines:"
@@ -169,9 +185,12 @@ for node in $NODES; do
     h=$(echo "$result_line" | grep -oP 'height=\K[0-9]+')
     t=$(echo "$result_line" | grep -oP 'tip=\K[^ ]+')
     v=$(echo "$result_line" | grep -oP 'valid=\K[^ ]+')
-    HEIGHTS[$node]=$h
-    TIPS[$node]=$t
-    VALIDS[$node]=$v
+    case $node in
+        a) HEIGHT_A=$h; TIP_A=$t; VALID_A=$v;;
+        b) HEIGHT_B=$h; TIP_B=$t; VALID_B=$v;;
+        c) HEIGHT_C=$h; TIP_C=$t; VALID_C=$v;;
+        d) HEIGHT_D=$h; TIP_D=$t; VALID_D=$v;;
+    esac
     echo "  Node $node : height=$h tip=$t valid=$v"
 
     if [ "$v" != "true" ]; then
@@ -185,11 +204,11 @@ for node in $NODES; do
 done
 
 # Check all heights match
-first_node=$(echo $NODES | awk '{print $1}')
-first_height=${HEIGHTS[$first_node]}
-for node in $NODES; do
-    if [ -n "${HEIGHTS[$node]}" ] && [ "${HEIGHTS[$node]}" != "$first_height" ]; then
-        echo "FAIL: Height mismatch - first=$first_height node $node=${HEIGHTS[$node]}"
+first_height=$HEIGHT_A
+for node in b c d; do
+    case $node in b) h=$HEIGHT_B;; c) h=$HEIGHT_C;; d) h=$HEIGHT_D;; esac
+    if [ -n "$h" ] && [ "$h" != "$first_height" ]; then
+        echo "FAIL: Height mismatch - first=$first_height node $node=$h"
         FAILURES=$((FAILURES + 1))
     fi
 done
@@ -198,10 +217,11 @@ if [ -n "$first_height" ]; then
 fi
 
 # Check all tip hashes match
-first_tip=${TIPS[$first_node]}
-for node in $NODES; do
-    if [ -n "${TIPS[$node]}" ] && [ "${TIPS[$node]}" != "$first_tip" ]; then
-        echo "FAIL: Tip hash mismatch - first=$first_tip node $node=${TIPS[$node]}"
+first_tip=$TIP_A
+for node in b c d; do
+    case $node in b) t=$TIP_B;; c) t=$TIP_C;; d) t=$TIP_D;; esac
+    if [ -n "$t" ] && [ "$t" != "$first_tip" ]; then
+        echo "FAIL: Tip hash mismatch - first=$first_tip node $node=$t"
         FAILURES=$((FAILURES + 1))
     fi
 done

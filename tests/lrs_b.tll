@@ -1,5 +1,5 @@
 // P0-15.18.5: Long-Run Stability Test - Node B (passive receiver, long run)
-from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, getNodeStatus
+from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, getNodeStatus, printNodeStatus
 
 let node = createBlockchainNode("nodeB", "127.0.0.1", 19302, 1, 50)
 startNode(node)
