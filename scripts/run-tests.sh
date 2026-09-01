@@ -123,17 +123,22 @@ SCOPE_ASSERTS=0
 # Independent golden values. These are NOT derived from source at runtime.
 # If someone adds/removes an assertion in a test file, they MUST update
 # the corresponding value here. Mismatch causes CI FAIL.
-declare -A EXPECTED_ASSERTS
-EXPECTED_ASSERTS["scope_01_global_local"]=8
-EXPECTED_ASSERTS["scope_02_shadowing"]=11
-EXPECTED_ASSERTS["scope_03_params"]=10
-EXPECTED_ASSERTS["scope_04_nested_fn"]=10
-EXPECTED_ASSERTS["scope_05_closure"]=9
-EXPECTED_ASSERTS["scope_06_block"]=14
-EXPECTED_ASSERTS["scope_07_coroutine"]=5
-EXPECTED_ASSERTS["scope_08_multi_fn_recursion"]=6
-EXPECTED_ASSERTS["scope_09_return_lifetime"]=12
-EXPECTED_ASSERTS["scope_10_complete_chain"]=10
+# Uses case statement instead of declare -A for bash 3.2 compatibility (macOS).
+get_expected_asserts() {
+    case "$1" in
+        scope_01_global_local) echo 8 ;;
+        scope_02_shadowing) echo 11 ;;
+        scope_03_params) echo 10 ;;
+        scope_04_nested_fn) echo 10 ;;
+        scope_05_closure) echo 9 ;;
+        scope_06_block) echo 14 ;;
+        scope_07_coroutine) echo 5 ;;
+        scope_08_multi_fn_recursion) echo 6 ;;
+        scope_09_return_lifetime) echo 12 ;;
+        scope_10_complete_chain) echo 10 ;;
+        *) echo 0 ;;
+    esac
+}
 EXPECTED_TOTAL_ASSERTS=95
 
 TLLC_BC="$REPO_ROOT/tools/TLLC/tllc.tllbc"
@@ -181,7 +186,7 @@ for f in "$REPO_ROOT/tests/scope/"*.tll; do
     else
         # Assertion Hard Gate: compare actual source count vs independent expected value
         actual_asserts=$(grep -c 'FAIL [0-9]' "$f" 2>/dev/null || echo 0)
-        expected_asserts=${EXPECTED_ASSERTS[$test_name]:-0}
+        expected_asserts=$(get_expected_asserts "$test_name")
         if [ "$actual_asserts" -ne "$expected_asserts" ]; then
             echo "  FAIL: $display (assertion count mismatch: expected=$expected_asserts, actual=$actual_asserts)"
             echo "    If you added/removed assertions, update EXPECTED_ASSERTS in this script."
