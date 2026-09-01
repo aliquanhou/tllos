@@ -124,9 +124,9 @@ for node in a b c d; do
         FAILURES=$((FAILURES + 1))
         continue
     fi
-    height=$(grep -oP 'RESULT_NODE_[A-Z]+ height=\K[0-9]+' "$log" 2>/dev/null | head -1 || echo "0")
-    tip=$(grep -oP 'RESULT_NODE_[A-Z]+ tip=\K[a-f0-9]+' "$log" 2>/dev/null | head -1 || echo "")
-    valid=$(grep -oP 'RESULT_NODE_[A-Z]+ valid=\K[a-z]+' "$log" 2>/dev/null | head -1 || echo "")
+    height=$(grep "RESULT_NODE_" "$log" 2>/dev/null | tail -1 | sed 's/.*height=\([0-9]*\).*/\1/' || echo "0")
+    tip=$(grep "RESULT_NODE_" "$log" 2>/dev/null | tail -1 | sed 's/.*tip=\([^ ]*\).*/\1/' || echo "")
+    valid=$(grep "RESULT_NODE_" "$log" 2>/dev/null | tail -1 | sed 's/.*valid=\([a-z]*\).*/\1/' || echo "")
     case $node in
         a) HEIGHT_A=$height; TIP_A=$tip; VALID_A=$valid;;
         b) HEIGHT_B=$height; TIP_B=$tip; VALID_B=$valid;;

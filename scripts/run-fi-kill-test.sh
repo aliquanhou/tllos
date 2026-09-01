@@ -182,9 +182,9 @@ for node in $NODES; do
         continue
     fi
 
-    h=$(echo "$result_line" | grep -oP 'height=\K[0-9]+')
-    t=$(echo "$result_line" | grep -oP 'tip=\K[^ ]+')
-    v=$(echo "$result_line" | grep -oP 'valid=\K[^ ]+')
+    h=$(echo "$result_line" | sed 's/.*height=\([0-9]*\).*/\1/')
+    t=$(echo "$result_line" | sed 's/.*tip=\([^ ]*\).*/\1/')
+    v=$(echo "$result_line" | sed 's/.*valid=\([a-z]*\).*/\1/')
     case $node in
         a) HEIGHT_A=$h; TIP_A=$t; VALID_A=$v;;
         b) HEIGHT_B=$h; TIP_B=$t; VALID_B=$v;;
