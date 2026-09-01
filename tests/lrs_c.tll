@@ -5,7 +5,14 @@ let node = createBlockchainNode("nodeC", "127.0.0.1", 19303, 1, 50)
 startNode(node)
 
 io.println("=== LRS Node C Connecting to Node A ===")
-connectToPeer(node, "127.0.0.1", 19301)
+let connectRetry = 0
+while connectRetry < 10 {
+    connectToPeer(node, "127.0.0.1", 19301)
+    coroutine.sleep(500)
+    if node.p2p.peers.length >= 1 { break }
+    connectRetry = connectRetry + 1
+    io.println("  Retry connect " + convert.toString(connectRetry) + "/10")
+}
 coroutine.sleep(1000)
 
 io.println("=== LRS Node C Waiting for 3 peers ===")
