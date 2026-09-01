@@ -1,0 +1,378 @@
+// ============================================================
+// TLL Ed25519 Field Arithmetic (P0-15.19.2)
+// Modular arithmetic modulo p = 2^255 - 19
+//
+// Representation: 10 limbs of 26 bits each (ref10 style)
+//   value = fe[0] + fe[1]*2^26 + fe[2]*2^52 + ... + fe[9]*2^234
+//   Each limb is a signed integer (negative allowed for lazy reduction)
+//
+// 26-bit limbs chosen because 26*2 = 52 bits, fits in TLL signed 64-bit int
+// ============================================================
+
+// p = 2^255 - 19 (as 10 limbs, little-endian 26-bit)
+// p = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFED
+fn fe_p() -> list {
+    return [
+        67108845,  // 2^26 - 19 (low 26 bits of p)
+        0x3FFFFFF,
+        0x3FFFFFF,
+        0x3FFFFFF,
+        0x3FFFFFF,
+        0x3FFFFFF,
+        0x3FFFFFF,
+        0x3FFFFFF,
+        0x3FFFFFF,
+        0x1FFFFF    // high 25 bits (2^255 has bit 255 set, so 2^255-19 has high 25 bits)
+    ]
+}
+
+// Zero element
+fn fe_zero() -> list {
+    return [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+}
+
+// One element
+fn fe_one() -> list {
+    return [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+}
+
+// Copy field element
+fn fe_copy(a: list) -> list {
+    return [a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9]]
+}
+
+// Add: h = f + g
+fn fe_add(f: list, g: list) -> list {
+    let h: list = []
+    let i = 0
+    while i < 10 {
+        h[i] = f[i] + g[i]
+        i = i + 1
+    }
+    return h
+}
+
+// Subtract: h = f - g
+fn fe_sub(f: list, g: list) -> list {
+    let h: list = []
+    let i = 0
+    while i < 10 {
+        h[i] = f[i] - g[i]
+        i = i + 1
+    }
+    return h
+}
+
+// Reduce a field element to canonical form (0 <= limb < 2^26, value < p)
+// Uses carry propagation and modular reduction
+fn fe_reduce(h: list) -> list {
+    let f = fe_copy(h)
+
+    // Carry propagation: ensure each limb is in range [0, 2^26)
+    // First pass: carry from low to high
+    let i = 0
+    while i < 9 {
+        let carry = f[i] >> 26
+        f[i] = f[i] - (carry << 26)
+        f[i + 1] = f[i + 1] + carry
+        i = i + 1
+    }
+    // f[9] may still be large
+
+    // Modular reduction: 2^255 闂?19 mod p
+    // f[9] * 2^234 * 2^21 = f[9] * 2^255 闂?f[9] * 19 mod p
+    // But f[9] is only 26 bits, and 2^234 * 2^26 = 2^260, not 2^255
+    // Actually: value = sum(f[i] * 2^(26*i))
+    // f[9] * 2^234. To get 2^255, we need f[9] * 2^234 * 2^21 = f[9] * 2^255
+    // So carry = f[9] >> 5? No, f[9] is 26 bits, and 2^234 * 2^26 = 2^260
+    // We need to reduce f[9] such that total < 2^255
+
+    // Actually, the standard approach:
+    // carry = f[9] >> 25  (since 2^255 = 2^(26*9 + 21), so bit 255 is in f[9] at position 21)
+    // Wait: 26*9 = 234, 255-234 = 21. So bit 255 is f[9] bit 21.
+    // f[9] should be < 2^25 for value < 2^255.
+    // carry = f[9] >> 25
+    // f[9] = f[9] & 0x1FFFFF (25 bits)
+    // f[0] += carry * 19  (since 2^255 闂?19 mod p)
+
+    let carry = f[9] >> 21
+    f[9] = f[9] & 0x1FFFFF
+    f[0] = f[0] + carry * 19
+
+    // Second carry propagation (after adding carry*19 to f[0])
+    let j = 0
+    while j < 9 {
+        let c2 = f[j] >> 26
+        f[j] = f[j] - (c2 << 26)
+        f[j + 1] = f[j + 1] + c2
+        j = j + 1
+    }
+    // f[9] should now be < 2^25
+
+    // Final check: if f >= p, subtract p
+    // Compare from HIGH limb to LOW limb (high limb has more weight)
+    let p = fe_p()
+    let ge = 1  // assume f >= p (handles f == p case)
+    let k = 9
+    while k >= 0 {
+        if f[k] > p[k] {
+            ge = 1
+            k = -1  // break, f > p
+        } else if f[k] < p[k] {
+            ge = 0
+            k = -1  // break, f < p
+        }
+        k = k - 1
+    }
+    if ge == 1 {
+        let m = 0
+        while m < 10 {
+            f[m] = f[m] - p[m]
+            m = m + 1
+        }
+        // Third carry propagation to handle negative limbs after subtraction
+        let n = 0
+        while n < 9 {
+            if f[n] < 0 {
+                let borrow = ((-f[n] + 67108863) / 67108864)
+                f[n] = f[n] + borrow * 67108864
+                f[n + 1] = f[n + 1] - borrow
+            }
+            n = n + 1
+        }
+    }
+
+    return f
+}
+
+// Multiply: h = f * g mod p
+// Uses schoolbook multiplication with 26-bit limbs
+fn fe_mul(f: list, g: list) -> list {
+    // 20 limbs for intermediate product (10+10-1 = 19, but we use 20 for safety)
+    let h: list = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+    let i = 0
+    while i < 10 {
+        let j = 0
+        while j < 10 {
+            h[i + j] = h[i + j] + f[i] * g[j]
+            j = j + 1
+        }
+        i = i + 1
+    }
+
+    // Now reduce from 20 limbs to 10 limbs
+    // h[i] for i >= 10 contributes h[i] * 2^(26*i)
+    // 2^(26*10) = 2^260 = 2^255 * 2^5 闂?19 * 2^5 = 608 mod p
+    // More generally: 2^(26*i) = 2^(255 + (26*i - 255)) 闂?19 * 2^(26*i - 255) mod p
+    // For i=10: 26*10 - 255 = 5, so 2^260 闂?19 * 2^5 = 608
+    // For i=11: 26*11 - 255 = 31, so 2^286 闂?19 * 2^31
+    // But 19 * 2^31 is large, we need to handle this carefully
+
+    // Actually, the standard ref10 approach uses a different reduction:
+    // After multiplication, carry propagate to make each limb < 2^26
+    // Then reduce high limbs: h[10] * 2^260 闂?h[10] * 19 * 2^5 = h[10] * 608
+    // But 608 = 19 * 32, and h[10] * 608 can be added to low limbs
+
+    // Simpler approach: carry propagate all 20 limbs, then reduce
+    // Carry propagate
+    let ci = 0
+    while ci < 19 {
+        let c = h[ci] >> 26
+        h[ci] = h[ci] - (c << 26)
+        h[ci + 1] = h[ci + 1] + c
+        ci = ci + 1
+    }
+    // h[19] may still be large
+
+    // Now reduce: h[10..19] need to be folded into h[0..9]
+    // h[10] * 2^260 = h[10] * 2^255 * 2^5 闂?h[10] * 19 * 32 = h[10] * 608
+    // But 608 > 2^26, so we need to split: 608 = 2^26 * 0 + 608, just add to h[0]
+    // Actually h[10] * 608 can be large, add to h[0] and carry propagate
+
+    // Fold h[10] into h[0]: h[10] * 2^260 闂?h[10] * 19 * 2^5 = h[10] * 608
+    h[0] = h[0] + h[10] * 608
+
+    // Fold h[11] into h[1]: h[11] * 2^286 = h[11] * 2^260 * 2^26 闂?h[11] * 608 * 2^26
+    // This means h[11] * 608 goes to h[1] (since *2^26 shifts by one limb)
+    h[1] = h[1] + h[11] * 608
+
+    // Similarly for h[12]..h[19]
+    h[2] = h[2] + h[12] * 608
+    h[3] = h[3] + h[13] * 608
+    h[4] = h[4] + h[14] * 608
+    h[5] = h[5] + h[15] * 608
+    h[6] = h[6] + h[16] * 608
+    h[7] = h[7] + h[17] * 608
+    h[8] = h[8] + h[18] * 608
+    h[9] = h[9] + h[19] * 608
+
+    // Now take first 10 limbs and reduce
+    let result: list = [h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], h[8], h[9]]
+    return fe_reduce(result)
+}
+
+// Square: h = f^2 mod p
+fn fe_sq(f: list) -> list {
+    return fe_mul(f, f)
+}
+
+// Invert: h = f^(-1) mod p using Fermat's little theorem
+// f^(p-2) mod p, p-2 = 2^255 - 21
+fn fe_invert(f: list) -> list {
+    // Use binary exponentiation
+    // p-2 = 2^255 - 21
+    // We compute f^(2^255 - 21) = f^(2^255) / f^21
+    // But division is multiplication by inverse, so we use binary exponentiation directly
+
+    // Exponent in binary: 2^255 - 21
+    // This is a 255-bit number with bits 0-4 and 8-254 set (since 21 = 10101)
+    // Actually: 2^255 - 21 = (2^255 - 1) - 20 = all 1s for 255 bits minus 10100
+    // = bits 5-254 set, bits 0-4 = 10101 (21 = 16+4+1, so bits 0,2,4 set)
+    // Wait: 2^255 - 21. In binary, 2^255 is 1 followed by 255 zeros.
+    // 2^255 - 1 is 255 ones.
+    // 2^255 - 21 = (2^255 - 1) - 20 = 255 ones - 10100
+    // = bits 5-254 set (250 bits), bits 0-4 = 01011 (since 11111 - 10100 = 01011)
+    // 01011 = 11, and 31 - 20 = 11. Yes.
+
+    // Binary exponentiation from MSB to LSB
+    let result = fe_one()
+    let base = fe_copy(f)
+
+    // We need to process 255 bits
+    // Bit 254 is the highest (since 2^255 - 21 < 2^255)
+    // Process from bit 254 down to bit 0
+    let bit = 254
+    while bit >= 0 {
+        result = fe_sq(result)
+        // Check if this bit is set in 2^255 - 21
+        // Bits 5-254 are set, bits 0-4 = 01011 (bits 0,1,3 set)
+        let bitSet = 0
+        if bit >= 5 {
+            bitSet = 1
+        } else {
+            // bits 0,1,3 set in 01011
+            if bit == 0 || bit == 1 || bit == 3 {
+                bitSet = 1
+            }
+        }
+        if bitSet == 1 {
+            result = fe_mul(result, base)
+        }
+        bit = bit - 1
+    }
+
+    return result
+}
+
+// Compare two field elements: returns 1 if equal, 0 otherwise
+fn fe_eq(f: list, g: list) -> int {
+    let fr = fe_reduce(f)
+    let gr = fe_reduce(g)
+    let i = 0
+    while i < 10 {
+        if fr[i] != gr[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+// Conditional move: if b == 1, h = f; else h = g (constant-time)
+fn fe_cmov(f: list, g: list, b: int) -> list {
+    // b should be 0 or 1
+    let h: list = []
+    let i = 0
+    while i < 10 {
+        // if b==1: f[i], else: g[i]
+        // mask = -b (all 1s if b=1, all 0s if b=0)
+        let mask = 0 - b
+        h[i] = g[i] ^ (mask & (f[i] ^ g[i]))
+        i = i + 1
+    }
+    return h
+}
+
+// Convert 32-byte array (little-endian) to field element
+fn fe_from_bytes(b: list) -> list {
+    let h: list = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    // Load 32 bytes into 10 limbs of 26 bits
+    // Limb 0: bytes 0-2 (low 26 bits)
+    h[0] = (b[0] | (b[1] << 8) | (b[2] << 16) | ((b[3] & 0x3F) << 24)) & 0x3FFFFFF
+    // Limb 1: bytes 3-6
+    h[1] = ((b[3] >> 6) | (b[4] << 2) | (b[5] << 10) | (b[6] << 18) | ((b[7] & 0x0F) << 26)) & 0x3FFFFFF
+    // This byte-by-byte approach is tedious. Let's use a simpler method.
+
+    // Actually, let's rebuild from scratch using a cleaner approach
+    let h2: list = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let limb = 0
+    let limbBits = 0
+    let byteIdx = 0
+    let bitPos = 0
+
+    while byteIdx < 32 {
+        let byteVal = b[byteIdx]
+        let bitsLeft = 8
+        while bitsLeft > 0 && limb < 10 {
+            let take = 26 - limbBits
+            if take > bitsLeft { take = bitsLeft }
+            let mask = (1 << take) - 1
+            let val = (byteVal >> bitPos) & mask
+            h2[limb] = h2[limb] | (val << limbBits)
+            limbBits = limbBits + take
+            bitPos = bitPos + take
+            bitsLeft = bitsLeft - take
+            if limbBits >= 26 {
+                limb = limb + 1
+                limbBits = 0
+            }
+        }
+        byteIdx = byteIdx + 1
+        bitPos = 0
+    }
+
+    return h2
+}
+
+// Convert field element to 32-byte array (little-endian)
+fn fe_to_bytes(f: list) -> list {
+    let fr = fe_reduce(f)
+    let b: list = []
+    let i = 0
+    while i < 32 {
+        b[i] = 0
+        i = i + 1
+    }
+
+    let limb = 0
+    let limbBits = 0
+    let byteIdx = 0
+    let bitPos = 0
+
+    while limb < 10 {
+        let val = fr[limb]
+        let bitsLeft = 26
+        while bitsLeft > 0 && byteIdx < 32 {
+            let take = 8 - bitPos
+            if take > bitsLeft { take = bitsLeft }
+            let mask = (1 << take) - 1
+            b[byteIdx] = b[byteIdx] | ((val & mask) << bitPos)
+            val = val >> take
+            bitPos = bitPos + take
+            bitsLeft = bitsLeft - take
+            if bitPos >= 8 {
+                byteIdx = byteIdx + 1
+                bitPos = 0
+            }
+        }
+        limb = limb + 1
+    }
+
+    return b
+}
+
+// Check if field element is negative (used for point encoding)
+// Returns 1 if odd, 0 if even
+fn fe_is_negative(f: list) -> int {
+    let fr = fe_reduce(f)
+    return fr[0] & 1
+}

@@ -1,0 +1,94 @@
+// Ed25519 Integration Test (Phase 1: Field + Curve basics)
+from "../../stdlib/crypto/ed25519_field" import fe_zero, fe_one, fe_add, fe_mul, fe_eq, fe_from_bytes, fe_to_bytes, fe_invert, fe_p, fe_reduce
+from "../../stdlib/crypto/ed25519_curve" import point_base, point_identity, point_add, point_double, point_scalarmul, point_encode, point_to_affine, fe_from_int
+
+let passed = 0
+let failed = 0
+
+fn check(name: string, cond: int) {
+    if cond == 1 {
+        io.println("PASS: " + name)
+        passed = passed + 1
+    } else {
+        io.println("FAIL: " + name)
+        failed = failed + 1
+    }
+}
+
+io.println("=== Ed25519 Integration Test (Phase 1) ===")
+io.println("")
+
+// --- Field arithmetic ---
+io.println("--- Field Arithmetic ---")
+let z = fe_zero()
+let o = fe_one()
+check("zero + one = one", fe_eq(fe_add(z, o), o))
+check("one * one = one", fe_eq(fe_mul(o, o), o))
+check("inverse(one) = one", fe_eq(fe_invert(o), o))
+
+let two = fe_add(o, o)
+check("2 * inverse(2) = 1", fe_eq(fe_mul(two, fe_invert(two)), o))
+
+// --- Curve point ---
+io.println("")
+io.println("--- Curve Point ---")
+let B = point_base()
+check("base point created", B.length == 4)
+
+let affineB = point_to_affine(B)
+check("base point affine x != 0", fe_eq(affineB[0], fe_zero()) == 0)
+check("base point affine y != 0", fe_eq(affineB[1], fe_zero()) == 0)
+
+// Encode base point
+let BEncoded = point_encode(B)
+check("base point encoded to 32 bytes", BEncoded.length == 32)
+
+// Base point y should be 4/5 mod p
+// y = 0x586666...66 (little-endian)
+check("base point y[0] = 0x58", BEncoded[0] == 0x58)
+
+// --- Point operations ---
+io.println("")
+io.println("--- Point Operations ---")
+let I = point_identity()
+check("identity point created", I.length == 4)
+
+// B + I = B
+let BplusI = point_add(B, I)
+let affineBplusI = point_to_affine(BplusI)
+check("B + identity = B (x)", fe_eq(affineBplusI[0], affineB[0]))
+check("B + identity = B (y)", fe_eq(affineBplusI[1], affineB[1]))
+
+// 2B = B + B
+let B2 = point_double(B)
+let B2add = point_add(B, B)
+let affineB2 = point_to_affine(B2)
+let affineB2add = point_to_affine(B2add)
+check("2B = B+B (x)", fe_eq(affineB2[0], affineB2add[0]))
+check("2B = B+B (y)", fe_eq(affineB2[1], affineB2add[1]))
+
+// --- Scalar multiplication ---
+io.println("")
+io.println("--- Scalar Multiplication ---")
+// 1 * B = B
+let oneScalar = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+let oneB = point_scalarmul(B, oneScalar)
+let affineOneB = point_to_affine(oneB)
+check("1*B = B (x)", fe_eq(affineOneB[0], affineB[0]))
+check("1*B = B (y)", fe_eq(affineOneB[1], affineB[1]))
+
+// 0 * B = identity
+let zeroScalar = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+let zeroB = point_scalarmul(B, zeroScalar)
+let affineZeroB = point_to_affine(zeroB)
+check("0*B = identity (x=0)", fe_eq(affineZeroB[0], fe_zero()))
+check("0*B = identity (y=1)", fe_eq(affineZeroB[1], fe_one()))
+
+// --- Summary ---
+io.println("")
+io.println("=== Results: " + convert.toString(passed) + " passed, " + convert.toString(failed) + " failed ===")
+if failed > 0 {
+    io.println("SOME TESTS FAILED")
+} else {
+    io.println("ALL TESTS PASSED")
+}
