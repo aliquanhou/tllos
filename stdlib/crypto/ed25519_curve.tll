@@ -4,7 +4,7 @@
 // d = -121665/121666 mod p
 // p = 2^255 - 19
 
-from "./ed25519_field" import fe_zero, fe_one, fe_add, fe_sub, fe_mul, fe_sq, fe_invert, fe_eq, fe_cmov, fe_from_bytes, fe_to_bytes, fe_is_negative, fe_copy, fe_p, fe_reduce
+from "./ed25519_field" import fe_zero, fe_one, fe_add, fe_sub, fe_mul, fe_sq, fe_invert, fe_eq, fe_cmov, fe_from_bytes, fe_to_bytes, fe_is_negative, fe_copy, fe_p, fe_reduce, fe_sqrt_ratio, fe_pow
 
 // Point in extended coordinates: (X:Y:Z:T) where x=X/Z, y=Y/Z, T=X*Y/Z
 // We use 4 field elements per point
@@ -30,19 +30,13 @@ fn point_is_identity(p: list) -> int {
 // p = (X1:Y1:Z1:T1), q = (X2:Y2:Z2:T2)
 // r = p + q
 fn point_add(p: list, q: list) -> list {
-    let d = fe_mul(fe_from_bytes([0xA3, 0x80, 0x30, 0x67, 0x9D, 0x7A, 0x0F, 0x5B, 0x7C, 0x4F, 0x6A, 0x1D, 0xFC, 0x3F, 0x91, 0xFB, 0xD4, 0xAF, 0xE1, 0x04, 0x4A, 0x3D, 0x94, 0x0E, 0x96, 0x7A, 0x62, 0x1E, 0xB1, 0x63, 0x3A, 0x38]), fe_from_bytes([0x2B, 0x83, 0x2C, 0x5D, 0x3E, 0x1F, 0x62, 0x84, 0x1B, 0xA1, 0x1E, 0x8E, 0x2A, 0x7E, 0x6D, 0x54, 0x7A, 0xED, 0x9F, 0x7B, 0xA8, 0x46, 0x52, 0x1C, 0x6B, 0x1D, 0x4C, 0x6E, 0x56, 0x36, 0x9D, 0x31]))
-    // Actually d = -121665 * inverse(121666) mod p
-    // Let's compute it properly: d = fe_mul(fe_neg(fe_from_int(121665)), fe_invert(fe_from_int(121666)))
-    // But for now, use the known constant:
-    // d = 0x52036CEE2B6FFE738CC740797779E89800700A4D4141D8AB75EB4DCA135978 (little-endian)
-    // Actually let's just compute it
+    // d = -121665 / 121666 mod p (Ed25519 curve parameter)
+    let d = fe_mul(fe_neg(fe_from_int(121665)), fe_invert(fe_from_int(121666)))
 
     let A = fe_mul(p[0], q[0])  // X1*X2
     let B = fe_mul(p[1], q[1])  // Y1*Y2
     let C = fe_mul(d, fe_mul(p[3], q[3]))  // d*T1*T2
     let D = fe_mul(p[2], q[2])  // Z1*Z2
-    let E = fe_sub(fe_add(p[0], p[1]), fe_add(q[0], q[1]))  // (X1+Y1)*(X2+Y2) - A - B
-    // Actually E = (X1+Y1)*(X2+Y2) - A - B
     let E1 = fe_add(p[0], p[1])
     let E2 = fe_add(q[0], q[1])
     let E3 = fe_mul(E1, E2)
@@ -76,8 +70,8 @@ fn point_scalarmul(p: list, s: list) -> list {
 
     let i = 0
     while i < 256 {
-        let byteIdx = i / 8
-        let bitIdx = i % 8
+        let byteIdx = i >> 3
+        let bitIdx = i & 7
         let bit = (s[byteIdx] >> bitIdx) & 1
         if bit == 1 {
             result = point_add(result, addendPt)
@@ -111,6 +105,7 @@ fn point_encode(p: list) -> list {
 }
 
 // Decode 32-byte compressed point
+// Returns point, or identity if decoding fails
 fn point_decode(s: list) -> list {
     // Extract sign bit
     let sign = (s[31] >> 7) & 1
@@ -120,22 +115,39 @@ fn point_decode(s: list) -> list {
     let y = fe_from_bytes(yBytes)
 
     // Compute x from y: x^2 = (y^2 - 1) / (d*y^2 + 1)
-    let y2 = fe_sq(y)
-    let u = fe_sub(y2, fe_one())  // y^2 - 1
-    let d = fe_mul(fe_from_bytes([0xA3, 0x80, 0x30, 0x67, 0x9D, 0x7A, 0x0F, 0x5B, 0x7C, 0x4F, 0x6A, 0x1D, 0xFC, 0x3F, 0x91, 0xFB, 0xD4, 0xAF, 0xE1, 0x04, 0x4A, 0x3D, 0x94, 0x0E, 0x96, 0x7A, 0x62, 0x1E, 0xB1, 0x63, 0x3A, 0x38]), fe_from_bytes([0x2B, 0x83, 0x2C, 0x5D, 0x3E, 0x1F, 0x62, 0x84, 0x1B, 0xA1, 0x1E, 0x8E, 0x2A, 0x7E, 0x6D, 0x54, 0x7A, 0xED, 0x9F, 0x7B, 0xA8, 0x46, 0x52, 0x1C, 0x6B, 0x1D, 0x4C, 0x6E, 0x56, 0x36, 0x9D, 0x31]))
-    let v = fe_add(fe_mul(d, y2), fe_one())  // d*y^2 + 1
-    let x = fe_mul(u, fe_invert(v))  // x = u/v
-    // x = sqrt(x^2), need to compute square root
-    // For Ed25519, sqrt can be computed via x = (u/v)^((p+3)/8)
-    // This is complex; for now return the point with x as computed
-    // Actually we need to compute the square root properly
-    // Let's use the formula: x = (u * v^3) * (u * v^7)^((p-5)/8)
-    // This is too complex for now; return a placeholder
+    // d = -121665/121666 mod p
+    let dNum = fe_neg(fe_from_int(121665))
+    let dDen = fe_invert(fe_from_int(121666))
+    let d = fe_mul(dNum, dDen)
 
-    // For now, just return the point with x=0 (incorrect but compiles)
-    // TODO: implement proper square root
-    let x0 = fe_zero()
-    return point_from_xy(x0, y)
+    let y2 = fe_sq(y)
+    let u = fe_sub(y2, fe_one())       // u = y^2 - 1
+    let v = fe_add(fe_mul(d, y2), fe_one())  // v = d*y^2 + 1
+
+    // Compute x = sqrt(u/v) using fe_sqrt_ratio
+    let x = fe_sqrt_ratio(u, v)
+
+    // Verify x^2 * v == u (if not, point is invalid)
+    let x2 = fe_sq(x)
+    let check = fe_mul(x2, v)
+    if fe_eq(check, u) == 0 {
+        // Not a square root; try x * sqrt(-1)
+        // sqrt(-1) = 2^((p-1)/4)
+        let sqrtMinus1 = fe_pow(fe_from_int(2), [0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x3FFFFFFF])
+        x = fe_mul(x, sqrtMinus1)
+        let x2b = fe_sq(x)
+        let checkb = fe_mul(x2b, v)
+        if fe_eq(checkb, u) == 0 {
+            return point_identity()  // invalid point
+        }
+    }
+
+    // Apply sign bit
+    if fe_is_negative(x) != sign {
+        x = fe_neg(x)
+    }
+
+    return point_from_xy(x, y)
 }
 
 // Base point B (from RFC 8032)

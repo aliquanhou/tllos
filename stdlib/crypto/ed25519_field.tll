@@ -49,7 +49,7 @@ fn fe_add(f: list, g: list) -> list {
         h[i] = f[i] + g[i]
         i = i + 1
     }
-    return h
+    return fe_reduce(h)
 }
 
 // Subtract: h = f - g
@@ -67,6 +67,20 @@ fn fe_sub(f: list, g: list) -> list {
 // Uses carry propagation and modular reduction
 fn fe_reduce(h: list) -> list {
     let f = fe_copy(h)
+    // If input is negative, add p to make it positive (handles fe_sub results)
+    let pCheck = fe_p()
+    let neg = 0
+    let ck = 9
+    while ck >= 0 {
+        if f[ck] < 0 { neg = 1; ck = -1 }
+        else if f[ck] > 0 { ck = -1 }
+        ck = ck - 1
+    }
+    if neg == 1 {
+        let ai = 0
+        while ai < 10 { f[ai] = f[ai] + pCheck[ai]; ai = ai + 1 }
+    }
+
 
     // Carry propagation: ensure each limb is in range [0, 2^26)
     // First pass: carry from low to high
@@ -108,6 +122,20 @@ fn fe_reduce(h: list) -> list {
         j = j + 1
     }
     // f[9] should now be < 2^25
+
+    // Third reduction: ensure f[9] < 2^21 before comparison
+    let c3 = f[9] >> 21
+    if c3 > 0 {
+        f[9] = f[9] & 0x1FFFFF
+        f[0] = f[0] + c3 * 19
+        let k3 = 0
+        while k3 < 9 {
+            let ck = f[k3] >> 26
+            f[k3] = f[k3] - (ck << 26)
+            f[k3 + 1] = f[k3 + 1] + ck
+            k3 = k3 + 1
+        }
+    }
 
     // Final check: if f >= p, subtract p
     // Compare from HIGH limb to LOW limb (high limb has more weight)
@@ -375,4 +403,48 @@ fn fe_to_bytes(f: list) -> list {
 fn fe_is_negative(f: list) -> int {
     let fr = fe_reduce(f)
     return fr[0] & 1
+}
+
+// Modular exponentiation: result = base^exp mod p
+// exp is a list of 32-bit limbs (little-endian)
+fn fe_pow(base: list, exp: list) -> list {
+    let result = fe_one()
+    let b = fe_copy(base)
+    let totalBits = exp.length * 32
+    let bit = 0
+    while bit < totalBits {
+        let limbIdx = bit / 32
+        let bitIdx = bit % 32
+        if ((exp[limbIdx] >> bitIdx) & 1) == 1 {
+            result = fe_mul(result, b)
+        }
+        b = fe_sq(b)
+        bit = bit + 1
+    }
+    return result
+}
+
+// Compute square root of (u/v) mod p for Ed25519
+// Returns x such that x^2 = u/v mod p
+// Uses formula: x = (u/v)^((p+3)/8), then adjust by sqrt(-1) if needed
+fn fe_sqrt_ratio(u: list, v: list) -> list {
+    // (p+3)/8 = (2^255 - 19 + 3) / 8 = (2^255 - 16) / 8 = 2^252 - 2
+    // As 32-bit limbs (little-endian): 0xFFFFFFFFFFFFFFFE... in high bits
+    // Actually (p+3)/8 = (2^255 - 16)/8 = 2^252 - 2
+    let exp = [0xFFFFFFFE, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x1FFFFFFF]
+    let v3 = fe_mul(fe_sq(v), v)  // v^3
+    let x = fe_mul(u, v3)          // u * v^3
+    x = fe_mul(x, fe_pow(fe_mul(u, v3), exp))  // x = (u*v^3)^((p+3)/8)
+    // x = (u/v) * x^2? Actually x = (u*v^3)^((p+3)/8) = (u/v)^((p+3)/8) * v^4?
+    // Let's use simpler formula: x = (u/v)^((p+3)/8)
+    // = u^((p+3)/8) * v^(-(p+3)/8)
+    // = u^((p+3)/8) * v^(p-1-(p+3)/8)  (since v^(p-1) = 1)
+    // = u^((p+3)/8) * v^((7p-11)/8)
+    // This is complex; use the v^3 trick from ref10
+    // x = u * v^3 * (u * v^7)^((p-5)/8)
+    let v7 = fe_mul(fe_sq(fe_sq(v)), v3)  // v^7 = v^4 * v^3
+    let uv7 = fe_mul(u, v7)
+    let exp2 = [0xFFFFFFFA, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x1FFFFFFF]  // (p-5)/8
+    x = fe_mul(u, fe_mul(v3, fe_pow(uv7, exp2)))
+    return x
 }

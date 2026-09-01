@@ -1,0 +1,255 @@
+// Ed25519 Scalar Arithmetic (mod L)
+// L = 2^252 + 27742317777372353535851937790883648493
+// Uses 8 x 32-bit limbs (little-endian) to avoid 64-bit overflow in multiplication
+
+// L in 8 x 32-bit limbs (little-endian)
+// L = 0x1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed
+fn scalar_L() -> list {
+    return [
+        0x5cf5d3ed,  // limb 0 (low 32 bits)
+        0x5812631a,  // limb 1
+        0xa2f79cd6,  // limb 2
+        0x14def9de,  // limb 3
+        0x00000000,  // limb 4
+        0x00000000,  // limb 5
+        0x00000000,  // limb 6
+        0x10000000   // limb 7 (bit 252)
+    ]
+}
+
+// Convert 32-byte little-endian array to 8 x 32-bit limbs
+fn scalar_from_bytes(b: list) -> list {
+    let s = [0, 0, 0, 0, 0, 0, 0, 0]
+    let i = 0
+    while i < 8 {
+        s[i] = (b[i*4] & 0xFF) | ((b[i*4+1] & 0xFF) << 8) | ((b[i*4+2] & 0xFF) << 16) | ((b[i*4+3] & 0xFF) << 24)
+        i = i + 1
+    }
+    return s
+}
+
+// Convert 8 x 32-bit limbs to 32-byte little-endian array
+fn scalar_to_bytes(s: list) -> list {
+    let b = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let i = 0
+    while i < 8 {
+        b[i*4] = s[i] & 0xFF
+        b[i*4+1] = (s[i] >> 8) & 0xFF
+        b[i*4+2] = (s[i] >> 16) & 0xFF
+        b[i*4+3] = (s[i] >> 24) & 0xFF
+        i = i + 1
+    }
+    return b
+}
+
+// Compare two scalars: returns 1 if a >= b, 0 if a < b
+fn scalar_ge(a: list, b: list) -> int {
+    let i = 7
+    while i >= 0 {
+        if a[i] > b[i] { return 1 }
+        if a[i] < b[i] { return 0 }
+        i = i - 1
+    }
+    return 1  // equal
+}
+
+// Subtract b from a (a >= b assumed)
+fn scalar_sub(a: list, b: list) -> list {
+    let r = [0, 0, 0, 0, 0, 0, 0, 0]
+    let borrow = 0
+    let i = 0
+    while i < 8 {
+        let diff = a[i] - b[i] - borrow
+        if diff < 0 {
+            diff = diff + 4294967296  // 2^32
+            borrow = 1
+        } else {
+            borrow = 0
+        }
+        r[i] = diff
+        i = i + 1
+    }
+    return r
+}
+
+// Reduce scalar mod L (assumes input < 2L)
+fn scalar_reduce_once(s: list) -> list {
+    let L = scalar_L()
+    if scalar_ge(s, L) == 1 {
+        return scalar_sub(s, L)
+    }
+    return s
+}
+
+// Add two scalars mod L
+fn scalar_add(a: list, b: list) -> list {
+    let r = [0, 0, 0, 0, 0, 0, 0, 0]
+    let carry = 0
+    let i = 0
+    while i < 8 {
+        let sum = a[i] + b[i] + carry
+        r[i] = sum & 0xFFFFFFFF
+        carry = sum >> 32
+        i = i + 1
+    }
+    // carry may be 1 (result < 2^256 < 2L since L > 2^252)
+    if carry == 1 {
+        // result >= 2^256, need to subtract 2^256 mod L
+        // 2^256 mod L = 2^256 - L (since 2^256 < 2L)
+        // Actually simpler: just reduce once
+        let L = scalar_L()
+        // r is now r + 2^256, but we only stored lower 256 bits
+        // Need to handle carry properly
+        // For now, just subtract L if r >= L
+        r = scalar_reduce_once(r)
+        // But we lost the carry... need to add 2^256 mod L
+        // 2^256 mod L = 2^256 - L
+        // Let's compute 2^256 - L and add it
+        let two256minusL = scalar_sub([0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF], L)
+        two256minusL[0] = two256minusL[0] + 1  // 2^256 = (2^256-1) + 1
+        r = scalar_add_raw(r, two256minusL)
+        r = scalar_reduce_once(r)
+    } else {
+        r = scalar_reduce_once(r)
+    }
+    return r
+}
+
+// Raw add without reduction (internal use)
+fn scalar_add_raw(a: list, b: list) -> list {
+    let r = [0, 0, 0, 0, 0, 0, 0, 0]
+    let carry = 0
+    let i = 0
+    while i < 8 {
+        let sum = a[i] + b[i] + carry
+        r[i] = sum & 0xFFFFFFFF
+        carry = sum >> 32
+        i = i + 1
+    }
+    return r
+}
+
+// Multiply two scalars mod L (schoolbook, 8x32 -> 16x32 intermediate)
+fn scalar_mul(a: list, b: list) -> list {
+    // Intermediate product: 16 x 32-bit limbs
+    let h = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let i = 0
+    while i < 8 {
+        let carry = 0
+        let j = 0
+        while j < 8 {
+            let prod = h[i+j] + a[i] * b[j] + carry
+            h[i+j] = prod & 0xFFFFFFFF
+            carry = prod >> 32
+            j = j + 1
+        }
+        h[i+8] = carry
+        i = i + 1
+    }
+
+    // Reduce 512-bit product mod L
+    // Simple approach: repeatedly subtract L from high parts
+    // For efficiency, use the fact that 2^256 mod L is known
+    // But for correctness, use repeated subtraction (slow but correct)
+    // Actually, let's reduce limb by limb from high to low
+
+    let L = scalar_L()
+    // Process high limbs (8-15) by converting to mod L
+    let k = 15
+    while k >= 8 {
+        if h[k] != 0 {
+            // h[k] * 2^(32*k) mod L
+            // 2^(32*k) = (2^256)^(k/8) * 2^(32*(k%8))
+            // This is complex; use simpler approach: subtract L * h[k] * 2^(32*(k-8))
+            // Actually, let's just do repeated subtraction for the high part
+            // Convert high 256 bits (limbs 8-15) to a value and reduce
+            let highVal = [h[8], h[9], h[10], h[11], h[12], h[13], h[14], h[15]]
+            // highVal * 2^256 mod L = highVal * (2^256 mod L)
+            // 2^256 mod L = 2^256 - L (since L < 2^256 < 2L)
+            let two256modL = scalar_sub([0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF], L)
+            two256modL[0] = two256modL[0] + 1
+            // Multiply highVal by two256modL (this is another 8x8 multiplication)
+            // For simplicity, just add highVal * two256modL to low part
+            // This is recursive; let's use a simpler iterative approach
+            // Just subtract L repeatedly from the full 512-bit number
+            let full = [h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], h[8], h[9], h[10], h[11], h[12], h[13], h[14], h[15]]
+            // Subtract L shifted by 256 bits repeatedly
+            let Lshifted = [0, 0, 0, 0, 0, 0, 0, 0, L[0], L[1], L[2], L[3], L[4], L[5], L[6], L[7]]
+            // While full >= Lshifted, subtract
+            while full_ge(full, Lshifted) == 1 {
+                full = full_sub(full, Lshifted)
+            }
+            // Now full < 2^256 + L, reduce once more
+            let result = [full[0], full[1], full[2], full[3], full[4], full[5], full[6], full[7]]
+            result = scalar_reduce_once(result)
+            return result
+        }
+        k = k - 1
+    }
+
+    // No high bits, just reduce low part
+    let result = [h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7]]
+    return scalar_reduce_once(result)
+}
+
+// Compare 16-limb values (internal)
+fn full_ge(a: list, b: list) -> int {
+    let i = 15
+    while i >= 0 {
+        if a[i] > b[i] { return 1 }
+        if a[i] < b[i] { return 0 }
+        i = i - 1
+    }
+    return 1
+}
+
+// Subtract 16-limb values (internal, a >= b)
+fn full_sub(a: list, b: list) -> list {
+    let r = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let borrow = 0
+    let i = 0
+    while i < 16 {
+        let diff = a[i] - b[i] - borrow
+        if diff < 0 {
+            diff = diff + 4294967296
+            borrow = 1
+        } else {
+            borrow = 0
+        }
+        r[i] = diff
+        i = i + 1
+    }
+    return r
+}
+
+// Reduce 64-byte (512-bit) hash mod L
+fn scalar_reduce_64(bytes: list) -> list {
+    // Convert 64 bytes to 16 limbs
+    let h = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let i = 0
+    while i < 16 {
+        h[i] = (bytes[i*4] & 0xFF) | ((bytes[i*4+1] & 0xFF) << 8) | ((bytes[i*4+2] & 0xFF) << 16) | ((bytes[i*4+3] & 0xFF) << 24)
+        i = i + 1
+    }
+
+    let L = scalar_L()
+    let Lshifted = [0, 0, 0, 0, 0, 0, 0, 0, L[0], L[1], L[2], L[3], L[4], L[5], L[6], L[7]]
+
+    // Repeatedly subtract L << 256
+    while full_ge(h, Lshifted) == 1 {
+        h = full_sub(h, Lshifted)
+    }
+
+    let result = [h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7]]
+    return scalar_reduce_once(result)
+}
+
+// Check if scalar is zero
+fn scalar_is_zero(s: list) -> int {
+    let i = 0
+    while i < 8 {
+        if s[i] != 0 { return 0 }
+        i = i + 1
+    }
+    return 1
+}
