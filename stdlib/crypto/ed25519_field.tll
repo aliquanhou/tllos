@@ -439,11 +439,11 @@ fn fe_is_negative(f: list) -> int {
 fn fe_pow(base: list, exp: list) -> list {
     let result = fe_one()
     let b = fe_copy(base)
-    let totalBits = exp.length * 32
+    let totalBits = arrays.length(exp) * 32
     let bit = 0
     while bit < totalBits {
-        let limbIdx = bit / 32
-        let bitIdx = bit % 32
+        let limbIdx = bit >> 5
+        let bitIdx = bit & 31
         if ((exp[limbIdx] >> bitIdx) & 1) == 1 {
             result = fe_mul(result, b)
         }
@@ -460,7 +460,7 @@ fn fe_sqrt_ratio(u: list, v: list) -> list {
     // (p+3)/8 = (2^255 - 19 + 3) / 8 = (2^255 - 16) / 8 = 2^252 - 2
     // As 32-bit limbs (little-endian): 0xFFFFFFFFFFFFFFFE... in high bits
     // Actually (p+3)/8 = (2^255 - 16)/8 = 2^252 - 2
-    let exp = [0xFFFFFFFE, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x1FFFFFFF]
+    let exp = [0xFFFFFFFE, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x0FFFFFFF]
     let v3 = fe_mul(fe_sq(v), v)  // v^3
     let x = fe_mul(u, v3)          // u * v^3
     x = fe_mul(x, fe_pow(fe_mul(u, v3), exp))  // x = (u*v^3)^((p+3)/8)
@@ -473,7 +473,7 @@ fn fe_sqrt_ratio(u: list, v: list) -> list {
     // x = u * v^3 * (u * v^7)^((p-5)/8)
     let v7 = fe_mul(fe_sq(fe_sq(v)), v3)  // v^7 = v^4 * v^3
     let uv7 = fe_mul(u, v7)
-    let exp2 = [0xFFFFFFFA, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x1FFFFFFF]  // (p-5)/8
+    let exp2 = [0xFFFFFFFD, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x0FFFFFFF]  // (p-5)/8
     x = fe_mul(u, fe_mul(v3, fe_pow(uv7, exp2)))
     return x
 }

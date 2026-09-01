@@ -109,8 +109,13 @@ fn point_encode(p: list) -> list {
 fn point_decode(s: list) -> list {
     // Extract sign bit
     let sign = (s[31] >> 7) & 1
-    // Clear sign bit to get y
-    let yBytes = fe_copy(s)
+    // Clear sign bit to get y (copy all 32 bytes, NOT fe_copy which copies 10 limbs)
+    let yBytes: list = []
+    let yi = 0
+    while yi < 32 {
+        yBytes[yi] = s[yi]
+        yi = yi + 1
+    }
     yBytes[31] = yBytes[31] & 0x7F
     let y = fe_from_bytes(yBytes)
 
