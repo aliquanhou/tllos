@@ -111,6 +111,25 @@ jobs:
         shell: cmd
         run: scripts\run-tests.bat
 
+      # === P0-16.1: TLL Engineering Enforcement Layer ===
+      # Validates .tll-engine/ structure, schema, Claim-Evidence matching.
+      # This ensures the engineering cognition layer remains consistent with code.
+      # No Runtime/Compiler modification — if this fails, .tll-engine/ has an inconsistency.
+
+      - name: Validate .tll-engine/ structure (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x scripts/validate-tll-engine.sh
+          scripts/validate-tll-engine.sh
+
+      - name: Validate .tll-engine/ structure (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: scripts\validate-tll-engine.ps1
+
+      - name: Validate Claim-Evidence matching (all platforms)
+        run: python3 scripts/validate-claim-evidence.py --engine-dir .tll-engine
+
       - name: End-to-end tllc verification (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
