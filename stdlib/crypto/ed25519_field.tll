@@ -60,7 +60,7 @@ fn fe_sub(f: list, g: list) -> list {
         h[i] = f[i] - g[i]
         i = i + 1
     }
-    return h
+    return fe_reduce(h)
 }
 
 // Reduce a field element to canonical form (0 <= limb < 2^26, value < p)

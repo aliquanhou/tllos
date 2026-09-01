@@ -1,0 +1,106 @@
+// P0-15.19.2: Ed25519 Field Arithmetic Test
+from "../../stdlib/crypto/ed25519_field" import fe_zero, fe_one, fe_add, fe_sub, fe_mul, fe_sq, fe_invert, fe_eq, fe_from_bytes, fe_to_bytes, fe_reduce, fe_copy
+
+io.println("=== Ed25519 Field Arithmetic Test ===")
+io.println("")
+
+let passed = 0
+let failed = 0
+
+fn check(name: string, cond: int) {
+    if cond != 0 {
+        io.println("PASS: " + name)
+        passed = passed + 1
+    } else {
+        io.println("FAIL: " + name)
+        failed = failed + 1
+    }
+}
+
+// Test 1: zero + one = one
+io.println("--- Basic arithmetic ---")
+let z = fe_zero()
+let o = fe_one()
+check("zero + one = one", fe_eq(fe_add(z, o), o))
+check("one + zero = one", fe_eq(fe_add(o, z), o))
+check("zero - one = -one (not equal one)", fe_eq(fe_sub(z, o), o) == 0)
+check("one - one = zero", fe_eq(fe_sub(o, o), z))
+
+// Test 2: multiplication
+io.println("")
+io.println("--- Multiplication ---")
+check("one * one = one", fe_eq(fe_mul(o, o), o))
+check("one * zero = zero", fe_eq(fe_mul(o, z), z))
+check("zero * one = zero", fe_eq(fe_mul(z, o), z))
+check("zero * zero = zero", fe_eq(fe_mul(z, z), z))
+
+// Test 3: square
+io.println("")
+io.println("--- Square ---")
+check("one^2 = one", fe_eq(fe_sq(o), o))
+check("zero^2 = zero", fe_eq(fe_sq(z), z))
+
+// Test 4: inverse
+io.println("")
+io.println("--- Inverse ---")
+check("inverse(one) = one", fe_eq(fe_invert(o), o))
+check("a * inverse(a) = one (for a=2)", fe_eq(fe_mul(fe_add(o, o), fe_invert(fe_add(o, o))), o))
+
+// Test 5: 2 + 3 = 5, 2 * 3 = 6
+io.println("")
+io.println("--- Small integer arithmetic ---")
+let two = fe_add(o, o)
+let three = fe_add(two, o)
+let five = fe_add(two, three)
+let six = fe_mul(two, three)
+check("2 + 3 = 5", fe_eq(five, fe_add(fe_add(fe_add(fe_add(o, o), o), o), o)))
+check("2 * 3 = 6", fe_eq(six, fe_mul(fe_add(o, o), fe_add(fe_add(o, o), o))))
+check("5 - 3 = 2", fe_eq(fe_sub(five, three), two))
+check("6 / 2 = 3 (via inverse)", fe_eq(fe_mul(six, fe_invert(two)), three))
+
+// Test 6: bytes round-trip
+io.println("")
+io.println("--- Bytes round-trip ---")
+let testBytes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]
+let fe1 = fe_from_bytes(testBytes)
+let bytesBack = fe_to_bytes(fe1)
+let bytesMatch = 1
+let bi = 0
+while bi < 32 {
+    if bytesBack[bi] != testBytes[bi] {
+        bytesMatch = 0
+        bi = 32
+    }
+    bi = bi + 1
+}
+check("bytes -> fe -> bytes round-trip", bytesMatch)
+
+// Test 7: large number reduction (2^255 - 19 should reduce to 0 mod p)
+io.println("")
+io.println("--- Modular reduction ---")
+// p = 2^255 - 19, so p mod p = 0
+// Construct p as bytes: 0x7FFFFF...FFED
+let pBytes = [237, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 127]
+let pFe = fe_from_bytes(pBytes)
+check("p mod p = 0", fe_eq(fe_reduce(pFe), fe_zero()))
+
+// Test 8: p + 1 mod p = 1
+check("(p + 1) mod p = 1", fe_eq(fe_reduce(fe_add(pFe, o)), o))
+
+// Test 9: distributive property: a*(b+c) = a*b + a*c
+io.println("")
+io.println("--- Distributive property ---")
+let a = fe_add(two, o)  // 3
+let b = fe_add(two, two) // 4
+let c = fe_add(b, o)     // 5
+let lhs = fe_mul(a, fe_add(b, c))  // 3*(4+5) = 27
+let rhs = fe_add(fe_mul(a, b), fe_mul(a, c))  // 3*4 + 3*5 = 12+15 = 27
+check("a*(b+c) = a*b + a*c", fe_eq(lhs, rhs))
+
+io.println("")
+io.println("=== Results: " + convert.toString(passed) + " passed, " + convert.toString(failed) + " failed ===")
+if failed > 0 {
+    io.println("SOME TESTS FAILED")
+} else {
+    io.println("ALL TESTS PASSED")
+}
