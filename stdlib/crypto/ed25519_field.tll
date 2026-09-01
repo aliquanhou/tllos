@@ -36,9 +36,22 @@ fn fe_one() -> list {
     return [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 }
 
+// Negate field element: -f mod p
+fn fe_neg(f: list) -> list {
+    return fe_sub(fe_zero(), f)
+}
+
 // Copy field element
 fn fe_copy(a: list) -> list {
     return [a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9]]
+}
+
+// Create field element from small integer (direct 10-limb creation)
+fn fe_from_int(n: int) -> list {
+    let f = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    f[0] = n & 0x3FFFFFF
+    f[1] = (n >> 26) & 0x3FFFFFF
+    return f
 }
 
 // Add: h = f + g
@@ -70,8 +83,8 @@ fn fe_sub(f: list, g: list) -> list {
         }
         b = b + 1
     }
-    // If result is negative (h[9] < 0), add p
-    if h[9] < 0 {
+    // If result is negative (h[9] < 0), add p repeatedly until non-negative
+    while h[9] < 0 {
         let pSub = fe_p()
         let si = 0
         while si < 10 {
@@ -206,7 +219,12 @@ fn fe_reduce(h: list) -> list {
 // Uses schoolbook multiplication with 26-bit limbs
 fn fe_mul(f: list, g: list) -> list {
     // 20 limbs for intermediate product (10+10-1 = 19, but we use 20 for safety)
-    let h: list = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let h: list = []
+    let hi = 0
+    while hi < 20 {
+        h[hi] = 0
+        hi = hi + 1
+    }
 
     let i = 0
     while i < 10 {

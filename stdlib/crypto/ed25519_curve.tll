@@ -33,24 +33,23 @@ fn point_add(p: list, q: list) -> list {
     // d = -121665 / 121666 mod p (Ed25519 curve parameter)
     let d = fe_mul(fe_neg(fe_from_int(121665)), fe_invert(fe_from_int(121666)))
 
-    let A = fe_mul(p[0], q[0])  // X1*X2
-    let B = fe_mul(p[1], q[1])  // Y1*Y2
-    let C = fe_mul(d, fe_mul(p[3], q[3]))  // d*T1*T2
-    let D = fe_mul(p[2], q[2])  // Z1*Z2
-    let E1 = fe_add(p[0], p[1])
-    let E2 = fe_add(q[0], q[1])
-    let E3 = fe_mul(E1, E2)
-    let E4 = fe_sub(E3, fe_add(A, B))
+    // Correct twisted Edwards extended coordinates addition (ref10 / Hisil)
+    let twoD = fe_add(d, d)  // 2d
+    let two = fe_add(fe_one(), fe_one())  // 2
 
+    let A = fe_mul(fe_sub(p[1], p[0]), fe_sub(q[1], q[0]))  // (Y1-X1)*(Y2-X2)
+    let B = fe_mul(fe_add(p[0], p[1]), fe_add(q[0], q[1]))  // (Y1+X1)*(Y2+X2)
+    let C = fe_mul(fe_mul(p[3], twoD), q[3])  // T1*2d*T2
+    let D = fe_mul(fe_mul(p[2], two), q[2])  // Z1*2*Z2
+    let E = fe_sub(B, A)  // B - A
     let F = fe_sub(D, C)  // D - C
     let G = fe_add(D, C)  // D + C
-    let H = fe_sub(B, A)  // B - A
+    let H = fe_add(B, A)  // B + A
 
-    let X3 = fe_mul(E4, F)  // E * F
-    let Y3 = fe_mul(G, H)   // G * H
-    let T3 = fe_mul(E4, H)  // E * H
-    let Z3 = fe_mul(F, G)   // F * G
-
+    let X3 = fe_mul(E, F)
+    let Y3 = fe_mul(G, H)
+    let T3 = fe_mul(E, H)
+    let Z3 = fe_mul(F, G)
     return [X3, Y3, Z3, T3]
 }
 
@@ -176,13 +175,12 @@ fn point_base() -> list {
 }
 
 // Helper: create field element from small integer
+// Directly create 10-limb field element (avoids fe_from_bytes array init issue)
 fn fe_from_int(n: int) -> list {
-    let bytes = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    bytes[0] = n & 0xFF
-    bytes[1] = (n >> 8) & 0xFF
-    bytes[2] = (n >> 16) & 0xFF
-    bytes[3] = (n >> 24) & 0xFF
-    return fe_from_bytes(bytes)
+    let f = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    f[0] = n & 0x3FFFFFF
+    f[1] = (n >> 26) & 0x3FFFFFF
+    return f
 }
 
 // Negate field element
