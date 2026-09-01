@@ -1686,6 +1686,9 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
     if modName == "coroutine" {
         if fnName == "wakeChannel" { return 144 }
     }
+    if modName == "crypto" {
+        if fnName == "randomBytes" { return 145 }
+    }
     if modName == "agent" {
         if fnName == "run" { return 98 }
         if fnName == "chat" { return 99 }
