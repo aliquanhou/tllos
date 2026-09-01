@@ -118,6 +118,19 @@ fn fe_reduce(h: list) -> list {
     }
     // f[9] may still be large
 
+    if f[9] >= 67108864 {
+        let carry26 = f[9] >> 26
+        f[9] = f[9] & 0x3FFFFFF
+        f[0] = f[0] + carry26 * 608
+        let ci2 = 0
+        while ci2 < 9 {
+            let c2 = f[ci2] >> 26
+            f[ci2] = f[ci2] - (c2 << 26)
+            f[ci2 + 1] = f[ci2 + 1] + c2
+            ci2 = ci2 + 1
+        }
+    }
+
     // Modular reduction: 2^255 闂?19 mod p
     // f[9] * 2^234 * 2^21 = f[9] * 2^255 闂?f[9] * 19 mod p
     // But f[9] is only 26 bits, and 2^234 * 2^26 = 2^260, not 2^255
@@ -187,7 +200,7 @@ fn fe_reduce(h: list) -> list {
         let n = 0
         while n < 9 {
             if f[n] < 0 {
-                let borrow = ((-f[n] + 67108863) / 67108864)
+                let borrow = ((-f[n] + 67108863) >> 26)
                 f[n] = f[n] + borrow * 67108864
                 f[n + 1] = f[n + 1] - borrow
             }
