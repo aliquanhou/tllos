@@ -408,3 +408,61 @@ jobs:
           if ($log -notmatch "Test 5 PASS") { throw "Test 5 did not PASS" }
           if ($log -notmatch "ALL TESTS PASSED") { throw "Test did not complete" }
           Write-Output "=== TCP/FD Boundary Test (Windows MSVC, REAL fds) PASSED ==="
+
+      # === P0-15.18.5: Long-Run Stability Test ===
+      # 4 Node real TCP, 20 blocks continuous mining, 60 transactions,
+      # ~130s continuous run, resource monitoring, final consistency verification.
+      - name: Long-Run Stability 4-Node 20-Block (Linux/macOS)
+        if: runner.os != 'Windows'
+        timeout-minutes: 6
+        run: |
+          chmod +x scripts/run-lrs-test.sh
+          scripts/run-lrs-test.sh
+
+      - name: Long-Run Stability 4-Node 20-Block (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 6
+        shell: powershell
+        run: scripts\run-lrs-test.ps1
+
+      # === P0-15.18.6: Performance Benchmark ===
+      # Coroutine creation/yield/sleep, JSON serialization, Blockchain core operations.
+      - name: Performance Benchmark (Linux/macOS)
+        if: runner.os != 'Windows'
+        timeout-minutes: 5
+        run: |
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/perf_coroutine.tll -o tests/perf_coroutine.tllbc
+          host/c/tllvm tests/perf_coroutine.tllbc 2>&1 | tee /tmp/perf_coroutine.log
+          test "${PIPESTATUS[0]}" -eq 0
+          grep -q "PERF_BENCHMARK_PASS" /tmp/perf_coroutine.log
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/perf_json.tll -o tests/perf_json.tllbc
+          host/c/tllvm tests/perf_json.tllbc 2>&1 | tee /tmp/perf_json.log
+          test "${PIPESTATUS[0]}" -eq 0
+          grep -q "PERF_JSON_PASS" /tmp/perf_json.log
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/perf_blockchain.tll -o tests/perf_blockchain.tllbc
+          host/c/tllvm tests/perf_blockchain.tllbc 2>&1 | tee /tmp/perf_blockchain.log
+          test "${PIPESTATUS[0]}" -eq 0
+          grep -q "PERF_BLOCKCHAIN_PASS" /tmp/perf_blockchain.log
+          echo "=== Performance Benchmark PASSED ==="
+
+      - name: Performance Benchmark (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: powershell
+        run: |
+          & host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tests\perf_coroutine.tll -o tests\perf_coroutine.tllbc
+          if ($LASTEXITCODE -ne 0) { throw "perf_coroutine compile failed" }
+          & host\c\tllvm.exe tests\perf_coroutine.tllbc 2>&1 | Tee-Object -FilePath perf_coroutine.log
+          if ($LASTEXITCODE -ne 0) { throw "perf_coroutine run failed" }
+          if ((Get-Content perf_coroutine.log -Raw) -notmatch "PERF_BENCHMARK_PASS") { throw "perf_coroutine did not PASS" }
+          & host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tests\perf_json.tll -o tests\perf_json.tllbc
+          if ($LASTEXITCODE -ne 0) { throw "perf_json compile failed" }
+          & host\c\tllvm.exe tests\perf_json.tllbc 2>&1 | Tee-Object -FilePath perf_json.log
+          if ($LASTEXITCODE -ne 0) { throw "perf_json run failed" }
+          if ((Get-Content perf_json.log -Raw) -notmatch "PERF_JSON_PASS") { throw "perf_json did not PASS" }
+          & host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tests\perf_blockchain.tll -o tests\perf_blockchain.tllbc
+          if ($LASTEXITCODE -ne 0) { throw "perf_blockchain compile failed" }
+          & host\c\tllvm.exe tests\perf_blockchain.tllbc 2>&1 | Tee-Object -FilePath perf_blockchain.log
+          if ($LASTEXITCODE -ne 0) { throw "perf_blockchain run failed" }
+          if ((Get-Content perf_blockchain.log -Raw) -notmatch "PERF_BLOCKCHAIN_PASS") { throw "perf_blockchain did not PASS" }
+          Write-Output "=== Performance Benchmark PASSED ==="

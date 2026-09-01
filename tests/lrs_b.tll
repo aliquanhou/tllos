@@ -1,0 +1,40 @@
+// P0-15.18.5: Long-Run Stability Test - Node B (passive receiver, long run)
+from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, getNodeStatus
+
+let node = createBlockchainNode("nodeB", "127.0.0.1", 19302, 1, 50)
+startNode(node)
+
+io.println("=== LRS Node B Connecting to Node A ===")
+connectToPeer(node, "127.0.0.1", 19301)
+coroutine.sleep(1000)
+
+io.println("=== LRS Node B Waiting for 3 peers ===")
+let waitTicks = 0
+while waitTicks < 60 {
+    coroutine.sleep(100)
+    waitTicks = waitTicks + 1
+    if node.p2p.peers.length >= 3 { break }
+}
+io.println("=== LRS Node B peers=" + convert.toString(node.p2p.peers.length) + " ===")
+
+// Long run: passively receive blocks and transactions for ~120 seconds
+// Monitor chain growth periodically
+let runTicks = 0
+let lastHeight = 0
+while runTicks < 120 {
+    coroutine.sleep(1000)
+    runTicks = runTicks + 1
+    let status = getNodeStatus(node)
+    if status.height != lastHeight {
+        io.println("LRS Node B tick=" + convert.toString(runTicks) + " height=" + convert.toString(status.height) + " valid=" + convert.toString(status.chainValid))
+        lastHeight = status.height
+    }
+}
+
+printNodeStatus(node)
+let finalStatus = getNodeStatus(node)
+io.println("RESULT_NODE_B height=" + convert.toString(finalStatus.height) + " tip=" + finalStatus.tipHash + " valid=" + convert.toString(finalStatus.chainValid))
+
+coroutine.sleep(1000)
+stopNode(node)
+io.println("=== LRS Node B Done ===")

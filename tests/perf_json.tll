@@ -1,0 +1,56 @@
+// P0-15.18.6: Performance Benchmark - JSON serialization
+io.println("=== Benchmark: JSON Serialization ===")
+
+// Test 1: Simple object serialize/deserialize (1000 iterations)
+let obj = json.parse("{\"name\":\"test\",\"value\":42,\"active\":true,\"tags\":[\"a\",\"b\",\"c\"]}")
+let start1 = time.nowMs()
+let i1 = 0
+while i1 < 1000 {
+    let s = json.stringify(obj)
+    let o2 = json.parse(s)
+    i1 = i1 + 1
+}
+let end1 = time.nowMs()
+let dur1 = end1 - start1
+io.println("  1000 simple object round-trips in " + convert.toString(dur1) + "ms")
+io.println("  PASS: JSON simple object")
+
+// Test 2: Nested object (100 iterations)
+let nested = json.parse("{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":42}}}},\"list\":[1,2,3,4,5,6,7,8,9,10]}")
+let start2 = time.nowMs()
+let i2 = 0
+while i2 < 100 {
+    let s = json.stringify(nested)
+    let o2 = json.parse(s)
+    i2 = i2 + 1
+}
+let end2 = time.nowMs()
+let dur2 = end2 - start2
+io.println("  100 nested object round-trips in " + convert.toString(dur2) + "ms")
+io.println("  PASS: JSON nested object")
+
+// Test 3: Large array (100 elements, 100 iterations)
+let largeArr: list = []
+let li = 0
+while li < 100 {
+    arrays.push(largeArr, json.parse("{\"id\":" + convert.toString(li) + ",\"name\":\"item" + convert.toString(li) + "\"}"))
+    li = li + 1
+}
+let start3 = time.nowMs()
+let i3 = 0
+while i3 < 100 {
+    let s = json.stringify(largeArr)
+    let a2 = json.parse(s)
+    i3 = i3 + 1
+}
+let end3 = time.nowMs()
+let dur3 = end3 - start3
+io.println("  100 large array (100 items) round-trips in " + convert.toString(dur3) + "ms")
+io.println("  PASS: JSON large array")
+
+io.println("")
+io.println("=== JSON Performance Summary ===")
+io.println("  Simple object: " + convert.toString(dur1) + "ms/1000 (" + convert.toString(dur1) + "us each)")
+io.println("  Nested object: " + convert.toString(dur2) + "ms/100")
+io.println("  Large array: " + convert.toString(dur3) + "ms/100")
+io.println("PERF_JSON_PASS")

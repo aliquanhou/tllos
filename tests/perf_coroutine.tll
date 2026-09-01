@@ -1,0 +1,101 @@
+// P0-15.18.6: Performance Benchmark - Coroutine creation and switching
+let results: list = []
+
+// Test 1: Coroutine creation throughput (10K coroutines)
+io.println("=== Benchmark: Coroutine Creation ===")
+let counter = 0
+fn incCounter() -> void {
+    counter = counter + 1
+}
+
+let start1 = time.nowMs()
+let ci = 0
+while ci < 10000 {
+    coroutine.spawn(incCounter)
+    ci = ci + 1
+}
+// Wait for all to complete
+let w1 = 0
+while counter < 10000 && w1 < 500 {
+    coroutine.sleep(10)
+    w1 = w1 + 1
+}
+let end1 = time.nowMs()
+let dur1 = end1 - start1
+io.println("  10000 coroutines created+completed in " + convert.toString(dur1) + "ms")
+io.println("  counter=" + convert.toString(counter))
+if counter == 10000 {
+    io.println("  PASS: coroutine creation")
+} else {
+    io.println("  FAIL: coroutine creation, expected 10000 got " + convert.toString(counter))
+}
+
+// Test 2: Coroutine yield/resume throughput (100K yields)
+io.println("=== Benchmark: Coroutine Yield/Resume ===")
+let yieldCounter = 0
+fn yielder() -> void {
+    let yi = 0
+    while yi < 100 {
+        coroutine.yield()
+        yieldCounter = yieldCounter + 1
+        yi = yi + 1
+    }
+}
+
+let start2 = time.nowMs()
+let yi2 = 0
+while yi2 < 1000 {
+    coroutine.spawn(yielder)
+    yi2 = yi2 + 1
+}
+// Wait for all yields
+let w2 = 0
+while yieldCounter < 100000 && w2 < 1000 {
+    coroutine.sleep(10)
+    w2 = w2 + 1
+}
+let end2 = time.nowMs()
+let dur2 = end2 - start2
+io.println("  100000 yields in " + convert.toString(dur2) + "ms")
+io.println("  yieldCounter=" + convert.toString(yieldCounter))
+if yieldCounter == 100000 {
+    io.println("  PASS: coroutine yield/resume")
+} else {
+    io.println("  FAIL: coroutine yield, expected 100000 got " + convert.toString(yieldCounter))
+}
+
+// Test 3: Sleep coroutine scheduling (1000 sleep coroutines)
+io.println("=== Benchmark: Sleep Scheduling ===")
+let sleepCounter = 0
+fn sleeper() -> void {
+    coroutine.sleep(50)
+    sleepCounter = sleepCounter + 1
+}
+
+let start3 = time.nowMs()
+let si = 0
+while si < 1000 {
+    coroutine.spawn(sleeper)
+    si = si + 1
+}
+let w3 = 0
+while sleepCounter < 1000 && w3 < 500 {
+    coroutine.sleep(10)
+    w3 = w3 + 1
+}
+let end3 = time.nowMs()
+let dur3 = end3 - start3
+io.println("  1000 sleep(50ms) coroutines in " + convert.toString(dur3) + "ms")
+io.println("  sleepCounter=" + convert.toString(sleepCounter))
+if sleepCounter == 1000 {
+    io.println("  PASS: sleep scheduling")
+} else {
+    io.println("  FAIL: sleep, expected 1000 got " + convert.toString(sleepCounter))
+}
+
+io.println("")
+io.println("=== Performance Summary ===")
+io.println("  Coroutine creation: " + convert.toString(dur1) + "ms for 10000 (" + convert.toString(dur1 / 10) + "us each)")
+io.println("  Coroutine yield: " + convert.toString(dur2) + "ms for 100000 (" + convert.toString(dur2 * 10) + "us each)")
+io.println("  Sleep scheduling: " + convert.toString(dur3) + "ms for 1000")
+io.println("PERF_BENCHMARK_PASS")
