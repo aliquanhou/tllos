@@ -1632,6 +1632,42 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
         return tll_int(0);
     }
 
+
+    /* P0-15.19 Cryptographic Foundation */
+    if (idx == 145) { /* crypto.randomBytes(n) -> string (hex-encoded) */
+        if (argCount > 0 && args[0].type == TLL_INT) {
+            int n = (int)args[0].as.integer;
+            if (n <= 0 || n > 1048576) return tll_string("");
+            unsigned char *buf = (unsigned char*)malloc(n);
+            if (!buf) return tll_string("");
+#ifdef _WIN32
+            if (BCryptGenRandom(NULL, buf, n, BCRYPT_USE_SYSTEM_PREFERRED_RNG) != 0) {
+                free(buf);
+                return tll_string("");
+            }
+#else
+            FILE *f = fopen("/dev/urandom", "rb");
+            if (!f) { free(buf); return tll_string(""); }
+            size_t rd = fread(buf, 1, n, f);
+            fclose(f);
+            if (rd != (size_t)n) { free(buf); return tll_string(""); }
+#endif
+            static const char hex[] = "0123456789abcdef";
+            char *hexStr = (char*)malloc(n * 2 + 1);
+            if (!hexStr) { free(buf); return tll_string(""); }
+            int i;
+            for (i = 0; i < n; i++) {
+                hexStr[i * 2] = hex[(buf[i] >> 4) & 0xF];
+                hexStr[i * 2 + 1] = hex[buf[i] & 0xF];
+            }
+            hexStr[n * 2] = '\0';
+            free(buf);
+            TLLValue v = tll_string(hexStr);
+            free(hexStr);
+            return v;
+        }
+        return tll_string("");
+    }
     fprintf(stderr, "tllvm: unknown builtin index %d\n", idx);
     return tll_null();
 }
