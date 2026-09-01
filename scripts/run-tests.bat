@@ -116,15 +116,33 @@ if exist "%TMPFILE%" del "%TMPFILE%"
 
 echo --- Scope Semantics Tests ---
 set "SCOPE_ASSERTS=0"
+set "EXPECTED_TOTAL_ASSERTS=95"
 REM P0-15.18.4-RUNTIME.4: TLL Compiler Semantic Guardrail
 REM Verifies variable scope semantics: global/local, shadowing, params,
 REM nested functions, closures, block scope, coroutines, recursion,
 REM return value lifetime, and complete scope chain.
+
+REM === ASSERTION HARD GATE ===
+REM Independent golden values. These are NOT derived from source at runtime.
+REM If someone adds/removes an assertion in a test file, they MUST update
+REM the corresponding value here. Mismatch causes CI FAIL.
 set "TLLC_BC=%~dp0..\tools\TLLC\tllc.tllbc"
 for %%F in ("%~dp0..\tests\scope\*.tll") do (
     set /a TOTAL+=1
     set "NAME=%%~nF"
     set "OUT=%%~dpnF.tllbc"
+    REM Look up expected assertion count for this test (independent golden value)
+    set "EXPECTED=0"
+    if "!NAME!"=="scope_01_global_local" set "EXPECTED=8"
+    if "!NAME!"=="scope_02_shadowing" set "EXPECTED=11"
+    if "!NAME!"=="scope_03_params" set "EXPECTED=10"
+    if "!NAME!"=="scope_04_nested_fn" set "EXPECTED=10"
+    if "!NAME!"=="scope_05_closure" set "EXPECTED=9"
+    if "!NAME!"=="scope_06_block" set "EXPECTED=14"
+    if "!NAME!"=="scope_07_coroutine" set "EXPECTED=5"
+    if "!NAME!"=="scope_08_multi_fn_recursion" set "EXPECTED=6"
+    if "!NAME!"=="scope_09_return_lifetime" set "EXPECTED=12"
+    if "!NAME!"=="scope_10_complete_chain" set "EXPECTED=10"
     "%TLLVM_EXE%" "%TLLC_BC%" compile "%%F" -o "!OUT!" >"%TMPFILE%" 2>&1
     if errorlevel 1 (
         echo   FAIL: %%~nxF ^(compile error^)
@@ -150,16 +168,30 @@ for %%F in ("%~dp0..\tests\scope\*.tll") do (
                     type "%TMPFILE%"
                     set /a FAILED+=1
                 ) else (
-                    REM Count assertions in source file for hard verification
-                    for /f "tokens=2 delims=:" %%A in ('find /c "FAIL " "%%F" 2^>nul') do set "ASSERTS=%%A"
-                    echo   PASS: %%~nxF ^(!ASSERTS! assertions verified^)
-                    set /a PASSED+=1
-                    set /a SCOPE_ASSERTS+=!ASSERTS!
+                    REM Assertion Hard Gate: compare actual source count vs independent expected value
+                    for /f %%A in ('type "%%F" ^| find /c "FAIL " 2^>nul') do set "ACTUAL_ASSERTS=%%A"
+                    if not "!ACTUAL_ASSERTS!"=="!EXPECTED!" (
+                        echo   FAIL: %%~nxF ^(assertion count mismatch: expected=!EXPECTED!, actual=!ACTUAL_ASSERTS!^)
+                        echo     If you added/removed assertions, update EXPECTED values in this script.
+                        set /a FAILED+=1
+                    ) else (
+                        echo   PASS: %%~nxF ^(!ACTUAL_ASSERTS!/!EXPECTED! assertions verified^)
+                        set /a PASSED+=1
+                        set /a SCOPE_ASSERTS+=!ACTUAL_ASSERTS!
+                    )
                 )
             )
         )
         if exist "!OUT!" del "!OUT!"
     )
+)
+
+REM Assertion Hard Gate: verify total
+if not "%SCOPE_ASSERTS%"=="%EXPECTED_TOTAL_ASSERTS%" (
+    echo FAIL: Scope assertion total mismatch: expected=%EXPECTED_TOTAL_ASSERTS%, actual=%SCOPE_ASSERTS%
+    set /a FAILED+=1
+) else (
+    echo   Scope assertion total: %SCOPE_ASSERTS%/%EXPECTED_TOTAL_ASSERTS% ^(HARD GATE PASS^)
 )
 
 if exist "%TMPFILE%" del "%TMPFILE%"
@@ -169,7 +201,7 @@ echo === Test Results ===
 echo Total:  %TOTAL%
 echo Passed: %PASSED%
 echo Failed: %FAILED%
-echo Scope assertions verified: %SCOPE_ASSERTS%
+echo Scope assertions verified: %SCOPE_ASSERTS%/%EXPECTED_TOTAL_ASSERTS% ^(HARD GATE^)
 echo.
 
 if %FAILED% gtr 0 (

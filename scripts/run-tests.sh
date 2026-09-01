@@ -118,11 +118,30 @@ rm -f "$TMPFILE"
 # These tests are compiled on-the-fly from .tll source, then run.
 echo "--- Scope Semantics Tests ---"
 SCOPE_ASSERTS=0
+
+# === ASSERTION HARD GATE ===
+# Independent golden values. These are NOT derived from source at runtime.
+# If someone adds/removes an assertion in a test file, they MUST update
+# the corresponding value here. Mismatch causes CI FAIL.
+declare -A EXPECTED_ASSERTS
+EXPECTED_ASSERTS["scope_01_global_local"]=8
+EXPECTED_ASSERTS["scope_02_shadowing"]=11
+EXPECTED_ASSERTS["scope_03_params"]=10
+EXPECTED_ASSERTS["scope_04_nested_fn"]=10
+EXPECTED_ASSERTS["scope_05_closure"]=9
+EXPECTED_ASSERTS["scope_06_block"]=14
+EXPECTED_ASSERTS["scope_07_coroutine"]=5
+EXPECTED_ASSERTS["scope_08_multi_fn_recursion"]=6
+EXPECTED_ASSERTS["scope_09_return_lifetime"]=12
+EXPECTED_ASSERTS["scope_10_complete_chain"]=10
+EXPECTED_TOTAL_ASSERTS=95
+
 TLLC_BC="$REPO_ROOT/tools/TLLC/tllc.tllbc"
 for f in "$REPO_ROOT/tests/scope/"*.tll; do
     [ -f "$f" ] || continue
     TOTAL=$((TOTAL + 1))
     display="$(basename "$f")"
+    test_name="$(basename "$f" .tll)"
     out="${f%.tll}.tllbc"
     # Compile
     set +e
@@ -160,14 +179,29 @@ for f in "$REPO_ROOT/tests/scope/"*.tll; do
         cat "$TMPFILE"
         FAILED=$((FAILED + 1))
     else
-        # Assertion count hard verification: count expected assertions in source
-        expected_asserts=$(grep -c 'FAIL [0-9]' "$f" 2>/dev/null || echo 0)
-        echo "  PASS: $display ($expected_asserts assertions verified)"
-        PASSED=$((PASSED + 1))
-        SCOPE_ASSERTS=$((SCOPE_ASSERTS + expected_asserts))
+        # Assertion Hard Gate: compare actual source count vs independent expected value
+        actual_asserts=$(grep -c 'FAIL [0-9]' "$f" 2>/dev/null || echo 0)
+        expected_asserts=${EXPECTED_ASSERTS[$test_name]:-0}
+        if [ "$actual_asserts" -ne "$expected_asserts" ]; then
+            echo "  FAIL: $display (assertion count mismatch: expected=$expected_asserts, actual=$actual_asserts)"
+            echo "    If you added/removed assertions, update EXPECTED_ASSERTS in this script."
+            FAILED=$((FAILED + 1))
+        else
+            echo "  PASS: $display ($actual_asserts/$expected_asserts assertions verified)"
+            PASSED=$((PASSED + 1))
+            SCOPE_ASSERTS=$((SCOPE_ASSERTS + actual_asserts))
+        fi
     fi
     rm -f "$out"
 done
+
+# Assertion Hard Gate: verify total
+if [ "$SCOPE_ASSERTS" -ne "$EXPECTED_TOTAL_ASSERTS" ]; then
+    echo "FAIL: Scope assertion total mismatch: expected=$EXPECTED_TOTAL_ASSERTS, actual=$SCOPE_ASSERTS"
+    FAILED=$((FAILED + 1))
+else
+    echo "  Scope assertion total: $SCOPE_ASSERTS/$EXPECTED_TOTAL_ASSERTS (HARD GATE PASS)"
+fi
 
 rm -f "$TMPFILE"
 
@@ -176,7 +210,7 @@ echo "=== Test Results ==="
 echo "Total:  $TOTAL"
 echo "Passed: $PASSED"
 echo "Failed: $FAILED"
-echo "Scope assertions verified: $SCOPE_ASSERTS"
+echo "Scope assertions verified: $SCOPE_ASSERTS/$EXPECTED_TOTAL_ASSERTS (HARD GATE)"
 echo ""
 
 if [ "$FAILED" -gt 0 ]; then
