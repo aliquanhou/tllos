@@ -53,6 +53,7 @@ fn fe_add(f: list, g: list) -> list {
 }
 
 // Subtract: h = f - g
+// Subtract: h = f - g
 fn fe_sub(f: list, g: list) -> list {
     let h: list = []
     let i = 0
@@ -60,29 +61,40 @@ fn fe_sub(f: list, g: list) -> list {
         h[i] = f[i] - g[i]
         i = i + 1
     }
-    return fe_reduce(h)
+    // Borrow propagation from low to high limbs
+    let b = 0
+    while b < 9 {
+        if h[b] < 0 {
+            h[b] = h[b] + 67108864  // 2^26
+            h[b + 1] = h[b + 1] - 1
+        }
+        b = b + 1
+    }
+    // If result is negative (h[9] < 0), add p
+    if h[9] < 0 {
+        let pSub = fe_p()
+        let si = 0
+        while si < 10 {
+            h[si] = h[si] + pSub[si]
+            si = si + 1
+        }
+        // Borrow propagation again after adding p
+        let b2 = 0
+        while b2 < 9 {
+            if h[b2] < 0 {
+                h[b2] = h[b2] + 67108864
+                h[b2 + 1] = h[b2 + 1] - 1
+            }
+            b2 = b2 + 1
+        }
+    }
+    return h
 }
 
 // Reduce a field element to canonical form (0 <= limb < 2^26, value < p)
 // Uses carry propagation and modular reduction
 fn fe_reduce(h: list) -> list {
     let f = fe_copy(h)
-    // If input is negative, add p to make it positive (handles fe_sub results)
-    let pCheck = fe_p()
-    let neg = 0
-    let ck = 9
-    while ck >= 0 {
-        if f[ck] < 0 { neg = 1; ck = -1 }
-        else if f[ck] > 0 { ck = -1 }
-        ck = ck - 1
-    }
-    if neg == 1 {
-        let ai = 0
-        while ai < 10 { f[ai] = f[ai] + pCheck[ai]; ai = ai + 1 }
-    }
-
-
-    // Carry propagation: ensure each limb is in range [0, 2^26)
     // First pass: carry from low to high
     let i = 0
     while i < 9 {
@@ -167,6 +179,23 @@ fn fe_reduce(h: list) -> list {
                 f[n + 1] = f[n + 1] - borrow
             }
             n = n + 1
+        }
+    }
+
+    // Handle negative result: if f[9] < 0, add p and normalize
+    if f[9] < 0 {
+        let pNeg = fe_p()
+        let ni = 0
+        while ni < 10 {
+            f[ni] = f[ni] + pNeg[ni]
+            ni = ni + 1
+        }
+        let ci = 0
+        while ci < 9 {
+            let ccarry = f[ci] >> 26
+            f[ci] = f[ci] - (ccarry << 26)
+            f[ci + 1] = f[ci + 1] + ccarry
+            ci = ci + 1
         }
     }
 
