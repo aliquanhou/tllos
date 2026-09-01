@@ -130,6 +130,14 @@ jobs:
       - name: Validate Claim-Evidence matching (all platforms)
         run: python3 scripts/validate-claim-evidence.py --engine-dir .tll-engine
 
+      - name: Engineering Cognition Query Engine smoke test (all platforms)
+        run: |
+          python3 scripts/query-engine.py list all --format json
+          python3 scripts/query-engine.py what compiler --format text
+          python3 scripts/query-engine.py depends vm --direction backward --format text
+          python3 scripts/query-engine.py safely-change compiler --format text
+          python3 scripts/query-engine.py must-verify blockchain --format text
+
       - name: End-to-end tllc verification (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
