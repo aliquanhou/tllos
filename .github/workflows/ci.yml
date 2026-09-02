@@ -112,7 +112,7 @@ jobs:
 
       # === P0-15.19: TLL Native Ed25519 Cryptographic Foundation ===
       # Self-developed Ed25519 implementation. RFC 8032 test vectors verified.
-      # These tests are NOT production security audit — they verify algorithm correctness.
+      # These tests are NOT production security audit -?they verify algorithm correctness.
       - name: Ed25519 Crypto Tests (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
@@ -171,7 +171,7 @@ jobs:
       # === P0-16.1: TLL Engineering Enforcement Layer ===
       # Validates .tll-engine/ structure, schema, Claim-Evidence matching.
       # This ensures the engineering cognition layer remains consistent with code.
-      # No Runtime/Compiler modification — if this fails, .tll-engine/ has an inconsistency.
+      # No Runtime/Compiler modification -?if this fails, .tll-engine/ has an inconsistency.
 
       - name: Validate .tll-engine/ structure (Linux/macOS)
         if: runner.os != 'Windows'
@@ -313,9 +313,9 @@ jobs:
         run: scripts\run-bc-network-test.ps1 bc_invalid
 
       # === P0-15.18.3: Blockchain High-Message Stress Test ===
-      # 4 Node real TCP, 120 high-frequency transactions (fee递增 triggers mempool capacity=50 overflow),
+      # 4 Node real TCP, 120 high-frequency transactions (fee--- triggers mempool capacity=50 overflow),
       # transaction propagation, block propagation, final 4-node consistency.
-      # No Runtime changes — if this fails, Runtime/P2P/Blockchain has a real bug.
+      # No Runtime changes -?if this fails, Runtime/P2P/Blockchain has a real bug.
       - name: Blockchain high-message stress 120 txs (Linux/macOS)
         if: runner.os != 'Windows'
         timeout-minutes: 5
@@ -330,7 +330,7 @@ jobs:
       # === P0-15.18.1: Coroutine 100K Stress Test (black-box, zero Runtime changes) ===
       # Verifies 100K immediate-return + 10K x10 yield + 1K sleep coroutines.
       # External evidence: exit code + process lifecycle + runtime + peak RSS.
-      # No Runtime code modifications — if this fails, Runtime has a real bug.
+      # No Runtime code modifications -?if this fails, Runtime has a real bug.
 
       - name: Coroutine 100K Stress Test (Linux/macOS)
         if: runner.os != 'Windows'
