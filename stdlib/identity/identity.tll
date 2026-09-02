@@ -1,0 +1,306 @@
+
+// ============================================================================
+// SECURITY NOTICE
+// TLL Agent Identity Primitive (P0-15.20)
+// Built on top of TLL Native Ed25519 (P0-15.19, Engineering-Verified).
+//
+// TLL Native Ed25519 is currently Engineering-Verified.
+// RFC 8032 test vectors passing does NOT constitute production-grade
+// cryptographic security. Identity built on this implementation MUST NOT
+// claim production cryptographic trust solely because RFC 8032 vectors pass.
+// Independent cryptographic audit remains pending.
+//
+// 中文：当前 TLL Native Ed25519 为工程验证级实现。RFC 8032 标准向量通过
+// 仅证明当前实现与标准测试向量的一致性，不等同于生产级密码学安全。
+// Identity 层不得将 RFC 8032 向量通过解释为生产级密码学可信。
+// 独立密码学审计仍处于 Pending 状态。
+// ============================================================================
+
+from "../crypto" import sha256Bytes, hexToBytes
+from "../crypto/ed25519" import generate_keypair, sign, verify
+
+// ---------------------------------------------------------------------------
+// Helper: uint32 big-endian encode/decode
+// ---------------------------------------------------------------------------
+
+fn uint32_to_bytes_be(n: int) -> list {
+    let bytes = [0, 0, 0, 0]
+    bytes[0] = (n >> 24) & 0xFF
+    bytes[1] = (n >> 16) & 0xFF
+    bytes[2] = (n >> 8) & 0xFF
+    bytes[3] = n & 0xFF
+    return bytes
+}
+
+fn bytes_to_uint32_be(bytes: list, offset: int) -> int {
+    let v = (bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]
+    return v & 0xFFFFFFFF
+}
+
+// ---------------------------------------------------------------------------
+// Helper: string <-> bytes (ASCII/Latin-1)
+// ---------------------------------------------------------------------------
+
+fn string_to_bytes(s: string) -> list {
+    let bytes = []
+    let i = 0
+    let len = strings.length(s)
+    while i < len {
+        bytes[i] = strings.charCodeAt(s, i) & 0xFF
+        i = i + 1
+    }
+    return bytes
+}
+
+fn bytes_to_string(bytes: list) -> string {
+    let s = ""
+    let i = 0
+    let len = arrays.length(bytes)
+    while i < len {
+        s = s + strings.fromCharCode(bytes[i])
+        i = i + 1
+    }
+    return s
+}
+
+// ---------------------------------------------------------------------------
+// Helper: append bytes to list
+// ---------------------------------------------------------------------------
+
+fn bytes_append(dst: list, src: list) -> list {
+    let i = 0
+    let len = arrays.length(src)
+    while i < len {
+        dst[arrays.length(dst)] = src[i]
+        i = i + 1
+    }
+    return dst
+}
+
+// ---------------------------------------------------------------------------
+// Identity Canonical Material
+// identity_material = version(4 BE) || algorithm_length(4 BE) ||
+//                     algorithm_bytes || public_key(32 bytes)
+// agent_id = SHA256(identity_material) -> 32 bytes
+// ---------------------------------------------------------------------------
+
+fn identity_build_canonical_material(version: int, algorithm: string, public_key: list) -> list {
+    let material = []
+    bytes_append(material, uint32_to_bytes_be(version))
+    let algBytes = string_to_bytes(algorithm)
+    bytes_append(material, uint32_to_bytes_be(arrays.length(algBytes)))
+    bytes_append(material, algBytes)
+    bytes_append(material, public_key)
+    return material
+}
+
+fn identity_compute_id(version: int, algorithm: string, public_key: list) -> list {
+    let material = identity_build_canonical_material(version, algorithm, public_key)
+    let hex = sha256Bytes(material)
+    return hexToBytes(hex)
+}
+
+// ---------------------------------------------------------------------------
+// Identity Constants
+// ---------------------------------------------------------------------------
+
+fn IDENTITY_VERSION() -> int { return 1 }
+fn IDENTITY_ALGORITHM() -> string { return "Ed25519" }
+fn IDENTITY_PUBLIC_KEY_SIZE() -> int { return 32 }
+fn IDENTITY_AGENT_ID_SIZE() -> int { return 32 }
+fn IDENTITY_PRIVATE_KEY_SIZE() -> int { return 64 }
+
+// ---------------------------------------------------------------------------
+// identity_generate(seed)
+// seed: 32-byte list
+// returns identity map with private_key and seed
+// ---------------------------------------------------------------------------
+
+fn identity_generate(seed: list) -> map {
+    let kp = generate_keypair(seed)
+    let version = IDENTITY_VERSION()
+    let algorithm = IDENTITY_ALGORITHM()
+    let public_key = kp["publicKey"]
+    let agent_id = identity_compute_id(version, algorithm, public_key)
+
+    return {
+        "version": version,
+        "algorithm": algorithm,
+        "public_key": public_key,
+        "agent_id": agent_id,
+        "private_key": kp["privateKey"],
+        "seed": seed
+    }
+}
+
+// ---------------------------------------------------------------------------
+// identity_from_public_key(public_key)
+// public_key: 32-byte list
+// returns identity map WITHOUT private_key (verification-only)
+// ---------------------------------------------------------------------------
+
+fn identity_from_public_key(public_key: list) -> map {
+    let version = IDENTITY_VERSION()
+    let algorithm = IDENTITY_ALGORITHM()
+    let agent_id = identity_compute_id(version, algorithm, public_key)
+
+    return {
+        "version": version,
+        "algorithm": algorithm,
+        "public_key": public_key,
+        "agent_id": agent_id,
+        "private_key": [],
+        "seed": []
+    }
+}
+
+// ---------------------------------------------------------------------------
+// identity_validate(identity)
+// returns 1 if valid, 0 if invalid
+// checks: version, algorithm, key lengths, agent_id integrity
+// ---------------------------------------------------------------------------
+
+fn identity_validate(identity: map) -> int {
+    // version check
+    if identity["version"] != IDENTITY_VERSION() { return 0 }
+
+    // algorithm check
+    if identity["algorithm"] != IDENTITY_ALGORITHM() { return 0 }
+
+    // public_key length
+    if arrays.length(identity["public_key"]) != IDENTITY_PUBLIC_KEY_SIZE() { return 0 }
+
+    // agent_id length
+    if arrays.length(identity["agent_id"]) != IDENTITY_AGENT_ID_SIZE() { return 0 }
+
+    // agent_id integrity: recompute and compare
+    let expected = identity_compute_id(
+        identity["version"],
+        identity["algorithm"],
+        identity["public_key"]
+    )
+    let i = 0
+    while i < IDENTITY_AGENT_ID_SIZE() {
+        if expected[i] != identity["agent_id"][i] { return 0 }
+        i = i + 1
+    }
+
+    return 1
+}
+
+// ---------------------------------------------------------------------------
+// identity_sign(identity, message)
+// message: byte list
+// returns 64-byte signature, or empty list if identity has no private_key
+// ---------------------------------------------------------------------------
+
+fn identity_sign(identity: map, message: list) -> list {
+    let pk = identity["private_key"]
+    if arrays.length(pk) != IDENTITY_PRIVATE_KEY_SIZE() { return [] }
+    return sign(pk, message)
+}
+
+// ---------------------------------------------------------------------------
+// identity_verify(identity, message, signature)
+// returns 1 if valid, 0 if invalid
+// ---------------------------------------------------------------------------
+
+fn identity_verify(identity: map, message: list, signature: list) -> int {
+    return verify(identity["public_key"], message, signature)
+}
+
+// ---------------------------------------------------------------------------
+// identity_encode(identity)
+// format: version(4 BE) || algorithm_length(4 BE) || algorithm_bytes ||
+//         public_key(32) || agent_id(32)
+// returns byte list
+// ---------------------------------------------------------------------------
+
+fn identity_encode(identity: map) -> list {
+    let encoded = []
+    bytes_append(encoded, uint32_to_bytes_be(identity["version"]))
+
+    let algBytes = string_to_bytes(identity["algorithm"])
+    bytes_append(encoded, uint32_to_bytes_be(arrays.length(algBytes)))
+    bytes_append(encoded, algBytes)
+
+    bytes_append(encoded, identity["public_key"])
+    bytes_append(encoded, identity["agent_id"])
+
+    return encoded
+}
+
+// ---------------------------------------------------------------------------
+// identity_decode(encoded)
+// returns identity map (verification-only, no private_key), or empty map on error
+// ---------------------------------------------------------------------------
+
+fn identity_decode(encoded: list) -> map {
+    let total = arrays.length(encoded)
+
+    // minimum: 4 (version) + 4 (alg_len) + 0 (alg) + 32 (pubkey) + 32 (agentid) = 72
+    if total < 72 { return {} }
+
+    let version = bytes_to_uint32_be(encoded, 0)
+    let algLen = bytes_to_uint32_be(encoded, 4)
+
+    // sanity: algorithm length cannot exceed total
+    if algLen > total - 72 { return {} }
+
+    // extract algorithm bytes and verify against known Ed25519
+    // (TLL has no strings.fromCharCode, so verify bytes then use known string)
+    let expectedAlg = string_to_bytes(IDENTITY_ALGORITHM())
+    let algMatch = 1
+    if algLen != arrays.length(expectedAlg) { algMatch = 0 }
+    let ai = 0
+    while ai < algLen && ai < arrays.length(expectedAlg) {
+        if encoded[8 + ai] != expectedAlg[ai] { algMatch = 0 }
+        ai = ai + 1
+    }
+    let algorithm = IDENTITY_ALGORITHM()
+    if algMatch == 0 { algorithm = "UNKNOWN" }
+
+    // extract public_key
+    let public_key = []
+    i = 0
+    while i < 32 {
+        public_key[i] = encoded[8 + algLen + i]
+        i = i + 1
+    }
+
+    // extract agent_id
+    let agent_id = []
+    i = 0
+    while i < 32 {
+        agent_id[i] = encoded[8 + algLen + 32 + i]
+        i = i + 1
+    }
+
+    return {
+        "version": version,
+        "algorithm": algorithm,
+        "public_key": public_key,
+        "agent_id": agent_id,
+        "private_key": [],
+        "seed": []
+    }
+}
+
+// ---------------------------------------------------------------------------
+// identity_equals(a, b)
+// compare two identities by agent_id (constant-time-ish)
+// returns 1 if equal, 0 if not
+// ---------------------------------------------------------------------------
+
+fn identity_equals(a: map, b: map) -> int {
+    if arrays.length(a["agent_id"]) != IDENTITY_AGENT_ID_SIZE() { return 0 }
+    if arrays.length(b["agent_id"]) != IDENTITY_AGENT_ID_SIZE() { return 0 }
+    let result = 0
+    let i = 0
+    while i < IDENTITY_AGENT_ID_SIZE() {
+        result = result | (a["agent_id"][i] ^ b["agent_id"][i])
+        i = i + 1
+    }
+    if result == 0 { return 1 }
+    return 0
+}

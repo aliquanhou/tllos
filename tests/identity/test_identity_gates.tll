@@ -1,0 +1,424 @@
+
+// P0-15.20 Identity Test Gate
+// Covers 8 gates: Deterministic ID, Key Separation, Canonical Encoding,
+// ID Integrity, Signature, Tampering, Algorithm Binding, Version Binding
+
+from "../../stdlib/identity/identity" import identity_generate, identity_from_public_key, identity_compute_id, identity_validate, identity_sign, identity_verify, identity_encode, identity_decode, identity_equals, IDENTITY_VERSION, IDENTITY_ALGORITHM
+
+// Helper: compare two byte lists
+fn bytes_equal(a: list, b: list) -> int {
+    if arrays.length(a) != arrays.length(b) { return 0 }
+    let i = 0
+    while i < arrays.length(a) {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+// Helper: make 32-byte seed from starting value
+fn make_seed(start: int) -> list {
+    let seed = []
+    let i = 0
+    while i < 32 {
+        seed[i] = (start + i) & 0xFF
+        i = i + 1
+    }
+    return seed
+}
+
+// Helper: string to bytes
+fn str_to_bytes(s: string) -> list {
+    let bytes = []
+    let i = 0
+    let len = strings.length(s)
+    while i < len {
+        bytes[i] = strings.charCodeAt(s, i) & 0xFF
+        i = i + 1
+    }
+    return bytes
+}
+
+// ===========================================================================
+// Gate 01: Deterministic ID
+// same public key -> same agent_id (via two paths: generate and from_public_key)
+// ===========================================================================
+
+fn gate_01_deterministic_id() -> int {
+    let seed = make_seed(1)
+    let id1 = identity_generate(seed)
+    let id2 = identity_from_public_key(id1["public_key"])
+
+    // agent_id must match between generate and from_public_key
+    if bytes_equal(id1["agent_id"], id2["agent_id"]) != 1 {
+        io.println("FAIL 01: agent_id mismatch between generate and from_public_key")
+        return 0
+    }
+
+    // recompute independently
+    let recomputed = identity_compute_id(
+        id1["version"],
+        id1["algorithm"],
+        id1["public_key"]
+    )
+    if bytes_equal(id1["agent_id"], recomputed) != 1 {
+        io.println("FAIL 01: recomputed agent_id mismatch")
+        return 0
+    }
+
+    // generate again with same seed -> same identity
+    let id3 = identity_generate(seed)
+    if bytes_equal(id1["agent_id"], id3["agent_id"]) != 1 {
+        io.println("FAIL 01: regenerate with same seed gives different agent_id")
+        return 0
+    }
+
+    io.println("PASS 01: Deterministic ID")
+    return 1
+}
+
+// ===========================================================================
+// Gate 02: Key Separation
+// different public key -> different agent_id
+// ===========================================================================
+
+fn gate_02_key_separation() -> int {
+    let id1 = identity_generate(make_seed(1))
+    let id2 = identity_generate(make_seed(100))
+
+    if bytes_equal(id1["public_key"], id2["public_key"]) == 1 {
+        io.println("FAIL 02: different seeds produced same public_key")
+        return 0
+    }
+
+    if bytes_equal(id1["agent_id"], id2["agent_id"]) == 1 {
+        io.println("FAIL 02: different public_keys produced same agent_id")
+        return 0
+    }
+
+    // identity_equals should return 0 for different identities
+    if identity_equals(id1, id2) != 0 {
+        io.println("FAIL 02: identity_equals returned 1 for different identities")
+        return 0
+    }
+
+    // identity_equals should return 1 for same identity
+    if identity_equals(id1, id1) != 1 {
+        io.println("FAIL 02: identity_equals returned 0 for same identity")
+        return 0
+    }
+
+    io.println("PASS 02: Key Separation")
+    return 1
+}
+
+// ===========================================================================
+// Gate 03: Canonical Encoding
+// identity -> encode -> decode -> identical identity
+// ===========================================================================
+
+fn gate_03_canonical_encoding() -> int {
+    let id = identity_generate(make_seed(1))
+    let encoded = identity_encode(id)
+
+    // encoded must be non-empty and reasonable size (72 + len("Ed25519") = 79)
+    if arrays.length(encoded) != 79 {
+        io.println("FAIL 03: encoded size = " + convert.toString(arrays.length(encoded)) + ", expected 79")
+        return 0
+    }
+
+    let decoded = identity_decode(encoded)
+
+    // version must match
+    if decoded["version"] != id["version"] {
+        io.println("FAIL 03: version mismatch after decode")
+        return 0
+    }
+
+    // algorithm must match
+    if decoded["algorithm"] != id["algorithm"] {
+        io.println("FAIL 03: algorithm mismatch after decode")
+        return 0
+    }
+
+    // public_key must match
+    if bytes_equal(decoded["public_key"], id["public_key"]) != 1 {
+        io.println("FAIL 03: public_key mismatch after decode")
+        return 0
+    }
+
+    // agent_id must match
+    if bytes_equal(decoded["agent_id"], id["agent_id"]) != 1 {
+        io.println("FAIL 03: agent_id mismatch after decode")
+        return 0
+    }
+
+    // decoded identity must validate
+    if identity_validate(decoded) != 1 {
+        io.println("FAIL 03: decoded identity failed validation")
+        return 0
+    }
+
+    // encode again -> same bytes
+    let reencoded = identity_encode(decoded)
+    if bytes_equal(encoded, reencoded) != 1 {
+        io.println("FAIL 03: re-encode produced different bytes")
+        return 0
+    }
+
+    io.println("PASS 03: Canonical Encoding")
+    return 1
+}
+
+// ===========================================================================
+// Gate 04: ID Integrity
+// modifying public_key must cause agent_id mismatch (validation fails)
+// ===========================================================================
+
+fn gate_04_id_integrity() -> int {
+    let id = identity_generate(make_seed(1))
+
+    // original must validate
+    if identity_validate(id) != 1 {
+        io.println("FAIL 04: original identity failed validation")
+        return 0
+    }
+
+    // tamper with public_key (flip first byte)
+    let tampered = identity_from_public_key(id["public_key"])
+    tampered["public_key"][0] = tampered["public_key"][0] ^ 0xFF
+
+    // tampered identity must fail validation
+    if identity_validate(tampered) != 0 {
+        io.println("FAIL 04: tampered public_key passed validation")
+        return 0
+    }
+
+    // tamper with agent_id directly (keep public_key)
+    let tampered2 = identity_from_public_key(id["public_key"])
+    tampered2["agent_id"][0] = tampered2["agent_id"][0] ^ 0xFF
+
+    if identity_validate(tampered2) != 0 {
+        io.println("FAIL 04: tampered agent_id passed validation")
+        return 0
+    }
+
+    io.println("PASS 04: ID Integrity")
+    return 1
+}
+
+// ===========================================================================
+// Gate 05: Signature
+// identity.sign(message) -> identity.verify(message) -> PASS
+// ===========================================================================
+
+fn gate_05_signature() -> int {
+    let id = identity_generate(make_seed(1))
+    let message = str_to_bytes("Hello TLL Identity")
+
+    let signature = identity_sign(id, message)
+
+    // signature must be 64 bytes
+    if arrays.length(signature) != 64 {
+        io.println("FAIL 05: signature length = " + convert.toString(arrays.length(signature)))
+        return 0
+    }
+
+    // verify must pass
+    if identity_verify(id, message, signature) != 1 {
+        io.println("FAIL 05: verify failed for valid signature")
+        return 0
+    }
+
+    // verification-only identity (from_public_key) must also verify
+    let verifier = identity_from_public_key(id["public_key"])
+    if identity_verify(verifier, message, signature) != 1 {
+        io.println("FAIL 05: verification-only identity failed to verify")
+        return 0
+    }
+
+    // verification-only identity must NOT be able to sign
+    let emptySig = identity_sign(verifier, message)
+    if arrays.length(emptySig) != 0 {
+        io.println("FAIL 05: verification-only identity produced signature")
+        return 0
+    }
+
+    io.println("PASS 05: Signature")
+    return 1
+}
+
+// ===========================================================================
+// Gate 06: Tampering
+// modifying message, signature, public_key, agent_id must be rejected
+// ===========================================================================
+
+fn gate_06_tampering() -> int {
+    let id = identity_generate(make_seed(1))
+    let message = str_to_bytes("Tamper test message")
+    let signature = identity_sign(id, message)
+
+    // 6a: modified message -> reject
+    let modifiedMsg = str_to_bytes("Tamper test message!")
+    if identity_verify(id, modifiedMsg, signature) != 0 {
+        io.println("FAIL 06a: modified message passed verification")
+        return 0
+    }
+
+    // 6b: modified signature (flip byte in R) -> reject
+    let badSig = []
+    let i = 0
+    while i < 64 { badSig[i] = signature[i]; i = i + 1 }
+    badSig[0] = badSig[0] ^ 0xFF
+    if identity_verify(id, message, badSig) != 0 {
+        io.println("FAIL 06b: modified signature R passed verification")
+        return 0
+    }
+
+    // 6c: modified signature (flip byte in S) -> reject
+    let badSig2 = []
+    i = 0
+    while i < 64 { badSig2[i] = signature[i]; i = i + 1 }
+    badSig2[32] = badSig2[32] ^ 0xFF
+    if identity_verify(id, message, badSig2) != 0 {
+        io.println("FAIL 06c: modified signature S passed verification")
+        return 0
+    }
+
+    // 6d: wrong public key -> reject
+    let otherId = identity_generate(make_seed(99))
+    if identity_verify(otherId, message, signature) != 0 {
+        io.println("FAIL 06d: wrong public_key passed verification")
+        return 0
+    }
+
+    // 6e: signature length wrong -> reject
+    let shortSig = []
+    i = 0
+    while i < 32 { shortSig[i] = signature[i]; i = i + 1 }
+    if identity_verify(id, message, shortSig) != 0 {
+        io.println("FAIL 06e: short signature passed verification")
+        return 0
+    }
+
+    io.println("PASS 06: Tampering")
+    return 1
+}
+
+// ===========================================================================
+// Gate 07: Algorithm Binding
+// identity with wrong algorithm must fail validation
+// ===========================================================================
+
+fn gate_07_algorithm_binding() -> int {
+    let id = identity_generate(make_seed(1))
+
+    // original must validate
+    if identity_validate(id) != 1 {
+        io.println("FAIL 07: original identity failed validation")
+        return 0
+    }
+
+    // create identity with wrong algorithm (but correct agent_id for that algorithm)
+    let wrongAlg = identity_from_public_key(id["public_key"])
+    wrongAlg["algorithm"] = "Ed448"
+    // recompute agent_id for wrong algorithm
+    wrongAlg["agent_id"] = identity_compute_id(wrongAlg["version"], wrongAlg["algorithm"], wrongAlg["public_key"])
+
+    // must fail validation because algorithm != Ed25519
+    if identity_validate(wrongAlg) != 0 {
+        io.println("FAIL 07: wrong algorithm passed validation")
+        return 0
+    }
+
+    // empty algorithm
+    let emptyAlg = identity_from_public_key(id["public_key"])
+    emptyAlg["algorithm"] = ""
+    emptyAlg["agent_id"] = identity_compute_id(emptyAlg["version"], emptyAlg["algorithm"], emptyAlg["public_key"])
+    if identity_validate(emptyAlg) != 0 {
+        io.println("FAIL 07: empty algorithm passed validation")
+        return 0
+    }
+
+    io.println("PASS 07: Algorithm Binding")
+    return 1
+}
+
+// ===========================================================================
+// Gate 08: Version Binding
+// different version must produce different canonical identity / agent_id
+// ===========================================================================
+
+fn gate_08_version_binding() -> int {
+    let id = identity_generate(make_seed(1))
+    let public_key = id["public_key"]
+
+    // agent_id for version 1
+    let id_v1 = identity_compute_id(1, "Ed25519", public_key)
+
+    // agent_id for version 2 (hypothetical)
+    let id_v2 = identity_compute_id(2, "Ed25519", public_key)
+
+    // must be different
+    if bytes_equal(id_v1, id_v2) == 1 {
+        io.println("FAIL 08: different versions produced same agent_id")
+        return 0
+    }
+
+    // create identity with wrong version (but recomputed agent_id)
+    let wrongVer = identity_from_public_key(public_key)
+    wrongVer["version"] = 2
+    wrongVer["agent_id"] = identity_compute_id(2, "Ed25519", public_key)
+
+    // must fail validation because version != 1
+    if identity_validate(wrongVer) != 0 {
+        io.println("FAIL 08: wrong version passed validation")
+        return 0
+    }
+
+    // version 0 must also fail
+    let zeroVer = identity_from_public_key(public_key)
+    zeroVer["version"] = 0
+    zeroVer["agent_id"] = identity_compute_id(0, "Ed25519", public_key)
+    if identity_validate(zeroVer) != 0 {
+        io.println("FAIL 08: version 0 passed validation")
+        return 0
+    }
+
+    io.println("PASS 08: Version Binding")
+    return 1
+}
+
+// ===========================================================================
+// Main: run all gates
+// ===========================================================================
+
+fn main() -> int {
+    io.println("=== P0-15.20 Identity Test Gates ===")
+    io.println("")
+
+    let passed = 0
+    let total = 8
+
+    if gate_01_deterministic_id() == 1 { passed = passed + 1 }
+    if gate_02_key_separation() == 1 { passed = passed + 1 }
+    if gate_03_canonical_encoding() == 1 { passed = passed + 1 }
+    if gate_04_id_integrity() == 1 { passed = passed + 1 }
+    if gate_05_signature() == 1 { passed = passed + 1 }
+    if gate_06_tampering() == 1 { passed = passed + 1 }
+    if gate_07_algorithm_binding() == 1 { passed = passed + 1 }
+    if gate_08_version_binding() == 1 { passed = passed + 1 }
+
+    io.println("")
+    io.println("=== Results: " + convert.toString(passed) + "/" + convert.toString(total) + " gates passed ===")
+
+    if passed == total {
+        io.println("PASS")
+        return 0
+    } else {
+        io.println("FAIL")
+        return 1
+    }
+}
+
+main()
