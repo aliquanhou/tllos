@@ -31,18 +31,18 @@ jobs:
           gcc -O2 -std=c99 -D_POSIX_C_SOURCE=200809L -o tllvm main.c vm.c value.c json.c builtin.c -lm
           ./tllvm --version 2>/dev/null || true
 
-      - name: Setup MSVC (Windows)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-        env:
-          # Node.js 24 dropped MSVC support; force this action to run on Node.js 20
-          # until ilammy/msvc-dev-cmd publishes a Node 24-compatible release.
-          FORCE_JAVASCRIPT_ACTIONS_TO_NODE20: true
-
       - name: Build Native Launcher (Windows)
         if: runner.os == 'Windows'
         shell: cmd
         run: |
+          @echo off
+          REM Use vswhere to find Visual Studio installation (replaces ilammy/msvc-dev-cmd which is incompatible with Node.js 24)
+          for /f "usebackq tokens=*" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALLDIR=%%i"
+          if not exist "%VSINSTALLDIR%\VC\Auxiliary\Build\vcvarsall.bat" (
+            echo ERROR: vcvarsall.bat not found at %VSINSTALLDIR%
+            exit /b 1
+          )
+          call "%VSINSTALLDIR%\VC\Auxiliary\Build\vcvarsall.bat" x64
           cd host\c
           cl /O2 /D_CRT_SECURE_NO_WARNINGS /Fe:tllvm.exe main.c vm.c value.c json.c builtin.c ws2_32.lib winhttp.lib
           if errorlevel 1 exit /b 1
