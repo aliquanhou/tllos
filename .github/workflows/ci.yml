@@ -37,14 +37,16 @@ jobs:
         run: |
           set "VSWHERE=C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
           if not exist "%VSWHERE%" set "VSWHERE=C:\Program Files\Microsoft Visual Studio\Installer\vswhere.exe"
-          echo vswhere: %VSWHERE%
           for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALLDIR=%%i"
           echo VSINSTALLDIR: %VSINSTALLDIR%
-          if not exist "%VSINSTALLDIR%\VC\Auxiliary\Build\vcvarsall.bat" (
-            echo ERROR: vcvarsall.bat not found
-            exit /b 1
+          call "%VSINSTALLDIR%\VC\Auxiliary\Build\vcvarsall.bat" x64 >nul 2>&1
+          for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find "VC\Tools\MSVC\*\bin\Hostx64\x64\cl.exe"`) do set "CLPATH=%%i"
+          echo CLPATH: %CLPATH%
+          if exist "%CLPATH%" (
+            for %%F in ("%CLPATH%") do set "PATH=%%~dpF;%PATH%"
+          ) else (
+            echo WARNING: cl.exe not found via vswhere, trying vcvars PATH
           )
-          call "%VSINSTALLDIR%\VC\Auxiliary\Build\vcvarsall.bat" x64
           where cl
           cd host\c
           cl /O2 /D_CRT_SECURE_NO_WARNINGS /Fe:tllvm.exe main.c vm.c value.c json.c builtin.c ws2_32.lib winhttp.lib
