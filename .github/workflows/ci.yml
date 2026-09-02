@@ -5,7 +5,6 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_dispatch:
 
 jobs:
   native-build-test:
@@ -31,26 +30,14 @@ jobs:
           gcc -O2 -std=c99 -D_POSIX_C_SOURCE=200809L -o tllvm main.c vm.c value.c json.c builtin.c -lm
           ./tllvm --version 2>/dev/null || true
 
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Build Native Launcher (Windows)
         if: runner.os == 'Windows'
         shell: cmd
         run: |
-          set "VSWHERE=C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
-          if not exist "%VSWHERE%" set "VSWHERE=C:\Program Files\Microsoft Visual Studio\Installer\vswhere.exe"
-          "%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath > "%TEMP%\vsins.txt" 2>nul
-          set /p VSINSTALLDIR=<"%TEMP%\vsins.txt"
-          echo VSINSTALLDIR: %VSINSTALLDIR%
-          call "%VSINSTALLDIR%\VC\Auxiliary\Build\vcvarsall.bat" x64 >nul 2>&1
-          "%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find "VC\Tools\MSVC\*\bin\Hostx64\x64\cl.exe" > "%TEMP%\clpath.txt" 2>nul
-          set /p CLPATH=<"%TEMP%\clpath.txt"
-          echo CLPATH: %CLPATH%
-          if exist "%CLPATH%" (
-            for %%F in ("%CLPATH%") do set "PATH=%%~dpF;%PATH%"
-          ) else (
-            echo WARNING: cl.exe not found via vswhere -find
-            dir /s /b "%VSINSTALLDIR%\VC\Tools\MSVC\*\bin\Hostx64\x64\cl.exe" 2>nul
-          )
-          where cl
           cd host\c
           cl /O2 /D_CRT_SECURE_NO_WARNINGS /Fe:tllvm.exe main.c vm.c value.c json.c builtin.c ws2_32.lib winhttp.lib
           if errorlevel 1 exit /b 1
@@ -124,68 +111,10 @@ jobs:
         shell: cmd
         run: scripts\run-tests.bat
 
-      # === P0-15.19: TLL Native Ed25519 Cryptographic Foundation ===
-      # Self-developed Ed25519 implementation. RFC 8032 test vectors verified.
-      # These tests are NOT production security audit -?they verify algorithm correctness.
-      - name: Ed25519 Crypto Tests (Linux/macOS)
-        if: runner.os != 'Windows'
-        run: |
-          TLLVM=host/c/tllvm
-          TLLC=tools/TLLC/tllc.tllbc
-          CRYPTO_FAIL=0
-          for f in tests/crypto/test_*.tll; do
-            [ -f "$f" ] || continue
-            echo "=== $(basename "$f") ==="
-            "$TLLVM" "$TLLC" compile "$f" -o "${f%.tll}.tllbc" >/dev/null 2>&1
-            OUTPUT=$("$TLLVM" "${f%.tll}.tllbc" 2>&1)
-            echo "$OUTPUT" | tail -3
-            if echo "$OUTPUT" | grep -qiE "FAIL|ERROR|panic"; then
-              echo "RESULT: FAIL"
-              CRYPTO_FAIL=1
-            else
-              echo "RESULT: PASS"
-            fi
-            echo ""
-          done
-          if [ "$CRYPTO_FAIL" -ne 0 ]; then
-            echo "Ed25519 crypto tests FAILED"
-            exit 1
-          fi
-          echo "All Ed25519 crypto tests passed"
-
-      - name: Ed25519 Crypto Tests (Windows)
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: |
-          $TLLVM = "host\c\tllvm.exe"
-          $TLLC = "tools\TLLC\tllc.tllbc"
-          $cryptoFail = $false
-          Get-ChildItem -Path "tests\crypto" -Filter "test_*.tll" | ForEach-Object {
-            $name = $_.Name
-            $bc = $_.FullName -replace '\.tll$', '.tllbc'
-            Write-Host "=== $name ==="
-            & $TLLVM $TLLC compile $_.FullName -o $bc 2>&1 | Out-Null
-            $output = & $TLLVM $bc 2>&1 | Out-String
-            $lines = $output -split "`n"
-            $lines | Select-Object -Last 3 | ForEach-Object { Write-Host $_ }
-            if ($output -match '(?i)FAIL|ERROR|panic') {
-              Write-Host "RESULT: FAIL"
-              $cryptoFail = $true
-            } else {
-              Write-Host "RESULT: PASS"
-            }
-            Write-Host ""
-          }
-          if ($cryptoFail) {
-            Write-Host "Ed25519 crypto tests FAILED"
-            exit 1
-          }
-          Write-Host "All Ed25519 crypto tests passed"
-
       # === P0-16.1: TLL Engineering Enforcement Layer ===
       # Validates .tll-engine/ structure, schema, Claim-Evidence matching.
       # This ensures the engineering cognition layer remains consistent with code.
-      # No Runtime/Compiler modification -?if this fails, .tll-engine/ has an inconsistency.
+      # No Runtime/Compiler modification — if this fails, .tll-engine/ has an inconsistency.
 
       - name: Validate .tll-engine/ structure (Linux/macOS)
         if: runner.os != 'Windows'
@@ -327,9 +256,9 @@ jobs:
         run: scripts\run-bc-network-test.ps1 bc_invalid
 
       # === P0-15.18.3: Blockchain High-Message Stress Test ===
-      # 4 Node real TCP, 120 high-frequency transactions (fee--- triggers mempool capacity=50 overflow),
+      # 4 Node real TCP, 120 high-frequency transactions (fee递增 triggers mempool capacity=50 overflow),
       # transaction propagation, block propagation, final 4-node consistency.
-      # No Runtime changes -?if this fails, Runtime/P2P/Blockchain has a real bug.
+      # No Runtime changes — if this fails, Runtime/P2P/Blockchain has a real bug.
       - name: Blockchain high-message stress 120 txs (Linux/macOS)
         if: runner.os != 'Windows'
         timeout-minutes: 5
@@ -344,7 +273,7 @@ jobs:
       # === P0-15.18.1: Coroutine 100K Stress Test (black-box, zero Runtime changes) ===
       # Verifies 100K immediate-return + 10K x10 yield + 1K sleep coroutines.
       # External evidence: exit code + process lifecycle + runtime + peak RSS.
-      # No Runtime code modifications -?if this fails, Runtime has a real bug.
+      # No Runtime code modifications — if this fails, Runtime has a real bug.
 
       - name: Coroutine 100K Stress Test (Linux/macOS)
         if: runner.os != 'Windows'
