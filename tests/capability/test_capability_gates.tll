@@ -1,0 +1,333 @@
+
+// P0-15.21 Capability Test Gates (12 gates)
+
+from "../../stdlib/capability/capability" import capability_create, capability_compute_id, capability_validate, capability_encode, capability_decode, capability_equals, capability_set_create, capability_set_add, capability_set_contains, capability_set_remove, capability_set_encode, capability_set_decode, CAPABILITY_VERSION
+
+fn bytes_eq(a: list, b: list) -> int {
+    if arrays.length(a) != arrays.length(b) { return 0 }
+    let i = 0
+    while i < arrays.length(a) {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+// Gate 01: Deterministic Capability ID
+fn gate_01() -> int {
+    let c1 = capability_create("submit_tx", "Submit a transaction", "{amount:int,to:string}", "v1")
+    let c2 = capability_create("submit_tx", "Submit a transaction", "{amount:int,to:string}", "v1")
+    if bytes_eq(c1["capability_id"], c2["capability_id"]) != 1 {
+        io.println("FAIL 01: same capability produced different IDs")
+        return 0
+    }
+    // different name -> different ID
+    let c3 = capability_create("submit_block", "Submit a transaction", "{amount:int,to:string}", "v1")
+    if bytes_eq(c1["capability_id"], c3["capability_id"]) == 1 {
+        io.println("FAIL 01: different name produced same ID")
+        return 0
+    }
+    io.println("PASS 01: Deterministic Capability ID")
+    return 1
+}
+
+// Gate 02: Canonical Encoding
+fn gate_02() -> int {
+    let c = capability_create("test_cap", "A test capability", "{}", "meta")
+    let enc = capability_encode(c)
+    // encoding must be non-empty and have reasonable size
+    if arrays.length(enc) < 56 {
+        io.println("FAIL 02: encoding too short")
+        return 0
+    }
+    // encode twice -> same bytes (deterministic)
+    let enc2 = capability_encode(c)
+    if bytes_eq(enc, enc2) != 1 {
+        io.println("FAIL 02: encoding not deterministic")
+        return 0
+    }
+    io.println("PASS 02: Canonical Encoding")
+    return 1
+}
+
+// Gate 03: Decode / Encode Roundtrip
+fn gate_03() -> int {
+    let c = capability_create("roundtrip_cap", "Roundtrip test", "{x:int}", "testmeta")
+    let enc = capability_encode(c)
+    let decoded = capability_decode(enc)
+    if decoded["version"] != c["version"] {
+        io.println("FAIL 03: version mismatch")
+        return 0
+    }
+    if decoded["name"] != c["name"] {
+        io.println("FAIL 03: name mismatch")
+        return 0
+    }
+    if decoded["description"] != c["description"] {
+        io.println("FAIL 03: description mismatch")
+        return 0
+    }
+    if decoded["parameters"] != c["parameters"] {
+        io.println("FAIL 03: parameters mismatch")
+        return 0
+    }
+    if decoded["metadata"] != c["metadata"] {
+        io.println("FAIL 03: metadata mismatch")
+        return 0
+    }
+    if bytes_eq(decoded["capability_id"], c["capability_id"]) != 1 {
+        io.println("FAIL 03: capability_id mismatch")
+        return 0
+    }
+    // decoded must validate
+    if capability_validate(decoded) != 1 {
+        io.println("FAIL 03: decoded capability failed validation")
+        return 0
+    }
+    // re-encode -> same bytes
+    let reenc = capability_encode(decoded)
+    if bytes_eq(enc, reenc) != 1 {
+        io.println("FAIL 03: re-encode produced different bytes")
+        return 0
+    }
+    io.println("PASS 03: Decode / Encode Roundtrip")
+    return 1
+}
+
+// Gate 04: Field Tampering Detection
+fn gate_04() -> int {
+    let c = capability_create("tamper_cap", "Tamper test", "{}", "meta")
+    // tamper name -> validation fails
+    let t1 = capability_create("tamper_cap", "Tamper test", "{}", "meta")
+    t1["name"] = "tampered_name"
+    if capability_validate(t1) != 0 {
+        io.println("FAIL 04: tampered name passed validation")
+        return 0
+    }
+    // tamper parameters -> validation fails
+    let t2 = capability_create("tamper_cap", "Tamper test", "{}", "meta")
+    t2["parameters"] = "{tampered:true}"
+    if capability_validate(t2) != 0 {
+        io.println("FAIL 04: tampered parameters passed validation")
+        return 0
+    }
+    // tamper capability_id -> validation fails
+    let t3 = capability_create("tamper_cap", "Tamper test", "{}", "meta")
+    t3["capability_id"][0] = t3["capability_id"][0] ^ 0xFF
+    if capability_validate(t3) != 0 {
+        io.println("FAIL 04: tampered capability_id passed validation")
+        return 0
+    }
+    io.println("PASS 04: Field Tampering Detection")
+    return 1
+}
+
+// Gate 05: Version Binding
+fn gate_05() -> int {
+    let c = capability_create("ver_cap", "Version test", "{}", "")
+    // version 1 validates
+    if capability_validate(c) != 1 {
+        io.println("FAIL 05: valid version failed validation")
+        return 0
+    }
+    // different version -> different ID
+    let id_v1 = capability_compute_id(1, "ver_cap", "Version test", "{}")
+    let id_v2 = capability_compute_id(2, "ver_cap", "Version test", "{}")
+    if bytes_eq(id_v1, id_v2) == 1 {
+        io.println("FAIL 05: different versions produced same ID")
+        return 0
+    }
+    // wrong version -> validation fails
+    let c2 = capability_create("ver_cap", "Version test", "{}", "")
+    c2["version"] = 2
+    if capability_validate(c2) != 0 {
+        io.println("FAIL 05: wrong version passed validation")
+        return 0
+    }
+    io.println("PASS 05: Version Binding")
+    return 1
+}
+
+// Gate 06: Parameter Binding
+fn gate_06() -> int {
+    let c1 = capability_create("param_cap", "Param test", "{a:int}", "")
+    let c2 = capability_create("param_cap", "Param test", "{b:string}", "")
+    // same name/desc but different parameters -> different ID
+    if bytes_eq(c1["capability_id"], c2["capability_id"]) == 1 {
+        io.println("FAIL 06: different parameters produced same ID")
+        return 0
+    }
+    // empty parameters is valid
+    let c3 = capability_create("param_cap", "Param test", "", "")
+    if capability_validate(c3) != 1 {
+        io.println("FAIL 06: empty parameters failed validation")
+        return 0
+    }
+    io.println("PASS 06: Parameter Binding")
+    return 1
+}
+
+// Gate 07: Capability Equality
+fn gate_07() -> int {
+    let c1 = capability_create("eq_cap", "Equality test", "{}", "meta1")
+    let c2 = capability_create("eq_cap", "Equality test", "{}", "meta2")
+    // same capability definition -> equal (metadata doesn't affect ID)
+    if capability_equals(c1, c2) != 1 {
+        io.println("FAIL 07: same capability not equal")
+        return 0
+    }
+    // different capability -> not equal
+    let c3 = capability_create("other_cap", "Other", "{}", "")
+    if capability_equals(c1, c3) != 0 {
+        io.println("FAIL 07: different capability considered equal")
+        return 0
+    }
+    io.println("PASS 07: Capability Equality")
+    return 1
+}
+
+// Gate 08: Capability Set Add
+fn gate_08() -> int {
+    let set = capability_set_create()
+    let c1 = capability_create("set_cap_1", "Set test 1", "{}", "")
+    let c2 = capability_create("set_cap_2", "Set test 2", "{}", "")
+    let set2 = capability_set_add(set, c1["capability_id"])
+    if arrays.length(set2) != 32 {
+        io.println("FAIL 08: add did not add 32 bytes")
+        return 0
+    }
+    let set3 = capability_set_add(set2, c2["capability_id"])
+    if arrays.length(set3) != 64 {
+        io.println("FAIL 08: second add did not add 32 bytes")
+        return 0
+    }
+    io.println("PASS 08: Capability Set Add")
+    return 1
+}
+
+// Gate 09: Capability Set Remove
+fn gate_09() -> int {
+    let set = capability_set_create()
+    let c1 = capability_create("rm_cap_1", "Remove test 1", "{}", "")
+    let c2 = capability_create("rm_cap_2", "Remove test 2", "{}", "")
+    let set2 = capability_set_add(set, c1["capability_id"])
+    let set3 = capability_set_add(set2, c2["capability_id"])
+    let set4 = capability_set_remove(set3, c1["capability_id"])
+    if arrays.length(set4) != 32 {
+        io.println("FAIL 09: remove did not remove 32 bytes")
+        return 0
+    }
+    if capability_set_contains(set4, c1["capability_id"]) != 0 {
+        io.println("FAIL 09: removed capability still in set")
+        return 0
+    }
+    if capability_set_contains(set4, c2["capability_id"]) != 1 {
+        io.println("FAIL 09: remaining capability not in set")
+        return 0
+    }
+    io.println("PASS 09: Capability Set Remove")
+    return 1
+}
+
+// Gate 10: Capability Set Membership
+fn gate_10() -> int {
+    let set = capability_set_create()
+    let c1 = capability_create("mem_cap_1", "Membership test 1", "{}", "")
+    let c2 = capability_create("mem_cap_2", "Membership test 2", "{}", "")
+    // empty set contains nothing
+    if capability_set_contains(set, c1["capability_id"]) != 0 {
+        io.println("FAIL 10: empty set contains capability")
+        return 0
+    }
+    let set2 = capability_set_add(set, c1["capability_id"])
+    if capability_set_contains(set2, c1["capability_id"]) != 1 {
+        io.println("FAIL 10: added capability not found")
+        return 0
+    }
+    if capability_set_contains(set2, c2["capability_id"]) != 0 {
+        io.println("FAIL 10: non-added capability found")
+        return 0
+    }
+    io.println("PASS 10: Capability Set Membership")
+    return 1
+}
+
+// Gate 11: Duplicate Handling
+fn gate_11() -> int {
+    let set = capability_set_create()
+    let c1 = capability_create("dup_cap", "Duplicate test", "{}", "")
+    let set2 = capability_set_add(set, c1["capability_id"])
+    let set3 = capability_set_add(set2, c1["capability_id"])
+    // duplicate add should not increase size
+    if arrays.length(set3) != 32 {
+        io.println("FAIL 11: duplicate add increased set size")
+        return 0
+    }
+    io.println("PASS 11: Duplicate Handling")
+    return 1
+}
+
+// Gate 12: Deterministic Set Encoding
+fn gate_12() -> int {
+    let c1 = capability_create("aaa_cap", "First", "{}", "")
+    let c2 = capability_create("bbb_cap", "Second", "{}", "")
+    let c3 = capability_create("ccc_cap", "Third", "{}", "")
+    // add in different orders
+    let set_a = capability_set_create()
+    set_a = capability_set_add(set_a, c1["capability_id"])
+    set_a = capability_set_add(set_a, c2["capability_id"])
+    set_a = capability_set_add(set_a, c3["capability_id"])
+    let set_b = capability_set_create()
+    set_b = capability_set_add(set_b, c3["capability_id"])
+    set_b = capability_set_add(set_b, c1["capability_id"])
+    set_b = capability_set_add(set_b, c2["capability_id"])
+    let enc_a = capability_set_encode(set_a)
+    let enc_b = capability_set_encode(set_b)
+    // different add order but same set -> same encoding (sorted)
+    if bytes_eq(enc_a, enc_b) != 1 {
+        io.println("FAIL 12: different add order produced different encoding")
+        return 0
+    }
+    // decode roundtrip
+    let decoded = capability_set_decode(enc_a)
+    if arrays.length(decoded) != 96 {
+        io.println("FAIL 12: decode did not restore 3 capabilities")
+        return 0
+    }
+    if capability_set_contains(decoded, c1["capability_id"]) != 1 {
+        io.println("FAIL 12: decoded set missing c1")
+        return 0
+    }
+    io.println("PASS 12: Deterministic Set Encoding")
+    return 1
+}
+
+fn main() -> int {
+    io.println("=== P0-15.21 Capability Test Gates ===")
+    io.println("")
+    let passed = 0
+    let total = 12
+    if gate_01() == 1 { passed = passed + 1 }
+    if gate_02() == 1 { passed = passed + 1 }
+    if gate_03() == 1 { passed = passed + 1 }
+    if gate_04() == 1 { passed = passed + 1 }
+    if gate_05() == 1 { passed = passed + 1 }
+    if gate_06() == 1 { passed = passed + 1 }
+    if gate_07() == 1 { passed = passed + 1 }
+    if gate_08() == 1 { passed = passed + 1 }
+    if gate_09() == 1 { passed = passed + 1 }
+    if gate_10() == 1 { passed = passed + 1 }
+    if gate_11() == 1 { passed = passed + 1 }
+    if gate_12() == 1 { passed = passed + 1 }
+    io.println("")
+    io.println("=== Results: " + convert.toString(passed) + "/" + convert.toString(total) + " gates passed ===")
+    if passed == total {
+        io.println("PASS")
+        return 0
+    } else {
+        io.println("FAIL")
+        return 1
+    }
+}
+
+main()

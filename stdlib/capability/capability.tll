@@ -1,0 +1,436 @@
+
+// ============================================================================
+// P0-15.21 TLL Agent Capability Primitive
+// Built on top of P0-15.20 Identity (SEALED) and P0-15.19 Ed25519 (SEALED).
+//
+// Capability = "what can this agent do?" (capability declaration, NOT permission)
+//
+// Canonical principle: every object has deterministic canonical material,
+// hashed to produce object ID. Encoding is field-order-fixed, length-prefixed.
+// ============================================================================
+
+from "../crypto" import sha256Bytes, hexToBytes
+
+// ---------------------------------------------------------------------------
+// Shared helpers (same pattern as identity.tll)
+// ---------------------------------------------------------------------------
+
+fn uint32_to_bytes_be(n: int) -> list {
+    let bytes = [0, 0, 0, 0]
+    bytes[0] = (n >> 24) & 0xFF
+    bytes[1] = (n >> 16) & 0xFF
+    bytes[2] = (n >> 8) & 0xFF
+    bytes[3] = n & 0xFF
+    return bytes
+}
+
+fn bytes_to_uint32_be(bytes: list, offset: int) -> int {
+    let v = (bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]
+    return v & 0xFFFFFFFF
+}
+
+fn string_to_bytes(s: string) -> list {
+    let bytes = []
+    let i = 0
+    let len = strings.length(s)
+    while i < len {
+        bytes[i] = strings.charCodeAt(s, i) & 0xFF
+        i = i + 1
+    }
+    return bytes
+}
+
+// ASCII printable lookup for bytes_to_string (TLL has no fromCharCode)
+fn ascii_lookup(c: int) -> string {
+    if c == 32 { return " " }
+    if c == 33 { return "!" }
+    if c == 35 { return "#" }
+    if c == 36 { return "$" }
+    if c == 37 { return "%" }
+    if c == 38 { return "&" }
+    if c == 39 { return "'" }
+    if c == 40 { return "(" }
+    if c == 41 { return ")" }
+    if c == 42 { return "*" }
+    if c == 43 { return "+" }
+    if c == 44 { return "," }
+    if c == 45 { return "-" }
+    if c == 46 { return "." }
+    if c == 47 { return "/" }
+    if c >= 48 && c <= 57 {
+        let digits = "0123456789"
+        return strings.charAt(digits, c - 48)
+    }
+    if c == 58 { return ":" }
+    if c == 59 { return ";" }
+    if c == 60 { return "<" }
+    if c == 61 { return "=" }
+    if c == 62 { return ">" }
+    if c == 63 { return "?" }
+    if c == 64 { return "@" }
+    if c >= 65 && c <= 90 {
+        let upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        return strings.charAt(upper, c - 65)
+    }
+    if c == 91 { return "[" }
+    if c == 93 { return "]" }
+    if c == 94 { return "^" }
+    if c == 95 { return "_" }
+    if c == 96 { return "`" }
+    if c >= 97 && c <= 122 {
+        let lower = "abcdefghijklmnopqrstuvwxyz"
+        return strings.charAt(lower, c - 97)
+    }
+    if c == 123 { return "{" }
+    if c == 124 { return "|" }
+    if c == 125 { return "}" }
+    if c == 126 { return "~" }
+    if c == 10 { return "\n" }
+    if c == 9 { return "\t" }
+    return "?"
+}
+
+fn bytes_to_string(bytes: list) -> string {
+    let s = ""
+    let i = 0
+    let len = arrays.length(bytes)
+    while i < len {
+        s = s + ascii_lookup(bytes[i])
+        i = i + 1
+    }
+    return s
+}
+
+fn bytes_append(dst: list, src: list) -> list {
+    let i = 0
+    let len = arrays.length(src)
+    while i < len {
+        dst[arrays.length(dst)] = src[i]
+        i = i + 1
+    }
+    return dst
+}
+
+fn bytes_equal(a: list, b: list) -> int {
+    if arrays.length(a) != arrays.length(b) { return 0 }
+    let i = 0
+    while i < arrays.length(a) {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+// ---------------------------------------------------------------------------
+// Capability constants
+// ---------------------------------------------------------------------------
+
+fn CAPABILITY_VERSION() -> int { return 1 }
+fn CAPABILITY_ID_SIZE() -> int { return 32 }
+
+// ---------------------------------------------------------------------------
+// Canonical material for capability_id
+// version(4) || name_len(4) || name || desc_len(4) || desc ||
+// params_len(4) || params
+// NOTE: metadata is NOT part of capability_id (metadata is optional annotation)
+// ---------------------------------------------------------------------------
+
+fn capability_build_canonical_material(version: int, name: string, description: string, parameters: string) -> list {
+    let material = []
+    bytes_append(material, uint32_to_bytes_be(version))
+
+    let nameBytes = string_to_bytes(name)
+    bytes_append(material, uint32_to_bytes_be(arrays.length(nameBytes)))
+    bytes_append(material, nameBytes)
+
+    let descBytes = string_to_bytes(description)
+    bytes_append(material, uint32_to_bytes_be(arrays.length(descBytes)))
+    bytes_append(material, descBytes)
+
+    let paramsBytes = string_to_bytes(parameters)
+    bytes_append(material, uint32_to_bytes_be(arrays.length(paramsBytes)))
+    bytes_append(material, paramsBytes)
+
+    return material
+}
+
+fn capability_compute_id(version: int, name: string, description: string, parameters: string) -> list {
+    let material = capability_build_canonical_material(version, name, description, parameters)
+    let hex = sha256Bytes(material)
+    return hexToBytes(hex)
+}
+
+// ---------------------------------------------------------------------------
+// capability_create(name, description, parameters, metadata)
+// returns capability map with capability_id
+// ---------------------------------------------------------------------------
+
+fn capability_create(name: string, description: string, parameters: string, metadata: string) -> map {
+    let version = CAPABILITY_VERSION()
+    let capability_id = capability_compute_id(version, name, description, parameters)
+
+    return {
+        "version": version,
+        "name": name,
+        "description": description,
+        "parameters": parameters,
+        "capability_id": capability_id,
+        "metadata": metadata
+    }
+}
+
+// ---------------------------------------------------------------------------
+// capability_validate(capability)
+// checks version, field presence, capability_id integrity
+// ---------------------------------------------------------------------------
+
+fn capability_validate(cap: map) -> int {
+    if cap["version"] != CAPABILITY_VERSION() { return 0 }
+
+    // name must be non-empty
+    if strings.length(cap["name"]) == 0 { return 0 }
+
+    // capability_id length
+    if arrays.length(cap["capability_id"]) != CAPABILITY_ID_SIZE() { return 0 }
+
+    // recompute and verify
+    let expected = capability_compute_id(
+        cap["version"],
+        cap["name"],
+        cap["description"],
+        cap["parameters"]
+    )
+    if bytes_equal(expected, cap["capability_id"]) != 1 { return 0 }
+
+    return 1
+}
+
+// ---------------------------------------------------------------------------
+// capability_encode(capability)
+// format: version(4) || name_len(4) || name || desc_len(4) || desc ||
+//         params_len(4) || params || meta_len(4) || meta || capability_id(32)
+// ---------------------------------------------------------------------------
+
+fn capability_encode(cap: map) -> list {
+    let encoded = []
+    bytes_append(encoded, uint32_to_bytes_be(cap["version"]))
+
+    let nameBytes = string_to_bytes(cap["name"])
+    bytes_append(encoded, uint32_to_bytes_be(arrays.length(nameBytes)))
+    bytes_append(encoded, nameBytes)
+
+    let descBytes = string_to_bytes(cap["description"])
+    bytes_append(encoded, uint32_to_bytes_be(arrays.length(descBytes)))
+    bytes_append(encoded, descBytes)
+
+    let paramsBytes = string_to_bytes(cap["parameters"])
+    bytes_append(encoded, uint32_to_bytes_be(arrays.length(paramsBytes)))
+    bytes_append(encoded, paramsBytes)
+
+    let metaBytes = string_to_bytes(cap["metadata"])
+    bytes_append(encoded, uint32_to_bytes_be(arrays.length(metaBytes)))
+    bytes_append(encoded, metaBytes)
+
+    bytes_append(encoded, cap["capability_id"])
+
+    return encoded
+}
+
+// ---------------------------------------------------------------------------
+// capability_decode(encoded)
+// returns capability map, or empty map on error
+// ---------------------------------------------------------------------------
+
+fn capability_decode(encoded: list) -> map {
+    let total = arrays.length(encoded)
+    // minimum: 4 + 4 + 0 + 4 + 0 + 4 + 0 + 4 + 0 + 32 = 56
+    if total < 56 { return {} }
+
+    let offset = 0
+    let version = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+
+    let nameLen = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+    if offset + nameLen > total - 44 { return {} }
+    let nameBytes = []
+    let i = 0
+    while i < nameLen { nameBytes[i] = encoded[offset + i]; i = i + 1 }
+    let name = bytes_to_string(nameBytes)
+    offset = offset + nameLen
+
+    let descLen = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+    if offset + descLen > total - 40 { return {} }
+    let descBytes = []
+    i = 0
+    while i < descLen { descBytes[i] = encoded[offset + i]; i = i + 1 }
+    let description = bytes_to_string(descBytes)
+    offset = offset + descLen
+
+    let paramsLen = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+    if offset + paramsLen > total - 36 { return {} }
+    let paramsBytes = []
+    i = 0
+    while i < paramsLen { paramsBytes[i] = encoded[offset + i]; i = i + 1 }
+    let parameters = bytes_to_string(paramsBytes)
+    offset = offset + paramsLen
+
+    let metaLen = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+    if offset + metaLen > total - 32 { return {} }
+    let metaBytes = []
+    i = 0
+    while i < metaLen { metaBytes[i] = encoded[offset + i]; i = i + 1 }
+    let metadata = bytes_to_string(metaBytes)
+    offset = offset + metaLen
+
+    if offset + 32 != total { return {} }
+    let capability_id = []
+    i = 0
+    while i < 32 { capability_id[i] = encoded[offset + i]; i = i + 1 }
+
+    return {
+        "version": version,
+        "name": name,
+        "description": description,
+        "parameters": parameters,
+        "capability_id": capability_id,
+        "metadata": metadata
+    }
+}
+
+// ---------------------------------------------------------------------------
+// capability_equals(a, b)
+// compare by capability_id
+// ---------------------------------------------------------------------------
+
+fn capability_equals(a: map, b: map) -> int {
+    return bytes_equal(a["capability_id"], b["capability_id"])
+}
+
+// ===========================================================================
+// Capability Set
+// A set of capability_ids (32 bytes each), sorted for deterministic encoding
+// ===========================================================================
+
+// Create empty set
+fn capability_set_create() -> list {
+    return []
+}
+
+// Check if set contains capability_id
+fn capability_set_contains(set: list, capability_id: list) -> int {
+    let count = arrays.length(set) / 32
+    let i = 0
+    while i < count {
+        let match = 1
+        let j = 0
+        while j < 32 {
+            if set[i * 32 + j] != capability_id[j] { match = 0; j = 32 }
+            j = j + 1
+        }
+        if match == 1 { return 1 }
+        i = i + 1
+    }
+    return 0
+}
+
+// Add capability_id to set (no duplicates), returns new set
+fn capability_set_add(set: list, capability_id: list) -> list {
+    if capability_set_contains(set, capability_id) == 1 { return set }
+    let newSet = []
+    bytes_append(newSet, set)
+    bytes_append(newSet, capability_id)
+    return newSet
+}
+
+// Remove capability_id from set, returns new set
+fn capability_set_remove(set: list, capability_id: list) -> list {
+    let newSet = []
+    let count = arrays.length(set) / 32
+    let i = 0
+    while i < count {
+        let match = 1
+        let j = 0
+        while j < 32 {
+            if set[i * 32 + j] != capability_id[j] { match = 0; j = 32 }
+            j = j + 1
+        }
+        if match == 0 {
+            let k = 0
+            while k < 32 {
+                newSet[arrays.length(newSet)] = set[i * 32 + k]
+                k = k + 1
+            }
+        }
+        i = i + 1
+    }
+    return newSet
+}
+
+// Sort capability_ids lexicographically (for deterministic encoding)
+fn capability_set_sort(set: list) -> list {
+    let count = arrays.length(set) / 32
+    if count <= 1 { return set }
+    // bubble sort
+    let sorted = []
+    bytes_append(sorted, set)
+    let i = 0
+    while i < count - 1 {
+        let j = 0
+        while j < count - 1 - i {
+            // compare sorted[j] and sorted[j+1]
+            let a_idx = j * 32
+            let b_idx = (j + 1) * 32
+            let a_less = 0
+            let found = 0
+            let k = 0
+            while k < 32 && found == 0 {
+                if sorted[a_idx + k] < sorted[b_idx + k] { a_less = 1; found = 1 }
+                if sorted[a_idx + k] > sorted[b_idx + k] { a_less = 0; found = 1 }
+                k = k + 1
+            }
+            if a_less == 0 {
+                // swap
+                let tmp = 0
+                let m = 0
+                while m < 32 {
+                    tmp = sorted[a_idx + m]
+                    sorted[a_idx + m] = sorted[b_idx + m]
+                    sorted[b_idx + m] = tmp
+                    m = m + 1
+                }
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return sorted
+}
+
+// Encode set: count(4 BE) + sorted capability_ids (32 bytes each)
+fn capability_set_encode(set: list) -> list {
+    let sorted = capability_set_sort(set)
+    let encoded = []
+    let count = arrays.length(sorted) / 32
+    bytes_append(encoded, uint32_to_bytes_be(count))
+    bytes_append(encoded, sorted)
+    return encoded
+}
+
+// Decode set
+fn capability_set_decode(encoded: list) -> list {
+    let total = arrays.length(encoded)
+    if total < 4 { return [] }
+    let count = bytes_to_uint32_be(encoded, 0)
+    if total != 4 + count * 32 { return [] }
+    let set = []
+    let i = 0
+    while i < count * 32 {
+        set[i] = encoded[4 + i]
+        i = i + 1
+    }
+    return set
+}
