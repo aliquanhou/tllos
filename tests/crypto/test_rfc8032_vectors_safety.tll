@@ -1,0 +1,175 @@
+// P0-15.19.5 RFC8032 Standard Vectors + Verify Safety Gate
+// Resource-safe: fixed test vectors, bounded
+from "../../stdlib/crypto/ed25519" import hex_to_bytes, bytes_to_hex, generate_keypair, sign, verify
+
+io.println("=== P0-15.19.5 RFC8032 Standard Vectors + Verify Safety Gate ===")
+io.println("")
+
+let totalPass = 0
+let totalFail = 0
+
+fn test_vector(name: string, seedHex: string, pubKeyHex: string, msgHex: string, sigHex: string) -> int {
+    io.println("--- " + name + " ---")
+    let seed = hex_to_bytes(seedHex)
+    let expectedPub = hex_to_bytes(pubKeyHex)
+    let message = hex_to_bytes(msgHex)
+    let expectedSig = hex_to_bytes(sigHex)
+
+    let kp = generate_keypair(seed)
+    let pubMatch = 1
+    let pi = 0
+    while pi < 32 {
+        if kp.publicKey[pi] != expectedPub[pi] { pubMatch = 0 }
+        pi = pi + 1
+    }
+    if pubMatch == 1 { io.println("  publicKey: PASS") } else {
+        io.println("  publicKey: FAIL")
+        io.println("    expected: " + pubKeyHex)
+        io.println("    actual:   " + bytes_to_hex(kp.publicKey))
+    }
+
+    let sig = sign(kp.privateKey, message)
+    let sigMatch = 1
+    let si = 0
+    while si < 64 {
+        if sig[si] != expectedSig[si] { sigMatch = 0 }
+        si = si + 1
+    }
+    if sigMatch == 1 { io.println("  signature: PASS") } else {
+        io.println("  signature: FAIL")
+        io.println("    expected: " + sigHex)
+        io.println("    actual:   " + bytes_to_hex(sig))
+    }
+
+    let v = verify(kp.publicKey, message, sig)
+    if v == 1 { io.println("  verify: PASS") } else { io.println("  verify: FAIL") }
+
+    let result = pubMatch & sigMatch & v
+    if result == 1 {
+        io.println("  RESULT: PASS")
+        totalPass = totalPass + 1
+    } else {
+        io.println("  RESULT: FAIL")
+        totalFail = totalFail + 1
+    }
+    io.println("")
+    return result
+}
+
+// RFC 8032 Test Vector #1
+test_vector("RFC8032 TEST 1 (empty message)",
+    "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60",
+    "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+    "",
+    "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b")
+
+// RFC 8032 Test Vector #2
+test_vector("RFC8032 TEST 2 (1-byte message 0x72)",
+    "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb",
+    "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c",
+    "72",
+    "92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00")
+
+// RFC 8032 Test Vector #3
+test_vector("RFC8032 TEST 3 (2-byte message 0xaf82)",
+    "c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7",
+    "fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025",
+    "af82",
+    "6291d657deec24024827e69c3abe01a30ce548a284743a445e3680d7db5ac3ac18ff9b538d16f290ae67f760984dc6594a7c15e9716ed28dc027beceea1ec40a")
+
+io.println("=== Verify Safety Gate ===")
+io.println("")
+
+// Use Test 1 keypair for safety gate
+let seed1 = hex_to_bytes("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+let kp1 = generate_keypair(seed1)
+let msg1 = []
+let sig1 = sign(kp1.privateKey, msg1)
+
+fn safety_test(name: string, shouldPass: int, result: int) {
+    let ok = 0
+    if shouldPass == 1 && result == 1 { ok = 1 }
+    if shouldPass == 0 && result == 0 { ok = 1 }
+    if ok == 1 {
+        io.println("[PASS] " + name)
+        totalPass = totalPass + 1
+    } else {
+        io.println("[FAIL] " + name + " (expected verify=" + convert.toString(shouldPass) + ", got=" + convert.toString(result) + ")")
+        totalFail = totalFail + 1
+    }
+}
+
+// 1. Valid signature
+safety_test("1. valid signature", 1, verify(kp1.publicKey, msg1, sig1))
+
+// 2. Modified message
+let tamperedMsg = [1]
+safety_test("2. modified message rejected", 0, verify(kp1.publicKey, tamperedMsg, sig1))
+
+// 3. Modified signature R (first 32 bytes)
+let tamperedSigR = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+let ti = 0
+while ti < 64 {
+    tamperedSigR[ti] = sig1[ti]
+    ti = ti + 1
+}
+tamperedSigR[0] = sig1[0] ^ 1
+safety_test("3. modified signature R rejected", 0, verify(kp1.publicKey, msg1, tamperedSigR))
+
+// 4. Modified signature S (last 32 bytes)
+let tamperedSigS = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+let ti2 = 0
+while ti2 < 64 {
+    tamperedSigS[ti2] = sig1[ti2]
+    ti2 = ti2 + 1
+}
+tamperedSigS[63] = sig1[63] ^ 1
+safety_test("4. modified signature S rejected", 0, verify(kp1.publicKey, msg1, tamperedSigS))
+
+// 5. Modified public key
+let wrongPub = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+let wi = 0
+while wi < 32 {
+    wrongPub[wi] = kp1.publicKey[wi]
+    wi = wi + 1
+}
+wrongPub[0] = kp1.publicKey[0] ^ 1
+safety_test("5. modified public key rejected", 0, verify(wrongPub, msg1, sig1))
+
+// 6. Signature length error
+let shortSig = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+safety_test("6. signature length error rejected", 0, verify(kp1.publicKey, msg1, shortSig))
+
+// 7. Public key length error
+let shortPub = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+safety_test("7. public key length error rejected", 0, verify(shortPub, msg1, sig1))
+
+// 8. Empty message (already tested, but explicit)
+safety_test("8. empty message valid", 1, verify(kp1.publicKey, [], sig1))
+
+// 9. Non-empty message
+let msg9 = [72, 101, 108, 108, 111]
+let sig9 = sign(kp1.privateKey, msg9)
+safety_test("9. non-empty message valid", 1, verify(kp1.publicKey, msg9, sig9))
+
+// 10. Deterministic signature
+let sig10a = sign(kp1.privateKey, msg9)
+let sig10b = sign(kp1.privateKey, msg9)
+let detMatch = 1
+let di = 0
+while di < 64 {
+    if sig10a[di] != sig10b[di] { detMatch = 0 }
+    di = di + 1
+}
+safety_test("10. deterministic signature", 1, detMatch)
+
+io.println("")
+io.println("=== Summary ===")
+io.println("PASS: " + convert.toString(totalPass))
+io.println("FAIL: " + convert.toString(totalFail))
+io.println("Total: " + convert.toString(totalPass + totalFail))
+if totalFail == 0 {
+    io.println("RESULT: ALL TESTS PASS")
+} else {
+    io.println("RESULT: FAILURES DETECTED")
+}

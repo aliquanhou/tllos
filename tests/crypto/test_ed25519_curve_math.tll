@@ -1,0 +1,101 @@
+// P0-15.19.5: Curve Math Gate (simplified)
+// Uses actual implementation functions, not hardcoded potentially-stale constants
+from "../../stdlib/crypto/ed25519_field" import fe_from_int, fe_mul, fe_to_bytes, fe_one, fe_sq, fe_add, fe_neg, fe_sub
+from "../../stdlib/crypto/ed25519_curve" import point_base, point_add, point_double, point_scalarmul, point_eq, point_identity
+
+io.println("=== P0-15.19.5: Curve Math Gate ===")
+io.println("")
+
+let pass = 0
+let fail = 0
+
+fn gate(name: string, ok: int) {
+    if ok == 1 {
+        io.println("[PASS] " + name)
+        pass = pass + 1
+    } else {
+        io.println("[FAIL] " + name)
+        fail = fail + 1
+    }
+}
+
+// Gate 1: 5*y == 4 mod p (base point y = 4/5)
+io.println("--- Gate 1: 5*y == 4 mod p ---")
+let B = point_base()
+let five = fe_from_int(5)
+let four = fe_from_int(4)
+let fiveY = fe_mul(five, B[1])
+let fiveYBytes = fe_to_bytes(fiveY)
+let fourBytes = fe_to_bytes(four)
+let fiveYMatch = 1
+let i = 0
+while i < 32 {
+    if fiveYBytes[i] != fourBytes[i] { fiveYMatch = 0 }
+    i = i + 1
+}
+gate("5*y == 4", fiveYMatch)
+
+// Gate 2: Base point is on curve: -x^2 + y^2 == 1 + d*x^2*y^2
+// d is computed the same way as in point_add
+io.println("--- Gate 2: Base point on curve ---")
+let d = fe_mul(fe_neg(fe_from_int(121665)), fe_invert(fe_from_int(121666)))
+let x2 = fe_sq(B[0])
+let y2 = fe_sq(B[1])
+let lhs = fe_add(fe_neg(x2), y2)
+let rhs = fe_add(fe_one(), fe_mul(d, fe_mul(x2, y2)))
+let lhsBytes = fe_to_bytes(lhs)
+let rhsBytes = fe_to_bytes(rhs)
+let curveMatch = 1
+let j = 0
+while j < 32 {
+    if lhsBytes[j] != rhsBytes[j] { curveMatch = 0 }
+    j = j + 1
+}
+gate("base point on curve", curveMatch)
+
+// Gate 3: point_add identity: B + I == B
+io.println("--- Gate 3: B + I == B ---")
+let I = point_identity()
+let BplusI = point_add(B, I)
+gate("B + I == B", point_eq(BplusI, B))
+
+// Gate 4: point_add identity: I + B == B
+io.println("--- Gate 4: I + B == B ---")
+let IplusB = point_add(I, B)
+gate("I + B == B", point_eq(IplusB, B))
+
+// Gate 5: point_double: 2B == B + B
+io.println("--- Gate 5: 2B == B + B ---")
+let twoB = point_double(B)
+let BplusB = point_add(B, B)
+gate("2B == B + B", point_eq(twoB, BplusB))
+
+// Gate 6: scalar_mul: 1*B == B
+io.println("--- Gate 6: 1*B == B ---")
+let oneBytes = [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+let oneB = point_scalarmul(B, oneBytes)
+gate("1*B == B", point_eq(oneB, B))
+
+// Gate 7: scalar_mul: 0*B == I
+io.println("--- Gate 7: 0*B == I ---")
+let zeroBytes = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+let zeroB = point_scalarmul(B, zeroBytes)
+gate("0*B == I", point_eq(zeroB, I))
+
+// Gate 8: 2B + B == 3B (associativity)
+io.println("--- Gate 8: (2B) + B == 3B ---")
+let threeBytes = [3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+let threeB = point_scalarmul(B, threeBytes)
+let twoBplusB = point_add(twoB, B)
+gate("(2B) + B == 3B", point_eq(twoBplusB, threeB))
+
+io.println("")
+io.println("=== Summary ===")
+io.println("PASS: " + convert.toString(pass))
+io.println("FAIL: " + convert.toString(fail))
+io.println("Total: " + convert.toString(pass + fail))
+if fail == 0 {
+    io.println("RESULT: ALL CURVE MATH GATES PASS")
+} else {
+    io.println("RESULT: FAILURES DETECTED")
+}

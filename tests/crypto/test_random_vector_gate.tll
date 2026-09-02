@@ -1,0 +1,119 @@
+// P0-15.19.3 Random Vector Gate (Level 4, bounded 10 inputs)
+// Resource-safe: fixed 10 test vectors, exactly 512 iterations per reduction
+from "../../stdlib/crypto/ed25519_scalar" import scalar_reduce_512, scalar_to_bytes
+
+io.println("=== P0-15.19.3 Random Vector Gate (10 bounded inputs) ===")
+io.println("")
+
+fn hex_to_limbs16(hex: string) -> list {
+    let h = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    let i = 0
+    while i < 16 {
+        let b0 = 0
+        let b1 = 0
+        let b2 = 0
+        let b3 = 0
+        let pos = i * 8
+        if pos + 1 < strings.length(hex) {
+            b0 = (hex_val(strings.charAt(hex, pos)) << 4) | hex_val(strings.charAt(hex, pos+1))
+        }
+        if pos + 3 < strings.length(hex) {
+            b1 = (hex_val(strings.charAt(hex, pos+2)) << 4) | hex_val(strings.charAt(hex, pos+3))
+        }
+        if pos + 5 < strings.length(hex) {
+            b2 = (hex_val(strings.charAt(hex, pos+4)) << 4) | hex_val(strings.charAt(hex, pos+5))
+        }
+        if pos + 7 < strings.length(hex) {
+            b3 = (hex_val(strings.charAt(hex, pos+6)) << 4) | hex_val(strings.charAt(hex, pos+7))
+        }
+        h[i] = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+        i = i + 1
+    }
+    return h
+}
+
+fn hex_val(c: string) -> int {
+    if c == "0" { return 0 }
+    if c == "1" { return 1 }
+    if c == "2" { return 2 }
+    if c == "3" { return 3 }
+    if c == "4" { return 4 }
+    if c == "5" { return 5 }
+    if c == "6" { return 6 }
+    if c == "7" { return 7 }
+    if c == "8" { return 8 }
+    if c == "9" { return 9 }
+    if c == "a" { return 10 }
+    if c == "b" { return 11 }
+    if c == "c" { return 12 }
+    if c == "d" { return 13 }
+    if c == "e" { return 14 }
+    if c == "f" { return 15 }
+    return 0
+}
+
+fn limbs_to_hex(s: list, len: int) -> string {
+    let hex = ""
+    let i = 0
+    while i < len {
+        let v = s[i] & 0xFF
+        let hi = v >> 4
+        let lo = v & 0xF
+        let hichar = "0"
+        let lochar = "0"
+        if hi < 10 { hichar = convert.toString(hi) } else { hichar = strings.charAt("abcdef", hi-10) }
+        if lo < 10 { lochar = convert.toString(lo) } else { lochar = strings.charAt("abcdef", lo-10) }
+        hex = hex + hichar + lochar
+        i = i + 1
+    }
+    return hex
+}
+
+fn test_vector(name: string, inputHex: string, expectedHex: string) -> int {
+    let input = hex_to_limbs16(inputHex)
+    let result = scalar_reduce_512(input)
+    let resultBytes = scalar_to_bytes(result)
+    let actualHex = limbs_to_hex(resultBytes, 32)
+    let match = 1
+    let i = 0
+    while i < 64 {
+        if strings.charAt(actualHex, i) != strings.charAt(expectedHex, i) {
+            match = 0
+        }
+        i = i + 1
+    }
+    if match == 1 {
+        io.println("[PASS] " + name)
+    } else {
+        io.println("[FAIL] " + name)
+        io.println("  expected: " + expectedHex)
+        io.println("  actual:   " + actualHex)
+    }
+    return match
+}
+
+let pass = 0
+let fail = 0
+
+// 10 bounded random vectors with independent Oracle values
+if test_vector("Random #1", "e5087388ebbf3f5f02c125c226f10611821cfbb66faf95e138e113784d97bd6f77bf3e658dc3822baa80181f7fedc76657faf9a64b74c88060d37141ca8dc77a", "10bf8de5001ca24d55746491d9000f37d48b9d822fd883cb9e844659e39ccc0c") == 1 { pass = pass + 1 } else { fail = fail + 1 }
+if test_vector("Random #2", "b7b0e6e2a6959541911db3f21981273d917323a35088d0a77f5f259d9e6627a65ebeb2ac40fd520eadb816b78f02deb71d233a2f71d38e0cb76b4e304d638afb", "63eced89cb62feb9544abba1748df4ba355384a4bb78da7403eceb3bfaae7b01") == 1 { pass = pass + 1 } else { fail = fail + 1 }
+if test_vector("Random #3", "36b4600c7a2d82a82539738b6c830f3fa4452dbcf1df7aadb9bea172bde7ddd29a28881adb4c3fa12c32b8b1e0716b0a6441a1262ea8e5d575ea127f90ad03e1", "c59f014112a654aa0c22587bacf6c635a467e4d673a3da112ab2e8d116737d0d") == 1 { pass = pass + 1 } else { fail = fail + 1 }
+if test_vector("Random #4", "086239d2380318e757f550a8dc5162b044a045e401e0283f60b83f6f911e32eaa59c9ec03d4200fc021357d2044a2e4af8c4c59b7946a81c08ed1980af23fe4e", "bc919427cf46e31490df0d3faa8ff567cd299e360aced95b7ee55d74faf7a40e") == 1 { pass = pass + 1 } else { fail = fail + 1 }
+if test_vector("Random #5", "dd8653349d808a1cf22b8ecba9c0a9741ecff5158fa2aa54d972dd21bf6a9cb450c9c9e0535dadcead7fc06f389a5648014a235cd90a8ed94a7c21f14b2579da", "930d7802fb10aab03a58eeafed084244d243ac7550aad1def7269efa1566e600") == 1 { pass = pass + 1 } else { fail = fail + 1 }
+if test_vector("Random #6", "0f6571bf3b2774fb76296668d4e2007b73ba682d211abc1b6013e49d5401f4329a9ef178c736bb8e283f28c700cb0364ee7606955f7adf9396c692875de13464", "ce068380a4ec62f8615e7144e6bbd1eb5d4e9c87136115ac2ec39f2caa1ca100") == 1 { pass = pass + 1 } else { fail = fail + 1 }
+if test_vector("Random #7", "0d7bb3a48e363929ad954f13b11399509fa47a7d680f5a29f270cead1eb1b2abcb10dc8ed6a65152501e4e5cc4e660d05699e103124c6aa24b4cf9ebd152ff5f", "5a0c6608d748babb98ed836630b9a54b3e0c8a9a7aa4265ab392a6452791ad03") == 1 { pass = pass + 1 } else { fail = fail + 1 }
+if test_vector("Random #8", "adef142f61d5816aa0f32fecfd70bd8b3933c90c4dc4c4e1fb7f03e7f9814e35fab597b0a8c4df9a2d37d4e10bd27b29c5f7a496df1c8f2a3fada66642a28b84", "a8f4b1952bffe85705aae1ae3cd39da2980cd7ad593362c815919893f6d7db06") == 1 { pass = pass + 1 } else { fail = fail + 1 }
+if test_vector("Random #9", "d168f73ac5bb52909d1b356291edfc6aa9f0bd163be5de72f43d46cf85d2fabb106264f89ec3d5753d6aca3ae6210de45b9396c9ae1e1b1804724fe2224b7cda", "666f2fe8b5a8478da725b662bd1c03fac601b9c46e3aa2be0153e9884751c608") == 1 { pass = pass + 1 } else { fail = fail + 1 }
+if test_vector("Random #10", "00235c4937a126544405613670c972ef94cdc598214f6a597e2fd8dfe4d8c0836561912130973fbda5baaf4eff2521d5c93039996259ec37ece02f133e65d0d2", "cf685d3a0060623725aa4a24d12f48b8a1f026ea8d551820e0ee553182fcfb06") == 1 { pass = pass + 1 } else { fail = fail + 1 }
+
+io.println("")
+io.println("=== Random Vector Gate Summary ===")
+io.println("PASS: " + convert.toString(pass))
+io.println("FAIL: " + convert.toString(fail))
+io.println("Total: " + convert.toString(pass + fail))
+if fail == 0 {
+    io.println("RESULT: ALL 10 RANDOM VECTORS PASS")
+} else {
+    io.println("RESULT: FAILURES DETECTED")
+}

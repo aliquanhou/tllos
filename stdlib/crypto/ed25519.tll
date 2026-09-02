@@ -1,3 +1,12 @@
+
+// ============================================================================
+// SECURITY NOTICE
+// TLL Native Ed25519 - Self-developed cryptographic implementation.
+// This is an engineering/research implementation, NOT production-grade crypto.
+// RFC 8032 test vectors pass, but this does NOT equal cryptographic audit.
+// Before production use, this implementation MUST undergo independent
+// cryptographic security audit (side-channel, memory safety, edge cases).
+// ============================================================================
 // Ed25519 Signature Scheme (RFC 8032)
 // Top-level API: generate_keypair, sign, verify
 // Uses SHA-512 for hashing (from crypto.tll)

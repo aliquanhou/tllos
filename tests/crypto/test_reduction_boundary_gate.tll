@@ -1,0 +1,199 @@
+// P0-15.19.3 Reduction Boundary Gate
+// Resource-safe: fixed 512 iterations per reduction, no random fuzz, bounded test cases
+from "../../stdlib/crypto/ed25519_scalar" import scalar_L, scalar_to_bytes, scalar_reduce_512, scalar_from_bytes
+
+io.println("=== P0-15.19.3 Scalar Reduction Boundary Gate ===")
+io.println("Algorithm: binary long division, exactly 512 iterations per reduction")
+io.println("")
+
+// Helper: hex string to 16-limb 512-bit array
+fn hex_to_limbs16(hex: string) -> list {
+    let h = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    let i = 0
+    while i < 16 {
+        let b0 = 0
+        let b1 = 0
+        let b2 = 0
+        let b3 = 0
+        let pos = i * 8
+        if pos + 1 < strings.length(hex) {
+            let c0 = strings.charAt(hex, pos)
+            let c1 = strings.charAt(hex, pos+1)
+            b0 = (hex_val(c0) << 4) | hex_val(c1)
+        }
+        if pos + 3 < strings.length(hex) {
+            let c2 = strings.charAt(hex, pos+2)
+            let c3 = strings.charAt(hex, pos+3)
+            b1 = (hex_val(c2) << 4) | hex_val(c3)
+        }
+        if pos + 5 < strings.length(hex) {
+            let c4 = strings.charAt(hex, pos+4)
+            let c5 = strings.charAt(hex, pos+5)
+            b2 = (hex_val(c4) << 4) | hex_val(c5)
+        }
+        if pos + 7 < strings.length(hex) {
+            let c6 = strings.charAt(hex, pos+6)
+            let c7 = strings.charAt(hex, pos+7)
+            b3 = (hex_val(c6) << 4) | hex_val(c7)
+        }
+        h[i] = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+        i = i + 1
+    }
+    return h
+}
+
+fn hex_val(c: string) -> int {
+    if c == "0" { return 0 }
+    if c == "1" { return 1 }
+    if c == "2" { return 2 }
+    if c == "3" { return 3 }
+    if c == "4" { return 4 }
+    if c == "5" { return 5 }
+    if c == "6" { return 6 }
+    if c == "7" { return 7 }
+    if c == "8" { return 8 }
+    if c == "9" { return 9 }
+    if c == "a" { return 10 }
+    if c == "b" { return 11 }
+    if c == "c" { return 12 }
+    if c == "d" { return 13 }
+    if c == "e" { return 14 }
+    if c == "f" { return 15 }
+    if c == "A" { return 10 }
+    if c == "B" { return 11 }
+    if c == "C" { return 12 }
+    if c == "D" { return 13 }
+    if c == "E" { return 14 }
+    if c == "F" { return 15 }
+    return 0
+}
+
+fn limbs_to_hex(s: list, len: int) -> string {
+    let hex = ""
+    let i = 0
+    while i < len {
+        let v = s[i] & 0xFF
+        let hi = v >> 4
+        let lo = v & 0xF
+        let hichar = "0"
+        let lochar = "0"
+        if hi < 10 { hichar = convert.toString(hi) } else { hichar = strings.charAt("abcdef", hi-10) }
+        if lo < 10 { lochar = convert.toString(lo) } else { lochar = strings.charAt("abcdef", lo-10) }
+        hex = hex + hichar + lochar
+        i = i + 1
+    }
+    return hex
+}
+
+fn compare_result(name: string, expectedHex: string, actual: list) -> int {
+    let actualBytes = scalar_to_bytes(actual)
+    let actualHex = limbs_to_hex(actualBytes, 32)
+    let match = 1
+    let i = 0
+    while i < 64 {
+        if strings.charAt(actualHex, i) != strings.charAt(expectedHex, i) {
+            match = 0
+        }
+        i = i + 1
+    }
+    if match == 1 {
+        io.println("[PASS] " + name)
+    } else {
+        io.println("[FAIL] " + name)
+        io.println("  expected: " + expectedHex)
+        io.println("  actual:   " + actualHex)
+    }
+    return match
+}
+
+// L as 512-bit input (limbs 0-7 = L, limbs 8-15 = 0)
+let L = scalar_L()
+let L_as_512 = [L[0],L[1],L[2],L[3],L[4],L[5],L[6],L[7],0,0,0,0,0,0,0,0]
+
+// 2L as 512-bit input
+let twoL = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+let carry2 = 0
+let ci = 0
+while ci < 8 {
+    let s2 = L[ci] * 2 + carry2
+    twoL[ci] = s2 & 0xFFFFFFFF
+    carry2 = s2 >> 32
+    ci = ci + 1
+}
+
+// L-1 as 512-bit input
+let Lminus1 = [L[0],L[1],L[2],L[3],L[4],L[5],L[6],L[7],0,0,0,0,0,0,0,0]
+Lminus1[0] = Lminus1[0] - 1
+
+// L+1 as 512-bit input
+let Lplus1 = [L[0],L[1],L[2],L[3],L[4],L[5],L[6],L[7],0,0,0,0,0,0,0,0]
+Lplus1[0] = Lplus1[0] + 1
+
+// 2L-1
+let twoLminus1 = [twoL[0],twoL[1],twoL[2],twoL[3],twoL[4],twoL[5],twoL[6],twoL[7],0,0,0,0,0,0,0,0]
+twoLminus1[0] = twoLminus1[0] - 1
+
+// 2L+1
+let twoLplus1 = [twoL[0],twoL[1],twoL[2],twoL[3],twoL[4],twoL[5],twoL[6],twoL[7],0,0,0,0,0,0,0,0]
+twoLplus1[0] = twoLplus1[0] + 1
+
+// 2^252 (limb 7 bit 28 = 1, since 252 = 7*32 + 28)
+let pow2_252 = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+pow2_252[7] = 1 << 28
+
+// 2^252 - 1
+let pow2_252_minus1 = [0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0x0FFFFFFF,0,0,0,0,0,0,0,0]
+
+// 2^256 (limb 8 = 1)
+let pow2_256 = [0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0]
+
+// 2^256 - 1
+let pow2_256_minus1 = [0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0,0,0,0,0,0,0,0]
+
+// 2^256 + 1
+let pow2_256_plus1 = [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0]
+
+// 2^512 - 1 (all limbs 0xFFFFFFFF)
+let pow2_512_minus1 = [0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF]
+
+let passCount = 0
+let failCount = 0
+
+io.println("--- Level 1: Small values ---")
+if compare_result("0 mod L", "0000000000000000000000000000000000000000000000000000000000000000", scalar_reduce_512([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])) == 1 { passCount = passCount + 1 } else { failCount = failCount + 1 }
+if compare_result("1 mod L", "0100000000000000000000000000000000000000000000000000000000000000", scalar_reduce_512([1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])) == 1 { passCount = passCount + 1 } else { failCount = failCount + 1 }
+
+io.println("")
+io.println("--- Level 2: L boundary ---")
+if compare_result("L-1 mod L", "ecd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010", scalar_reduce_512(Lminus1)) == 1 { passCount = passCount + 1 } else { failCount = failCount + 1 }
+if compare_result("L mod L", "0000000000000000000000000000000000000000000000000000000000000000", scalar_reduce_512(L_as_512)) == 1 { passCount = passCount + 1 } else { failCount = failCount + 1 }
+if compare_result("L+1 mod L", "0100000000000000000000000000000000000000000000000000000000000000", scalar_reduce_512(Lplus1)) == 1 { passCount = passCount + 1 } else { failCount = failCount + 1 }
+
+io.println("")
+io.println("--- Level 2: 2L boundary ---")
+if compare_result("2L-1 mod L", "ecd3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010", scalar_reduce_512(twoLminus1)) == 1 { passCount = passCount + 1 } else { failCount = failCount + 1 }
+if compare_result("2L mod L", "0000000000000000000000000000000000000000000000000000000000000000", scalar_reduce_512(twoL)) == 1 { passCount = passCount + 1 } else { failCount = failCount + 1 }
+if compare_result("2L+1 mod L", "0100000000000000000000000000000000000000000000000000000000000000", scalar_reduce_512(twoLplus1)) == 1 { passCount = passCount + 1 } else { failCount = failCount + 1 }
+
+io.println("")
+io.println("--- Level 2: Power of 2 boundary ---")
+if compare_result("2^252 mod L", "0000000000000000000000000000000000000000000000000000000000000010", scalar_reduce_512(pow2_252)) == 1 { passCount = passCount + 1 } else { failCount = failCount + 1 }
+if compare_result("2^252-1 mod L", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0f", scalar_reduce_512(pow2_252_minus1)) == 1 { passCount = passCount + 1 } else { failCount = failCount + 1 }
+if compare_result("2^256 mod L", "1d95988d7431ecd670cf7d73f45befc6feffffffffffffffffffffffffffff0f", scalar_reduce_512(pow2_256)) == 1 { passCount = passCount + 1 } else { failCount = failCount + 1 }
+if compare_result("2^256-1 mod L", "1c95988d7431ecd670cf7d73f45befc6feffffffffffffffffffffffffffff0f", scalar_reduce_512(pow2_256_minus1)) == 1 { passCount = passCount + 1 } else { failCount = failCount + 1 }
+if compare_result("2^256+1 mod L", "1e95988d7431ecd670cf7d73f45befc6feffffffffffffffffffffffffffff0f", scalar_reduce_512(pow2_256_plus1)) == 1 { passCount = passCount + 1 } else { failCount = failCount + 1 }
+
+io.println("")
+io.println("--- Level 2: 512-bit max ---")
+if compare_result("2^512-1 mod L", "000f9c44e31106a447938568a71b0ed065bef517d273ecce3d9a307c1b419903", scalar_reduce_512(pow2_512_minus1)) == 1 { passCount = passCount + 1 } else { failCount = failCount + 1 }
+
+io.println("")
+io.println("=== Gate Summary ===")
+io.println("PASS: " + convert.toString(passCount))
+io.println("FAIL: " + convert.toString(failCount))
+io.println("Total: " + convert.toString(passCount + failCount))
+if failCount == 0 {
+    io.println("RESULT: ALL BOUNDARY VECTORS PASS")
+} else {
+    io.println("RESULT: FAILURES DETECTED")
+}

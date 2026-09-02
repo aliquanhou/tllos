@@ -26,6 +26,15 @@ fn point_is_identity(p: list) -> int {
     return fe_eq(p[0], fe_zero()) & fe_eq(p[1], p[2])
 }
 
+// Check if two points are equal (compare affine x,y)
+fn point_eq(p: list, q: list) -> int {
+    let x1z2 = fe_mul(p[0], q[2])
+    let x2z1 = fe_mul(q[0], p[2])
+    let y1z2 = fe_mul(p[1], q[2])
+    let y2z1 = fe_mul(q[1], p[2])
+    return fe_eq(x1z2, x2z1) & fe_eq(y1z2, y2z1)
+}
+
 // Point addition in extended coordinates (formula from ref10)
 // p = (X1:Y1:Z1:T1), q = (X2:Y2:Z2:T2)
 // r = p + q
@@ -109,7 +118,7 @@ fn point_decode(s: list) -> list {
     // Extract sign bit
     let sign = (s[31] >> 7) & 1
     // Clear sign bit to get y (copy all 32 bytes, NOT fe_copy which copies 10 limbs)
-    let yBytes: list = []
+    let yBytes = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
     let yi = 0
     while yi < 32 {
         yBytes[yi] = s[yi]
@@ -137,7 +146,7 @@ fn point_decode(s: list) -> list {
     if fe_eq(check, u) == 0 {
         // Not a square root; try x * sqrt(-1)
         // sqrt(-1) = 2^((p-1)/4)
-        let sqrtMinus1 = fe_pow(fe_from_int(2), [0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x3FFFFFFF])
+        let sqrtMinus1 = fe_pow(fe_from_int(2), [0xFFFFFFFB, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0x1FFFFFFF])
         x = fe_mul(x, sqrtMinus1)
         let x2b = fe_sq(x)
         let checkb = fe_mul(x2b, v)
@@ -167,7 +176,10 @@ fn point_base() -> list {
     // 0x216936D3CD6E53FEC0A4E231FDD6DC5C692CC7609525A7B2C9562D608F25D5
     // Base point y (little-endian):
     // 0x6666666666666666666666666666666666666666666666666666666666666658
-    let xBytes = [0xD5, 0x25, 0x8F, 0x60, 0x2D, 0x56, 0xC9, 0xB2, 0x7B, 0x5A, 0x52, 0x09, 0x76, 0xCC, 0x92, 0xC6, 0xC5, 0xDC, 0xD6, 0xFD, 0x31, 0xE2, 0xA4, 0xC0, 0xFE, 0x53, 0x6E, 0xCD, 0xD3, 0x36, 0x69, 0x21]
+    // Correct base point x (little-endian), computed from y=4/5, d=-121665/121666 mod p
+    // Verified against independent BigInteger Oracle: fe_mul(x,x) == x^2 mod p
+    // x (LE hex): 1ad5258f602d56c9b2a7259560c72c695cdcd6fd31e2a4c0fe536ecdd3366921
+    let xBytes = [0x1A, 0xD5, 0x25, 0x8F, 0x60, 0x2D, 0x56, 0xC9, 0xB2, 0xA7, 0x25, 0x95, 0x60, 0xC7, 0x2C, 0x69, 0x5C, 0xDC, 0xD6, 0xFD, 0x31, 0xE2, 0xA4, 0xC0, 0xFE, 0x53, 0x6E, 0xCD, 0xD3, 0x36, 0x69, 0x21]
     let yBytes = [0x58, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66]
     let x = fe_from_bytes(xBytes)
     let yB = fe_from_bytes(yBytes)
