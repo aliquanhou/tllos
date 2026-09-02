@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   native-build-test:
@@ -110,6 +111,64 @@ jobs:
         if: runner.os == 'Windows'
         shell: cmd
         run: scripts\run-tests.bat
+
+      # === P0-15.19: TLL Native Ed25519 Cryptographic Foundation ===
+      # Self-developed Ed25519 implementation. RFC 8032 test vectors verified.
+      # These tests are NOT production security audit — they verify algorithm correctness.
+      - name: Ed25519 Crypto Tests (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          TLLVM=host/c/tllvm
+          TLLC=tools/TLLC/tllc.tllbc
+          CRYPTO_FAIL=0
+          for f in tests/crypto/test_*.tll; do
+            [ -f "$f" ] || continue
+            echo "=== $(basename "$f") ==="
+            "$TLLVM" "$TLLC" compile "$f" -o "${f%.tll}.tllbc" >/dev/null 2>&1
+            OUTPUT=$("$TLLVM" "${f%.tll}.tllbc" 2>&1)
+            echo "$OUTPUT" | tail -3
+            if echo "$OUTPUT" | grep -qiE "FAIL|ERROR|panic"; then
+              echo "RESULT: FAIL"
+              CRYPTO_FAIL=1
+            else
+              echo "RESULT: PASS"
+            fi
+            echo ""
+          done
+          if [ "$CRYPTO_FAIL" -ne 0 ]; then
+            echo "Ed25519 crypto tests FAILED"
+            exit 1
+          fi
+          echo "All Ed25519 crypto tests passed"
+
+      - name: Ed25519 Crypto Tests (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $TLLVM = "host\c\tllvm.exe"
+          $TLLC = "tools\TLLC\tllc.tllbc"
+          $cryptoFail = $false
+          Get-ChildItem -Path "tests\crypto" -Filter "test_*.tll" | ForEach-Object {
+            $name = $_.Name
+            $bc = $_.FullName -replace '\.tll$', '.tllbc'
+            Write-Host "=== $name ==="
+            & $TLLVM $TLLC compile $_.FullName -o $bc 2>&1 | Out-Null
+            $output = & $TLLVM $bc 2>&1 | Out-String
+            $lines = $output -split "`n"
+            $lines | Select-Object -Last 3 | ForEach-Object { Write-Host $_ }
+            if ($output -match '(?i)FAIL|ERROR|panic') {
+              Write-Host "RESULT: FAIL"
+              $cryptoFail = $true
+            } else {
+              Write-Host "RESULT: PASS"
+            }
+            Write-Host ""
+          }
+          if ($cryptoFail) {
+            Write-Host "Ed25519 crypto tests FAILED"
+            exit 1
+          }
+          Write-Host "All Ed25519 crypto tests passed"
 
       # === P0-16.1: TLL Engineering Enforcement Layer ===
       # Validates .tll-engine/ structure, schema, Claim-Evidence matching.
