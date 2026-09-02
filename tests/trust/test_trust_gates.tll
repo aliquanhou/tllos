@@ -1,0 +1,307 @@
+
+// P0-15.24 Trust Test Gates (14 gates)
+
+from "../../stdlib/identity/identity" import identity_generate
+from "../../stdlib/capability/capability" import capability_create
+from "../../stdlib/authority/authority" import authority_create
+from "../../stdlib/evidence/evidence" import evidence_create, zero_bytes
+from "../../stdlib/trust/trust" import trust_evaluate, trust_validate, trust_encode, trust_decode, trust_equals, trust_verify_signature, REASON_ALL_VALID
+
+fn bytes_eq(a: list, b: list) -> int {
+    if arrays.length(a) != arrays.length(b) { return 0 }
+    let i = 0
+    while i < arrays.length(a) {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+fn make_seed(start: int) -> list {
+    let seed = []
+    let i = 0
+    while i < 32 { seed[i] = (start + i) & 0xFF; i = i + 1 }
+    return seed
+}
+
+fn make_hash(start: int) -> list {
+    let h = []
+    let i = 0
+    while i < 32 { h[i] = (start + i * 7) & 0xFF; i = i + 1 }
+    return h
+}
+
+// Helper: build a complete valid chain
+fn build_valid_chain(ag_seed: int, cap_name: string, time: int) -> map {
+    let ag = identity_generate(make_seed(ag_seed))
+    let evaluator = identity_generate(make_seed(ag_seed + 100))
+    let cap = capability_create(cap_name, "Test capability", "{}", "")
+    let auth = authority_create(ag["agent_id"], cap["capability_id"], "max:100", "evaluator", time - 100, time + 1000, evaluator["private_key"])
+    let ev1 = evidence_create(ag["agent_id"], cap["capability_id"], "action1", make_hash(1), make_hash(2), time, "PASS", "", zero_bytes(32), ag["private_key"])
+    let ev2 = evidence_create(ag["agent_id"], cap["capability_id"], "action2", make_hash(3), make_hash(4), time + 1, "PASS", "", ev1["evidence_id"], ag["private_key"])
+    return {
+        "identity": ag,
+        "evaluator": evaluator,
+        "capability": cap,
+        "authority": auth,
+        "evidence1": ev1,
+        "evidence2": ev2
+    }
+}
+
+// Gate 01: Valid Identity
+fn gate_01() -> int {
+    let chain = build_valid_chain(1, "gate01_cap", 1000)
+    let trust = trust_evaluate(chain["identity"], chain["capability"], chain["authority"], chain["evidence2"], chain["evidence1"], 1000, chain["evaluator"]["private_key"])
+    if trust["valid"] != 1 {
+        io.println("FAIL 01: valid identity chain rejected, reasons: " + trust["reasons"])
+        return 0
+    }
+    io.println("PASS 01: Valid Identity")
+    return 1
+}
+
+// Gate 02: Valid Capability
+fn gate_02() -> int {
+    let chain = build_valid_chain(2, "gate02_cap", 2000)
+    let trust = trust_evaluate(chain["identity"], chain["capability"], chain["authority"], chain["evidence2"], chain["evidence1"], 2000, chain["evaluator"]["private_key"])
+    if trust["valid"] != 1 {
+        io.println("FAIL 02: valid capability chain rejected")
+        return 0
+    }
+    if trust["score"] != 100 {
+        io.println("FAIL 02: expected score 100, got " + convert.toString(trust["score"]))
+        return 0
+    }
+    io.println("PASS 02: Valid Capability")
+    return 1
+}
+
+// Gate 03: Valid Authority
+fn gate_03() -> int {
+    let chain = build_valid_chain(3, "gate03_cap", 3000)
+    let trust = trust_evaluate(chain["identity"], chain["capability"], chain["authority"], chain["evidence2"], chain["evidence1"], 3000, chain["evaluator"]["private_key"])
+    if trust["valid"] != 1 {
+        io.println("FAIL 03: valid authority chain rejected")
+        return 0
+    }
+    io.println("PASS 03: Valid Authority")
+    return 1
+}
+
+// Gate 04: Valid Evidence
+fn gate_04() -> int {
+    let chain = build_valid_chain(4, "gate04_cap", 4000)
+    let trust = trust_evaluate(chain["identity"], chain["capability"], chain["authority"], chain["evidence2"], chain["evidence1"], 4000, chain["evaluator"]["private_key"])
+    if trust["valid"] != 1 {
+        io.println("FAIL 04: valid evidence chain rejected")
+        return 0
+    }
+    if trust["reasons"] != REASON_ALL_VALID() {
+        io.println("FAIL 04: expected ALL_VALID, got " + trust["reasons"])
+        return 0
+    }
+    io.println("PASS 04: Valid Evidence")
+    return 1
+}
+
+// Gate 05: Complete Chain
+fn gate_05() -> int {
+    let chain = build_valid_chain(5, "gate05_cap", 5000)
+    let trust = trust_evaluate(chain["identity"], chain["capability"], chain["authority"], chain["evidence2"], chain["evidence1"], 5000, chain["evaluator"]["private_key"])
+    if trust["valid"] != 1 {
+        io.println("FAIL 05: complete chain rejected")
+        return 0
+    }
+    // Verify trust signature
+    if trust_verify_signature(trust, chain["evaluator"]["public_key"]) != 1 {
+        io.println("FAIL 05: trust signature invalid")
+        return 0
+    }
+    io.println("PASS 05: Complete Chain")
+    return 1
+}
+
+// Gate 06: Invalid Identity Rejection
+fn gate_06() -> int {
+    let chain = build_valid_chain(6, "gate06_cap", 6000)
+    let bad_identity = chain["identity"]
+    bad_identity["agent_id"][0] = bad_identity["agent_id"][0] ^ 0xFF
+    let trust = trust_evaluate(bad_identity, chain["capability"], chain["authority"], chain["evidence2"], chain["evidence1"], 6000, chain["evaluator"]["private_key"])
+    if trust["valid"] != 0 {
+        io.println("FAIL 06: invalid identity accepted")
+        return 0
+    }
+    io.println("PASS 06: Invalid Identity Rejection")
+    return 1
+}
+
+// Gate 07: Invalid Capability Rejection
+fn gate_07() -> int {
+    let chain = build_valid_chain(7, "gate07_cap", 7000)
+    let bad_cap = chain["capability"]
+    bad_cap["capability_id"][0] = bad_cap["capability_id"][0] ^ 0xFF
+    let trust = trust_evaluate(chain["identity"], bad_cap, chain["authority"], chain["evidence2"], chain["evidence1"], 7000, chain["evaluator"]["private_key"])
+    if trust["valid"] != 0 {
+        io.println("FAIL 07: invalid capability accepted")
+        return 0
+    }
+    io.println("PASS 07: Invalid Capability Rejection")
+    return 1
+}
+
+// Gate 08: Invalid Authority Rejection
+fn gate_08() -> int {
+    let chain = build_valid_chain(8, "gate08_cap", 8000)
+    let bad_auth = chain["authority"]
+    bad_auth["authority_id"][0] = bad_auth["authority_id"][0] ^ 0xFF
+    let trust = trust_evaluate(chain["identity"], chain["capability"], bad_auth, chain["evidence2"], chain["evidence1"], 8000, chain["evaluator"]["private_key"])
+    if trust["valid"] != 0 {
+        io.println("FAIL 08: invalid authority accepted")
+        return 0
+    }
+    io.println("PASS 08: Invalid Authority Rejection")
+    return 1
+}
+
+// Gate 09: Invalid Evidence Rejection
+fn gate_09() -> int {
+    let chain = build_valid_chain(9, "gate09_cap", 9000)
+    let bad_ev = chain["evidence2"]
+    bad_ev["evidence_id"][0] = bad_ev["evidence_id"][0] ^ 0xFF
+    let trust = trust_evaluate(chain["identity"], chain["capability"], chain["authority"], bad_ev, chain["evidence1"], 9000, chain["evaluator"]["private_key"])
+    if trust["valid"] != 0 {
+        io.println("FAIL 09: invalid evidence accepted")
+        return 0
+    }
+    io.println("PASS 09: Invalid Evidence Rejection")
+    return 1
+}
+
+// Gate 10: Expired Authority Rejection
+fn gate_10() -> int {
+    let ag = identity_generate(make_seed(10))
+    let evaluator = identity_generate(make_seed(110))
+    let cap = capability_create("gate10_cap", "Test", "{}", "")
+    // Authority expired at time 500, current time 1000
+    let auth = authority_create(ag["agent_id"], cap["capability_id"], "", "eval", 100, 500, evaluator["private_key"])
+    let ev = evidence_create(ag["agent_id"], cap["capability_id"], "act", make_hash(1), make_hash(2), 200, "PASS", "", zero_bytes(32), ag["private_key"])
+    let trust = trust_evaluate(ag, cap, auth, ev, {}, 1000, evaluator["private_key"])
+    if trust["valid"] != 0 {
+        io.println("FAIL 10: expired authority accepted")
+        return 0
+    }
+    io.println("PASS 10: Expired Authority Rejection")
+    return 1
+}
+
+// Gate 11: Capability Mismatch Rejection
+fn gate_11() -> int {
+    let ag = identity_generate(make_seed(11))
+    let evaluator = identity_generate(make_seed(111))
+    let cap1 = capability_create("cap_a", "A", "{}", "")
+    let cap2 = capability_create("cap_b", "B", "{}", "")
+    // Authority for cap1, but evaluating with cap2
+    let auth = authority_create(ag["agent_id"], cap1["capability_id"], "", "eval", 1000, 2000, evaluator["private_key"])
+    let ev = evidence_create(ag["agent_id"], cap1["capability_id"], "act", make_hash(1), make_hash(2), 1500, "PASS", "", zero_bytes(32), ag["private_key"])
+    let trust = trust_evaluate(ag, cap2, auth, ev, {}, 1500, evaluator["private_key"])
+    if trust["valid"] != 0 {
+        io.println("FAIL 11: capability mismatch accepted")
+        return 0
+    }
+    io.println("PASS 11: Capability Mismatch Rejection")
+    return 1
+}
+
+// Gate 12: Broken Evidence Chain Rejection
+fn gate_12() -> int {
+    let chain = build_valid_chain(12, "gate12_cap", 12000)
+    // ev2.previous should be ev1.evidence_id, but we pass a different previous
+    let other_chain = build_valid_chain(120, "other_cap", 12000)
+    let trust = trust_evaluate(chain["identity"], chain["capability"], chain["authority"], chain["evidence2"], other_chain["evidence1"], 12000, chain["evaluator"]["private_key"])
+    if trust["valid"] != 0 {
+        io.println("FAIL 12: broken evidence chain accepted")
+        return 0
+    }
+    io.println("PASS 12: Broken Evidence Chain Rejection")
+    return 1
+}
+
+// Gate 13: Deterministic Evaluation
+fn gate_13() -> int {
+    let chain = build_valid_chain(13, "gate13_cap", 13000)
+    let t1 = trust_evaluate(chain["identity"], chain["capability"], chain["authority"], chain["evidence2"], chain["evidence1"], 13000, chain["evaluator"]["private_key"])
+    let t2 = trust_evaluate(chain["identity"], chain["capability"], chain["authority"], chain["evidence2"], chain["evidence1"], 13000, chain["evaluator"]["private_key"])
+    if trust_equals(t1, t2) != 1 {
+        io.println("FAIL 13: non-deterministic evaluation")
+        return 0
+    }
+    if t1["valid"] != t2["valid"] {
+        io.println("FAIL 13: valid mismatch")
+        return 0
+    }
+    if t1["score"] != t2["score"] {
+        io.println("FAIL 13: score mismatch")
+        return 0
+    }
+    io.println("PASS 13: Deterministic Evaluation")
+    return 1
+}
+
+// Gate 14: Tamper Detection
+fn gate_14() -> int {
+    let chain = build_valid_chain(14, "gate14_cap", 14000)
+    let trust = trust_evaluate(chain["identity"], chain["capability"], chain["authority"], chain["evidence2"], chain["evidence1"], 14000, chain["evaluator"]["private_key"])
+    // Tamper trust_id -> validation fails
+    trust["trust_id"][0] = trust["trust_id"][0] ^ 0xFF
+    if trust_validate(trust) != 0 {
+        io.println("FAIL 14: tampered trust_id passed validation")
+        return 0
+    }
+    // Encode/decode roundtrip preserves validity
+    let trust2 = trust_evaluate(chain["identity"], chain["capability"], chain["authority"], chain["evidence2"], chain["evidence1"], 14000, chain["evaluator"]["private_key"])
+    let enc = trust_encode(trust2)
+    let decoded = trust_decode(enc)
+    if trust_validate(decoded) != 1 {
+        io.println("FAIL 14: decoded trust failed validation")
+        return 0
+    }
+    if trust_equals(trust2, decoded) != 1 {
+        io.println("FAIL 14: decode changed trust_id")
+        return 0
+    }
+    io.println("PASS 14: Tamper Detection")
+    return 1
+}
+
+fn main() -> int {
+    io.println("=== P0-15.24 Trust Test Gates ===")
+    io.println("")
+    let passed = 0
+    let total = 14
+    if gate_01() == 1 { passed = passed + 1 }
+    if gate_02() == 1 { passed = passed + 1 }
+    if gate_03() == 1 { passed = passed + 1 }
+    if gate_04() == 1 { passed = passed + 1 }
+    if gate_05() == 1 { passed = passed + 1 }
+    if gate_06() == 1 { passed = passed + 1 }
+    if gate_07() == 1 { passed = passed + 1 }
+    if gate_08() == 1 { passed = passed + 1 }
+    if gate_09() == 1 { passed = passed + 1 }
+    if gate_10() == 1 { passed = passed + 1 }
+    if gate_11() == 1 { passed = passed + 1 }
+    if gate_12() == 1 { passed = passed + 1 }
+    if gate_13() == 1 { passed = passed + 1 }
+    if gate_14() == 1 { passed = passed + 1 }
+    io.println("")
+    io.println("=== Results: " + convert.toString(passed) + "/" + convert.toString(total) + " gates passed ===")
+    if passed == total {
+        io.println("PASS")
+        return 0
+    } else {
+        io.println("FAIL")
+        return 1
+    }
+}
+
+main()

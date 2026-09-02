@@ -1,0 +1,554 @@
+
+// ============================================================================
+// P0-15.24 TLL Agent Trust Primitive
+// Built on P0-15.23 Evidence (SEALED), P0-15.22 Authority (SEALED),
+// P0-15.21 Capability (SEALED), P0-15.20 Identity (SEALED),
+// P0-15.19 Ed25519 (SEALED).
+//
+// Trust = "why does the system believe this agent?"
+// Trust is NOT a simple reputation_score. Trust is built on:
+//   Identity validity + Capability validity + Authority validity +
+//   Evidence validity + Evidence chain validity.
+// Trust output includes valid + reasons (deterministic failure reasons).
+// Score is provided but is NOT the sole basis for trust.
+// ============================================================================
+
+from "../crypto" import sha256Bytes, hexToBytes
+from "../crypto/ed25519" import sign, verify
+from "../identity/identity" import identity_validate
+from "../capability/capability" import capability_validate
+from "../authority/authority" import authority_validate, authority_is_expired
+from "../evidence/evidence" import evidence_validate, evidence_verify_signature, evidence_chain_verify
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+fn uint32_to_bytes_be(n: int) -> list {
+    let bytes = [0, 0, 0, 0]
+    bytes[0] = (n >> 24) & 0xFF
+    bytes[1] = (n >> 16) & 0xFF
+    bytes[2] = (n >> 8) & 0xFF
+    bytes[3] = n & 0xFF
+    return bytes
+}
+
+fn bytes_to_uint32_be(bytes: list, offset: int) -> int {
+    let v = (bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]
+    return v & 0xFFFFFFFF
+}
+
+fn uint64_to_bytes_be(n: int) -> list {
+    let bytes = [0, 0, 0, 0, 0, 0, 0, 0]
+    bytes[0] = (n >> 56) & 0xFF
+    bytes[1] = (n >> 48) & 0xFF
+    bytes[2] = (n >> 40) & 0xFF
+    bytes[3] = (n >> 32) & 0xFF
+    bytes[4] = (n >> 24) & 0xFF
+    bytes[5] = (n >> 16) & 0xFF
+    bytes[6] = (n >> 8) & 0xFF
+    bytes[7] = n & 0xFF
+    return bytes
+}
+
+fn bytes_to_uint64_be(bytes: list, offset: int) -> int {
+    let v = 0
+    v = (v << 8) | bytes[offset]
+    v = (v << 8) | bytes[offset + 1]
+    v = (v << 8) | bytes[offset + 2]
+    v = (v << 8) | bytes[offset + 3]
+    v = (v << 8) | bytes[offset + 4]
+    v = (v << 8) | bytes[offset + 5]
+    v = (v << 8) | bytes[offset + 6]
+    v = (v << 8) | bytes[offset + 7]
+    return v
+}
+
+fn string_to_bytes(s: string) -> list {
+    let bytes = []
+    let i = 0
+    let len = strings.length(s)
+    while i < len {
+        bytes[i] = strings.charCodeAt(s, i) & 0xFF
+        i = i + 1
+    }
+    return bytes
+}
+
+fn ascii_lookup(c: int) -> string {
+    if c == 32 { return " " }
+    if c == 33 { return "!" }
+    if c == 35 { return "#" }
+    if c == 36 { return "$" }
+    if c == 37 { return "%" }
+    if c == 38 { return "&" }
+    if c == 39 { return "'" }
+    if c == 40 { return "(" }
+    if c == 41 { return ")" }
+    if c == 42 { return "*" }
+    if c == 43 { return "+" }
+    if c == 44 { return "," }
+    if c == 45 { return "-" }
+    if c == 46 { return "." }
+    if c == 47 { return "/" }
+    if c >= 48 && c <= 57 {
+        let digits = "0123456789"
+        return strings.charAt(digits, c - 48)
+    }
+    if c == 58 { return ":" }
+    if c == 59 { return ";" }
+    if c == 60 { return "<" }
+    if c == 61 { return "=" }
+    if c == 62 { return ">" }
+    if c == 63 { return "?" }
+    if c == 64 { return "@" }
+    if c >= 65 && c <= 90 {
+        let upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        return strings.charAt(upper, c - 65)
+    }
+    if c == 91 { return "[" }
+    if c == 93 { return "]" }
+    if c == 94 { return "^" }
+    if c == 95 { return "_" }
+    if c == 96 { return "`" }
+    if c >= 97 && c <= 122 {
+        let lower = "abcdefghijklmnopqrstuvwxyz"
+        return strings.charAt(lower, c - 97)
+    }
+    if c == 123 { return "{" }
+    if c == 124 { return "|" }
+    if c == 125 { return "}" }
+    if c == 126 { return "~" }
+    return "?"
+}
+
+fn bytes_to_string(bytes: list) -> string {
+    let s = ""
+    let i = 0
+    let len = arrays.length(bytes)
+    while i < len {
+        s = s + ascii_lookup(bytes[i])
+        i = i + 1
+    }
+    return s
+}
+
+fn bytes_append(dst: list, src: list) -> list {
+    let i = 0
+    let len = arrays.length(src)
+    while i < len {
+        dst[arrays.length(dst)] = src[i]
+        i = i + 1
+    }
+    return dst
+}
+
+fn bytes_equal(a: list, b: list) -> int {
+    if arrays.length(a) != arrays.length(b) { return 0 }
+    let i = 0
+    while i < arrays.length(a) {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+fn copy_bytes(src: list) -> list {
+    let dst = []
+    let i = 0
+    let len = arrays.length(src)
+    while i < len { dst[i] = src[i]; i = i + 1 }
+    return dst
+}
+
+// ---------------------------------------------------------------------------
+// Trust constants
+// ---------------------------------------------------------------------------
+
+fn TRUST_VERSION() -> int { return 1 }
+fn TRUST_ID_SIZE() -> int { return 32 }
+fn TRUST_SIGNATURE_SIZE() -> int { return 64 }
+
+// Failure reason constants (string tokens used in reasons field)
+fn REASON_ALL_VALID() -> string { return "ALL_VALID" }
+fn REASON_IDENTITY_INVALID() -> string { return "IDENTITY_INVALID" }
+fn REASON_CAPABILITY_INVALID() -> string { return "CAPABILITY_INVALID" }
+fn REASON_AUTHORITY_INVALID() -> string { return "AUTHORITY_INVALID" }
+fn REASON_AUTHORITY_EXPIRED() -> string { return "AUTHORITY_EXPIRED" }
+fn REASON_AGENT_MISMATCH() -> string { return "AGENT_MISMATCH" }
+fn REASON_CAPABILITY_MISMATCH() -> string { return "CAPABILITY_MISMATCH" }
+fn REASON_EVIDENCE_INVALID() -> string { return "EVIDENCE_INVALID" }
+fn REASON_EVIDENCE_MISSING() -> string { return "EVIDENCE_MISSING" }
+fn REASON_EVIDENCE_SIGNATURE_INVALID() -> string { return "EVIDENCE_SIGNATURE_INVALID" }
+fn REASON_EVIDENCE_CHAIN_BROKEN() -> string { return "EVIDENCE_CHAIN_BROKEN" }
+
+// ---------------------------------------------------------------------------
+// Canonical material for trust_id
+// version(4) || agent_id(32) || capability_id(32) || authority_id(32) ||
+// evidence_id(32) || valid(4) || reasons_len(4) || reasons ||
+// score(4) || timestamp(8)
+// ---------------------------------------------------------------------------
+
+fn trust_build_canonical_material(version: int, agent_id: list, capability_id: list, authority_id: list, evidence_id: list, valid: int, reasons: string, score: int, timestamp: int) -> list {
+    let material = []
+    bytes_append(material, uint32_to_bytes_be(version))
+    bytes_append(material, agent_id)
+    bytes_append(material, capability_id)
+    bytes_append(material, authority_id)
+    bytes_append(material, evidence_id)
+    bytes_append(material, uint32_to_bytes_be(valid))
+    let rBytes = string_to_bytes(reasons)
+    bytes_append(material, uint32_to_bytes_be(arrays.length(rBytes)))
+    bytes_append(material, rBytes)
+    bytes_append(material, uint32_to_bytes_be(score))
+    bytes_append(material, uint64_to_bytes_be(timestamp))
+    return material
+}
+
+fn trust_compute_id(version: int, agent_id: list, capability_id: list, authority_id: list, evidence_id: list, valid: int, reasons: string, score: int, timestamp: int) -> list {
+    let material = trust_build_canonical_material(version, agent_id, capability_id, authority_id, evidence_id, valid, reasons, score, timestamp)
+    let hex = sha256Bytes(material)
+    return hexToBytes(hex)
+}
+
+// ---------------------------------------------------------------------------
+// trust_evaluate(identity, capability, authority, evidence,
+//                 previous_evidence, current_time, evaluator_private_key)
+//
+// Evaluates trust based on validity of all components.
+// previous_evidence can be empty map {} to skip chain check.
+// Returns trust map with valid, reasons, score, trust_id, signature.
+// ---------------------------------------------------------------------------
+
+fn trust_evaluate(identity: map, capability: map, authority: map, evidence: map, previous_evidence: map, current_time: int, evaluator_private_key: list) -> map {
+    let version = TRUST_VERSION()
+    let reasons = ""
+    let passed = 0
+    let total = 0
+
+    // 1. Identity validity
+    total = total + 1
+    if identity_validate(identity) == 1 {
+        passed = passed + 1
+    } else {
+        if strings.length(reasons) > 0 { reasons = reasons + "," }
+        reasons = reasons + REASON_IDENTITY_INVALID()
+    }
+
+    // 2. Capability validity
+    total = total + 1
+    if capability_validate(capability) == 1 {
+        passed = passed + 1
+    } else {
+        if strings.length(reasons) > 0 { reasons = reasons + "," }
+        reasons = reasons + REASON_CAPABILITY_INVALID()
+    }
+
+    // 3. Authority validity
+    total = total + 1
+    if authority_validate(authority) == 1 {
+        passed = passed + 1
+    } else {
+        if strings.length(reasons) > 0 { reasons = reasons + "," }
+        reasons = reasons + REASON_AUTHORITY_INVALID()
+    }
+
+    // 4. Authority expiration (only if authority is valid)
+    if authority_validate(authority) == 1 {
+        total = total + 1
+        if authority_is_expired(authority, current_time) != 1 {
+            passed = passed + 1
+        } else {
+            if strings.length(reasons) > 0 { reasons = reasons + "," }
+            reasons = reasons + REASON_AUTHORITY_EXPIRED()
+        }
+    }
+
+    // 5. Agent binding: authority.agent_id == identity.agent_id
+    if authority_validate(authority) == 1 && identity_validate(identity) == 1 {
+        total = total + 1
+        if bytes_equal(authority["agent_id"], identity["agent_id"]) == 1 {
+            passed = passed + 1
+        } else {
+            if strings.length(reasons) > 0 { reasons = reasons + "," }
+            reasons = reasons + REASON_AGENT_MISMATCH()
+        }
+    }
+
+    // 6. Capability binding: authority.capability_id == capability.capability_id
+    if authority_validate(authority) == 1 && capability_validate(capability) == 1 {
+        total = total + 1
+        if bytes_equal(authority["capability_id"], capability["capability_id"]) == 1 {
+            passed = passed + 1
+        } else {
+            if strings.length(reasons) > 0 { reasons = reasons + "," }
+            reasons = reasons + REASON_CAPABILITY_MISMATCH()
+        }
+    }
+
+    // 7. Evidence validity
+    total = total + 1
+    // Check if evidence is provided (non-empty map)
+    let has_evidence = 0
+    // TLL maps: check if "evidence_id" key exists by trying to access
+    // We use a simple heuristic: if evidence has evidence_id of length 32
+    if arrays.length(evidence["evidence_id"]) == 32 { has_evidence = 1 }
+
+    if has_evidence == 1 {
+        if evidence_validate(evidence) == 1 {
+            passed = passed + 1
+        } else {
+            if strings.length(reasons) > 0 { reasons = reasons + "," }
+            reasons = reasons + REASON_EVIDENCE_INVALID()
+        }
+    } else {
+        if strings.length(reasons) > 0 { reasons = reasons + "," }
+        reasons = reasons + REASON_EVIDENCE_MISSING()
+    }
+
+    // 8. Evidence signature (only if evidence valid and identity valid)
+    if has_evidence == 1 && evidence_validate(evidence) == 1 && identity_validate(identity) == 1 {
+        total = total + 1
+        if evidence_verify_signature(evidence, identity["public_key"]) == 1 {
+            passed = passed + 1
+        } else {
+            if strings.length(reasons) > 0 { reasons = reasons + "," }
+            reasons = reasons + REASON_EVIDENCE_SIGNATURE_INVALID()
+        }
+    }
+
+    // 9. Evidence agent binding (only if evidence valid)
+    if has_evidence == 1 && evidence_validate(evidence) == 1 && identity_validate(identity) == 1 {
+        total = total + 1
+        if bytes_equal(evidence["agent_id"], identity["agent_id"]) == 1 {
+            passed = passed + 1
+        } else {
+            if strings.length(reasons) > 0 { reasons = reasons + "," }
+            reasons = reasons + REASON_AGENT_MISMATCH()
+        }
+    }
+
+    // 10. Evidence chain (only if previous_evidence provided)
+    let has_prev = 0
+    if arrays.length(previous_evidence["evidence_id"]) == 32 { has_prev = 1 }
+    if has_prev == 1 && has_evidence == 1 && evidence_validate(evidence) == 1 {
+        total = total + 1
+        if evidence_chain_verify(evidence, previous_evidence) == 1 {
+            passed = passed + 1
+        } else {
+            if strings.length(reasons) > 0 { reasons = reasons + "," }
+            reasons = reasons + REASON_EVIDENCE_CHAIN_BROKEN()
+        }
+    }
+
+    // Determine valid and reasons
+    let valid = 0
+    if passed == total {
+        valid = 1
+        reasons = REASON_ALL_VALID()
+    }
+
+    // Score: percentage of checks passed (0-100), integer division
+    let score = 0
+    if total > 0 {
+        let temp = passed * 100
+        while temp >= total {
+            temp = temp - total
+            score = score + 1
+        }
+    }
+
+    // IDs for trust
+    let agent_id = identity["agent_id"]
+    let capability_id = capability["capability_id"]
+    let authority_id = authority["authority_id"]
+    let evidence_id = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+    if has_evidence == 1 { evidence_id = evidence["evidence_id"] }
+
+    let timestamp = current_time
+
+    let trust_id = trust_compute_id(version, agent_id, capability_id, authority_id, evidence_id, valid, reasons, score, timestamp)
+
+    let trust = {
+        "version": version,
+        "trust_id": trust_id,
+        "agent_id": copy_bytes(agent_id),
+        "capability_id": copy_bytes(capability_id),
+        "authority_id": copy_bytes(authority_id),
+        "evidence_id": copy_bytes(evidence_id),
+        "valid": valid,
+        "reasons": reasons,
+        "score": score,
+        "timestamp": timestamp,
+        "checks_passed": passed,
+        "checks_total": total,
+        "signature": []
+    }
+
+    // Sign the trust evaluation
+    let material = trust_build_canonical_material(version, agent_id, capability_id, authority_id, evidence_id, valid, reasons, score, timestamp)
+    let sig = sign(evaluator_private_key, material)
+    trust["signature"] = sig
+
+    return trust
+}
+
+// ---------------------------------------------------------------------------
+// trust_validate(trust)
+// ---------------------------------------------------------------------------
+
+fn trust_validate(tr: map) -> int {
+    if tr["version"] != TRUST_VERSION() { return 0 }
+    if arrays.length(tr["trust_id"]) != TRUST_ID_SIZE() { return 0 }
+    if arrays.length(tr["agent_id"]) != TRUST_ID_SIZE() { return 0 }
+    if arrays.length(tr["capability_id"]) != TRUST_ID_SIZE() { return 0 }
+    if arrays.length(tr["authority_id"]) != TRUST_ID_SIZE() { return 0 }
+    if arrays.length(tr["evidence_id"]) != TRUST_ID_SIZE() { return 0 }
+    if arrays.length(tr["signature"]) != TRUST_SIGNATURE_SIZE() { return 0 }
+    if tr["valid"] != 0 && tr["valid"] != 1 { return 0 }
+    if tr["score"] < 0 || tr["score"] > 100 { return 0 }
+
+    let expected = trust_compute_id(
+        tr["version"],
+        tr["agent_id"],
+        tr["capability_id"],
+        tr["authority_id"],
+        tr["evidence_id"],
+        tr["valid"],
+        tr["reasons"],
+        tr["score"],
+        tr["timestamp"]
+    )
+    if bytes_equal(expected, tr["trust_id"]) != 1 { return 0 }
+
+    return 1
+}
+
+// ---------------------------------------------------------------------------
+// trust_verify_signature(trust, evaluator_public_key)
+// ---------------------------------------------------------------------------
+
+fn trust_verify_signature(tr: map, evaluator_public_key: list) -> int {
+    let material = trust_build_canonical_material(
+        tr["version"],
+        tr["agent_id"],
+        tr["capability_id"],
+        tr["authority_id"],
+        tr["evidence_id"],
+        tr["valid"],
+        tr["reasons"],
+        tr["score"],
+        tr["timestamp"]
+    )
+    return verify(evaluator_public_key, material, tr["signature"])
+}
+
+// ---------------------------------------------------------------------------
+// trust_encode(trust)
+// format: version(4) || agent_id(32) || capability_id(32) ||
+//         authority_id(32) || evidence_id(32) || valid(4) ||
+//         reasons_len(4) || reasons || score(4) || timestamp(8) ||
+//         trust_id(32) || signature(64)
+// ---------------------------------------------------------------------------
+
+fn trust_encode(tr: map) -> list {
+    let encoded = []
+    bytes_append(encoded, uint32_to_bytes_be(tr["version"]))
+    bytes_append(encoded, tr["agent_id"])
+    bytes_append(encoded, tr["capability_id"])
+    bytes_append(encoded, tr["authority_id"])
+    bytes_append(encoded, tr["evidence_id"])
+    bytes_append(encoded, uint32_to_bytes_be(tr["valid"]))
+    let rBytes = string_to_bytes(tr["reasons"])
+    bytes_append(encoded, uint32_to_bytes_be(arrays.length(rBytes)))
+    bytes_append(encoded, rBytes)
+    bytes_append(encoded, uint32_to_bytes_be(tr["score"]))
+    bytes_append(encoded, uint64_to_bytes_be(tr["timestamp"]))
+    bytes_append(encoded, tr["trust_id"])
+    bytes_append(encoded, tr["signature"])
+    return encoded
+}
+
+// ---------------------------------------------------------------------------
+// trust_decode(encoded)
+// ---------------------------------------------------------------------------
+
+fn trust_decode(encoded: list) -> map {
+    let total = arrays.length(encoded)
+    // minimum: 4 + 32*5 + 4 + 4 + 0 + 4 + 8 + 32 + 64 = 248
+    if total < 248 { return {} }
+
+    let offset = 0
+    let version = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+
+    let agent_id = []
+    let i = 0
+    while i < 32 { agent_id[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + 32
+
+    let capability_id = []
+    i = 0
+    while i < 32 { capability_id[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + 32
+
+    let authority_id = []
+    i = 0
+    while i < 32 { authority_id[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + 32
+
+    let evidence_id = []
+    i = 0
+    while i < 32 { evidence_id[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + 32
+
+    let valid = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+
+    let rLen = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+    if offset + rLen > total - 108 { return {} }
+    let rBytes = []
+    i = 0
+    while i < rLen { rBytes[i] = encoded[offset + i]; i = i + 1 }
+    let reasons = bytes_to_string(rBytes)
+    offset = offset + rLen
+
+    let score = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+
+    let timestamp = bytes_to_uint64_be(encoded, offset)
+    offset = offset + 8
+
+    let trust_id = []
+    i = 0
+    while i < 32 { trust_id[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + 32
+
+    if offset + 64 != total { return {} }
+    let signature = []
+    i = 0
+    while i < 64 { signature[i] = encoded[offset + i]; i = i + 1 }
+
+    return {
+        "version": version,
+        "trust_id": trust_id,
+        "agent_id": agent_id,
+        "capability_id": capability_id,
+        "authority_id": authority_id,
+        "evidence_id": evidence_id,
+        "valid": valid,
+        "reasons": reasons,
+        "score": score,
+        "timestamp": timestamp,
+        "signature": signature
+    }
+}
+
+// ---------------------------------------------------------------------------
+// trust_equals(a, b)
+// ---------------------------------------------------------------------------
+
+fn trust_equals(a: map, b: map) -> int {
+    return bytes_equal(a["trust_id"], b["trust_id"])
+}
