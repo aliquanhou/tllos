@@ -34,6 +34,10 @@ jobs:
       - name: Setup MSVC (Windows)
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
+        env:
+          # Node.js 24 dropped MSVC support; force this action to run on Node.js 20
+          # until ilammy/msvc-dev-cmd publishes a Node 24-compatible release.
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE20: true
 
       - name: Build Native Launcher (Windows)
         if: runner.os == 'Windows'
