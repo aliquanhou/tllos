@@ -1,0 +1,387 @@
+
+// ============================================================================
+// P0-15.22 TLL Agent Authority Primitive
+// Built on P0-15.21 Capability (SEALED), P0-15.20 Identity (SEALED),
+// P0-15.19 Ed25519 (SEALED).
+//
+// Authority = "what is this agent allowed to do?" (authorization grant)
+// Authority references: agent_id (who), capability_id (what),
+//                       issuer (who granted), constraints, time bounds, signature.
+//
+// Capability = ability declaration. Authority = authorization grant.
+// These are distinct concepts.
+// ============================================================================
+
+from "../crypto" import sha256Bytes, hexToBytes
+from "../crypto/ed25519" import sign, verify
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+fn uint32_to_bytes_be(n: int) -> list {
+    let bytes = [0, 0, 0, 0]
+    bytes[0] = (n >> 24) & 0xFF
+    bytes[1] = (n >> 16) & 0xFF
+    bytes[2] = (n >> 8) & 0xFF
+    bytes[3] = n & 0xFF
+    return bytes
+}
+
+fn bytes_to_uint32_be(bytes: list, offset: int) -> int {
+    let v = (bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]
+    return v & 0xFFFFFFFF
+}
+
+fn uint64_to_bytes_be(n: int) -> list {
+    let bytes = [0, 0, 0, 0, 0, 0, 0, 0]
+    bytes[0] = (n >> 56) & 0xFF
+    bytes[1] = (n >> 48) & 0xFF
+    bytes[2] = (n >> 40) & 0xFF
+    bytes[3] = (n >> 32) & 0xFF
+    bytes[4] = (n >> 24) & 0xFF
+    bytes[5] = (n >> 16) & 0xFF
+    bytes[6] = (n >> 8) & 0xFF
+    bytes[7] = n & 0xFF
+    return bytes
+}
+
+fn bytes_to_uint64_be(bytes: list, offset: int) -> int {
+    let v = 0
+    v = (v << 8) | bytes[offset]
+    v = (v << 8) | bytes[offset + 1]
+    v = (v << 8) | bytes[offset + 2]
+    v = (v << 8) | bytes[offset + 3]
+    v = (v << 8) | bytes[offset + 4]
+    v = (v << 8) | bytes[offset + 5]
+    v = (v << 8) | bytes[offset + 6]
+    v = (v << 8) | bytes[offset + 7]
+    return v
+}
+
+fn string_to_bytes(s: string) -> list {
+    let bytes = []
+    let i = 0
+    let len = strings.length(s)
+    while i < len {
+        bytes[i] = strings.charCodeAt(s, i) & 0xFF
+        i = i + 1
+    }
+    return bytes
+}
+
+fn ascii_lookup(c: int) -> string {
+    if c == 32 { return " " }
+    if c == 33 { return "!" }
+    if c == 35 { return "#" }
+    if c == 36 { return "$" }
+    if c == 37 { return "%" }
+    if c == 38 { return "&" }
+    if c == 39 { return "'" }
+    if c == 40 { return "(" }
+    if c == 41 { return ")" }
+    if c == 42 { return "*" }
+    if c == 43 { return "+" }
+    if c == 44 { return "," }
+    if c == 45 { return "-" }
+    if c == 46 { return "." }
+    if c == 47 { return "/" }
+    if c >= 48 && c <= 57 {
+        let digits = "0123456789"
+        return strings.charAt(digits, c - 48)
+    }
+    if c == 58 { return ":" }
+    if c == 59 { return ";" }
+    if c == 60 { return "<" }
+    if c == 61 { return "=" }
+    if c == 62 { return ">" }
+    if c == 63 { return "?" }
+    if c == 64 { return "@" }
+    if c >= 65 && c <= 90 {
+        let upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        return strings.charAt(upper, c - 65)
+    }
+    if c == 91 { return "[" }
+    if c == 93 { return "]" }
+    if c == 94 { return "^" }
+    if c == 95 { return "_" }
+    if c == 96 { return "`" }
+    if c >= 97 && c <= 122 {
+        let lower = "abcdefghijklmnopqrstuvwxyz"
+        return strings.charAt(lower, c - 97)
+    }
+    if c == 123 { return "{" }
+    if c == 124 { return "|" }
+    if c == 125 { return "}" }
+    if c == 126 { return "~" }
+    return "?"
+}
+
+fn bytes_to_string(bytes: list) -> string {
+    let s = ""
+    let i = 0
+    let len = arrays.length(bytes)
+    while i < len {
+        s = s + ascii_lookup(bytes[i])
+        i = i + 1
+    }
+    return s
+}
+
+fn bytes_append(dst: list, src: list) -> list {
+    let i = 0
+    let len = arrays.length(src)
+    while i < len {
+        dst[arrays.length(dst)] = src[i]
+        i = i + 1
+    }
+    return dst
+}
+
+fn bytes_equal(a: list, b: list) -> int {
+    if arrays.length(a) != arrays.length(b) { return 0 }
+    let i = 0
+    while i < arrays.length(a) {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+// ---------------------------------------------------------------------------
+// Authority constants
+// ---------------------------------------------------------------------------
+
+fn AUTHORITY_VERSION() -> int { return 1 }
+fn AUTHORITY_ID_SIZE() -> int { return 32 }
+fn AUTHORITY_SIGNATURE_SIZE() -> int { return 64 }
+
+// ---------------------------------------------------------------------------
+// Canonical material for authority_id
+// version(4) || agent_id(32) || capability_id(32) ||
+// constraints_len(4) || constraints || issuer_len(4) || issuer ||
+// issued_at(8) || expires_at(8)
+// NOTE: signature is NOT part of authority_id
+// ---------------------------------------------------------------------------
+
+fn authority_build_canonical_material(version: int, agent_id: list, capability_id: list, constraints: string, issuer: string, issued_at: int, expires_at: int) -> list {
+    let material = []
+    bytes_append(material, uint32_to_bytes_be(version))
+    bytes_append(material, agent_id)
+    bytes_append(material, capability_id)
+
+    let cBytes = string_to_bytes(constraints)
+    bytes_append(material, uint32_to_bytes_be(arrays.length(cBytes)))
+    bytes_append(material, cBytes)
+
+    let iBytes = string_to_bytes(issuer)
+    bytes_append(material, uint32_to_bytes_be(arrays.length(iBytes)))
+    bytes_append(material, iBytes)
+
+    bytes_append(material, uint64_to_bytes_be(issued_at))
+    bytes_append(material, uint64_to_bytes_be(expires_at))
+
+    return material
+}
+
+fn authority_compute_id(version: int, agent_id: list, capability_id: list, constraints: string, issuer: string, issued_at: int, expires_at: int) -> list {
+    let material = authority_build_canonical_material(version, agent_id, capability_id, constraints, issuer, issued_at, expires_at)
+    let hex = sha256Bytes(material)
+    return hexToBytes(hex)
+}
+
+// ---------------------------------------------------------------------------
+// authority_create(agent_id, capability_id, constraints, issuer,
+//                  issued_at, expires_at, issuer_private_key)
+// returns authority map with authority_id and signature
+// ---------------------------------------------------------------------------
+
+fn authority_create(agent_id: list, capability_id: list, constraints: string, issuer: string, issued_at: int, expires_at: int, issuer_private_key: list) -> map {
+    let version = AUTHORITY_VERSION()
+    let authority_id = authority_compute_id(version, agent_id, capability_id, constraints, issuer, issued_at, expires_at)
+
+    let auth = {
+        "version": version,
+        "agent_id": agent_id,
+        "capability_id": capability_id,
+        "constraints": constraints,
+        "issuer": issuer,
+        "issued_at": issued_at,
+        "expires_at": expires_at,
+        "authority_id": authority_id,
+        "signature": []
+    }
+
+    // sign the canonical material
+    let material = authority_build_canonical_material(version, agent_id, capability_id, constraints, issuer, issued_at, expires_at)
+    let sig = sign(issuer_private_key, material)
+    auth["signature"] = sig
+
+    return auth
+}
+
+// ---------------------------------------------------------------------------
+// authority_validate(authority)
+// checks version, IDs, authority_id integrity
+// (expiration check is separate: authority_is_expired)
+// ---------------------------------------------------------------------------
+
+fn authority_validate(auth: map) -> int {
+    if auth["version"] != AUTHORITY_VERSION() { return 0 }
+    if arrays.length(auth["agent_id"]) != AUTHORITY_ID_SIZE() { return 0 }
+    if arrays.length(auth["capability_id"]) != AUTHORITY_ID_SIZE() { return 0 }
+    if arrays.length(auth["authority_id"]) != AUTHORITY_ID_SIZE() { return 0 }
+    if arrays.length(auth["signature"]) != AUTHORITY_SIGNATURE_SIZE() { return 0 }
+
+    // recompute authority_id
+    let expected = authority_compute_id(
+        auth["version"],
+        auth["agent_id"],
+        auth["capability_id"],
+        auth["constraints"],
+        auth["issuer"],
+        auth["issued_at"],
+        auth["expires_at"]
+    )
+    if bytes_equal(expected, auth["authority_id"]) != 1 { return 0 }
+
+    return 1
+}
+
+// ---------------------------------------------------------------------------
+// authority_is_expired(authority, current_time)
+// returns 1 if expired, 0 if still valid
+// ---------------------------------------------------------------------------
+
+fn authority_is_expired(auth: map, current_time: int) -> int {
+    if current_time > auth["expires_at"] { return 1 }
+    if current_time < auth["issued_at"] { return 1 }
+    return 0
+}
+
+// ---------------------------------------------------------------------------
+// authority_verify_signature(authority, issuer_public_key)
+// verify the issuer's signature over canonical material
+// ---------------------------------------------------------------------------
+
+fn authority_verify_signature(auth: map, issuer_public_key: list) -> int {
+    let material = authority_build_canonical_material(
+        auth["version"],
+        auth["agent_id"],
+        auth["capability_id"],
+        auth["constraints"],
+        auth["issuer"],
+        auth["issued_at"],
+        auth["expires_at"]
+    )
+    return verify(issuer_public_key, material, auth["signature"])
+}
+
+// ---------------------------------------------------------------------------
+// authority_encode(authority)
+// format: version(4) || agent_id(32) || capability_id(32) ||
+//         constraints_len(4) || constraints || issuer_len(4) || issuer ||
+//         issued_at(8) || expires_at(8) || authority_id(32) || signature(64)
+// ---------------------------------------------------------------------------
+
+fn authority_encode(auth: map) -> list {
+    let encoded = []
+    bytes_append(encoded, uint32_to_bytes_be(auth["version"]))
+    bytes_append(encoded, auth["agent_id"])
+    bytes_append(encoded, auth["capability_id"])
+
+    let cBytes = string_to_bytes(auth["constraints"])
+    bytes_append(encoded, uint32_to_bytes_be(arrays.length(cBytes)))
+    bytes_append(encoded, cBytes)
+
+    let iBytes = string_to_bytes(auth["issuer"])
+    bytes_append(encoded, uint32_to_bytes_be(arrays.length(iBytes)))
+    bytes_append(encoded, iBytes)
+
+    bytes_append(encoded, uint64_to_bytes_be(auth["issued_at"]))
+    bytes_append(encoded, uint64_to_bytes_be(auth["expires_at"]))
+    bytes_append(encoded, auth["authority_id"])
+    bytes_append(encoded, auth["signature"])
+
+    return encoded
+}
+
+// ---------------------------------------------------------------------------
+// authority_decode(encoded)
+// returns authority map, or empty map on error
+// ---------------------------------------------------------------------------
+
+fn authority_decode(encoded: list) -> map {
+    let total = arrays.length(encoded)
+    // minimum: 4 + 32 + 32 + 4 + 0 + 4 + 0 + 8 + 8 + 32 + 64 = 188
+    if total < 188 { return {} }
+
+    let offset = 0
+    let version = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+
+    let agent_id = []
+    let i = 0
+    while i < 32 { agent_id[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + 32
+
+    let capability_id = []
+    i = 0
+    while i < 32 { capability_id[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + 32
+
+    let cLen = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+    if offset + cLen > total - 116 { return {} }
+    let cBytes = []
+    i = 0
+    while i < cLen { cBytes[i] = encoded[offset + i]; i = i + 1 }
+    let constraints = bytes_to_string(cBytes)
+    offset = offset + cLen
+
+    let iLen = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+    if offset + iLen > total - 112 { return {} }
+    let iBytes = []
+    i = 0
+    while i < iLen { iBytes[i] = encoded[offset + i]; i = i + 1 }
+    let issuer = bytes_to_string(iBytes)
+    offset = offset + iLen
+
+    let issued_at = bytes_to_uint64_be(encoded, offset)
+    offset = offset + 8
+    let expires_at = bytes_to_uint64_be(encoded, offset)
+    offset = offset + 8
+
+    if offset + 32 > total - 64 { return {} }
+    let authority_id = []
+    i = 0
+    while i < 32 { authority_id[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + 32
+
+    if offset + 64 != total { return {} }
+    let signature = []
+    i = 0
+    while i < 64 { signature[i] = encoded[offset + i]; i = i + 1 }
+
+    return {
+        "version": version,
+        "agent_id": agent_id,
+        "capability_id": capability_id,
+        "constraints": constraints,
+        "issuer": issuer,
+        "issued_at": issued_at,
+        "expires_at": expires_at,
+        "authority_id": authority_id,
+        "signature": signature
+    }
+}
+
+// ---------------------------------------------------------------------------
+// authority_equals(a, b)
+// compare by authority_id
+// ---------------------------------------------------------------------------
+
+fn authority_equals(a: map, b: map) -> int {
+    return bytes_equal(a["authority_id"], b["authority_id"])
+}

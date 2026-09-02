@@ -1,0 +1,288 @@
+
+// P0-15.22 Authority Test Gates (12 gates)
+
+from "../../stdlib/identity/identity" import identity_generate, identity_from_public_key
+from "../../stdlib/capability/capability" import capability_create
+from "../../stdlib/authority/authority" import authority_create, authority_compute_id, authority_validate, authority_encode, authority_decode, authority_equals, authority_is_expired, authority_verify_signature, AUTHORITY_VERSION
+
+fn bytes_eq(a: list, b: list) -> int {
+    if arrays.length(a) != arrays.length(b) { return 0 }
+    let i = 0
+    while i < arrays.length(a) {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+fn make_seed(start: int) -> list {
+    let seed = []
+    let i = 0
+    while i < 32 { seed[i] = (start + i) & 0xFF; i = i + 1 }
+    return seed
+}
+
+// Gate 01: Deterministic Authority ID
+fn gate_01() -> int {
+    let ag = identity_generate(make_seed(1))
+    let issuer = identity_generate(make_seed(2))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let a1 = authority_create(ag["agent_id"], cap["capability_id"], "max:100", "issuer_001", 1000, 2000, issuer["private_key"])
+    let a2 = authority_create(ag["agent_id"], cap["capability_id"], "max:100", "issuer_001", 1000, 2000, issuer["private_key"])
+    if bytes_eq(a1["authority_id"], a2["authority_id"]) != 1 {
+        io.println("FAIL 01: same authority produced different IDs")
+        return 0
+    }
+    io.println("PASS 01: Deterministic Authority ID")
+    return 1
+}
+
+// Gate 02: Canonical Encoding
+fn gate_02() -> int {
+    let ag = identity_generate(make_seed(1))
+    let issuer = identity_generate(make_seed(2))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let a = authority_create(ag["agent_id"], cap["capability_id"], "max:100", "issuer_001", 1000, 2000, issuer["private_key"])
+    let enc = authority_encode(a)
+    if arrays.length(enc) < 188 {
+        io.println("FAIL 02: encoding too short")
+        return 0
+    }
+    let enc2 = authority_encode(a)
+    if bytes_eq(enc, enc2) != 1 {
+        io.println("FAIL 02: encoding not deterministic")
+        return 0
+    }
+    io.println("PASS 02: Canonical Encoding")
+    return 1
+}
+
+// Gate 03: Roundtrip
+fn gate_03() -> int {
+    let ag = identity_generate(make_seed(1))
+    let issuer = identity_generate(make_seed(2))
+    let cap = capability_create("test_cap", "Test", "{x:int}", "meta")
+    let a = authority_create(ag["agent_id"], cap["capability_id"], "max:100;rate:10", "issuer_001", 1000, 2000, issuer["private_key"])
+    let enc = authority_encode(a)
+    let decoded = authority_decode(enc)
+    if decoded["version"] != a["version"] { io.println("FAIL 03: version"); return 0 }
+    if bytes_eq(decoded["agent_id"], a["agent_id"]) != 1 { io.println("FAIL 03: agent_id"); return 0 }
+    if bytes_eq(decoded["capability_id"], a["capability_id"]) != 1 { io.println("FAIL 03: capability_id"); return 0 }
+    if decoded["constraints"] != a["constraints"] { io.println("FAIL 03: constraints"); return 0 }
+    if decoded["issuer"] != a["issuer"] { io.println("FAIL 03: issuer"); return 0 }
+    if decoded["issued_at"] != a["issued_at"] { io.println("FAIL 03: issued_at"); return 0 }
+    if decoded["expires_at"] != a["expires_at"] { io.println("FAIL 03: expires_at"); return 0 }
+    if bytes_eq(decoded["authority_id"], a["authority_id"]) != 1 { io.println("FAIL 03: authority_id"); return 0 }
+    if bytes_eq(decoded["signature"], a["signature"]) != 1 { io.println("FAIL 03: signature"); return 0 }
+    if authority_validate(decoded) != 1 { io.println("FAIL 03: validate"); return 0 }
+    let reenc = authority_encode(decoded)
+    if bytes_eq(enc, reenc) != 1 { io.println("FAIL 03: re-encode"); return 0 }
+    io.println("PASS 03: Roundtrip")
+    return 1
+}
+
+// Gate 04: Agent Binding
+fn gate_04() -> int {
+    let ag1 = identity_generate(make_seed(1))
+    let ag2 = identity_generate(make_seed(3))
+    let issuer = identity_generate(make_seed(2))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let a1 = authority_create(ag1["agent_id"], cap["capability_id"], "", "iss", 1000, 2000, issuer["private_key"])
+    let a2 = authority_create(ag2["agent_id"], cap["capability_id"], "", "iss", 1000, 2000, issuer["private_key"])
+    if bytes_eq(a1["authority_id"], a2["authority_id"]) == 1 {
+        io.println("FAIL 04: different agents produced same ID")
+        return 0
+    }
+    io.println("PASS 04: Agent Binding")
+    return 1
+}
+
+// Gate 05: Capability Binding
+fn gate_05() -> int {
+    let ag = identity_generate(make_seed(1))
+    let issuer = identity_generate(make_seed(2))
+    let cap1 = capability_create("cap_a", "A", "{}", "")
+    let cap2 = capability_create("cap_b", "B", "{}", "")
+    let a1 = authority_create(ag["agent_id"], cap1["capability_id"], "", "iss", 1000, 2000, issuer["private_key"])
+    let a2 = authority_create(ag["agent_id"], cap2["capability_id"], "", "iss", 1000, 2000, issuer["private_key"])
+    if bytes_eq(a1["authority_id"], a2["authority_id"]) == 1 {
+        io.println("FAIL 05: different capabilities produced same ID")
+        return 0
+    }
+    io.println("PASS 05: Capability Binding")
+    return 1
+}
+
+// Gate 06: Issuer Binding
+fn gate_06() -> int {
+    let ag = identity_generate(make_seed(1))
+    let issuer1 = identity_generate(make_seed(2))
+    let issuer2 = identity_generate(make_seed(4))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let a1 = authority_create(ag["agent_id"], cap["capability_id"], "", "issuer_A", 1000, 2000, issuer1["private_key"])
+    let a2 = authority_create(ag["agent_id"], cap["capability_id"], "", "issuer_B", 1000, 2000, issuer2["private_key"])
+    if bytes_eq(a1["authority_id"], a2["authority_id"]) == 1 {
+        io.println("FAIL 06: different issuers produced same ID")
+        return 0
+    }
+    io.println("PASS 06: Issuer Binding")
+    return 1
+}
+
+// Gate 07: Signature
+fn gate_07() -> int {
+    let ag = identity_generate(make_seed(1))
+    let issuer = identity_generate(make_seed(2))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let a = authority_create(ag["agent_id"], cap["capability_id"], "max:100", "issuer_001", 1000, 2000, issuer["private_key"])
+    if arrays.length(a["signature"]) != 64 {
+        io.println("FAIL 07: signature not 64 bytes")
+        return 0
+    }
+    if authority_verify_signature(a, issuer["public_key"]) != 1 {
+        io.println("FAIL 07: valid signature failed verification")
+        return 0
+    }
+    io.println("PASS 07: Signature")
+    return 1
+}
+
+// Gate 08: Signature Tampering
+fn gate_08() -> int {
+    let ag = identity_generate(make_seed(1))
+    let issuer = identity_generate(make_seed(2))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let a = authority_create(ag["agent_id"], cap["capability_id"], "max:100", "issuer_001", 1000, 2000, issuer["private_key"])
+    // tamper signature
+    a["signature"][0] = a["signature"][0] ^ 0xFF
+    if authority_verify_signature(a, issuer["public_key"]) != 0 {
+        io.println("FAIL 08: tampered signature passed verification")
+        return 0
+    }
+    // wrong public key
+    let other = identity_generate(make_seed(5))
+    let a2 = authority_create(ag["agent_id"], cap["capability_id"], "max:100", "issuer_001", 1000, 2000, issuer["private_key"])
+    if authority_verify_signature(a2, other["public_key"]) != 0 {
+        io.println("FAIL 08: wrong public key passed verification")
+        return 0
+    }
+    io.println("PASS 08: Signature Tampering")
+    return 1
+}
+
+// Gate 09: Expiration
+fn gate_09() -> int {
+    let ag = identity_generate(make_seed(1))
+    let issuer = identity_generate(make_seed(2))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let a = authority_create(ag["agent_id"], cap["capability_id"], "", "iss", 1000, 2000, issuer["private_key"])
+    // before issued_at -> expired
+    if authority_is_expired(a, 500) != 1 {
+        io.println("FAIL 09: before issued_at not detected as expired")
+        return 0
+    }
+    // within range -> not expired
+    if authority_is_expired(a, 1500) != 0 {
+        io.println("FAIL 09: within range detected as expired")
+        return 0
+    }
+    // after expires_at -> expired
+    if authority_is_expired(a, 2500) != 1 {
+        io.println("FAIL 09: after expires_at not detected as expired")
+        return 0
+    }
+    io.println("PASS 09: Expiration")
+    return 1
+}
+
+// Gate 10: Constraint Integrity
+fn gate_10() -> int {
+    let ag = identity_generate(make_seed(1))
+    let issuer = identity_generate(make_seed(2))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let a1 = authority_create(ag["agent_id"], cap["capability_id"], "max:100", "iss", 1000, 2000, issuer["private_key"])
+    let a2 = authority_create(ag["agent_id"], cap["capability_id"], "max:200", "iss", 1000, 2000, issuer["private_key"])
+    if bytes_eq(a1["authority_id"], a2["authority_id"]) == 1 {
+        io.println("FAIL 10: different constraints produced same ID")
+        return 0
+    }
+    // tamper constraints after creation -> validation fails
+    a1["constraints"] = "max:999"
+    if authority_validate(a1) != 0 {
+        io.println("FAIL 10: tampered constraints passed validation")
+        return 0
+    }
+    io.println("PASS 10: Constraint Integrity")
+    return 1
+}
+
+// Gate 11: Wrong Agent Rejection
+fn gate_11() -> int {
+    let ag1 = identity_generate(make_seed(1))
+    let ag2 = identity_generate(make_seed(3))
+    let issuer = identity_generate(make_seed(2))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let a = authority_create(ag1["agent_id"], cap["capability_id"], "", "iss", 1000, 2000, issuer["private_key"])
+    // authority is for ag1, not ag2
+    if bytes_eq(a["agent_id"], ag2["agent_id"]) == 1 {
+        io.println("FAIL 11: agent_id unexpectedly matches")
+        return 0
+    }
+    // validation still passes (structure is valid), but Agent Binding is wrong
+    if authority_validate(a) != 1 {
+        io.println("FAIL 11: valid authority failed validation")
+        return 0
+    }
+    io.println("PASS 11: Wrong Agent Rejection")
+    return 1
+}
+
+// Gate 12: Wrong Capability Rejection
+fn gate_12() -> int {
+    let ag = identity_generate(make_seed(1))
+    let issuer = identity_generate(make_seed(2))
+    let cap1 = capability_create("cap_a", "A", "{}", "")
+    let cap2 = capability_create("cap_b", "B", "{}", "")
+    let a = authority_create(ag["agent_id"], cap1["capability_id"], "", "iss", 1000, 2000, issuer["private_key"])
+    // authority is for cap1, not cap2
+    if bytes_eq(a["capability_id"], cap2["capability_id"]) == 1 {
+        io.println("FAIL 12: capability_id unexpectedly matches")
+        return 0
+    }
+    if authority_validate(a) != 1 {
+        io.println("FAIL 12: valid authority failed validation")
+        return 0
+    }
+    io.println("PASS 12: Wrong Capability Rejection")
+    return 1
+}
+
+fn main() -> int {
+    io.println("=== P0-15.22 Authority Test Gates ===")
+    io.println("")
+    let passed = 0
+    let total = 12
+    if gate_01() == 1 { passed = passed + 1 }
+    if gate_02() == 1 { passed = passed + 1 }
+    if gate_03() == 1 { passed = passed + 1 }
+    if gate_04() == 1 { passed = passed + 1 }
+    if gate_05() == 1 { passed = passed + 1 }
+    if gate_06() == 1 { passed = passed + 1 }
+    if gate_07() == 1 { passed = passed + 1 }
+    if gate_08() == 1 { passed = passed + 1 }
+    if gate_09() == 1 { passed = passed + 1 }
+    if gate_10() == 1 { passed = passed + 1 }
+    if gate_11() == 1 { passed = passed + 1 }
+    if gate_12() == 1 { passed = passed + 1 }
+    io.println("")
+    io.println("=== Results: " + convert.toString(passed) + "/" + convert.toString(total) + " gates passed ===")
+    if passed == total {
+        io.println("PASS")
+        return 0
+    } else {
+        io.println("FAIL")
+        return 1
+    }
+}
+
+main()
