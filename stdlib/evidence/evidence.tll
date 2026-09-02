@@ -1,0 +1,448 @@
+
+// ============================================================================
+// P0-15.23 TLL Agent Evidence Primitive
+// Built on P0-15.22 Authority (SEALED), P0-15.21 Capability (SEALED),
+// P0-15.20 Identity (SEALED), P0-15.19 Ed25519 (SEALED).
+//
+// Evidence = "what did this agent actually do?" (verifiable fact record).
+// Evidence is NOT Trust. Evidence stores hashes, not raw large data.
+// Evidence supports minimal chaining (previous_evidence_id) for audit trails.
+// ============================================================================
+
+from "../crypto" import sha256Bytes, hexToBytes
+from "../crypto/ed25519" import sign, verify
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+fn uint32_to_bytes_be(n: int) -> list {
+    let bytes = [0, 0, 0, 0]
+    bytes[0] = (n >> 24) & 0xFF
+    bytes[1] = (n >> 16) & 0xFF
+    bytes[2] = (n >> 8) & 0xFF
+    bytes[3] = n & 0xFF
+    return bytes
+}
+
+fn bytes_to_uint32_be(bytes: list, offset: int) -> int {
+    let v = (bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]
+    return v & 0xFFFFFFFF
+}
+
+fn uint64_to_bytes_be(n: int) -> list {
+    let bytes = [0, 0, 0, 0, 0, 0, 0, 0]
+    bytes[0] = (n >> 56) & 0xFF
+    bytes[1] = (n >> 48) & 0xFF
+    bytes[2] = (n >> 40) & 0xFF
+    bytes[3] = (n >> 32) & 0xFF
+    bytes[4] = (n >> 24) & 0xFF
+    bytes[5] = (n >> 16) & 0xFF
+    bytes[6] = (n >> 8) & 0xFF
+    bytes[7] = n & 0xFF
+    return bytes
+}
+
+fn bytes_to_uint64_be(bytes: list, offset: int) -> int {
+    let v = 0
+    v = (v << 8) | bytes[offset]
+    v = (v << 8) | bytes[offset + 1]
+    v = (v << 8) | bytes[offset + 2]
+    v = (v << 8) | bytes[offset + 3]
+    v = (v << 8) | bytes[offset + 4]
+    v = (v << 8) | bytes[offset + 5]
+    v = (v << 8) | bytes[offset + 6]
+    v = (v << 8) | bytes[offset + 7]
+    return v
+}
+
+fn string_to_bytes(s: string) -> list {
+    let bytes = []
+    let i = 0
+    let len = strings.length(s)
+    while i < len {
+        bytes[i] = strings.charCodeAt(s, i) & 0xFF
+        i = i + 1
+    }
+    return bytes
+}
+
+fn ascii_lookup(c: int) -> string {
+    if c == 32 { return " " }
+    if c == 33 { return "!" }
+    if c == 35 { return "#" }
+    if c == 36 { return "$" }
+    if c == 37 { return "%" }
+    if c == 38 { return "&" }
+    if c == 39 { return "'" }
+    if c == 40 { return "(" }
+    if c == 41 { return ")" }
+    if c == 42 { return "*" }
+    if c == 43 { return "+" }
+    if c == 44 { return "," }
+    if c == 45 { return "-" }
+    if c == 46 { return "." }
+    if c == 47 { return "/" }
+    if c >= 48 && c <= 57 {
+        let digits = "0123456789"
+        return strings.charAt(digits, c - 48)
+    }
+    if c == 58 { return ":" }
+    if c == 59 { return ";" }
+    if c == 60 { return "<" }
+    if c == 61 { return "=" }
+    if c == 62 { return ">" }
+    if c == 63 { return "?" }
+    if c == 64 { return "@" }
+    if c >= 65 && c <= 90 {
+        let upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        return strings.charAt(upper, c - 65)
+    }
+    if c == 91 { return "[" }
+    if c == 93 { return "]" }
+    if c == 94 { return "^" }
+    if c == 95 { return "_" }
+    if c == 96 { return "`" }
+    if c >= 97 && c <= 122 {
+        let lower = "abcdefghijklmnopqrstuvwxyz"
+        return strings.charAt(lower, c - 97)
+    }
+    if c == 123 { return "{" }
+    if c == 124 { return "|" }
+    if c == 125 { return "}" }
+    if c == 126 { return "~" }
+    return "?"
+}
+
+fn bytes_to_string(bytes: list) -> string {
+    let s = ""
+    let i = 0
+    let len = arrays.length(bytes)
+    while i < len {
+        s = s + ascii_lookup(bytes[i])
+        i = i + 1
+    }
+    return s
+}
+
+fn bytes_append(dst: list, src: list) -> list {
+    let i = 0
+    let len = arrays.length(src)
+    while i < len {
+        dst[arrays.length(dst)] = src[i]
+        i = i + 1
+    }
+    return dst
+}
+
+fn bytes_equal(a: list, b: list) -> int {
+    if arrays.length(a) != arrays.length(b) { return 0 }
+    let i = 0
+    while i < arrays.length(a) {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+fn zero_bytes(n: int) -> list {
+    let b = []
+    let i = 0
+    while i < n { b[i] = 0; i = i + 1 }
+    return b
+}
+
+fn copy_bytes(src: list) -> list {
+    let dst = []
+    let i = 0
+    let len = arrays.length(src)
+    while i < len { dst[i] = src[i]; i = i + 1 }
+    return dst
+}
+
+// ---------------------------------------------------------------------------
+// Evidence constants
+// ---------------------------------------------------------------------------
+
+fn EVIDENCE_VERSION() -> int { return 1 }
+fn EVIDENCE_ID_SIZE() -> int { return 32 }
+fn EVIDENCE_HASH_SIZE() -> int { return 32 }
+fn EVIDENCE_SIGNATURE_SIZE() -> int { return 64 }
+
+// ---------------------------------------------------------------------------
+// Canonical material for evidence_id
+// version(4) || agent_id(32) || capability_id(32) ||
+// action_len(4) || action || input_hash(32) || output_hash(32) ||
+// timestamp(8) || result_len(4) || result || previous_evidence_id(32)
+// NOTE: metadata and signature are NOT part of evidence_id
+// ---------------------------------------------------------------------------
+
+fn evidence_build_canonical_material(version: int, agent_id: list, capability_id: list, action: string, input_hash: list, output_hash: list, timestamp: int, result: string, previous_evidence_id: list) -> list {
+    let material = []
+    bytes_append(material, uint32_to_bytes_be(version))
+    bytes_append(material, agent_id)
+    bytes_append(material, capability_id)
+
+    let aBytes = string_to_bytes(action)
+    bytes_append(material, uint32_to_bytes_be(arrays.length(aBytes)))
+    bytes_append(material, aBytes)
+
+    bytes_append(material, input_hash)
+    bytes_append(material, output_hash)
+    bytes_append(material, uint64_to_bytes_be(timestamp))
+
+    let rBytes = string_to_bytes(result)
+    bytes_append(material, uint32_to_bytes_be(arrays.length(rBytes)))
+    bytes_append(material, rBytes)
+
+    bytes_append(material, previous_evidence_id)
+
+    return material
+}
+
+fn evidence_compute_id(version: int, agent_id: list, capability_id: list, action: string, input_hash: list, output_hash: list, timestamp: int, result: string, previous_evidence_id: list) -> list {
+    let material = evidence_build_canonical_material(version, agent_id, capability_id, action, input_hash, output_hash, timestamp, result, previous_evidence_id)
+    let hex = sha256Bytes(material)
+    return hexToBytes(hex)
+}
+
+// ---------------------------------------------------------------------------
+// evidence_create(agent_id, capability_id, action, input_hash, output_hash,
+//                 timestamp, result, metadata, previous_evidence_id,
+//                 agent_private_key)
+// returns evidence map with evidence_id and signature
+// ---------------------------------------------------------------------------
+
+fn evidence_create(agent_id: list, capability_id: list, action: string, input_hash: list, output_hash: list, timestamp: int, result: string, metadata: string, previous_evidence_id: list, agent_private_key: list) -> map {
+    let version = EVIDENCE_VERSION()
+    // Defensive copies to avoid reference aliasing (TLL lists are reference types)
+    let agent_id_c = copy_bytes(agent_id)
+    let capability_id_c = copy_bytes(capability_id)
+    let input_hash_c = copy_bytes(input_hash)
+    let output_hash_c = copy_bytes(output_hash)
+    let previous_c = copy_bytes(previous_evidence_id)
+
+    let evidence_id = evidence_compute_id(version, agent_id_c, capability_id_c, action, input_hash_c, output_hash_c, timestamp, result, previous_c)
+
+    let ev = {
+        "version": version,
+        "evidence_id": evidence_id,
+        "agent_id": agent_id_c,
+        "capability_id": capability_id_c,
+        "action": action,
+        "input_hash": input_hash_c,
+        "output_hash": output_hash_c,
+        "timestamp": timestamp,
+        "result": result,
+        "metadata": metadata,
+        "previous_evidence_id": previous_c,
+        "signature": []
+    }
+
+    let material = evidence_build_canonical_material(version, agent_id_c, capability_id_c, action, input_hash_c, output_hash_c, timestamp, result, previous_c)
+    let sig = sign(agent_private_key, material)
+    ev["signature"] = sig
+
+    return ev
+}
+
+// ---------------------------------------------------------------------------
+// evidence_validate(evidence)
+// checks version, IDs, evidence_id integrity
+// ---------------------------------------------------------------------------
+
+fn evidence_validate(ev: map) -> int {
+    if ev["version"] != EVIDENCE_VERSION() { return 0 }
+    if arrays.length(ev["evidence_id"]) != EVIDENCE_ID_SIZE() { return 0 }
+    if arrays.length(ev["agent_id"]) != EVIDENCE_ID_SIZE() { return 0 }
+    if arrays.length(ev["capability_id"]) != EVIDENCE_ID_SIZE() { return 0 }
+    if arrays.length(ev["input_hash"]) != EVIDENCE_HASH_SIZE() { return 0 }
+    if arrays.length(ev["output_hash"]) != EVIDENCE_HASH_SIZE() { return 0 }
+    if arrays.length(ev["previous_evidence_id"]) != EVIDENCE_ID_SIZE() { return 0 }
+    if arrays.length(ev["signature"]) != EVIDENCE_SIGNATURE_SIZE() { return 0 }
+
+    let expected = evidence_compute_id(
+        ev["version"],
+        ev["agent_id"],
+        ev["capability_id"],
+        ev["action"],
+        ev["input_hash"],
+        ev["output_hash"],
+        ev["timestamp"],
+        ev["result"],
+        ev["previous_evidence_id"]
+    )
+    if bytes_equal(expected, ev["evidence_id"]) != 1 { return 0 }
+
+    return 1
+}
+
+// ---------------------------------------------------------------------------
+// evidence_verify_signature(evidence, agent_public_key)
+// ---------------------------------------------------------------------------
+
+fn evidence_verify_signature(ev: map, agent_public_key: list) -> int {
+    let material = evidence_build_canonical_material(
+        ev["version"],
+        ev["agent_id"],
+        ev["capability_id"],
+        ev["action"],
+        ev["input_hash"],
+        ev["output_hash"],
+        ev["timestamp"],
+        ev["result"],
+        ev["previous_evidence_id"]
+    )
+    return verify(agent_public_key, material, ev["signature"])
+}
+
+// ---------------------------------------------------------------------------
+// evidence_chain_verify(current, previous)
+// verify that current.previous_evidence_id == previous.evidence_id
+// ---------------------------------------------------------------------------
+
+fn evidence_chain_verify(current: map, previous: map) -> int {
+    return bytes_equal(current["previous_evidence_id"], previous["evidence_id"])
+}
+
+// ---------------------------------------------------------------------------
+// evidence_encode(evidence)
+// format: version(4) || agent_id(32) || capability_id(32) ||
+//         action_len(4) || action || input_hash(32) || output_hash(32) ||
+//         timestamp(8) || result_len(4) || result ||
+//         metadata_len(4) || metadata || previous_evidence_id(32) ||
+//         evidence_id(32) || signature(64)
+// ---------------------------------------------------------------------------
+
+fn evidence_encode(ev: map) -> list {
+    let encoded = []
+    bytes_append(encoded, uint32_to_bytes_be(ev["version"]))
+    bytes_append(encoded, ev["agent_id"])
+    bytes_append(encoded, ev["capability_id"])
+
+    let aBytes = string_to_bytes(ev["action"])
+    bytes_append(encoded, uint32_to_bytes_be(arrays.length(aBytes)))
+    bytes_append(encoded, aBytes)
+
+    bytes_append(encoded, ev["input_hash"])
+    bytes_append(encoded, ev["output_hash"])
+    bytes_append(encoded, uint64_to_bytes_be(ev["timestamp"]))
+
+    let rBytes = string_to_bytes(ev["result"])
+    bytes_append(encoded, uint32_to_bytes_be(arrays.length(rBytes)))
+    bytes_append(encoded, rBytes)
+
+    let mBytes = string_to_bytes(ev["metadata"])
+    bytes_append(encoded, uint32_to_bytes_be(arrays.length(mBytes)))
+    bytes_append(encoded, mBytes)
+
+    bytes_append(encoded, ev["previous_evidence_id"])
+    bytes_append(encoded, ev["evidence_id"])
+    bytes_append(encoded, ev["signature"])
+
+    return encoded
+}
+
+// ---------------------------------------------------------------------------
+// evidence_decode(encoded)
+// returns evidence map, or empty map on error
+// ---------------------------------------------------------------------------
+
+fn evidence_decode(encoded: list) -> map {
+    let total = arrays.length(encoded)
+    // minimum: 4 + 32 + 32 + 4 + 0 + 32 + 32 + 8 + 4 + 0 + 4 + 0 + 32 + 32 + 64 = 280
+    if total < 280 { return {} }
+
+    let offset = 0
+    let version = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+
+    let agent_id = []
+    let i = 0
+    while i < 32 { agent_id[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + 32
+
+    let capability_id = []
+    i = 0
+    while i < 32 { capability_id[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + 32
+
+    let aLen = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+    if offset + aLen > total - 208 { return {} }
+    let aBytes = []
+    i = 0
+    while i < aLen { aBytes[i] = encoded[offset + i]; i = i + 1 }
+    let action = bytes_to_string(aBytes)
+    offset = offset + aLen
+
+    let input_hash = []
+    i = 0
+    while i < 32 { input_hash[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + 32
+
+    let output_hash = []
+    i = 0
+    while i < 32 { output_hash[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + 32
+
+    let timestamp = bytes_to_uint64_be(encoded, offset)
+    offset = offset + 8
+
+    let rLen = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+    if offset + rLen > total - 132 { return {} }
+    let rBytes = []
+    i = 0
+    while i < rLen { rBytes[i] = encoded[offset + i]; i = i + 1 }
+    let result = bytes_to_string(rBytes)
+    offset = offset + rLen
+
+    let mLen = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+    if offset + mLen > total - 128 { return {} }
+    let mBytes = []
+    i = 0
+    while i < mLen { mBytes[i] = encoded[offset + i]; i = i + 1 }
+    let metadata = bytes_to_string(mBytes)
+    offset = offset + mLen
+
+    let previous_evidence_id = []
+    i = 0
+    while i < 32 { previous_evidence_id[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + 32
+
+    let evidence_id = []
+    i = 0
+    while i < 32 { evidence_id[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + 32
+
+    if offset + 64 != total { return {} }
+    let signature = []
+    i = 0
+    while i < 64 { signature[i] = encoded[offset + i]; i = i + 1 }
+
+    return {
+        "version": version,
+        "evidence_id": evidence_id,
+        "agent_id": agent_id,
+        "capability_id": capability_id,
+        "action": action,
+        "input_hash": input_hash,
+        "output_hash": output_hash,
+        "timestamp": timestamp,
+        "result": result,
+        "metadata": metadata,
+        "previous_evidence_id": previous_evidence_id,
+        "signature": signature
+    }
+}
+
+// ---------------------------------------------------------------------------
+// evidence_equals(a, b)
+// compare by evidence_id
+// ---------------------------------------------------------------------------
+
+fn evidence_equals(a: map, b: map) -> int {
+    return bytes_equal(a["evidence_id"], b["evidence_id"])
+}

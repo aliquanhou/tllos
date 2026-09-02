@@ -1,0 +1,300 @@
+
+// P0-15.23 Evidence Test Gates (12 gates)
+
+from "../../stdlib/identity/identity" import identity_generate
+from "../../stdlib/capability/capability" import capability_create
+from "../../stdlib/evidence/evidence" import evidence_create, evidence_compute_id, evidence_validate, evidence_encode, evidence_decode, evidence_equals, evidence_verify_signature, evidence_chain_verify, zero_bytes, EVIDENCE_VERSION
+
+fn bytes_eq(a: list, b: list) -> int {
+    if arrays.length(a) != arrays.length(b) { return 0 }
+    let i = 0
+    while i < arrays.length(a) {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+fn make_seed(start: int) -> list {
+    let seed = []
+    let i = 0
+    while i < 32 { seed[i] = (start + i) & 0xFF; i = i + 1 }
+    return seed
+}
+
+fn make_hash(start: int) -> list {
+    let h = []
+    let i = 0
+    while i < 32 { h[i] = (start + i * 7) & 0xFF; i = i + 1 }
+    return h
+}
+
+// Gate 01: Deterministic Evidence ID
+fn gate_01() -> int {
+    let ag = identity_generate(make_seed(1))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let inHash = make_hash(10)
+    let outHash = make_hash(20)
+    let prev = zero_bytes(32)
+    let e1 = evidence_create(ag["agent_id"], cap["capability_id"], "submit_tx", inHash, outHash, 1000, "PASS", "meta", prev, ag["private_key"])
+    let e2 = evidence_create(ag["agent_id"], cap["capability_id"], "submit_tx", inHash, outHash, 1000, "PASS", "meta", prev, ag["private_key"])
+    if bytes_eq(e1["evidence_id"], e2["evidence_id"]) != 1 {
+        io.println("FAIL 01: same evidence produced different IDs")
+        return 0
+    }
+    io.println("PASS 01: Deterministic Evidence ID")
+    return 1
+}
+
+// Gate 02: Canonical Encoding
+fn gate_02() -> int {
+    let ag = identity_generate(make_seed(1))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let e = evidence_create(ag["agent_id"], cap["capability_id"], "action", make_hash(1), make_hash(2), 1000, "PASS", "", zero_bytes(32), ag["private_key"])
+    let enc = evidence_encode(e)
+    if arrays.length(enc) < 280 {
+        io.println("FAIL 02: encoding too short")
+        return 0
+    }
+    let enc2 = evidence_encode(e)
+    if bytes_eq(enc, enc2) != 1 {
+        io.println("FAIL 02: encoding not deterministic")
+        return 0
+    }
+    io.println("PASS 02: Canonical Encoding")
+    return 1
+}
+
+// Gate 03: Roundtrip
+fn gate_03() -> int {
+    let ag = identity_generate(make_seed(1))
+    let cap = capability_create("test_cap", "Test", "{x:int}", "meta")
+    let e = evidence_create(ag["agent_id"], cap["capability_id"], "run_test", make_hash(1), make_hash(2), 1234567890, "PASS", "test_run_001", zero_bytes(32), ag["private_key"])
+    let enc = evidence_encode(e)
+    let decoded = evidence_decode(enc)
+    if decoded["version"] != e["version"] { io.println("FAIL 03: version"); return 0 }
+    if bytes_eq(decoded["evidence_id"], e["evidence_id"]) != 1 { io.println("FAIL 03: evidence_id"); return 0 }
+    if bytes_eq(decoded["agent_id"], e["agent_id"]) != 1 { io.println("FAIL 03: agent_id"); return 0 }
+    if bytes_eq(decoded["capability_id"], e["capability_id"]) != 1 { io.println("FAIL 03: capability_id"); return 0 }
+    if decoded["action"] != e["action"] { io.println("FAIL 03: action"); return 0 }
+    if bytes_eq(decoded["input_hash"], e["input_hash"]) != 1 { io.println("FAIL 03: input_hash"); return 0 }
+    if bytes_eq(decoded["output_hash"], e["output_hash"]) != 1 { io.println("FAIL 03: output_hash"); return 0 }
+    if decoded["timestamp"] != e["timestamp"] { io.println("FAIL 03: timestamp"); return 0 }
+    if decoded["result"] != e["result"] { io.println("FAIL 03: result"); return 0 }
+    if decoded["metadata"] != e["metadata"] { io.println("FAIL 03: metadata"); return 0 }
+    if bytes_eq(decoded["previous_evidence_id"], e["previous_evidence_id"]) != 1 { io.println("FAIL 03: previous"); return 0 }
+    if bytes_eq(decoded["signature"], e["signature"]) != 1 { io.println("FAIL 03: signature"); return 0 }
+    if evidence_validate(decoded) != 1 { io.println("FAIL 03: validate"); return 0 }
+    let reenc = evidence_encode(decoded)
+    if bytes_eq(enc, reenc) != 1 { io.println("FAIL 03: re-encode"); return 0 }
+    io.println("PASS 03: Roundtrip")
+    return 1
+}
+
+// Gate 04: Agent Binding
+fn gate_04() -> int {
+    let ag1 = identity_generate(make_seed(1))
+    let ag2 = identity_generate(make_seed(3))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let e1 = evidence_create(ag1["agent_id"], cap["capability_id"], "act", make_hash(1), make_hash(2), 1000, "PASS", "", zero_bytes(32), ag1["private_key"])
+    let e2 = evidence_create(ag2["agent_id"], cap["capability_id"], "act", make_hash(1), make_hash(2), 1000, "PASS", "", zero_bytes(32), ag2["private_key"])
+    if bytes_eq(e1["evidence_id"], e2["evidence_id"]) == 1 {
+        io.println("FAIL 04: different agents produced same ID")
+        return 0
+    }
+    io.println("PASS 04: Agent Binding")
+    return 1
+}
+
+// Gate 05: Capability Binding
+fn gate_05() -> int {
+    let ag = identity_generate(make_seed(1))
+    let cap1 = capability_create("cap_a", "A", "{}", "")
+    let cap2 = capability_create("cap_b", "B", "{}", "")
+    let e1 = evidence_create(ag["agent_id"], cap1["capability_id"], "act", make_hash(1), make_hash(2), 1000, "PASS", "", zero_bytes(32), ag["private_key"])
+    let e2 = evidence_create(ag["agent_id"], cap2["capability_id"], "act", make_hash(1), make_hash(2), 1000, "PASS", "", zero_bytes(32), ag["private_key"])
+    if bytes_eq(e1["evidence_id"], e2["evidence_id"]) == 1 {
+        io.println("FAIL 05: different capabilities produced same ID")
+        return 0
+    }
+    io.println("PASS 05: Capability Binding")
+    return 1
+}
+
+// Gate 06: Input Hash Integrity
+fn gate_06() -> int {
+    let ag = identity_generate(make_seed(1))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let in1 = make_hash(1)
+    let in2 = make_hash(2)
+    let e1 = evidence_create(ag["agent_id"], cap["capability_id"], "act", in1, make_hash(10), 1000, "PASS", "", zero_bytes(32), ag["private_key"])
+    let e2 = evidence_create(ag["agent_id"], cap["capability_id"], "act", in2, make_hash(10), 1000, "PASS", "", zero_bytes(32), ag["private_key"])
+    if bytes_eq(e1["evidence_id"], e2["evidence_id"]) == 1 {
+        io.println("FAIL 06: different input hashes produced same ID")
+        return 0
+    }
+    // tamper input_hash after creation -> validation fails
+    e1["input_hash"][0] = e1["input_hash"][0] ^ 0xFF
+    if evidence_validate(e1) != 0 {
+        io.println("FAIL 06: tampered input_hash passed validation")
+        return 0
+    }
+    io.println("PASS 06: Input Hash Integrity")
+    return 1
+}
+
+// Gate 07: Output Hash Integrity
+fn gate_07() -> int {
+    let ag = identity_generate(make_seed(1))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let out1 = make_hash(10)
+    let out2 = make_hash(20)
+    let e1 = evidence_create(ag["agent_id"], cap["capability_id"], "act", make_hash(1), out1, 1000, "PASS", "", zero_bytes(32), ag["private_key"])
+    let e2 = evidence_create(ag["agent_id"], cap["capability_id"], "act", make_hash(1), out2, 1000, "PASS", "", zero_bytes(32), ag["private_key"])
+    if bytes_eq(e1["evidence_id"], e2["evidence_id"]) == 1 {
+        io.println("FAIL 07: different output hashes produced same ID")
+        return 0
+    }
+    e1["output_hash"][0] = e1["output_hash"][0] ^ 0xFF
+    if evidence_validate(e1) != 0 {
+        io.println("FAIL 07: tampered output_hash passed validation")
+        return 0
+    }
+    io.println("PASS 07: Output Hash Integrity")
+    return 1
+}
+
+// Gate 08: Signature
+fn gate_08() -> int {
+    let ag = identity_generate(make_seed(1))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let e = evidence_create(ag["agent_id"], cap["capability_id"], "act", make_hash(1), make_hash(2), 1000, "PASS", "", zero_bytes(32), ag["private_key"])
+    if arrays.length(e["signature"]) != 64 {
+        io.println("FAIL 08: signature not 64 bytes")
+        return 0
+    }
+    if evidence_verify_signature(e, ag["public_key"]) != 1 {
+        io.println("FAIL 08: valid signature failed verification")
+        return 0
+    }
+    io.println("PASS 08: Signature")
+    return 1
+}
+
+// Gate 09: Signature Tampering
+fn gate_09() -> int {
+    let ag = identity_generate(make_seed(1))
+    let other = identity_generate(make_seed(5))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let e = evidence_create(ag["agent_id"], cap["capability_id"], "act", make_hash(1), make_hash(2), 1000, "PASS", "", zero_bytes(32), ag["private_key"])
+    // tamper signature
+    e["signature"][0] = e["signature"][0] ^ 0xFF
+    if evidence_verify_signature(e, ag["public_key"]) != 0 {
+        io.println("FAIL 09: tampered signature passed verification")
+        return 0
+    }
+    // wrong public key
+    let e2 = evidence_create(ag["agent_id"], cap["capability_id"], "act", make_hash(1), make_hash(2), 1000, "PASS", "", zero_bytes(32), ag["private_key"])
+    if evidence_verify_signature(e2, other["public_key"]) != 0 {
+        io.println("FAIL 09: wrong public key passed verification")
+        return 0
+    }
+    io.println("PASS 09: Signature Tampering")
+    return 1
+}
+
+// Gate 10: Chain Link Integrity
+fn gate_10() -> int {
+    let ag = identity_generate(make_seed(1))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    // E1: first in chain, previous = zero
+    let e1 = evidence_create(ag["agent_id"], cap["capability_id"], "step1", make_hash(1), make_hash(2), 1000, "PASS", "", zero_bytes(32), ag["private_key"])
+    // E2: previous = E1.id
+    let e2 = evidence_create(ag["agent_id"], cap["capability_id"], "step2", make_hash(3), make_hash(4), 2000, "PASS", "", e1["evidence_id"], ag["private_key"])
+    // E3: previous = E2.id
+    let e3 = evidence_create(ag["agent_id"], cap["capability_id"], "step3", make_hash(5), make_hash(6), 3000, "PASS", "", e2["evidence_id"], ag["private_key"])
+
+    // verify chain
+    if evidence_chain_verify(e2, e1) != 1 { io.println("FAIL 10: E2->E1 link broken"); return 0 }
+    if evidence_chain_verify(e3, e2) != 1 { io.println("FAIL 10: E3->E2 link broken"); return 0 }
+    // wrong link
+    if evidence_chain_verify(e3, e1) != 0 { io.println("FAIL 10: E3->E1 should be broken"); return 0 }
+    // tamper E1 evidence_id -> chain breaks
+    let e1_tampered = e1
+    e1_tampered["evidence_id"][0] = e1_tampered["evidence_id"][0] ^ 0xFF
+    if evidence_chain_verify(e2, e1_tampered) != 0 { io.println("FAIL 10: tampered E1 still linked"); return 0 }
+    io.println("PASS 10: Chain Link Integrity")
+    return 1
+}
+
+// Gate 11: Timestamp Validation
+fn gate_11() -> int {
+    let ag = identity_generate(make_seed(1))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let e1 = evidence_create(ag["agent_id"], cap["capability_id"], "act", make_hash(1), make_hash(2), 1000, "PASS", "", zero_bytes(32), ag["private_key"])
+    let e2 = evidence_create(ag["agent_id"], cap["capability_id"], "act", make_hash(1), make_hash(2), 2000, "PASS", "", zero_bytes(32), ag["private_key"])
+    // different timestamps -> different IDs
+    if bytes_eq(e1["evidence_id"], e2["evidence_id"]) == 1 {
+        io.println("FAIL 11: different timestamps produced same ID")
+        return 0
+    }
+    // tamper timestamp -> validation fails
+    e1["timestamp"] = 9999
+    if evidence_validate(e1) != 0 {
+        io.println("FAIL 11: tampered timestamp passed validation")
+        return 0
+    }
+    io.println("PASS 11: Timestamp Validation")
+    return 1
+}
+
+// Gate 12: Result Integrity
+fn gate_12() -> int {
+    let ag = identity_generate(make_seed(1))
+    let cap = capability_create("test_cap", "Test", "{}", "")
+    let e1 = evidence_create(ag["agent_id"], cap["capability_id"], "act", make_hash(1), make_hash(2), 1000, "PASS", "", zero_bytes(32), ag["private_key"])
+    let e2 = evidence_create(ag["agent_id"], cap["capability_id"], "act", make_hash(1), make_hash(2), 1000, "FAIL", "", zero_bytes(32), ag["private_key"])
+    // different results -> different IDs
+    if bytes_eq(e1["evidence_id"], e2["evidence_id"]) == 1 {
+        io.println("FAIL 12: different results produced same ID")
+        return 0
+    }
+    // tamper result -> validation fails
+    e1["result"] = "TAMPERED"
+    if evidence_validate(e1) != 0 {
+        io.println("FAIL 12: tampered result passed validation")
+        return 0
+    }
+    io.println("PASS 12: Result Integrity")
+    return 1
+}
+
+fn main() -> int {
+    io.println("=== P0-15.23 Evidence Test Gates ===")
+    io.println("")
+    let passed = 0
+    let total = 12
+    if gate_01() == 1 { passed = passed + 1 }
+    if gate_02() == 1 { passed = passed + 1 }
+    if gate_03() == 1 { passed = passed + 1 }
+    if gate_04() == 1 { passed = passed + 1 }
+    if gate_05() == 1 { passed = passed + 1 }
+    if gate_06() == 1 { passed = passed + 1 }
+    if gate_07() == 1 { passed = passed + 1 }
+    if gate_08() == 1 { passed = passed + 1 }
+    if gate_09() == 1 { passed = passed + 1 }
+    if gate_10() == 1 { passed = passed + 1 }
+    if gate_11() == 1 { passed = passed + 1 }
+    if gate_12() == 1 { passed = passed + 1 }
+    io.println("")
+    io.println("=== Results: " + convert.toString(passed) + "/" + convert.toString(total) + " gates passed ===")
+    if passed == total {
+        io.println("PASS")
+        return 0
+    } else {
+        io.println("FAIL")
+        return 1
+    }
+}
+
+main()
