@@ -37,15 +37,18 @@ jobs:
         run: |
           set "VSWHERE=C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
           if not exist "%VSWHERE%" set "VSWHERE=C:\Program Files\Microsoft Visual Studio\Installer\vswhere.exe"
-          for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALLDIR=%%i"
+          "%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath > "%TEMP%\vsins.txt" 2>nul
+          set /p VSINSTALLDIR=<"%TEMP%\vsins.txt"
           echo VSINSTALLDIR: %VSINSTALLDIR%
           call "%VSINSTALLDIR%\VC\Auxiliary\Build\vcvarsall.bat" x64 >nul 2>&1
-          for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find "VC\Tools\MSVC\*\bin\Hostx64\x64\cl.exe"`) do set "CLPATH=%%i"
+          "%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find "VC\Tools\MSVC\*\bin\Hostx64\x64\cl.exe" > "%TEMP%\clpath.txt" 2>nul
+          set /p CLPATH=<"%TEMP%\clpath.txt"
           echo CLPATH: %CLPATH%
           if exist "%CLPATH%" (
             for %%F in ("%CLPATH%") do set "PATH=%%~dpF;%PATH%"
           ) else (
-            echo WARNING: cl.exe not found via vswhere, trying vcvars PATH
+            echo WARNING: cl.exe not found via vswhere -find
+            dir /s /b "%VSINSTALLDIR%\VC\Tools\MSVC\*\bin\Hostx64\x64\cl.exe" 2>nul
           )
           where cl
           cd host\c
