@@ -1,0 +1,595 @@
+
+// TLL Agent Ecosystem - Agent Profile + Capability Discovery
+// P0-15.24+ Agent Ecosystem
+//
+// AgentProfile unifies an agent's identity, capabilities, authorities,
+// and metadata into a single verifiable profile.
+//
+// This is the top layer of the Agent Trust Infrastructure:
+//   Identity (who am I?)
+//     -> Capability (what can I do?)
+//       -> Authority (what am I allowed to do?)
+//         -> Evidence (what have I proven?)
+//           -> Trust (why should you believe me?)
+//             -> AgentProfile (unified agent identity)
+//
+// SECURITY NOTICE:
+// TLL Native Ed25519 is currently Engineering-Verified.
+// RFC 8032 test vectors passing does NOT constitute production-grade
+// cryptographic security. Agent profiles built on this implementation
+// MUST NOT claim production cryptographic trust solely because RFC 8032
+// vectors pass. Independent cryptographic audit remains pending.
+
+from "../crypto" import sha256Bytes, hexToBytes
+from "../identity/identity" import identity_validate, identity_encode, identity_decode, identity_equals, identity_sign, identity_verify
+from "../capability/capability" import capability_validate, capability_encode, capability_decode, capability_equals, capability_set_create, capability_set_add, capability_set_contains, capability_set_encode, capability_set_decode
+from "../authority/authority" import authority_validate, authority_encode, authority_decode, authority_equals, authority_verify_signature, authority_is_expired
+from "../evidence/evidence" import evidence_validate, evidence_encode, evidence_decode, evidence_equals, evidence_verify_signature, evidence_chain_verify
+from "../trust/trust" import trust_evaluate, trust_validate, trust_encode, trust_decode, trust_equals
+
+// === Constants ===
+fn AGENT_PROTOCOL_VERSION() -> int { return 1 }
+fn AGENT_PROFILE_MAGIC() -> string { return "TLLAP" }
+fn AGENT_PROFILE_MAGIC_BYTES() -> list { return [84, 76, 76, 65, 80] }
+
+// === uint32 big-endian encode/decode ===
+fn uint32_to_bytes_be(n: int) -> list {
+    let b = []
+    b[0] = (n >> 24) & 0xFF
+    b[1] = (n >> 16) & 0xFF
+    b[2] = (n >> 8) & 0xFF
+    b[3] = n & 0xFF
+    return b
+}
+
+fn bytes_to_uint32_be(bytes: list, offset: int) -> int {
+    return ((bytes[offset] & 0xFF) << 24) |
+           ((bytes[offset + 1] & 0xFF) << 16) |
+           ((bytes[offset + 2] & 0xFF) << 8) |
+           (bytes[offset + 3] & 0xFF)
+}
+
+// === bytes helpers ===
+fn copy_bytes(src: list) -> list {
+    let dst = []
+    let i = 0
+    while i < arrays.length(src) {
+        dst[i] = src[i]
+        i = i + 1
+    }
+    return dst
+}
+
+fn bytes_equal(a: list, b: list) -> int {
+    if arrays.length(a) != arrays.length(b) { return 0 }
+    let i = 0
+    while i < arrays.length(a) {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+// === string <-> bytes (ASCII only) ===
+fn string_to_bytes(s: string) -> list {
+    let b = []
+    let i = 0
+    let len = strings.length(s)
+    while i < len {
+        b[i] = convert.toInt(strings.charCodeAt(s, i))
+        i = i + 1
+    }
+    return b
+}
+
+fn bytes_to_string(b: list) -> string {
+    let s = ""
+    let i = 0
+    let ascii = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+    while i < arrays.length(b) {
+        let c = b[i]
+        if c >= 32 && c <= 126 {
+            s = s + strings.charAt(ascii, c - 32)
+        } else {
+            s = s + "?"
+        }
+        i = i + 1
+    }
+    return s
+}
+
+// === Agent Profile ===
+//
+// AgentProfile structure:
+//   protocol_version  (uint32)
+//   profile_id        (32 bytes = SHA256(identity.agent_id || protocol_version))
+//   identity          (encoded Identity)
+//   capabilities      (encoded CapabilitySet)
+//   authorities       (list of encoded Authority, count-prefixed)
+//   metadata          (string, key=value pairs separated by ;)
+//   signature         (64 bytes - agent signs profile canonical material)
+
+fn agent_profile_create(identity: map, capabilities: list, authorities: list, metadata: string, private_key: list) -> map {
+    let profile = {}
+    profile["protocol_version"] = AGENT_PROTOCOL_VERSION()
+    profile["identity"] = identity
+    profile["capabilities"] = capabilities
+    profile["authorities"] = authorities
+    profile["metadata"] = metadata
+
+    // Compute profile_id = SHA256(agent_id || protocol_version_bytes)
+    let idMaterial = copy_bytes(identity["agent_id"])
+    let pvBytes = uint32_to_bytes_be(AGENT_PROTOCOL_VERSION())
+    let j = 0
+    while j < 4 {
+        idMaterial[arrays.length(idMaterial)] = pvBytes[j]
+        j = j + 1
+    }
+    let idHex = sha256Bytes(idMaterial)
+    profile["profile_id"] = hexToBytes(idHex)
+
+    // Sign profile canonical material using identity_sign
+    let canonical = agent_profile_build_canonical(profile)
+    profile["signature"] = identity_sign(identity, canonical)
+
+    return profile
+}
+
+fn agent_profile_build_canonical(profile: map) -> list {
+    let material = []
+
+    // protocol_version
+    let pv = uint32_to_bytes_be(profile["protocol_version"])
+    let i = 0
+    while i < 4 { material[i] = pv[i]; i = i + 1 }
+
+    // identity.agent_id
+    let agentId = profile["identity"]["agent_id"]
+    i = 0
+    while i < 32 { material[arrays.length(material)] = agentId[i]; i = i + 1 }
+
+    // capabilities count + each capability_id
+    let caps = profile["capabilities"]
+    let capCount = arrays.length(caps)
+    let ccBytes = uint32_to_bytes_be(capCount)
+    i = 0
+    while i < 4 { material[arrays.length(material)] = ccBytes[i]; i = i + 1 }
+    i = 0
+    while i < capCount {
+        let cid = caps[i]["capability_id"]
+        let k = 0
+        while k < 32 { material[arrays.length(material)] = cid[k]; k = k + 1 }
+        i = i + 1
+    }
+
+    // authorities count + each authority_id
+    let auths = profile["authorities"]
+    let authCount = arrays.length(auths)
+    let acBytes = uint32_to_bytes_be(authCount)
+    i = 0
+    while i < 4 { material[arrays.length(material)] = acBytes[i]; i = i + 1 }
+    i = 0
+    while i < authCount {
+        let aid = auths[i]["authority_id"]
+        let k = 0
+        while k < 32 { material[arrays.length(material)] = aid[k]; k = k + 1 }
+        i = i + 1
+    }
+
+    // metadata
+    let metaBytes = string_to_bytes(profile["metadata"])
+    let mlBytes = uint32_to_bytes_be(arrays.length(metaBytes))
+    i = 0
+    while i < 4 { material[arrays.length(material)] = mlBytes[i]; i = i + 1 }
+    i = 0
+    while i < arrays.length(metaBytes) { material[arrays.length(material)] = metaBytes[i]; i = i + 1 }
+
+    return material
+}
+
+fn agent_profile_validate(profile: map) -> int {
+    if profile["protocol_version"] != AGENT_PROTOCOL_VERSION() { return 0 }
+    if arrays.length(profile["profile_id"]) != 32 { return 0 }
+    if identity_validate(profile["identity"]) != 1 { return 0 }
+
+    // Validate all capabilities
+    let caps = profile["capabilities"]
+    let i = 0
+    while i < arrays.length(caps) {
+        if capability_validate(caps[i]) != 1 { return 0 }
+        i = i + 1
+    }
+
+    // Validate all authorities
+    let auths = profile["authorities"]
+    i = 0
+    while i < arrays.length(auths) {
+        if authority_validate(auths[i]) != 1 { return 0 }
+        i = i + 1
+    }
+
+    // Verify profile signature using identity_verify
+    let canonical = agent_profile_build_canonical(profile)
+    if identity_verify(profile["identity"], canonical, profile["signature"]) != 1 { return 0 }
+
+    return 1
+}
+
+fn agent_profile_verify_signature(profile: map) -> int {
+    let canonical = agent_profile_build_canonical(profile)
+    return identity_verify(profile["identity"], canonical, profile["signature"])
+}
+
+// === Agent Profile Encode/Decode ===
+//
+// Format:
+//   magic (5 bytes "TLLAP")
+//   protocol_version (4)
+//   profile_id (32)
+//   identity_len (4) + identity_bytes
+//   capabilities_len (4) + capabilities_bytes (encoded set)
+//   authorities_count (4)
+//     for each: authority_len (4) + authority_bytes
+//   metadata_len (4) + metadata_bytes
+//   signature (64)
+
+fn agent_profile_encode(profile: map) -> list {
+    let encoded = []
+
+    // magic
+    let magic = string_to_bytes(AGENT_PROFILE_MAGIC())
+    let i = 0
+    while i < 5 { encoded[i] = magic[i]; i = i + 1 }
+
+    // protocol_version
+    let pv = uint32_to_bytes_be(profile["protocol_version"])
+    i = 0
+    while i < 4 { encoded[arrays.length(encoded)] = pv[i]; i = i + 1 }
+
+    // profile_id
+    i = 0
+    while i < 32 { encoded[arrays.length(encoded)] = profile["profile_id"][i]; i = i + 1 }
+
+    // identity
+    let idBytes = identity_encode(profile["identity"])
+    let idLen = uint32_to_bytes_be(arrays.length(idBytes))
+    i = 0
+    while i < 4 { encoded[arrays.length(encoded)] = idLen[i]; i = i + 1 }
+    i = 0
+    while i < arrays.length(idBytes) { encoded[arrays.length(encoded)] = idBytes[i]; i = i + 1 }
+
+    // capabilities (encode each full capability object)
+    let caps = profile["capabilities"]
+    let capCount = uint32_to_bytes_be(arrays.length(caps))
+    i = 0
+    while i < 4 { encoded[arrays.length(encoded)] = capCount[i]; i = i + 1 }
+    i = 0
+    while i < arrays.length(caps) {
+        let cBytes = capability_encode(caps[i])
+        let cLen = uint32_to_bytes_be(arrays.length(cBytes))
+        let k = 0
+        while k < 4 { encoded[arrays.length(encoded)] = cLen[k]; k = k + 1 }
+        k = 0
+        while k < arrays.length(cBytes) { encoded[arrays.length(encoded)] = cBytes[k]; k = k + 1 }
+        i = i + 1
+    }
+
+    // authorities
+    let auths = profile["authorities"]
+    let authCount = uint32_to_bytes_be(arrays.length(auths))
+    i = 0
+    while i < 4 { encoded[arrays.length(encoded)] = authCount[i]; i = i + 1 }
+    i = 0
+    while i < arrays.length(auths) {
+        let aBytes = authority_encode(auths[i])
+        let aLen = uint32_to_bytes_be(arrays.length(aBytes))
+        let k = 0
+        while k < 4 { encoded[arrays.length(encoded)] = aLen[k]; k = k + 1 }
+        k = 0
+        while k < arrays.length(aBytes) { encoded[arrays.length(encoded)] = aBytes[k]; k = k + 1 }
+        i = i + 1
+    }
+
+    // metadata
+    let metaBytes = string_to_bytes(profile["metadata"])
+    let metaLen = uint32_to_bytes_be(arrays.length(metaBytes))
+    i = 0
+    while i < 4 { encoded[arrays.length(encoded)] = metaLen[i]; i = i + 1 }
+    i = 0
+    while i < arrays.length(metaBytes) { encoded[arrays.length(encoded)] = metaBytes[i]; i = i + 1 }
+
+    // signature
+    i = 0
+    while i < 64 { encoded[arrays.length(encoded)] = profile["signature"][i]; i = i + 1 }
+
+    return encoded
+}
+
+fn agent_profile_decode(encoded: list) -> map {
+    let total = arrays.length(encoded)
+    // minimum: 5 + 4 + 32 + 4 + 0 + 4 + 0 + 4 + 0 + 4 + 0 + 64 = 121
+    if total < 121 { return {} }
+
+    let offset = 0
+
+    // magic - compare bytes directly
+    let magicMatch = 1
+    let magicBytes = AGENT_PROFILE_MAGIC_BYTES()
+    i = 0
+    while i < 5 {
+        if encoded[offset + i] != magicBytes[i] { magicMatch = 0 }
+        i = i + 1
+    }
+    if magicMatch != 1 { return {} }
+    offset = offset + 5
+
+    // protocol_version
+    let protocolVersion = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+    if protocolVersion != AGENT_PROTOCOL_VERSION() { return {} }
+
+    // profile_id
+    let profileId = []
+    i = 0
+    while i < 32 { profileId[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + 32
+
+    // identity
+    let idLen = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+    if offset + idLen > total - 64 { return {} }
+    let idBytes = []
+    i = 0
+    while i < idLen { idBytes[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + idLen
+    let identity = identity_decode(idBytes)
+    if arrays.length(identity["agent_id"]) != 32 { return {} }
+
+    // capabilities (decode each full capability object)
+    let capCount = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+    let caps = []
+    i = 0
+    while i < capCount {
+        if offset + 4 > total - 64 { return {} }
+        let cLen = bytes_to_uint32_be(encoded, offset)
+        offset = offset + 4
+        if offset + cLen > total - 64 { return {} }
+        let cBytes = []
+        let k = 0
+        while k < cLen { cBytes[k] = encoded[offset + k]; k = k + 1 }
+        offset = offset + cLen
+        let cap = capability_decode(cBytes)
+        if arrays.length(cap["capability_id"]) != 32 { return {} }
+        caps[i] = cap
+        i = i + 1
+    }
+
+    // authorities
+    let authCount = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+    let auths = []
+    i = 0
+    while i < authCount {
+        if offset + 4 > total - 64 { return {} }
+        let aLen = bytes_to_uint32_be(encoded, offset)
+        offset = offset + 4
+        if offset + aLen > total - 64 { return {} }
+        let aBytes = []
+        let k = 0
+        while k < aLen { aBytes[k] = encoded[offset + k]; k = k + 1 }
+        offset = offset + aLen
+        let auth = authority_decode(aBytes)
+        if arrays.length(auth["authority_id"]) != 32 { return {} }
+        auths[i] = auth
+        i = i + 1
+    }
+
+    // metadata
+    let metaLen = bytes_to_uint32_be(encoded, offset)
+    offset = offset + 4
+    if offset + metaLen > total - 64 { return {} }
+    let metaBytes = []
+    i = 0
+    while i < metaLen { metaBytes[i] = encoded[offset + i]; i = i + 1 }
+    offset = offset + metaLen
+    let metadata = bytes_to_string(metaBytes)
+
+    // signature
+    if offset + 64 != total { return {} }
+    let signature = []
+    i = 0
+    while i < 64 { signature[i] = encoded[offset + i]; i = i + 1 }
+
+    return {
+        "protocol_version": protocolVersion,
+        "profile_id": profileId,
+        "identity": identity,
+        "capabilities": caps,
+        "authorities": auths,
+        "metadata": metadata,
+        "signature": signature
+    }
+}
+
+fn agent_profile_equals(a: map, b: map) -> int {
+    if a["protocol_version"] != b["protocol_version"] { return 0 }
+    if bytes_equal(a["profile_id"], b["profile_id"]) != 1 { return 0 }
+    if identity_equals(a["identity"], b["identity"]) != 1 { return 0 }
+    if a["metadata"] != b["metadata"] { return 0 }
+    if bytes_equal(a["signature"], b["signature"]) != 1 { return 0 }
+    // Compare capabilities count
+    if arrays.length(a["capabilities"]) != arrays.length(b["capabilities"]) { return 0 }
+    // Compare authorities count
+    if arrays.length(a["authorities"]) != arrays.length(b["authorities"]) { return 0 }
+    return 1
+}
+
+// === Profile Query Operations ===
+
+fn agent_profile_find_capability(profile: map, capability_name: string) -> map {
+    let i = 0
+    let caps = profile["capabilities"]
+    let len = arrays.length(caps)
+    while i < len {
+        let cap = caps[i]
+        if cap["name"] == capability_name {
+            // Return a fresh map literal to avoid list-element reference issues
+            return {
+                "version": cap["version"],
+                "capability_id": cap["capability_id"],
+                "name": cap["name"],
+                "description": cap["description"],
+                "parameters": cap["parameters"],
+                "metadata": cap["metadata"]
+            }
+        }
+        i = i + 1
+    }
+    return {}
+}
+
+fn agent_profile_has_capability(profile: map, capability_name: string) -> int {
+    let cap = agent_profile_find_capability(profile, capability_name)
+    if cap["name"] == capability_name { return 1 }
+    return 0
+}
+
+fn agent_profile_check_authority(profile: map, capability_id: list, current_time: int) -> int {
+    let auths = profile["authorities"]
+    let i = 0
+    while i < arrays.length(auths) {
+        let auth = auths[i]
+        if bytes_equal(auth["capability_id"], capability_id) == 1 {
+            if authority_is_expired(auth, current_time) != 1 {
+                // Note: signature verification requires issuer_public_key,
+                // which is not stored in authority v1. This is a known limitation.
+                // For now, we validate authority structure and expiration only.
+                if authority_validate(auth) == 1 {
+                    return 1
+                }
+            }
+        }
+        i = i + 1
+    }
+    return 0
+}
+
+fn agent_profile_verify_evidence(profile: map, evidence: map) -> int {
+    if evidence_validate(evidence) != 1 { return 0 }
+    if evidence_verify_signature(evidence, profile["identity"]["public_key"]) != 1 { return 0 }
+    // Evidence must be bound to this agent's identity
+    if bytes_equal(evidence["agent_id"], profile["identity"]["agent_id"]) != 1 { return 0 }
+    return 1
+}
+
+fn agent_profile_evaluate_trust(profile: map, capability: map, authority: map, evidence: map, previous_evidence: map, current_time: int, evaluator_private_key: list) -> map {
+    return trust_evaluate(
+        profile["identity"],
+        capability,
+        authority,
+        evidence,
+        previous_evidence,
+        current_time,
+        evaluator_private_key
+    )
+}
+
+// === Capability Discovery (minimal, local/protocol layer) ===
+//
+// Agent A declares capabilities -> Agent B queries capability
+// This is a minimal local/protocol-layer discovery mechanism.
+// No P2P, DHT, or network discovery implemented.
+
+fn agent_discovery_create_registry() -> map {
+    return {
+        "agents": [],
+        "protocol_version": AGENT_PROTOCOL_VERSION()
+    }
+}
+
+fn agent_discovery_register(registry: map, profile: map) -> int {
+    if agent_profile_validate(profile) != 1 { return 0 }
+    // Check for duplicate profile_id
+    let agents = registry["agents"]
+    let i = 0
+    while i < arrays.length(agents) {
+        if bytes_equal(agents[i]["profile_id"], profile["profile_id"]) == 1 {
+            return 0 // already registered
+        }
+        i = i + 1
+    }
+    agents[arrays.length(agents)] = profile
+    return 1
+}
+
+fn agent_discovery_unregister(registry: map, profile_id: list) -> int {
+    let agents = registry["agents"]
+    let newAgents = []
+    let found = 0
+    let i = 0
+    while i < arrays.length(agents) {
+        if bytes_equal(agents[i]["profile_id"], profile_id) != 1 {
+            newAgents[arrays.length(newAgents)] = agents[i]
+        } else {
+            found = 1
+        }
+        i = i + 1
+    }
+    registry["agents"] = newAgents
+    return found
+}
+
+fn agent_discovery_find_by_capability(registry: map, capability_name: string) -> list {
+    let results = []
+    let agents = registry["agents"]
+    let len = arrays.length(agents)
+    let i = 0
+    while i < len {
+        let ag = agents[i]
+        if agent_profile_has_capability(ag, capability_name) == 1 {
+            results[arrays.length(results)] = ag
+        }
+        i = i + 1
+    }
+    return results
+}
+
+fn agent_discovery_find_by_id(registry: map, profile_id: list) -> map {
+    let agents = registry["agents"]
+    let len = arrays.length(agents)
+    let i = 0
+    while i < len {
+        let ag = agents[i]
+        if bytes_equal(ag["profile_id"], profile_id) == 1 {
+            return ag
+        }
+        i = i + 1
+    }
+    return {}
+}
+
+fn agent_discovery_list_capabilities(registry: map) -> list {
+    let allCaps = []
+    let agents = registry["agents"]
+    let i = 0
+    while i < arrays.length(agents) {
+        let caps = agents[i]["capabilities"]
+        let j = 0
+        while j < arrays.length(caps) {
+            // Check if already in list
+            let found = 0
+            let k = 0
+            while k < arrays.length(allCaps) {
+                if allCaps[k] == caps[j]["name"] { found = 1 }
+                k = k + 1
+            }
+            if found == 0 {
+                allCaps[arrays.length(allCaps)] = caps[j]["name"]
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return allCaps
+}

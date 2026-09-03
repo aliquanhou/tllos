@@ -1,0 +1,286 @@
+
+// TLL Agent Ecosystem Test Gates
+// P0-15.24+ Agent Ecosystem
+
+from "../../stdlib/identity/identity" import identity_generate, identity_validate, identity_encode, identity_decode
+from "../../stdlib/capability/capability" import capability_create, capability_validate, capability_encode, capability_decode, capability_set_create, capability_set_add
+from "../../stdlib/authority/authority" import authority_create, authority_validate, authority_encode, authority_decode, authority_is_expired
+from "../../stdlib/evidence/evidence" import evidence_create, evidence_validate, evidence_encode, evidence_decode
+from "../../stdlib/agent/agent_ecosystem" import
+    agent_profile_create, agent_profile_validate, agent_profile_encode, agent_profile_decode,
+    agent_profile_equals, agent_profile_find_capability, agent_profile_has_capability,
+    agent_profile_check_authority, agent_profile_verify_evidence, agent_profile_evaluate_trust,
+    agent_discovery_create_registry, agent_discovery_register, agent_discovery_unregister,
+    agent_discovery_find_by_capability, agent_discovery_find_by_id, agent_discovery_list_capabilities,
+    AGENT_PROTOCOL_VERSION
+
+fn make_bytes(val: int, len: int) -> list {
+    let b = []
+    let i = 0
+    while i < len { b[i] = (val + i) & 0xFF; i = i + 1 }
+    return b
+}
+
+fn bytes_eq(a: list, b: list) -> int {
+    if arrays.length(a) != arrays.length(b) { return 0 }
+    let i = 0
+    while i < arrays.length(a) {
+        if a[i] != b[i] { return 0 }
+        i = i + 1
+    }
+    return 1
+}
+
+fn build_test_agent(seed_val: int, name: string) -> map {
+    let seed = make_bytes(seed_val, 32)
+    let identity = identity_generate(seed)
+
+    let cap1 = capability_create("code_review", "Reviews TLL code", "{}", "v1")
+    let cap2 = capability_create("test_runner", "Runs TLL tests", "{}", "v1")
+    let caps = []
+    caps[0] = cap1
+    caps[1] = cap2
+
+    // Create authority for cap1
+    let issuerSeed = make_bytes(seed_val + 100, 32)
+    let issuer = identity_generate(issuerSeed)
+    let now = 1000000
+    let expires = now + 86400
+    let auth = authority_create(identity["agent_id"], cap1["capability_id"], "scope=read", "issuer_" + name, now, expires, issuer["private_key"])
+    let auths = []
+    auths[0] = auth
+
+    let metadata = "name=" + name + ";version=1.0"
+    let profile = agent_profile_create(identity, caps, auths, metadata, identity["private_key"])
+
+    return profile
+}
+
+fn main() -> int {
+    io.println("=== TLL Agent Ecosystem Test Gates ===")
+    io.println("")
+
+    let passed = 0
+    let failed = 0
+
+    // Gate 01: Agent Profile Create & Validate
+    io.println("--- Gate 01: Agent Profile Create & Validate ---")
+    let profile1 = build_test_agent(1, "agent_alpha")
+    if agent_profile_validate(profile1) == 1 {
+        io.println("PASS 01: Agent profile create and validate")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 01: Agent profile validation failed")
+        failed = failed + 1
+    }
+
+    // Gate 02: Agent Profile Encode/Decode Roundtrip
+    io.println("--- Gate 02: Agent Profile Encode/Decode Roundtrip ---")
+    let enc2 = agent_profile_encode(profile1)
+    let dec2 = agent_profile_decode(enc2)
+    if agent_profile_validate(dec2) == 1 && agent_profile_equals(profile1, dec2) == 1 {
+        io.println("PASS 02: Agent profile encode/decode roundtrip")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 02: Agent profile encode/decode failed")
+        failed = failed + 1
+    }
+
+    // Gate 03: Agent Profile Signature Tamper Detection
+    io.println("--- Gate 03: Signature Tamper Detection ---")
+    let profile3 = build_test_agent(2, "agent_beta")
+    profile3["signature"][0] = profile3["signature"][0] ^ 0xFF
+    if agent_profile_validate(profile3) == 0 {
+        io.println("PASS 03: Tampered signature rejected")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 03: Tampered signature passed validation")
+        failed = failed + 1
+    }
+
+    // Gate 04: Find Capability
+    io.println("--- Gate 04: Find Capability ---")
+    let foundCap = agent_profile_find_capability(profile1, "code_review")
+    let notFound = agent_profile_find_capability(profile1, "nonexistent")
+    if foundCap["name"] == "code_review" && notFound["name"] != "nonexistent" {
+        io.println("PASS 04: Find capability works")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 04: Find capability failed")
+        failed = failed + 1
+    }
+
+    // Gate 05: Has Capability
+    io.println("--- Gate 05: Has Capability ---")
+    if agent_profile_has_capability(profile1, "test_runner") == 1 && agent_profile_has_capability(profile1, "nonexistent") == 0 {
+        io.println("PASS 05: Has capability works")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 05: Has capability failed")
+        failed = failed + 1
+    }
+
+    // Gate 06: Check Authority
+    io.println("--- Gate 06: Check Authority ---")
+    let cap1 = profile1["capabilities"][0]
+    let now = 1000000 + 100
+    if agent_profile_check_authority(profile1, cap1["capability_id"], now) == 1 {
+        io.println("PASS 06: Check authority works (valid authority)")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 06: Check authority failed")
+        failed = failed + 1
+    }
+
+    // Gate 07: Check Authority - Expired
+    io.println("--- Gate 07: Check Authority Expired ---")
+    let futureTime = 1000000 + 86400 + 1000
+    if agent_profile_check_authority(profile1, cap1["capability_id"], futureTime) == 0 {
+        io.println("PASS 07: Expired authority rejected")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 07: Expired authority not rejected")
+        failed = failed + 1
+    }
+
+    // Gate 08: Verify Evidence
+    io.println("--- Gate 08: Verify Evidence ---")
+    let evInput = make_bytes(10, 32)
+    let evOutput = make_bytes(20, 32)
+    let evidence = evidence_create(profile1["identity"]["agent_id"], cap1["capability_id"], "review", evInput, evOutput, 1000000, "PASS", "meta", make_bytes(0, 32), profile1["identity"]["private_key"])
+    if agent_profile_verify_evidence(profile1, evidence) == 1 {
+        io.println("PASS 08: Verify evidence works")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 08: Verify evidence failed")
+        failed = failed + 1
+    }
+
+    // Gate 09: Verify Evidence - Wrong Agent
+    io.println("--- Gate 09: Verify Evidence Wrong Agent ---")
+    let profile2 = build_test_agent(3, "agent_gamma")
+    if agent_profile_verify_evidence(profile2, evidence) == 0 {
+        io.println("PASS 09: Evidence from wrong agent rejected")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 09: Evidence from wrong agent not rejected")
+        failed = failed + 1
+    }
+
+    // Gate 10: Evaluate Trust
+    io.println("--- Gate 10: Evaluate Trust ---")
+    let auth1 = profile1["authorities"][0]
+    let evaluatorSeed = make_bytes(999, 32)
+    let evaluator = identity_generate(evaluatorSeed)
+    let trust = agent_profile_evaluate_trust(profile1, cap1, auth1, evidence, make_bytes(0, 32), 1000000 + 100, evaluator["private_key"])
+    if trust["valid"] == 1 {
+        io.println("PASS 10: Evaluate trust works (valid chain)")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 10: Evaluate trust failed: " + trust["reasons"])
+        failed = failed + 1
+    }
+
+    // Gate 11: Discovery Register
+    io.println("--- Gate 11: Discovery Register ---")
+    let registry = agent_discovery_create_registry()
+    let reg1 = agent_discovery_register(registry, profile1)
+    let reg2 = agent_discovery_register(registry, profile2)
+    if reg1 == 1 && reg2 == 1 && arrays.length(registry["agents"]) == 2 {
+        io.println("PASS 11: Discovery register works")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 11: Discovery register failed")
+        failed = failed + 1
+    }
+
+    // Gate 12: Discovery Duplicate Rejection
+    io.println("--- Gate 12: Discovery Duplicate Rejection ---")
+    let regDup = agent_discovery_register(registry, profile1)
+    if regDup == 0 && arrays.length(registry["agents"]) == 2 {
+        io.println("PASS 12: Duplicate registration rejected")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 12: Duplicate registration not rejected")
+        failed = failed + 1
+    }
+
+    // Gate 13: Discovery Find by Capability
+    io.println("--- Gate 13: Discovery Find by Capability ---")
+    let foundByCap = agent_discovery_find_by_capability(registry, "code_review")
+    if arrays.length(foundByCap) == 2 {
+        io.println("PASS 13: Find by capability works (2 agents with code_review)")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 13: Find by capability failed, got " + convert.toString(arrays.length(foundByCap)))
+        failed = failed + 1
+    }
+
+    // Gate 14: Discovery Find by ID
+    io.println("--- Gate 14: Discovery Find by ID ---")
+    let foundById = agent_discovery_find_by_id(registry, profile1["profile_id"])
+    if foundById["profile_id"][0] == profile1["profile_id"][0] {
+        io.println("PASS 14: Find by ID works")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 14: Find by ID failed")
+        failed = failed + 1
+    }
+
+    // Gate 15: Discovery List Capabilities
+    io.println("--- Gate 15: Discovery List Capabilities ---")
+    let allCaps = agent_discovery_list_capabilities(registry)
+    if arrays.length(allCaps) == 2 {
+        io.println("PASS 15: List capabilities works (2 unique capabilities)")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 15: List capabilities failed, got " + convert.toString(arrays.length(allCaps)))
+        failed = failed + 1
+    }
+
+    // Gate 16: Discovery Unregister
+    io.println("--- Gate 16: Discovery Unregister ---")
+    let unreg = agent_discovery_unregister(registry, profile1["profile_id"])
+    if unreg == 1 && arrays.length(registry["agents"]) == 1 {
+        io.println("PASS 16: Unregister works")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 16: Unregister failed")
+        failed = failed + 1
+    }
+
+    // Gate 17: Profile Metadata Tamper
+    io.println("--- Gate 17: Profile Metadata Tamper ---")
+    let profile17 = build_test_agent(4, "agent_delta")
+    profile17["metadata"] = "tampered=true"
+    if agent_profile_validate(profile17) == 0 {
+        io.println("PASS 17: Metadata tamper rejected")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 17: Metadata tamper not rejected")
+        failed = failed + 1
+    }
+
+    // Gate 18: Profile Identity Tamper
+    io.println("--- Gate 18: Profile Identity Tamper ---")
+    let profile18 = build_test_agent(5, "agent_epsilon")
+    profile18["identity"]["agent_id"][0] = profile18["identity"]["agent_id"][0] ^ 0xFF
+    if agent_profile_validate(profile18) == 0 {
+        io.println("PASS 18: Identity tamper rejected")
+        passed = passed + 1
+    } else {
+        io.println("FAIL 18: Identity tamper not rejected")
+        failed = failed + 1
+    }
+
+    io.println("")
+    io.println("=== Results: " + convert.toString(passed) + "/" + convert.toString(passed + failed) + " gates passed ===")
+    if failed == 0 {
+        io.println("PASS")
+    } else {
+        io.println("FAIL")
+    }
+    return 0
+}
+
+main()
