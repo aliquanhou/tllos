@@ -1,4 +1,4 @@
-/*
+﻿/*
  * TLL Native Launcher (tllvm)
  * Bootstrap/Host layer only - NOT TLL Language Core.
  *
@@ -277,6 +277,9 @@ TLLValue tll_vm_invoke(TLLVM *vm, TLLValue fnValue, TLLValue *args, int argCount
 /* Builtin */
 TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount);
 
+/* SQLite builtin binding (sqlite_builtin.c) - index range 150-159 */
+TLLValue sqlite_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount);
+
 /* P0-15.16 IO-aware scheduler: wake all coroutines waiting on a specific channel.
  * Called from builtin coroutine.wakeChannel(channelMap). Returns number woken. */
 int coroutine_wake_channel(TLLVM *vm, void *channelPtr);
@@ -295,3 +298,5 @@ extern int tll_exit_code;
 extern int tll_should_exit;
 
 #endif /* TLLVM_H */
+
+

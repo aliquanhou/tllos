@@ -143,7 +143,7 @@ fn extractImportsFromSource(source: string) -> list {
 
 // Check if a module path is a built-in stdlib module (io, math, etc.)
 fn isStdlibModule(modPath: string) -> bool {
-    let stdlibs: list = ["io", "math", "strings", "arrays", "convert", "fs", "json", "range", "process"]
+    let stdlibs: list = ["io", "math", "strings", "arrays", "convert", "fs", "json", "range", "process", "sqlite"]
     let i = 0
     while i < arrays.length(stdlibs) {
         if arrays.get(stdlibs, i) == modPath {
@@ -1059,3 +1059,4 @@ export fn linkAndCompile(entryFile: string) -> map {
     let bytecode = compile(mergedProgram)
     return bytecode
 }
+

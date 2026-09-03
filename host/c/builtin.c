@@ -393,6 +393,10 @@ static void http_process_task(HttpTask *data) {
 
 TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
     (void)vm;
+    /* SQLite builtin binding (index 100-119) */
+    if (idx >= 150 && idx < 160) {
+        return sqlite_builtin_invoke(vm, idx, args, argCount);
+    }
     /* io (0-2) */
     if (idx == 0) { /* println */
         if (argCount > 0) { char *s = tll_to_string(args[0]); puts(s); free(s); }
@@ -1671,3 +1675,5 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
     fprintf(stderr, "tllvm: unknown builtin index %d\n", idx);
     return tll_null();
 }
+
+

@@ -1736,7 +1736,17 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
         if fnName == "decodeURI" { return 96 }
         if fnName == "parseJSON" { return 97 }
     }
-    return -1
+    if modName == "sqlite" {
+        if fnName == "open" { return 150 }
+        if fnName == "close" { return 151 }
+        if fnName == "exec" { return 152 }
+        if fnName == "query" { return 153 }
+        if fnName == "lastInsertRowid" { return 154 }
+        if fnName == "changes" { return 155 }
+        if fnName == "version" { return 156 }
+        if fnName == "tableExists" { return 157 }
+        if fnName == "columns" { return 158 }
+    }    return -1
 }
 
 fn cg_compileArray(expr: map) -> int {
@@ -1812,3 +1822,4 @@ fn cg_parseInt(value: string) -> int {
     }
     return convert.toInt(value, 10)
 }
+

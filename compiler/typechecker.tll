@@ -113,7 +113,7 @@ fn tc_registerBuiltins() -> void {
     tc_defineType("any", typeAuto())
 
     // Stdlib modules as variables with auto type
-    let modules = ["io", "json", "math", "strings", "arrays", "convert", "fs", "http", "agent", "workflow"]
+    let modules = ["io", "json", "math", "strings", "arrays", "convert", "fs", "http", "agent", "workflow", "sqlite"]
     let i = 0
     while i < arrays.length(modules) {
         let modName = arrays.get(modules, i)
@@ -459,3 +459,4 @@ fn tc_resolveType(typeNode: map) -> map {
     if t != null { return t }
     return makeType(name, "primitive")
 }
+
