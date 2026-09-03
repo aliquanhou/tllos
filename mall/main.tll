@@ -1,0 +1,678 @@
+// TLL Mall - Main Entry
+// Commercial-grade B2C mall built entirely in TLL
+
+from "./core/database" import db_open, db_close, db_exec, db_query, db_queryOne, db_insert, db_begin, db_commit, db_rollback
+from "./core/router" import router_create, router_get, router_post, router_handler, res_json, res_html, res_redirect, res_notFound, res_error, req_getQuery, req_getJsonBody, req_getCookie
+from "./core/session" import session_getOrCreate, session_cookieHeader, session_set, session_getValue, session_destroy, cache_set, cache_get
+from "./core/auth" import auth_ensureTables, auth_register, auth_login, auth_logout, auth_currentUser, auth_isLoggedIn, auth_isAdmin, auth_requireLogin, auth_requireAdmin, auth_createAdmin, cookie_getSessionId
+from "./core/schema" import schema_initAll, schema_seedData
+from "./core/admin" import admin_registerRoutes
+
+// === HTML Templates ===
+
+fn html_page(title, body) {
+    return "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>" + title + " - TLL Mall</title><style>" +
+        "*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;color:#333}" +
+        ".header{background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.1);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:60px}" +
+        ".logo{font-size:24px;font-weight:bold;color:#ff4400}.nav a{margin:0 15px;text-decoration:none;color:#333}.nav a:hover{color:#ff4400}" +
+        ".container{max-width:1200px;margin:20px auto;padding:0 20px}.product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:20px}" +
+        ".product-card{background:#fff;border-radius:8px;overflow:hidden;cursor:pointer;transition:transform .2s}.product-card:hover{transform:translateY(-4px);box-shadow:0 8px 24px rgba(0,0,0,.12)}" +
+        ".product-img{width:100%;height:200px;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;color:#fff;font-size:48px}" +
+        ".product-info{padding:12px}.product-name{font-size:14px;color:#333;margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" +
+        ".product-price{color:#ff4400;font-size:18px;font-weight:bold}.btn{display:inline-block;padding:8px 20px;background:#ff4400;color:#fff;border:none;border-radius:4px;cursor:pointer;text-decoration:none;font-size:14px}" +
+        ".btn:hover{background:#e63d00}.btn-outline{background:#fff;color:#ff4400;border:1px solid #ff4400}.form-group{margin-bottom:15px}.form-group label{display:block;margin-bottom:5px;font-weight:500}" +
+        ".form-group input,.form-group select,.form-group textarea{width:100%;padding:10px;border:1px solid #ddd;border-radius:4px;font-size:14px}" +
+        ".card{background:#fff;border-radius:8px;padding:20px;margin-bottom:20px}.table{width:100%;border-collapse:collapse}.table th,.table td{padding:12px;text-align:left;border-bottom:1px solid #eee}" +
+        ".badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px}.badge-success{background:#e8f5e9;color:#2e7d32}.badge-warning{background:#fff3e0;color:#e65100}.badge-danger{background:#ffebee;color:#c62828}" +
+        ".breadcrumb{margin-bottom:20px;color:#666}.breadcrumb a{color:#666;text-decoration:none}.empty{text-align:center;padding:60px;color:#999;font-size:16px}" +
+        "</style></head><body>" + body + "</body></html>"
+}
+
+fn html_header(currentUser) {
+    let userNav = ""
+    if (currentUser != null) {
+        userNav = "<span>欢迎, " + currentUser.username + "</span> <a href='/user'>用户中心</a> <a href='/cart'>购物车</a> <a href='/logout'>退出</a>"
+    } else {
+        userNav = "<a href='/login'>登录</a> <a href='/register'>注册</a> <a href='/cart'>购物车</a>"
+    }
+    return "<div class='header'><div class='logo'>TLL Mall</div><div class='nav'><a href='/'>首页</a><a href='/category'>分类</a>" + userNav + "</div></div>"
+}
+
+// === Global Counters ===
+let _orderCounter = 1000
+
+// === Initialize Database ===
+io.println("=== TLL Mall Starting ===")
+let db = db_open("mall/data/mall.db")
+io.println("Database opened")
+
+schema_initAll(db)
+io.println("Schema initialized (20 tables)")
+
+schema_seedData(db)
+io.println("Seed data loaded")
+
+auth_ensureTables(db)
+auth_createAdmin(db, "admin", "admin123", "admin@tllmall.com")
+io.println("Admin user ensured")
+
+// === Router (global variable to avoid TLL closure capture bug in multi-threaded Worker Pool) ===
+let mallRouter = router_create()
+
+// Global handler function (not a closure) to avoid closure capture bug
+fn mallHandler(req) {
+    return router_handle(mallRouter, req)
+}
+
+// --- Home Page ---
+router_get(mallRouter, "/", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+
+    let products = db_query(db, "SELECT * FROM products WHERE status='on' ORDER BY sort_order, id DESC LIMIT 20")
+    let categories = db_query(db, "SELECT * FROM categories WHERE parent_id=0 AND status='active' ORDER BY sort_order")
+    let banners = db_query(db, "SELECT * FROM banners WHERE status='active' ORDER BY sort_order")
+
+    let productHtml = ""
+    let i = 0
+    while (i < arrays.length(products)) {
+        let p = products[i]
+        productHtml = productHtml + "<div class='product-card' onclick=\"location.href='/product/" + convert.toString(p.id) + "'\">" +
+            "<div class='product-img'>" + strings.charAt(p.name, 0) + "</div>" +
+            "<div class='product-info'><div class='product-name'>" + p.name + "</div>" +
+            "<div class='product-price'>¥" + convert.toString(p.price) + "</div></div></div>"
+        i = i + 1
+    }
+
+    let catHtml = ""
+    let j = 0
+    while (j < arrays.length(categories)) {
+        let c = categories[j]
+        catHtml = catHtml + "<a href='/category/" + convert.toString(c.id) + "' style='display:inline-block;padding:8px 16px;margin:4px;background:#fff;border-radius:20px;text-decoration:none;color:#333'>" + c.name + "</a>"
+        j = j + 1
+    }
+
+    let body = html_header(currentUser) +
+        "<div class='container'>" +
+        "<div class='card' style='background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;text-align:center;padding:40px'><h1>欢迎来到 TLL Mall</h1><p>高帧率编程语言打造的商业级商城</p></div>" +
+        "<div class='card'><h3 style='margin-bottom:15px'>商品分类</h3>" + catHtml + "</div>" +
+        "<h3 style='margin:20px 0'>热门商品</h3>" +
+        "<div class='product-grid'>" + productHtml + "</div>" +
+        "</div>"
+
+    return res_html(html_page("首页", body))
+})
+
+// --- Category Page ---
+router_get(mallRouter, "/category", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    let categories = db_query(db, "SELECT * FROM categories WHERE parent_id=0 AND status='active' ORDER BY sort_order")
+    let catHtml = ""
+    let i = 0
+    while (i < arrays.length(categories)) {
+        let c = categories[i]
+        let subCats = db_query(db, "SELECT * FROM categories WHERE parent_id=" + convert.toString(c.id) + " AND status='active'")
+        catHtml = catHtml + "<div class='card'><h3>" + c.name + "</h3><div>"
+        let j = 0
+        while (j < arrays.length(subCats)) {
+            catHtml = catHtml + "<a href='/category/" + convert.toString(subCats[j].id) + "' style='margin-right:15px;color:#666;text-decoration:none'>" + subCats[j].name + "</a>"
+            j = j + 1
+        }
+        catHtml = catHtml + "</div></div>"
+        i = i + 1
+    }
+    let body = html_header(currentUser) + "<div class='container'><h2 style='margin-bottom:20px'>全部分类</h2>" + catHtml + "</div>"
+    return res_html(html_page("分类", body))
+})
+
+// --- Category Products ---
+router_get(mallRouter, "/category/:id", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    let catId = convert.toInt(req.params.id)
+    let category = db_queryOne(db, "SELECT * FROM categories WHERE id=" + convert.toString(catId))
+    let products = db_query(db, "SELECT * FROM products WHERE category_id=" + convert.toString(catId) + " AND status='on' ORDER BY id DESC")
+    let productHtml = ""
+    if (arrays.length(products) == 0) {
+        productHtml = "<div class='empty'>该分类下暂无商品</div>"
+    } else {
+        let i = 0
+        while (i < arrays.length(products)) {
+            let p = products[i]
+            productHtml = productHtml + "<div class='product-card' onclick=\"location.href='/product/" + convert.toString(p.id) + "'\">" +
+                "<div class='product-img'>" + strings.charAt(p.name, 0) + "</div>" +
+                "<div class='product-info'><div class='product-name'>" + p.name + "</div>" +
+                "<div class='product-price'>¥" + convert.toString(p.price) + "</div></div></div>"
+            i = i + 1
+        }
+    }
+    let catName = "全部"
+    if (category != null) { catName = category.name }
+    let body = html_header(currentUser) + "<div class='container'><div class='breadcrumb'><a href='/'>首页</a> / " + catName + "</div>" +
+        "<h2 style='margin-bottom:20px'>" + catName + "</h2><div class='product-grid'>" + productHtml + "</div></div>"
+    return res_html(html_page(catName, body))
+})
+
+// --- Product Detail ---
+router_get(mallRouter, "/product/:id", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    let productId = convert.toInt(req.params.id)
+    let product = db_queryOne(db, "SELECT * FROM products WHERE id=" + convert.toString(productId))
+    if (product == null) { return res_notFound("商品不存在") }
+
+    let skus = db_query(db, "SELECT * FROM product_skus WHERE product_id=" + convert.toString(productId))
+    let skuHtml = ""
+    if (arrays.length(skus) > 0) {
+        skuHtml = "<div class='form-group'><label>规格选择</label><select id='skuSelect' onchange='updatePrice()'>"
+        let i = 0
+        while (i < arrays.length(skus)) {
+            skuHtml = skuHtml + "<option value='" + convert.toString(skus[i].id) + "' data-price='" + convert.toString(skus[i].price) + "'>" + skus[i].spec + " - ¥" + convert.toString(skus[i].price) + " (库存:" + convert.toString(skus[i].stock) + ")</option>"
+            i = i + 1
+        }
+        skuHtml = skuHtml + "</select></div>"
+    }
+
+    let body = html_header(currentUser) +
+        "<div class='container'><div class='breadcrumb'><a href='/'>首页</a> / <a href='/category/" + convert.toString(product.category_id) + "'>商品</a> / " + product.name + "</div>" +
+        "<div class='card' style='display:grid;grid-template-columns:400px 1fr;gap:30px'>" +
+        "<div class='product-img' style='height:400px;font-size:80px;border-radius:8px'>" + strings.charAt(product.name, 0) + "</div>" +
+        "<div><h1 style='margin-bottom:15px'>" + product.name + "</h1>" +
+        "<div style='font-size:32px;color:#ff4400;font-weight:bold;margin-bottom:20px' id='priceDisplay'>¥" + convert.toString(product.price) + "</div>" +
+        "<p style='color:#666;margin-bottom:20px'>" + product.description + "</p>" +
+        "<p style='margin-bottom:10px'>库存: <span id='stockDisplay'>" + convert.toString(product.stock) + "</span></p>" +
+        "<p style='margin-bottom:20px'>销量: " + convert.toString(product.sales) + "</p>" +
+        skuHtml +
+        "<div class='form-group'><label>数量</label><input type='number' id='quantity' value='1' min='1' max='" + convert.toString(product.stock) + "'></div>" +
+        "<div style='margin-top:20px'>" +
+        "<button class='btn' onclick='addToCart()'>加入购物车</button> " +
+        "<button class='btn btn-outline' onclick='buyNow()'>立即购买</button>" +
+        "</div></div></div>" +
+        "<div class='card'><h3>商品详情</h3><p style='color:#666;line-height:1.8'>" + product.detail + "</p></div>" +
+        "</div>" +
+        "<script>function updatePrice(){let s=document.getElementById('skuSelect');let opt=s.options[s.selectedIndex];document.getElementById('priceDisplay').textContent='¥'+opt.dataset.price;}" +
+        "function addToCart(){let skuId=document.getElementById('skuSelect')?document.getElementById('skuSelect').value:'';let qty=document.getElementById('quantity').value;" +
+        "fetch('/cart/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product_id:" + convert.toString(product.id) + ",sku_id:skuId,quantity:parseInt(qty)})}).then(r=>r.json()).then(d=>{if(d.success){alert('已加入购物车');}else{alert(d.error);}});}" +
+        "function buyNow(){addToCart();setTimeout(()=>{location.href='/cart';},500);}</script>"
+
+    return res_html(html_page(product.name, body))
+})
+
+// --- Cart Page ---
+router_get(mallRouter, "/cart", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/cart") }
+
+    let cartItems = db_query(db, "SELECT ci.*, p.name as product_name, p.price as product_price, p.main_image, ps.spec as sku_spec, ps.price as sku_price FROM cart_items ci LEFT JOIN products p ON ci.product_id=p.id LEFT JOIN product_skus ps ON ci.sku_id=ps.id WHERE ci.user_id=" + convert.toString(currentUser.id) + " ORDER BY ci.id DESC")
+
+    let cartHtml = ""
+    let totalAmount = 0.0
+    if (arrays.length(cartItems) == 0) {
+        cartHtml = "<div class='empty'>购物车是空的，<a href='/'>去逛逛</a></div>"
+    } else {
+        cartHtml = "<table class='table'><thead><tr><th>商品</th><th>规格</th><th>单价</th><th>数量</th><th>小计</th><th>操作</th></tr></thead><tbody>"
+        let i = 0
+        while (i < arrays.length(cartItems)) {
+            let item = cartItems[i]
+            let price = item.product_price
+            if (item.sku_price != null) { price = item.sku_price }
+            let subtotal = price * item.quantity
+            totalAmount = totalAmount + subtotal
+            let cartSkuSpec = "-"
+            if (item.sku_spec != null) { cartSkuSpec = item.sku_spec }
+            cartHtml = cartHtml + "<tr><td>" + item.product_name + "</td><td>" + cartSkuSpec + "</td>" +
+                "<td>¥" + convert.toString(price) + "</td>" +
+                "<td><button onclick='updateQty(" + convert.toString(item.id) + "," + convert.toString(item.quantity - 1) + ")'>-</button> " + convert.toString(item.quantity) + " <button onclick='updateQty(" + convert.toString(item.id) + "," + convert.toString(item.quantity + 1) + ")'>+</button></td>" +
+                "<td>¥" + convert.toString(subtotal) + "</td>" +
+                "<td><a href='#' onclick='removeItem(" + convert.toString(item.id) + ");return false' style='color:#ff4400'>删除</a></td></tr>"
+            i = i + 1
+        }
+        cartHtml = cartHtml + "</tbody></table>"
+    }
+
+    let cartFooter = ""
+    if (arrays.length(cartItems) > 0) { cartFooter = "<div class='card' style='text-align:right'><h3>合计: <span style='color:#ff4400'>¥" + convert.toString(totalAmount) + "</span></h3><a href='/checkout' class='btn'>去结算</a></div>" }
+
+    let body = html_header(currentUser) +
+        "<div class='container'><h2 style='margin-bottom:20px'>购物车</h2>" +
+        "<div class='card'>" + cartHtml + "</div>" +
+        cartFooter +
+        "</div>" +
+        "<script>function updateQty(id,qty){if(qty<1)return;fetch('/cart/update',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id,quantity:qty})}).then(()=>location.reload());}" +
+        "function removeItem(id){fetch('/cart/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})}).then(()=>location.reload());}</script>"
+
+    return res_html(html_page("购物车", body))
+})
+
+// --- Cart Add API ---
+router_post(mallRouter, "/cart/add", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_json({error: "请先登录"}, 401) }
+
+    let body = req_getJsonBody(req)
+    if (body == null) { return res_json({error: "无效请求"}, 400) }
+
+    let productId = convert.toInt(body.product_id)
+    let skuId = 0
+    let hasSku = false
+    if (body.sku_id != null) {
+        let skuStr = convert.toString(body.sku_id)
+        if (strings.length(skuStr) > 0) {
+            skuId = convert.toInt(body.sku_id)
+            hasSku = true
+        }
+    }
+    let quantity = 1
+    if (body.quantity != null) { quantity = convert.toInt(body.quantity) }
+
+    // Check if already in cart
+    let existing = null
+    if (hasSku) {
+        existing = db_queryOne(db, "SELECT * FROM cart_items WHERE user_id=" + convert.toString(currentUser.id) + " AND product_id=" + convert.toString(productId) + " AND sku_id=" + convert.toString(skuId))
+    } else {
+        existing = db_queryOne(db, "SELECT * FROM cart_items WHERE user_id=" + convert.toString(currentUser.id) + " AND product_id=" + convert.toString(productId) + " AND sku_id IS NULL")
+    }
+
+    if (existing != null) {
+        db_exec(db, "UPDATE cart_items SET quantity=quantity+" + convert.toString(quantity) + " WHERE id=" + convert.toString(existing.id))
+    } else {
+        let skuVal = "NULL"
+        if (hasSku) { skuVal = convert.toString(skuId) }
+        db_exec(db, "INSERT INTO cart_items (user_id, product_id, sku_id, quantity) VALUES (" + convert.toString(currentUser.id) + "," + convert.toString(productId) + "," + skuVal + "," + convert.toString(quantity) + ")")
+    }
+
+    return res_json({success: true})
+})
+
+// --- Cart Update API ---
+router_post(mallRouter, "/cart/update", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_json({error: "请先登录"}, 401) }
+    let body = req_getJsonBody(req)
+    db_exec(db, "UPDATE cart_items SET quantity=" + convert.toString(body.quantity) + " WHERE id=" + convert.toString(body.id) + " AND user_id=" + convert.toString(currentUser.id))
+    return res_json({success: true})
+})
+
+// --- Cart Remove API ---
+router_post(mallRouter, "/cart/remove", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_json({error: "请先登录"}, 401) }
+    let body = req_getJsonBody(req)
+    db_exec(db, "DELETE FROM cart_items WHERE id=" + convert.toString(body.id) + " AND user_id=" + convert.toString(currentUser.id))
+    return res_json({success: true})
+})
+
+// --- Checkout Page ---
+router_get(mallRouter, "/checkout", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/checkout") }
+
+    let cartItems = db_query(db, "SELECT ci.*, p.name as product_name, p.price as product_price, ps.spec as sku_spec, ps.price as sku_price, p.stock as product_stock, ps.stock as sku_stock FROM cart_items ci LEFT JOIN products p ON ci.product_id=p.id LEFT JOIN product_skus ps ON ci.sku_id=ps.id WHERE ci.user_id=" + convert.toString(currentUser.id))
+
+    let addresses = db_query(db, "SELECT * FROM user_addresses WHERE user_id=" + convert.toString(currentUser.id) + " ORDER BY is_default DESC")
+
+    let totalAmount = 0.0
+    let itemsHtml = ""
+    let i = 0
+    while (i < arrays.length(cartItems)) {
+        let item = cartItems[i]
+        let price = item.product_price
+        if (item.sku_price != null) { price = item.sku_price }
+        let subtotal = price * item.quantity
+        totalAmount = totalAmount + subtotal
+        let coSkuSpec = "-"
+        if (item.sku_spec != null) { coSkuSpec = item.sku_spec }
+        itemsHtml = itemsHtml + "<tr><td>" + item.product_name + "</td><td>" + coSkuSpec + "</td><td>¥" + convert.toString(price) + "</td><td>" + convert.toString(item.quantity) + "</td><td>¥" + convert.toString(subtotal) + "</td></tr>"
+        i = i + 1
+    }
+
+    let addrHtml = ""
+    if (arrays.length(addresses) == 0) {
+        addrHtml = "<p>暂无收货地址，<a href='/user/address'>添加地址</a></p>"
+    } else {
+        addrHtml = "<select name='address_id' class='form-control' style='width:100%;padding:10px'>"
+        let j = 0
+        while (j < arrays.length(addresses)) {
+            let a = addresses[j]
+            let selected = ""
+            if (a.is_default == 1) { selected = "selected" }
+            addrHtml = addrHtml + "<option value='" + convert.toString(a.id) + "' " + selected + ">" + a.name + " " + a.phone + " " + a.province + a.city + a.district + a.detail + "</option>"
+            j = j + 1
+        }
+        addrHtml = addrHtml + "</select>"
+    }
+
+    let body = html_header(currentUser) +
+        "<div class='container'><h2 style='margin-bottom:20px'>确认订单</h2>" +
+        "<div class='card'><h3>收货地址</h3>" + addrHtml + "</div>" +
+        "<div class='card'><h3>商品清单</h3><table class='table'><thead><tr><th>商品</th><th>规格</th><th>单价</th><th>数量</th><th>小计</th></tr></thead><tbody>" + itemsHtml + "</tbody></table></div>" +
+        "<div class='card'><h3>订单备注</h3><input type='text' name='remark' placeholder='选填' style='width:100%;padding:10px'></div>" +
+        "<div class='card' style='text-align:right'><h3>应付总额: <span style='color:#ff4400'>¥" + convert.toString(totalAmount) + "</span></h3>" +
+        "<button class='btn' onclick='submitOrder()' style='font-size:18px;padding:12px 40px'>提交订单</button></div>" +
+        "</div>" +
+        "<script>function submitOrder(){let addrId=document.querySelector('[name=address_id]')?document.querySelector('[name=address_id]').value:'';let remark=document.querySelector('[name=remark]').value;" +
+        "fetch('/order/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address_id:parseInt(addrId),remark:remark})}).then(r=>r.json()).then(d=>{if(d.success){location.href='/order/'+d.order_id;}else{alert(d.error);}});}</script>"
+
+    return res_html(html_page("确认订单", body))
+})
+
+// --- Create Order API ---
+router_post(mallRouter, "/order/create", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_json({error: "请先登录"}, 401) }
+
+    let body = req_getJsonBody(req)
+    let addressId = body.address_id
+    let remark = body.remark
+
+    // Get address
+    let address = db_queryOne(db, "SELECT * FROM user_addresses WHERE id=" + convert.toString(addressId) + " AND user_id=" + convert.toString(currentUser.id))
+    if (address == null) { return res_json({error: "请选择收货地址"}, 400) }
+
+    // Get cart items
+    let cartItems = db_query(db, "SELECT ci.*, p.name as product_name, p.price as product_price, p.main_image, p.stock as product_stock, ps.spec as sku_spec, ps.price as sku_price, ps.stock as sku_stock FROM cart_items ci LEFT JOIN products p ON ci.product_id=p.id LEFT JOIN product_skus ps ON ci.sku_id=ps.id WHERE ci.user_id=" + convert.toString(currentUser.id))
+
+    if (arrays.length(cartItems) == 0) { return res_json({error: "购物车为空"}, 400) }
+
+    // Begin transaction
+    db_begin(db)
+
+    let totalAmount = 0.0
+    _orderCounter = _orderCounter + 1
+    let orderNo = "TLL" + convert.toString(_orderCounter) + convert.toString(currentUser.id)
+
+    // Check stock and calculate total
+    let i = 0
+    while (i < arrays.length(cartItems)) {
+        let item = cartItems[i]
+        let price = item.product_price
+        let stock = item.product_stock
+        if (item.sku_price != null) { price = item.sku_price; stock = item.sku_stock }
+        if (stock < item.quantity) {
+            db_rollback(db)
+            return res_json({error: "商品 " + item.product_name + " 库存不足"}, 400)
+        }
+        totalAmount = totalAmount + price * item.quantity
+        i = i + 1
+    }
+
+    // Create order
+    let addrDetail = address.province + address.city + address.district + address.detail
+    let remarkVal = ""
+    if (remark != null) { remarkVal = remark }
+    db_exec(db, "INSERT INTO orders (order_no, user_id, total_amount, status, address_name, address_phone, address_detail, remark) VALUES ('" + orderNo + "'," + convert.toString(currentUser.id) + "," + convert.toString(totalAmount) + ",'pending','" + address.name + "','" + address.phone + "','" + addrDetail + "','" + remarkVal + "')")
+
+    let orderId = sqlite.lastInsertRowid(db.raw)
+
+    // Create order items and deduct stock
+    let j = 0
+    while (j < arrays.length(cartItems)) {
+        let item = cartItems[j]
+        let price = item.product_price
+        if (item.sku_price != null) { price = item.sku_price }
+        let subtotal = price * item.quantity
+        let skuSpec = ""
+        if (item.sku_spec != null) { skuSpec = item.sku_spec }
+        let skuIdVal = "NULL"
+        if (item.sku_id != null) { skuIdVal = convert.toString(item.sku_id) }
+
+        let itemImage = ""
+        if (item.main_image != null) { itemImage = item.main_image }
+        db_exec(db, "INSERT INTO order_items (order_id, product_id, sku_id, product_name, product_image, spec, price, quantity, subtotal) VALUES (" + convert.toString(orderId) + "," + convert.toString(item.product_id) + "," + skuIdVal + ",'" + item.product_name + "','" + itemImage + "','" + skuSpec + "'," + convert.toString(price) + "," + convert.toString(item.quantity) + "," + convert.toString(subtotal) + ")")
+
+        // Deduct stock
+        if (item.sku_id != null) {
+            db_exec(db, "UPDATE product_skus SET stock=stock-" + convert.toString(item.quantity) + " WHERE id=" + convert.toString(item.sku_id))
+        } else {
+            db_exec(db, "UPDATE products SET stock=stock-" + convert.toString(item.quantity) + ", sales=sales+" + convert.toString(item.quantity) + " WHERE id=" + convert.toString(item.product_id))
+        }
+
+        j = j + 1
+    }
+
+    // Clear cart
+    db_exec(db, "DELETE FROM cart_items WHERE user_id=" + convert.toString(currentUser.id))
+
+    db_commit(db)
+
+    return res_json({success: true, order_id: orderId, order_no: orderNo})
+})
+
+// --- Order List ---
+router_get(mallRouter, "/orders", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login") }
+
+    let orders = db_query(db, "SELECT * FROM orders WHERE user_id=" + convert.toString(currentUser.id) + " ORDER BY id DESC")
+
+    let ordersHtml = ""
+    if (arrays.length(orders) == 0) {
+        ordersHtml = "<div class='empty'>暂无订单</div>"
+    } else {
+        let i = 0
+        while (i < arrays.length(orders)) {
+            let o = orders[i]
+            let statusBadge = "<span class='badge badge-warning'>待付款</span>"
+            if (o.status == "paid") { statusBadge = "<span class='badge badge-success'>已付款</span>" }
+            else if (o.status == "shipped") { statusBadge = "<span class='badge badge-success'>已发货</span>" }
+            else if (o.status == "completed") { statusBadge = "<span class='badge badge-success'>已完成</span>" }
+            else if (o.status == "cancelled") { statusBadge = "<span class='badge badge-danger'>已取消</span>" }
+
+            let items = db_query(db, "SELECT * FROM order_items WHERE order_id=" + convert.toString(o.id))
+            let itemsHtml = ""
+            let j = 0
+            while (j < arrays.length(items)) {
+                itemsHtml = itemsHtml + "<div>" + items[j].product_name + " x" + convert.toString(items[j].quantity) + "</div>"
+                j = j + 1
+            }
+
+            ordersHtml = ordersHtml + "<div class='card'><div style='display:flex;justify-content:space-between;margin-bottom:10px'>" +
+                "<span>订单号: " + o.order_no + "</span><span>" + statusBadge + "</span></div>" +
+                itemsHtml +
+                "<div style='text-align:right;margin-top:10px'>合计: <span style='color:#ff4400;font-weight:bold'>¥" + convert.toString(o.total_amount) + "</span> " +
+                "<a href='/order/" + convert.toString(o.id) + "' class='btn btn-outline' style='margin-left:10px'>查看详情</a></div></div>"
+            i = i + 1
+        }
+    }
+
+    let body = html_header(currentUser) + "<div class='container'><h2 style='margin-bottom:20px'>我的订单</h2>" + ordersHtml + "</div>"
+    return res_html(html_page("我的订单", body))
+})
+
+// --- Order Detail ---
+router_get(mallRouter, "/order/:id", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login") }
+
+    let orderId = convert.toInt(req.params.id)
+    let order = db_queryOne(db, "SELECT * FROM orders WHERE id=" + convert.toString(orderId) + " AND user_id=" + convert.toString(currentUser.id))
+    if (order == null) { return res_notFound("订单不存在") }
+
+    let items = db_query(db, "SELECT * FROM order_items WHERE order_id=" + convert.toString(orderId))
+
+    let itemsHtml = ""
+    let i = 0
+    while (i < arrays.length(items)) {
+        let odSkuSpec = "-"
+        if (items[i].spec != null) { odSkuSpec = items[i].spec }
+        itemsHtml = itemsHtml + "<tr><td>" + items[i].product_name + "</td><td>" + odSkuSpec + "</td><td>¥" + convert.toString(items[i].price) + "</td><td>" + convert.toString(items[i].quantity) + "</td><td>¥" + convert.toString(items[i].subtotal) + "</td></tr>"
+        i = i + 1
+    }
+
+    let payButton = ""
+    if (order.status == "pending") { payButton = "<button class='btn' onclick='payOrder(" + convert.toString(orderId) + ")'>立即付款</button>" }
+
+    let body = html_header(currentUser) +
+        "<div class='container'><div class='breadcrumb'><a href='/'>首页</a> / <a href='/orders'>我的订单</a> / 订单详情</div>" +
+        "<div class='card'><h3>订单信息</h3><p>订单号: " + order.order_no + "</p><p>状态: " + order.status + "</p><p>下单时间: " + order.created_at + "</p></div>" +
+        "<div class='card'><h3>收货信息</h3><p>" + order.address_name + " " + order.address_phone + "</p><p>" + order.address_detail + "</p></div>" +
+        "<div class='card'><h3>商品清单</h3><table class='table'><thead><tr><th>商品</th><th>规格</th><th>单价</th><th>数量</th><th>小计</th></tr></thead><tbody>" + itemsHtml + "</tbody></table></div>" +
+        "<div class='card' style='text-align:right'><h3>订单总额: <span style='color:#ff4400'>¥" + convert.toString(order.total_amount) + "</span></h3>" +
+        payButton +
+        "</div></div>" +
+        "<script>function payOrder(id){fetch('/order/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order_id:id})}).then(r=>r.json()).then(d=>{if(d.success){alert('支付成功');location.reload();}else{alert(d.error);}});}</script>"
+
+    return res_html(html_page("订单详情", body))
+})
+
+// --- Pay Order API (simulated) ---
+router_post(mallRouter, "/order/pay", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_json({error: "请先登录"}, 401) }
+    let body = req_getJsonBody(req)
+    let order = db_queryOne(db, "SELECT * FROM orders WHERE id=" + convert.toString(body.order_id) + " AND user_id=" + convert.toString(currentUser.id))
+    if (order == null) { return res_json({error: "订单不存在"}, 404) }
+    if (order.status != "pending") { return res_json({error: "订单状态不正确"}, 400) }
+    db_exec(db, "UPDATE orders SET status='paid', payment_status='paid', paid_at=datetime('now') WHERE id=" + convert.toString(body.order_id))
+    return res_json({success: true})
+})
+
+// --- Login Page ---
+router_get(mallRouter, "/login", fn(req) {
+    let body = "<div style='max-width:400px;margin:60px auto'><div class='card'><h2 style='text-align:center;margin-bottom:20px'>登录 TLL Mall</h2>" +
+        "<div class='form-group'><label>用户名</label><input type='text' id='username' placeholder='请输入用户名'></div>" +
+        "<div class='form-group'><label>密码</label><input type='password' id='password' placeholder='请输入密码'></div>" +
+        "<button class='btn' style='width:100%' onclick='doLogin()'>登录</button>" +
+        "<p style='text-align:center;margin-top:15px'>还没有账号？<a href='/register'>立即注册</a></p></div></div>" +
+        "<script>function doLogin(){let u=document.getElementById('username').value;let p=document.getElementById('password').value;" +
+        "fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})}).then(r=>r.json()).then(d=>{if(d.success){document.cookie='sessionId='+d.sessionId+';path=/';location.href='/';}else{alert(d.error);}});}</script>"
+    return res_html(html_page("登录", body))
+})
+
+// --- Login API ---
+router_post(mallRouter, "/login", fn(req) {
+    let body = req_getJsonBody(req)
+    let result = auth_login(db, body.username, body.password)
+    return res_json(result)
+})
+
+// --- Register Page ---
+router_get(mallRouter, "/register", fn(req) {
+    let body = "<div style='max-width:400px;margin:60px auto'><div class='card'><h2 style='text-align:center;margin-bottom:20px'>注册 TLL Mall</h2>" +
+        "<div class='form-group'><label>用户名</label><input type='text' id='username' placeholder='至少3个字符'></div>" +
+        "<div class='form-group'><label>邮箱</label><input type='email' id='email' placeholder='选填'></div>" +
+        "<div class='form-group'><label>密码</label><input type='password' id='password' placeholder='至少6个字符'></div>" +
+        "<button class='btn' style='width:100%' onclick='doRegister()'>注册</button>" +
+        "<p style='text-align:center;margin-top:15px'>已有账号？<a href='/login'>立即登录</a></p></div></div>" +
+        "<script>function doRegister(){let u=document.getElementById('username').value;let e=document.getElementById('email').value;let p=document.getElementById('password').value;" +
+        "fetch('/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,email:e,password:p})}).then(r=>r.json()).then(d=>{if(d.success){alert('注册成功，请登录');location.href='/login';}else{alert(d.error);}});}</script>"
+    return res_html(html_page("注册", body))
+})
+
+// --- Register API ---
+router_post(mallRouter, "/register", fn(req) {
+    let body = req_getJsonBody(req)
+    let result = auth_register(db, body.username, body.password, body.email)
+    return res_json(result)
+})
+
+// --- Logout ---
+router_get(mallRouter, "/logout", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    auth_logout(sessionId)
+    return res_redirect("/")
+})
+
+// --- User Center ---
+router_get(mallRouter, "/user", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login") }
+
+    let orderCount = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE user_id=" + convert.toString(currentUser.id))
+    let cartCount = db_queryOne(db, "SELECT COUNT(*) as cnt FROM cart_items WHERE user_id=" + convert.toString(currentUser.id))
+
+    let body = html_header(currentUser) +
+        "<div class='container'><h2 style='margin-bottom:20px'>用户中心</h2>" +
+        "<div class='card'><h3>基本信息</h3><p>用户名: " + currentUser.username + "</p><p>角色: " + currentUser.role + "</p></div>" +
+        "<div class='card' style='display:grid;grid-template-columns:1fr 1fr;gap:20px'>" +
+        "<div style='text-align:center;padding:20px;background:#f9f9f9;border-radius:8px'><h2 style='color:#ff4400'>" + convert.toString(orderCount.cnt) + "</h2><p>我的订单</p><a href='/orders' class='btn btn-outline'>查看订单</a></div>" +
+        "<div style='text-align:center;padding:20px;background:#f9f9f9;border-radius:8px'><h2 style='color:#ff4400'>" + convert.toString(cartCount.cnt) + "</h2><p>购物车</p><a href='/cart' class='btn btn-outline'>去购物车</a></div>" +
+        "</div>" +
+        "<div class='card'><h3>快捷操作</h3><p><a href='/user/address'>地址管理</a></p><p><a href='/orders'>订单管理</a></p></div>" +
+        "</div>"
+    return res_html(html_page("用户中心", body))
+})
+
+// --- Address Management ---
+router_get(mallRouter, "/user/address", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login") }
+
+    let addresses = db_query(db, "SELECT * FROM user_addresses WHERE user_id=" + convert.toString(currentUser.id) + " ORDER BY is_default DESC")
+
+    let addrHtml = ""
+    if (arrays.length(addresses) == 0) {
+        addrHtml = "<div class='empty'>暂无收货地址</div>"
+    } else {
+        addrHtml = "<table class='table'><thead><tr><th>收货人</th><th>电话</th><th>地址</th><th>默认</th><th>操作</th></tr></thead><tbody>"
+        let i = 0
+        while (i < arrays.length(addresses)) {
+            let a = addresses[i]
+            let isDefaultText = "否"
+            if (a.is_default == 1) { isDefaultText = "是" }
+            addrHtml = addrHtml + "<tr><td>" + a.name + "</td><td>" + a.phone + "</td><td>" + a.province + a.city + a.district + a.detail + "</td>" +
+                "<td>" + isDefaultText + "</td>" +
+                "<td><a href='#' onclick='deleteAddr(" + convert.toString(a.id) + ");return false' style='color:#ff4400'>删除</a></td></tr>"
+            i = i + 1
+        }
+        addrHtml = addrHtml + "</tbody></table>"
+    }
+
+    let body = html_header(currentUser) +
+        "<div class='container'><div class='breadcrumb'><a href='/user'>用户中心</a> / 地址管理</div>" +
+        "<div class='card'><h3>新增地址</h3>" +
+        "<div class='form-group'><label>收货人</label><input type='text' id='addrName'></div>" +
+        "<div class='form-group'><label>电话</label><input type='text' id='addrPhone'></div>" +
+        "<div class='form-group'><label>省份</label><input type='text' id='addrProvince'></div>" +
+        "<div class='form-group'><label>城市</label><input type='text' id='addrCity'></div>" +
+        "<div class='form-group'><label>区县</label><input type='text' id='addrDistrict'></div>" +
+        "<div class='form-group'><label>详细地址</label><input type='text' id='addrDetail'></div>" +
+        "<button class='btn' onclick='addAddr()'>添加地址</button></div>" +
+        "<div class='card'><h3>地址列表</h3>" + addrHtml + "</div></div>" +
+        "<script>function addAddr(){let data={name:document.getElementById('addrName').value,phone:document.getElementById('addrPhone').value,province:document.getElementById('addrProvince').value,city:document.getElementById('addrCity').value,district:document.getElementById('addrDistrict').value,detail:document.getElementById('addrDetail').value};" +
+        "fetch('/user/address/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}).then(r=>r.json()).then(d=>{if(d.success){location.reload();}else{alert(d.error);}});}" +
+        "function deleteAddr(id){fetch('/user/address/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})}).then(()=>location.reload());}</script>"
+
+    return res_html(html_page("地址管理", body))
+})
+
+// --- Add Address API ---
+router_post(mallRouter, "/user/address/add", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_json({error: "请先登录"}, 401) }
+    let body = req_getJsonBody(req)
+    db_exec(db, "INSERT INTO user_addresses (user_id, name, phone, province, city, district, detail) VALUES (" + convert.toString(currentUser.id) + ",'" + body.name + "','" + body.phone + "','" + body.province + "','" + body.city + "','" + body.district + "','" + body.detail + "')")
+    return res_json({success: true})
+})
+
+// --- Delete Address API ---
+router_post(mallRouter, "/user/address/delete", fn(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_json({error: "请先登录"}, 401) }
+    let body = req_getJsonBody(req)
+    db_exec(db, "DELETE FROM user_addresses WHERE id=" + convert.toString(body.id) + " AND user_id=" + convert.toString(currentUser.id))
+    return res_json({success: true})
+})
+
+// === Register Admin Routes ===
+admin_registerRoutes(mallRouter, db)
+io.println("Admin routes registered")
+
+// === Start Server ===
+io.println("=== TLL Mall Ready ===")
+io.println("Listening on :8090")
+http.serve("0.0.0.0:8090", mallHandler)

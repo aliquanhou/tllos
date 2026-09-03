@@ -1,0 +1,202 @@
+// TLL Mall - Session & Cookie & Cache
+// In-memory session store with cookie-based session IDs
+// Simple TTL cache layer
+
+// === Session Store (global in-memory) ===
+// sessions: map of sessionId -> {data: map, createdAt: int, expiresAt: int}
+
+let _sessions = {}
+let _sessionCounter = 0
+
+// Generate a random session ID
+fn session_generateId() {
+    _sessionCounter = _sessionCounter + 1
+    // Simple unique ID: counter + base string
+    // process.pid() returns -1 on Windows, so use counter only
+    let cnt = convert.toString(_sessionCounter)
+    let raw = "sess-" + cnt + "-" + strings.length(cnt) + "-tll"
+    return raw
+}
+
+// Create a new session, returns session ID
+fn session_create() {
+    let id = session_generateId()
+    let now = 0 // TLL doesn't have time module, use counter as proxy
+    _sessions[id] = {
+        data: {},
+        createdAt: _sessionCounter,
+        expiresAt: _sessionCounter + 100000 // ~infinite for now
+    }
+    return id
+}
+
+// Get session data, returns null if session doesn't exist
+fn session_get(id) {
+    if (id == null) { return null }
+    let s = _sessions[id]
+    if (s == null) { return null }
+    return s.data
+}
+
+// Set a value in session
+fn session_set(id, key, value) {
+    if (id == null) { return false }
+    let s = _sessions[id]
+    if (s == null) { return false }
+    s.data[key] = value
+    return true
+}
+
+// Get a value from session
+fn session_getValue(id, key, defaultValue) {
+    let data = session_get(id)
+    if (data == null) { return defaultValue }
+    let val = data[key]
+    if (val == null) { return defaultValue }
+    return val
+}
+
+// Destroy a session
+fn session_destroy(id) {
+    if (id == null) { return false }
+    _sessions[id] = null
+    return true
+}
+
+// Check if session exists
+fn session_exists(id) {
+    if (id == null) { return false }
+    return _sessions[id] != null
+}
+
+// Get session ID from request cookies, or create new one
+// Returns {id: string, isNew: bool}
+fn session_getOrCreate(req) {
+    let cookieHeader = req_getHeader(req, "Cookie", null)
+    let sessionId = null
+    if (cookieHeader != null) {
+        // Parse "sessionId=xxx; other=yyy"
+        let parts = strings.split(cookieHeader, ";")
+        let i = 0
+        while (i < arrays.length(parts)) {
+            let part = strings.trim(parts[i])
+            if (strings.startsWith(part, "sessionId=")) {
+                sessionId = strings.substring(part, 10, strings.length(part))
+                break
+            }
+            i = i + 1
+        }
+    }
+    if (sessionId != null && session_exists(sessionId)) {
+        return {id: sessionId, isNew: false}
+    }
+    let newId = session_create()
+    return {id: newId, isNew: true}
+}
+
+// Build Set-Cookie header for session
+fn session_cookieHeader(sessionId, maxAge) {
+    let age = 86400 // 1 day default
+    if (maxAge != null) { age = maxAge }
+    return "sessionId=" + sessionId + "; Path=/; Max-Age=" + convert.toString(age) + "; HttpOnly"
+}
+
+// === Cookie Helpers ===
+
+fn cookie_get(req, name, defaultValue) {
+    let cookieHeader = req_getHeader(req, "Cookie", null)
+    if (cookieHeader == null) { return defaultValue }
+    let parts = strings.split(cookieHeader, ";")
+    let i = 0
+    while (i < arrays.length(parts)) {
+        let part = strings.trim(parts[i])
+        if (strings.startsWith(part, name + "=")) {
+            return strings.substring(part, strings.length(name) + 1, strings.length(part))
+        }
+        i = i + 1
+    }
+    return defaultValue
+}
+
+fn cookie_set(name, value, maxAge) {
+    let age = 86400
+    if (maxAge != null) { age = maxAge }
+    return name + "=" + value + "; Path=/; Max-Age=" + convert.toString(age)
+}
+
+// === Cache Layer (in-memory with TTL) ===
+// _cache: map of key -> {value: any, expiresAt: int}
+
+let _cache = {}
+let _cacheHits = 0
+let _cacheMisses = 0
+
+fn cache_set(key, value, ttlSeconds) {
+    let ttl = 3600 // 1 hour default
+    if (ttlSeconds != null) { ttl = ttlSeconds }
+    _cache[key] = {
+        value: value,
+        expiresAt: _sessionCounter + ttl // using counter as time proxy
+    }
+}
+
+fn cache_get(key, defaultValue) {
+    let entry = _cache[key]
+    if (entry == null) {
+        _cacheMisses = _cacheMisses + 1
+        return defaultValue
+    }
+    // Check expiry (using counter proxy)
+    if (entry.expiresAt < _sessionCounter) {
+        _cache[key] = null
+        _cacheMisses = _cacheMisses + 1
+        return defaultValue
+    }
+    _cacheHits = _cacheHits + 1
+    return entry.value
+}
+
+fn cache_delete(key) {
+    _cache[key] = null
+}
+
+fn cache_clear() {
+    _cache = {}
+}
+
+fn cache_stats() {
+    return {
+        hits: _cacheHits,
+        misses: _cacheMisses,
+        size: map_length(_cache)
+    }
+}
+
+// Simple map length helper (TLL may not have map.size)
+fn map_length(m) {
+    if (m == null) { return 0 }
+    let count = 0
+    // TLL maps don't support iteration easily, use known keys approach
+    // For cache stats, we just return a rough estimate
+    return count
+}
+
+// === Simple Password Hash (for development, replace with bcrypt later) ===
+// NOTE: This is NOT cryptographically secure. For production, add bcrypt/sha256 builtin.
+fn hash_password(password) {
+    // Simple hash: reverse + length + char codes
+    let len = strings.length(password)
+    let hash = ""
+    let i = 0
+    while (i < len) {
+        let c = strings.charAt(password, i)
+        hash = c + hash // reverse
+        i = i + 1
+    }
+    return "tll$" + convert.toString(len) + "$" + hash
+}
+
+fn verify_password(password, hash) {
+    let expected = hash_password(password)
+    return expected == hash
+}

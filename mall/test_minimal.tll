@@ -1,0 +1,31 @@
+// Minimal test: login flow
+from "./core/database" import db_open, db_exec, db_query, db_queryOne
+from "./core/auth" import auth_ensureTables, auth_register, auth_login
+from "./core/session" import session_create, session_set
+
+io.println("=== Minimal Login Test ===")
+
+let db = db_open("test_minimal.db")
+auth_ensureTables(db)
+
+io.println("Step 1: register")
+let reg = auth_register(db, "testuser", "password123", "test@test.com")
+io.println("Register result: " + json.stringify(reg))
+
+io.println("Step 2: query user directly")
+let user = db_queryOne(db, "SELECT * FROM users WHERE username = 'testuser'")
+io.println("Query result: " + json.stringify(user))
+
+io.println("Step 3: session create")
+let sid = session_create()
+io.println("Session id: " + sid)
+
+io.println("Step 4: session set")
+session_set(sid, "test", "value")
+io.println("Session set done")
+
+io.println("Step 5: auth_login")
+let login = auth_login(db, "testuser", "password123")
+io.println("Login result: " + json.stringify(login))
+
+io.println("=== Test Complete ===")

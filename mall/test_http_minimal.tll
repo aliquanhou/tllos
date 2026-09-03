@@ -1,0 +1,7 @@
+// Minimal HTTP server test
+fn handler(req) {
+    return {status: 200, contentType: "text/plain", body: "Hello " + req.path}
+}
+
+io.println("Starting minimal HTTP server on :8092...")
+http.serve("0.0.0.0:8092", handler)

@@ -1,0 +1,192 @@
+// TLL Mall - Authentication & Authorization
+// User registration, login, session-based auth, RBAC
+
+from "./database" import db_open, db_exec, db_query, db_queryOne, db_insert, db_tableExists
+from "./session" import session_create, session_set, session_getValue, session_destroy, session_exists, hash_password, verify_password
+
+// === User Table Schema ===
+fn auth_ensureTables(db) {
+    db_exec(db, "CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        email TEXT UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT DEFAULT 'user',
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    db_exec(db, "CREATE TABLE IF NOT EXISTS user_addresses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        province TEXT,
+        city TEXT,
+        district TEXT,
+        detail TEXT NOT NULL,
+        is_default INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )")
+}
+
+// === Registration ===
+fn auth_register(db, username, password, email) {
+    // Validate
+    if (username == null || strings.length(username) < 3) {
+        return {error: "Username must be at least 3 characters"}
+    }
+    if (password == null || strings.length(password) < 6) {
+        return {error: "Password must be at least 6 characters"}
+    }
+
+    // Check if username exists
+    let existing = db_queryOne(db, "SELECT id FROM users WHERE username = '" + username + "'")
+    if (existing != null) {
+        return {error: "Username already exists"}
+    }
+
+    // Check if email exists
+    if (email != null && strings.length(email) > 0) {
+        let existingEmail = db_queryOne(db, "SELECT id FROM users WHERE email = '" + email + "'")
+        if (existingEmail != null) {
+            return {error: "Email already exists"}
+        }
+    }
+
+    // Create user
+    let hash = hash_password(password)
+    let emailVal = "NULL"
+    if (email != null && strings.length(email) > 0) {
+        emailVal = "'" + email + "'"
+    }
+    let userId = db_insert(db, "INSERT INTO users (username, email, password_hash, role) VALUES ('" + username + "', " + emailVal + ", '" + hash + "', 'user')")
+
+    return {success: true, userId: userId, username: username}
+}
+
+// === Login ===
+fn auth_login(db, username, password) {
+    if (username == null || password == null) {
+        return {error: "Username and password required"}
+    }
+
+    let user = db_queryOne(db, "SELECT * FROM users WHERE username = '" + username + "'")
+    if (user == null) {
+        return {error: "Invalid username or password"}
+    }
+
+    if (user.status != "active") {
+        return {error: "Account is disabled"}
+    }
+
+    if (!verify_password(password, user.password_hash)) {
+        return {error: "Invalid username or password"}
+    }
+
+    // Create session
+    let sessionId = session_create()
+    session_set(sessionId, "userId", user.id)
+    session_set(sessionId, "username", user.username)
+    session_set(sessionId, "role", user.role)
+
+    return {
+        success: true,
+        sessionId: sessionId,
+        user: {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            role: user.role
+        }
+    }
+}
+
+// === Logout ===
+fn auth_logout(sessionId) {
+    if (sessionId == null) { return false }
+    session_destroy(sessionId)
+    return true
+}
+
+// === Get Current User ===
+fn auth_currentUser(sessionId) {
+    if (sessionId == null || !session_exists(sessionId)) { return null }
+    let userId = session_getValue(sessionId, "userId", null)
+    if (userId == null) { return null }
+    return {
+        id: userId,
+        username: session_getValue(sessionId, "username", null),
+        role: session_getValue(sessionId, "role", "user")
+    }
+}
+
+// === Authorization Checks ===
+fn auth_isLoggedIn(sessionId) {
+    return auth_currentUser(sessionId) != null
+}
+
+fn auth_isAdmin(sessionId) {
+    let user = auth_currentUser(sessionId)
+    if (user == null) { return false }
+    return user.role == "admin"
+}
+
+fn auth_requireRole(sessionId, role) {
+    let user = auth_currentUser(sessionId)
+    if (user == null) { return false }
+    return user.role == role
+}
+
+// === Auth Middleware ===
+// Returns null if authorized, or a response map if not
+fn auth_middleware(req, requiredRole) {
+    let sessionId = cookie_getSessionId(req)
+    let user = auth_currentUser(sessionId)
+    if (user == null) {
+        return res_json({error: "Authentication required"}, 401)
+    }
+    if (requiredRole != null && user.role != requiredRole) {
+        return res_json({error: "Permission denied"}, 403)
+    }
+    req.currentUser = user
+    req.sessionId = sessionId
+    return null
+}
+
+fn auth_requireLogin(req) {
+    return auth_middleware(req, null)
+}
+
+fn auth_requireAdmin(req) {
+    return auth_middleware(req, "admin")
+}
+
+// Helper to get session ID from request
+fn cookie_getSessionId(req) {
+    let cookieHeader = req_getHeader(req, "Cookie", null)
+    if (cookieHeader == null) { return null }
+    let parts = strings.split(cookieHeader, ";")
+    let i = 0
+    while (i < arrays.length(parts)) {
+        let part = strings.trim(parts[i])
+        if (strings.startsWith(part, "sessionId=")) {
+            return strings.substring(part, 10, strings.length(part))
+        }
+        i = i + 1
+    }
+    return null
+}
+
+// === Create Default Admin ===
+fn auth_createAdmin(db, username, password, email) {
+    let existing = db_queryOne(db, "SELECT id FROM users WHERE username = '" + username + "'")
+    if (existing != null) {
+        return {skipped: true, message: "Admin already exists"}
+    }
+    let hash = hash_password(password)
+    let userId = db_insert(db, "INSERT INTO users (username, email, password_hash, role) VALUES ('" + username + "', '" + email + "', '" + hash + "', 'admin')")
+    return {success: true, adminId: userId}
+}

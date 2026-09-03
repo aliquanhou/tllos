@@ -1,0 +1,15 @@
+// HTTP + SQLite test
+from "./core/database" import db_open, db_exec, db_query
+
+let db = db_open("test_http_db.db")
+db_exec(db, "CREATE TABLE IF NOT EXISTS test (id INTEGER PRIMARY KEY, name TEXT)")
+db_exec(db, "INSERT OR IGNORE INTO test (id, name) VALUES (1, 'hello')")
+
+fn handler(req) {
+    let rows = db_query(db, "SELECT * FROM test")
+    let count = arrays.length(rows)
+    return {status: 200, contentType: "text/plain", body: "Request " + req.path + ", rows=" + convert.toString(count)}
+}
+
+io.println("Starting HTTP+SQLite server on :8093...")
+http.serve("0.0.0.0:8093", handler)

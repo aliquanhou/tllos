@@ -1,0 +1,24 @@
+// HTTP + Router test
+from "./core/router" import router_create, router_get, router_post, router_handler, res_json, res_html
+
+let router = router_create()
+
+router_get(router, "/", fn(req) {
+    return res_html("<h1>Home</h1>")
+})
+
+router_get(router, "/test", fn(req) {
+    return res_json({path: req.path, method: req.method})
+})
+
+router_get(router, "/product/:id", fn(req) {
+    return res_json({id: req.params.id})
+})
+
+router_post(router, "/api/data", fn(req) {
+    let body = req_getJsonBody(req)
+    return res_json({received: body})
+})
+
+io.println("Starting HTTP+Router server on :8094...")
+http.serve("0.0.0.0:8094", router_handler(router))

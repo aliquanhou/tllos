@@ -1,0 +1,30 @@
+// TLL Mall - DB Debug Test
+from "./core/database" import db_open, db_close, db_exec, db_query, db_migrate, db_tableExists
+
+io.println("=== DB Debug Test ===")
+
+let db = db_open("test_debug.db")
+io.println("Database opened")
+
+io.println("users table exists: " + convert.toString(db_tableExists(db, "users")))
+io.println("products table exists: " + convert.toString(db_tableExists(db, "products")))
+io.println("_migrations table exists: " + convert.toString(db_tableExists(db, "_migrations")))
+
+// Run migration
+let migrations = [
+    {name: "001_create_users", sql: "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, email TEXT, created_at TEXT)"},
+    {name: "002_create_products", sql: "CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, price REAL, stock INTEGER, description TEXT)"}
+]
+let migrateResult = db_migrate(db, migrations)
+io.println("Migration result: " + json.stringify(migrateResult))
+
+io.println("After migration - users exists: " + convert.toString(db_tableExists(db, "users")))
+io.println("After migration - products exists: " + convert.toString(db_tableExists(db, "products")))
+
+// Try direct exec
+let r1 = sqlite.exec(db.raw, "CREATE TABLE IF NOT EXISTS test_direct (id INTEGER)")
+io.println("Direct exec result: " + convert.toString(r1))
+io.println("test_direct exists: " + convert.toString(db_tableExists(db, "test_direct")))
+
+db_close(db)
+io.println("=== Done ===")

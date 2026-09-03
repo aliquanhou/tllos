@@ -1,0 +1,49 @@
+// TLL Mall - Auth Test
+from "./core/database" import db_open, db_close
+from "./core/auth" import auth_ensureTables, auth_register, auth_login, auth_logout, auth_currentUser, auth_isLoggedIn, auth_isAdmin, auth_createAdmin
+from "./core/router" import router_create, router_get, router_post, router_handler, res_json, res_html
+
+io.println("=== TLL Mall Auth Test ===")
+
+let db = db_open("test_auth.db")
+auth_ensureTables(db)
+
+// Create admin
+let adminResult = auth_createAdmin(db, "admin", "admin123", "admin@tllmall.com")
+io.println("Create admin: " + json.stringify(adminResult))
+
+// Register user
+let regResult = auth_register(db, "testuser", "password123", "test@test.com")
+io.println("Register: " + json.stringify(regResult))
+
+// Login
+let loginResult = auth_login(db, "testuser", "password123")
+io.println("Login: " + json.stringify(loginResult))
+
+// Check current user
+if (loginResult.success) {
+    let user = auth_currentUser(loginResult.sessionId)
+    io.println("Current user: " + json.stringify(user))
+    io.println("Is logged in: " + convert.toString(auth_isLoggedIn(loginResult.sessionId)))
+    io.println("Is admin: " + convert.toString(auth_isAdmin(loginResult.sessionId)))
+}
+
+// Admin login
+let adminLogin = auth_login(db, "admin", "admin123")
+io.println("Admin login success: " + convert.toString(adminLogin.success))
+if (adminLogin.success) {
+    io.println("Admin is admin: " + convert.toString(auth_isAdmin(adminLogin.sessionId)))
+}
+
+// Test wrong password
+let wrongLogin = auth_login(db, "testuser", "wrongpassword")
+io.println("Wrong password: " + json.stringify(wrongLogin))
+
+// Logout
+if (loginResult.success) {
+    auth_logout(loginResult.sessionId)
+    io.println("After logout, is logged in: " + convert.toString(auth_isLoggedIn(loginResult.sessionId)))
+}
+
+db_close(db)
+io.println("=== Auth Test Complete ===")

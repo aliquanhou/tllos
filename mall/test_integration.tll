@@ -1,0 +1,51 @@
+// TLL Mall - Integration Test v2
+from "./core/database" import db_open, db_close, db_exec, db_query, db_migrate, db_tableExists
+from "./core/router" import router_create, router_get, router_handler, res_json, res_html
+
+io.println("=== TLL Mall Integration Test v2 ===")
+
+let db = db_open("test_integration.db")
+io.println("Database opened")
+
+let migrations = [
+    {name: "001_create_users", sql: "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, email TEXT, created_at TEXT)"},
+    {name: "002_create_products", sql: "CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, price REAL, stock INTEGER, description TEXT)"}
+]
+db_migrate(db, migrations)
+
+db_exec(db, "INSERT OR IGNORE INTO users (username, email, created_at) VALUES ('admin', 'admin@test.com', '2026-09-04')")
+db_exec(db, "INSERT OR IGNORE INTO products (name, price, stock, description) VALUES ('Test Product', 99.99, 100, 'A test product')")
+
+// Debug: query before server starts
+let users = db_query(db, "SELECT * FROM users")
+io.println("Users count: " + convert.toString(arrays.length(users)))
+
+let products = db_query(db, "SELECT * FROM products")
+io.println("Products count: " + convert.toString(arrays.length(products)))
+if (arrays.length(products) > 0) {
+    io.println("First product: " + json.stringify(products[0]))
+}
+
+// Router
+let router = router_create()
+
+router_get(router, "/", fn(req) {
+    return res_html("<h1>TLL Mall</h1>")
+})
+
+router_get(router, "/api/users", fn(req) {
+    let u = db_query(db, "SELECT * FROM users")
+    return res_json({count: arrays.length(u)})
+})
+
+router_get(router, "/api/products", fn(req) {
+    io.println("DEBUG: /api/products handler called")
+    let p = db_query(db, "SELECT * FROM products")
+    io.println("DEBUG: query returned, type=" + convert.typeOf(p))
+    let cnt = arrays.length(p)
+    io.println("DEBUG: count=" + convert.toString(cnt))
+    return res_json({count: cnt})
+})
+
+io.println("Starting server on :8091...")
+http.serve("0.0.0.0:8091", router_handler(router))

@@ -1,0 +1,254 @@
+// TLL Mall - Complete Database Schema
+// All tables for B2C mall: users, products, SKU, categories, brands, orders, cart, addresses, marketing
+
+from "./database" import db_exec, db_tableExists
+
+fn schema_initAll(db) {
+    // === Users (already in auth, but ensure here too) ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        email TEXT UNIQUE,
+        phone TEXT,
+        password_hash TEXT NOT NULL,
+        role TEXT DEFAULT 'user',
+        status TEXT DEFAULT 'active',
+        avatar TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === User Addresses ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS user_addresses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        province TEXT,
+        city TEXT,
+        district TEXT,
+        detail TEXT NOT NULL,
+        is_default INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )")
+
+    // === Categories ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        parent_id INTEGER DEFAULT 0,
+        sort_order INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        icon TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === Brands ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS brands (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        logo TEXT,
+        description TEXT,
+        sort_order INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === Products (SPU) ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        category_id INTEGER,
+        brand_id INTEGER,
+        description TEXT,
+        detail TEXT,
+        main_image TEXT,
+        images TEXT,
+        price REAL DEFAULT 0,
+        stock INTEGER DEFAULT 0,
+        sales INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'on',
+        sort_order INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (category_id) REFERENCES categories(id),
+        FOREIGN KEY (brand_id) REFERENCES brands(id)
+    )")
+
+    // === Product SKU ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS product_skus (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id INTEGER NOT NULL,
+        sku_code TEXT UNIQUE,
+        spec TEXT,
+        price REAL DEFAULT 0,
+        stock INTEGER DEFAULT 0,
+        image TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (product_id) REFERENCES products(id)
+    )")
+
+    // === Shopping Cart ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS cart_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        product_id INTEGER NOT NULL,
+        sku_id INTEGER,
+        quantity INTEGER DEFAULT 1,
+        selected INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        FOREIGN KEY (product_id) REFERENCES products(id),
+        FOREIGN KEY (sku_id) REFERENCES product_skus(id)
+    )")
+
+    // === Orders ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_no TEXT UNIQUE NOT NULL,
+        user_id INTEGER NOT NULL,
+        total_amount REAL DEFAULT 0,
+        status TEXT DEFAULT 'pending',
+        payment_status TEXT DEFAULT 'unpaid',
+        shipping_status TEXT DEFAULT 'unshipped',
+        address_name TEXT,
+        address_phone TEXT,
+        address_detail TEXT,
+        remark TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        paid_at TEXT,
+        shipped_at TEXT,
+        completed_at TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )")
+
+    // === Order Items ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS order_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id INTEGER NOT NULL,
+        product_id INTEGER NOT NULL,
+        sku_id INTEGER,
+        product_name TEXT,
+        product_image TEXT,
+        spec TEXT,
+        price REAL DEFAULT 0,
+        quantity INTEGER DEFAULT 1,
+        subtotal REAL DEFAULT 0,
+        FOREIGN KEY (order_id) REFERENCES orders(id),
+        FOREIGN KEY (product_id) REFERENCES products(id)
+    )")
+
+    // === After Sales / Refunds ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS after_sales (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        type TEXT DEFAULT 'refund',
+        reason TEXT,
+        status TEXT DEFAULT 'pending',
+        amount REAL DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        processed_at TEXT,
+        FOREIGN KEY (order_id) REFERENCES orders(id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )")
+
+    // === Marketing: Coupons ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS coupons (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        type TEXT DEFAULT 'discount',
+        value REAL DEFAULT 0,
+        min_amount REAL DEFAULT 0,
+        total_count INTEGER DEFAULT 0,
+        used_count INTEGER DEFAULT 0,
+        start_at TEXT,
+        end_at TEXT,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === User Coupons ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS user_coupons (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        coupon_id INTEGER NOT NULL,
+        status TEXT DEFAULT 'unused',
+        used_at TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        FOREIGN KEY (coupon_id) REFERENCES coupons(id)
+    )")
+
+    // === Banners ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS banners (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT,
+        image TEXT NOT NULL,
+        link TEXT,
+        sort_order INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === System Config ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS system_config (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        description TEXT,
+        updated_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === Admin Operation Logs ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS admin_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        admin_id INTEGER,
+        action TEXT,
+        target TEXT,
+        detail TEXT,
+        ip TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    return {success: true, tables: 20}
+}
+
+// Seed initial data: categories, brands, sample products
+fn schema_seedData(db) {
+    // Categories
+    db_exec(db, "INSERT OR IGNORE INTO categories (id, name, parent_id, sort_order) VALUES (1, '数码电器', 0, 1)")
+    db_exec(db, "INSERT OR IGNORE INTO categories (id, name, parent_id, sort_order) VALUES (2, '服装鞋包', 0, 2)")
+    db_exec(db, "INSERT OR IGNORE INTO categories (id, name, parent_id, sort_order) VALUES (3, '家居生活', 0, 3)")
+    db_exec(db, "INSERT OR IGNORE INTO categories (id, name, parent_id, sort_order) VALUES (4, '手机', 1, 1)")
+    db_exec(db, "INSERT OR IGNORE INTO categories (id, name, parent_id, sort_order) VALUES (5, '电脑', 1, 2)")
+
+    // Brands
+    db_exec(db, "INSERT OR IGNORE INTO brands (id, name, sort_order) VALUES (1, 'TLL Tech', 1)")
+    db_exec(db, "INSERT OR IGNORE INTO brands (id, name, sort_order) VALUES (2, 'HighFrame', 2)")
+
+    // Sample products
+    db_exec(db, "INSERT OR IGNORE INTO products (id, name, category_id, brand_id, price, stock, description, main_image, status) VALUES (1, 'TLL Phone Pro', 4, 1, 3999.00, 100, '高帧率智能手机，搭载 TLL OS', '/images/product1.jpg', 'on')")
+    db_exec(db, "INSERT OR IGNORE INTO products (id, name, category_id, brand_id, price, stock, description, main_image, status) VALUES (2, 'TLL Laptop Air', 5, 1, 6999.00, 50, '轻薄高性能笔记本', '/images/product2.jpg', 'on')")
+    db_exec(db, "INSERT OR IGNORE INTO products (id, name, category_id, brand_id, price, stock, description, main_image, status) VALUES (3, 'HighFrame 耳机', 1, 2, 599.00, 200, '高保真无线耳机', '/images/product3.jpg', 'on')")
+    db_exec(db, "INSERT OR IGNORE INTO products (id, name, category_id, brand_id, price, stock, description, main_image, status) VALUES (4, '智能手表', 1, 1, 1299.00, 80, '健康监测智能手表', '/images/product4.jpg', 'on')")
+    db_exec(db, "INSERT OR IGNORE INTO products (id, name, category_id, brand_id, price, stock, description, main_image, status) VALUES (5, '机械键盘', 1, 2, 399.00, 150, '高帧率机械键盘', '/images/product5.jpg', 'on')")
+    db_exec(db, "INSERT OR IGNORE INTO products (id, name, category_id, brand_id, price, stock, description, main_image, status) VALUES (6, '4K 显示器', 1, 1, 2499.00, 60, '27寸4K高刷新率显示器', '/images/product6.jpg', 'on')")
+
+    // SKUs for product 1
+    db_exec(db, "INSERT OR IGNORE INTO product_skus (id, product_id, sku_code, spec, price, stock) VALUES (1, 1, 'SKU001-BLK-128', '黑色 128GB', 3999.00, 50)")
+    db_exec(db, "INSERT OR IGNORE INTO product_skus (id, product_id, sku_code, spec, price, stock) VALUES (2, 1, 'SKU001-WHT-256', '白色 256GB', 4299.00, 30)")
+    db_exec(db, "INSERT OR IGNORE INTO product_skus (id, product_id, sku_code, spec, price, stock) VALUES (3, 1, 'SKU001-BLU-512', '蓝色 512GB', 4699.00, 20)")
+
+    // Banners
+    db_exec(db, "INSERT OR IGNORE INTO banners (id, title, image, link, sort_order) VALUES (1, '新品上市', '/images/banner1.jpg', '/product/1', 1)")
+    db_exec(db, "INSERT OR IGNORE INTO banners (id, title, image, link, sort_order) VALUES (2, '限时优惠', '/images/banner2.jpg', '/category/1', 2)")
+
+    // System config
+    db_exec(db, "INSERT OR IGNORE INTO system_config (key, value, description) VALUES ('site_name', 'TLL Mall', '网站名称')")
+    db_exec(db, "INSERT OR IGNORE INTO system_config (key, value, description) VALUES ('site_logo', '/images/logo.png', '网站Logo')")
+
+    return {success: true, seeded: true}
+}

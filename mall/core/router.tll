@@ -1,0 +1,206 @@
+// TLL Mall - Web Router
+// Provides routing, middleware, path parameters, and response helpers
+
+// === Response Helpers ===
+
+fn res_json(data, status) {
+    let code = 200
+    if (status != null) { code = status }
+    return {
+        status: code,
+        contentType: "application/json; charset=utf-8",
+        body: json.stringify(data)
+    }
+}
+
+fn res_html(html, status) {
+    let code = 200
+    if (status != null) { code = status }
+    return {
+        status: code,
+        contentType: "text/html; charset=utf-8",
+        body: html
+    }
+}
+
+fn res_text(text, status) {
+    let code = 200
+    if (status != null) { code = status }
+    return {
+        status: code,
+        contentType: "text/plain; charset=utf-8",
+        body: text
+    }
+}
+
+fn res_redirect(url, status) {
+    let code = 302
+    if (status != null) { code = status }
+    return {
+        status: code,
+        contentType: "text/html; charset=utf-8",
+        body: "<html><head><meta http-equiv='refresh' content='0;url=" + url + "'></head><body>Redirecting to <a href='" + url + "'>" + url + "</a></body></html>",
+        headers: {Location: url}
+    }
+}
+
+fn res_notFound(message) {
+    let msg = "404 Not Found"
+    if (message != null) { msg = message }
+    return res_html("<html><body><h1>404</h1><p>" + msg + "</p><a href='/'>Home</a></body></html>", 404)
+}
+
+fn res_error(message, status) {
+    let code = 500
+    if (status != null) { code = status }
+    return res_json({error: message, status: code}, code)
+}
+
+// === Request Helpers ===
+
+fn req_getQuery(req, key, defaultValue) {
+    if (req.queryMap == null) { return defaultValue }
+    let val = req.queryMap[key]
+    if (val == null) { return defaultValue }
+    return val
+}
+
+fn req_getHeader(req, key, defaultValue) {
+    if (req.headers == null) { return defaultValue }
+    let val = req.headers[key]
+    if (val == null) { return defaultValue }
+    return val
+}
+
+fn req_getCookie(req, name, defaultValue) {
+    let cookieHeader = req_getHeader(req, "Cookie", null)
+    if (cookieHeader == null) { return defaultValue }
+    // Parse "name1=value1; name2=value2"
+    let parts = strings.split(cookieHeader, ";")
+    let i = 0
+    while (i < arrays.length(parts)) {
+        let part = strings.trim(parts[i])
+        if (strings.startsWith(part, name + "=")) {
+            return strings.substring(part, strings.length(name) + 1, strings.length(part))
+        }
+        i = i + 1
+    }
+    return defaultValue
+}
+
+fn req_getJsonBody(req) {
+    if (req.body == null || strings.length(req.body) == 0) { return null }
+    return json.parse(req.body)
+}
+
+// === Path Parameter Parsing ===
+
+// Match a route pattern against a path
+// Pattern: "/product/:id" matches "/product/123"
+// Returns null if no match, or map of params if match
+fn router_matchPath(pattern, path) {
+    let patternParts = strings.split(pattern, "/")
+    let pathParts = strings.split(path, "/")
+    if (arrays.length(patternParts) != arrays.length(pathParts)) { return null }
+    let params = {}
+    let i = 0
+    while (i < arrays.length(patternParts)) {
+        let pp = patternParts[i]
+        let rp = pathParts[i]
+        if (strings.startsWith(pp, ":")) {
+            let paramName = strings.substring(pp, 1, strings.length(pp))
+            params[paramName] = rp
+        } else if (pp != rp) {
+            return null
+        }
+        i = i + 1
+    }
+    return params
+}
+
+// === Router ===
+
+fn router_create() {
+    return {
+        routes: [],
+        middlewares: []
+    }
+}
+
+fn router_addRoute(router, method, pattern, handler) {
+    arrays.push(router.routes, {
+        method: method,
+        pattern: pattern,
+        handler: handler
+    })
+}
+
+fn router_get(router, pattern, handler) {
+    router_addRoute(router, "GET", pattern, handler)
+}
+
+fn router_post(router, pattern, handler) {
+    router_addRoute(router, "POST", pattern, handler)
+}
+
+fn router_put(router, pattern, handler) {
+    router_addRoute(router, "PUT", pattern, handler)
+}
+
+fn router_delete(router, pattern, handler) {
+    router_addRoute(router, "DELETE", pattern, handler)
+}
+
+fn router_use(router, middleware) {
+    arrays.push(router.middlewares, middleware)
+}
+
+// Handle a request through middleware chain and route matching
+fn router_handle(router, req) {
+    let method = req.method
+    let path = req.path
+    let routeCount = arrays.length(router.routes)
+
+    let j = 0
+    while (j < routeCount) {
+        let route = router.routes[j]
+        if (route.method == method) {
+            let params = router_matchPath(route.pattern, path)
+            if (params != null) {
+                req.params = params
+                return route.handler(req)
+            }
+        }
+        j = j + 1
+    }
+
+    return res_notFound("No route matched " + method + " " + path)
+}
+
+// Create an HTTP handler function suitable for http.serve
+fn router_handler(router) {
+    return fn(req) {
+        return router_handle(router, req)
+    }
+}
+
+// === Static File Serving (basic) ===
+
+fn router_serveStatic(router, urlPrefix, fsPath) {
+    router_get(router, urlPrefix + "/*", fn(req) {
+        let filePath = strings.substring(req.path, strings.length(urlPrefix) + 1, strings.length(req.path))
+        let fullPath = fsPath + "/" + filePath
+        if (!fs.exists(fullPath)) { return res_notFound("File not found: " + filePath) }
+        let content = fs.readFile(fullPath)
+        let contentType = "application/octet-stream"
+        if (strings.endsWith(filePath, ".html")) { contentType = "text/html; charset=utf-8" }
+        else if (strings.endsWith(filePath, ".css")) { contentType = "text/css; charset=utf-8" }
+        else if (strings.endsWith(filePath, ".js")) { contentType = "application/javascript; charset=utf-8" }
+        else if (strings.endsWith(filePath, ".json")) { contentType = "application/json; charset=utf-8" }
+        else if (strings.endsWith(filePath, ".png")) { contentType = "image/png" }
+        else if (strings.endsWith(filePath, ".jpg") || strings.endsWith(filePath, ".jpeg")) { contentType = "image/jpeg" }
+        else if (strings.endsWith(filePath, ".gif")) { contentType = "image/gif" }
+        else if (strings.endsWith(filePath, ".svg")) { contentType = "image/svg+xml" }
+        return {status: 200, contentType: contentType, body: content}
+    })
+}

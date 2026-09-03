@@ -1,0 +1,237 @@
+// TLL Mall - Database Core
+// Wraps sqlite builtin with higher-level API: connection, query, exec, transaction, migration
+
+// === Connection Management ===
+
+fn db_open(path) {
+    let raw = sqlite.open(path)
+    let handle = {
+        raw: raw,
+        path: path,
+        queryCount: 0,
+        execCount: 0,
+        inTransaction: false
+    }
+    return handle
+}
+
+fn db_close(handle) {
+    sqlite.close(handle.raw)
+}
+
+// === SQL Parameter Escaping (prevents SQL injection) ===
+
+fn db_escapeString(s) {
+    if (s == null) { return "NULL" }
+    let str = convert.toString(s)
+    // Escape single quotes by doubling them
+    let result = ""
+    let i = 0
+    let len = strings.length(str)
+    while (i < len) {
+        let c = strings.charAt(str, i)
+        if (c == "'") {
+            result = result + "''"
+        } else {
+            result = result + c
+        }
+        i = i + 1
+    }
+    return "'" + result + "'"
+}
+
+fn db_escapeValue(v) {
+    if (v == null) { return "NULL" }
+    if (convert.typeOf(v) == "int") { return convert.toString(v) }
+    if (convert.typeOf(v) == "float") { return convert.toString(v) }
+    if (convert.typeOf(v) == "bool") {
+        if (v) { return "1" }
+        return "0"
+    }
+    return db_escapeString(v)
+}
+
+// Build SQL with parameters replaced
+fn db_buildSQL(sql, params) {
+    if (params == null) { return sql }
+    if (convert.typeOf(params) != "list") { return sql }
+    if (arrays.length(params) == 0) { return sql }
+    let result = ""
+    let paramIdx = 0
+    let i = 0
+    let len = strings.length(sql)
+    while (i < len) {
+        let c = strings.charAt(sql, i)
+        if (c == "?" && paramIdx < arrays.length(params)) {
+            result = result + db_escapeValue(params[paramIdx])
+            paramIdx = paramIdx + 1
+        } else {
+            result = result + c
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// === Query (SELECT) ===
+
+fn db_query(handle, sql, params) {
+    let finalSQL = db_buildSQL(sql, params)
+    handle.queryCount = handle.queryCount + 1
+    return sqlite.query(handle.raw, finalSQL)
+}
+
+// Query single row, returns null if no result
+fn db_queryOne(handle, sql, params) {
+    let rows = db_query(handle, sql, params)
+    if (arrays.length(rows) == 0) { return null }
+    return rows[0]
+}
+
+// Query single value, returns null if no result
+fn db_queryValue(handle, sql, params) {
+    let row = db_queryOne(handle, sql, params)
+    if (row == null) { return null }
+    // Return first value in row
+    let cols = sqlite.columns(handle.raw, "") // not useful, iterate map instead
+    return row
+}
+
+// === Exec (INSERT/UPDATE/DELETE/DDL) ===
+
+fn db_exec(handle, sql, params) {
+    let finalSQL = db_buildSQL(sql, params)
+    handle.execCount = handle.execCount + 1
+    return sqlite.exec(handle.raw, finalSQL)
+}
+
+// Insert and return last insert ID
+fn db_insert(handle, sql, params) {
+    db_exec(handle, sql, params)
+    return sqlite.lastInsertRowid(handle.raw)
+}
+
+// === Transaction Support ===
+
+fn db_begin(handle) {
+    if (handle.inTransaction) { return false }
+    sqlite.exec(handle.raw, "BEGIN TRANSACTION")
+    handle.inTransaction = true
+    return true
+}
+
+fn db_commit(handle) {
+    if (!handle.inTransaction) { return false }
+    sqlite.exec(handle.raw, "COMMIT")
+    handle.inTransaction = false
+    return true
+}
+
+fn db_rollback(handle) {
+    if (!handle.inTransaction) { return false }
+    sqlite.exec(handle.raw, "ROLLBACK")
+    handle.inTransaction = false
+    return true
+}
+
+// Execute a function within a transaction, auto-commit on success, rollback on error
+fn db_transaction(handle, callback) {
+    db_begin(handle)
+    let result = null
+    // Note: TLL doesn't have try/catch that works reliably across builtins,
+    // so we rely on the caller to return an error marker
+    result = callback(handle)
+    if (result == null || (convert.typeOf(result) == "map" && result.error != null)) {
+        db_rollback(handle)
+        return result
+    }
+    db_commit(handle)
+    return result
+}
+
+// === Migration Support ===
+
+// Check if migrations table exists, create if not
+fn db_ensureMigrationsTable(handle) {
+    sqlite.exec(handle.raw, "CREATE TABLE IF NOT EXISTS _migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TEXT)")
+}
+
+// Get list of applied migrations
+fn db_getAppliedMigrations(handle) {
+    db_ensureMigrationsTable(handle)
+    let rows = sqlite.query(handle.raw, "SELECT name FROM _migrations ORDER BY id")
+    let names = []
+    let i = 0
+    while (i < arrays.length(rows)) {
+        arrays.push(names, rows[i].name)
+        i = i + 1
+    }
+    return names
+}
+
+// Check if a migration has been applied
+fn db_migrationApplied(handle, name) {
+    let applied = db_getAppliedMigrations(handle)
+    let i = 0
+    while (i < arrays.length(applied)) {
+        if (applied[i] == name) { return true }
+        i = i + 1
+    }
+    return false
+}
+
+// Apply a single migration
+fn db_applyMigration(handle, name, sql) {
+    if (db_migrationApplied(handle, name)) {
+        return {skipped: true, name: name}
+    }
+    db_begin(handle)
+    let result = sqlite.exec(handle.raw, sql)
+    if (result < 0) {
+        db_rollback(handle)
+        return {error: "migration failed: " + name, name: name}
+    }
+    sqlite.exec(handle.raw, "INSERT INTO _migrations (name, applied_at) VALUES ('" + name + "', datetime('now'))")
+    db_commit(handle)
+    return {applied: true, name: name}
+}
+
+// Apply multiple migrations in order
+// migrations is an array of {name, sql}
+fn db_migrate(handle, migrations) {
+    let results = []
+    let i = 0
+    while (i < arrays.length(migrations)) {
+        let m = migrations[i]
+        let result = db_applyMigration(handle, m.name, m.sql)
+        arrays.push(results, result)
+        if (result.error != null) {
+            return {error: result.error, results: results}
+        }
+        i = i + 1
+    }
+    return {success: true, results: results}
+}
+
+// === Utility ===
+
+fn db_tableExists(handle, name) {
+    return sqlite.tableExists(handle.raw, name)
+}
+
+fn db_tableColumns(handle, name) {
+    return sqlite.columns(handle.raw, name)
+}
+
+fn db_version() {
+    return sqlite.version()
+}
+
+fn db_stats(handle) {
+    return {
+        path: handle.path,
+        queryCount: handle.queryCount,
+        execCount: handle.execCount,
+        inTransaction: handle.inTransaction
+    }
+}

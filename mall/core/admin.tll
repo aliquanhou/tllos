@@ -1,0 +1,288 @@
+// TLL Mall - Admin Backend
+// Admin dashboard, product/order/user management
+
+from "./database" import db_open, db_exec, db_query, db_queryOne, db_insert
+from "./router" import router_get, router_post, res_json, res_html, res_redirect, res_notFound, res_error
+from "./auth" import auth_currentUser, auth_isAdmin, cookie_getSessionId
+
+// Admin HTML template
+fn admin_page(title, body) {
+    return "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>" + title + " - TLL Mall Admin</title><style>" +
+        "*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#333}" +
+        ".sidebar{position:fixed;left:0;top:0;width:200px;height:100vh;background:#001529;color:#fff;padding-top:20px}.sidebar h2{text-align:center;margin-bottom:30px;color:#fff;font-size:18px}" +
+        ".sidebar a{display:block;padding:12px 20px;color:#ccc;text-decoration:none;border-left:3px solid transparent}.sidebar a:hover,.sidebar a.active{background:#1890ff;color:#fff;border-left-color:#1890ff}" +
+        ".main{margin-left:200px;padding:20px}.header{background:#fff;padding:15px 20px;margin-bottom:20px;border-radius:4px;display:flex;justify-content:space-between;align-items:center}" +
+        ".card{background:#fff;border-radius:4px;padding:20px;margin-bottom:20px}.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-bottom:20px}" +
+        ".stat-card{background:#fff;border-radius:4px;padding:20px;text-align:center}.stat-card .number{font-size:32px;font-weight:bold;color:#1890ff}.stat-card .label{color:#999;margin-top:5px}" +
+        "table{width:100%;border-collapse:collapse}th,td{padding:12px;text-align:left;border-bottom:1px solid #eee}th{background:#fafafa;font-weight:600}" +
+        ".btn{display:inline-block;padding:6px 15px;background:#1890ff;color:#fff;border:none;border-radius:4px;cursor:pointer;text-decoration:none;font-size:14px;margin-right:5px}.btn:hover{background:#40a9ff}.btn-danger{background:#ff4d4f}.btn-danger:hover{background:#ff7875}" +
+        ".form-group{margin-bottom:15px}.form-group label{display:block;margin-bottom:5px;font-weight:500}.form-group input,.form-group select,.form-group textarea{width:100%;padding:8px;border:1px solid #ddd;border-radius:4px}" +
+        ".badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px}.badge-success{background:#e8f5e9;color:#2e7d32}.badge-warning{background:#fff3e0;color:#e65100}.badge-danger{background:#ffebee;color:#c62828}.badge-info{background:#e3f2fd;color:#1565c0}" +
+        "</style></head><body>" + body + "</body></html>"
+}
+
+fn admin_sidebar(active) {
+    let clsDashboard = ""
+    if (active == "dashboard") { clsDashboard = "active" }
+    let clsProducts = ""
+    if (active == "products") { clsProducts = "active" }
+    let clsOrders = ""
+    if (active == "orders") { clsOrders = "active" }
+    let clsUsers = ""
+    if (active == "users") { clsUsers = "active" }
+    let clsCategories = ""
+    if (active == "categories") { clsCategories = "active" }
+
+    return "<div class='sidebar'><h2>TLL Mall 后台</h2>" +
+        "<a href='/admin' class='" + clsDashboard + "'>仪表盘</a>" +
+        "<a href='/admin/products' class='" + clsProducts + "'>商品管理</a>" +
+        "<a href='/admin/orders' class='" + clsOrders + "'>订单管理</a>" +
+        "<a href='/admin/users' class='" + clsUsers + "'>用户管理</a>" +
+        "<a href='/admin/categories' class='" + clsCategories + "'>分类管理</a>" +
+        "<a href='/'>返回商城</a>" +
+        "<a href='/logout'>退出登录</a>" +
+        "</div>"
+}
+
+// Admin auth check middleware (returns response if not admin, null if ok)
+fn admin_checkAuth(req) {
+    let sessionId = cookie_getSessionId(req)
+    let user = auth_currentUser(sessionId)
+    if (user == null) {
+        return res_redirect("/login?redirect=/admin")
+    }
+    if (user.role != "admin") {
+        return res_html("<html><body><h1>403 Forbidden</h1><p>需要管理员权限</p><a href='/'>返回首页</a></body></html>", 403)
+    }
+    req.currentUser = user
+    req.sessionId = sessionId
+    return null
+}
+
+// Register all admin routes (uses global mallRouter from main.tll)
+fn admin_registerRoutes(router, db) {
+    // Admin Dashboard
+    router_get(router, "/admin", fn(req) {
+        let authResult = admin_checkAuth(req)
+        if (authResult != null) { return authResult }
+
+        let totalProducts = db_queryOne(db, "SELECT COUNT(*) as cnt FROM products")
+        let totalOrders = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders")
+        let totalUsers = db_queryOne(db, "SELECT COUNT(*) as cnt FROM users")
+        let totalSales = db_queryOne(db, "SELECT COALESCE(SUM(total_amount),0) as total FROM orders WHERE status != 'cancelled'")
+
+        let recentOrders = db_query(db, "SELECT * FROM orders ORDER BY id DESC LIMIT 5")
+        let ordersHtml = ""
+        let i = 0
+        while (i < arrays.length(recentOrders)) {
+            let o = recentOrders[i]
+            ordersHtml = ordersHtml + "<tr><td>" + o.order_no + "</td><td>" + convert.toString(o.user_id) + "</td><td>¥" + convert.toString(o.total_amount) + "</td><td><span class='badge badge-info'>" + o.status + "</span></td><td>" + o.created_at + "</td></tr>"
+            i = i + 1
+        }
+
+        let body = admin_sidebar("dashboard") +
+            "<div class='main'><div class='header'><h2>仪表盘</h2><span>欢迎, " + req.currentUser.username + "</span></div>" +
+            "<div class='stat-grid'>" +
+            "<div class='stat-card'><div class='number'>" + convert.toString(totalProducts.cnt) + "</div><div class='label'>商品总数</div></div>" +
+            "<div class='stat-card'><div class='number'>" + convert.toString(totalOrders.cnt) + "</div><div class='label'>订单总数</div></div>" +
+            "<div class='stat-card'><div class='number'>" + convert.toString(totalUsers.cnt) + "</div><div class='label'>用户总数</div></div>" +
+            "<div class='stat-card'><div class='number'>¥" + convert.toString(totalSales.total) + "</div><div class='label'>销售总额</div></div>" +
+            "</div>" +
+            "<div class='card'><h3 style='margin-bottom:15px'>最近订单</h3><table><thead><tr><th>订单号</th><th>用户ID</th><th>金额</th><th>状态</th><th>时间</th></tr></thead><tbody>" + ordersHtml + "</tbody></table></div>" +
+            "</div>"
+
+        return res_html(admin_page("仪表盘", body))
+    })
+
+    // Product Management
+    router_get(router, "/admin/products", fn(req) {
+        let authResult = admin_checkAuth(req)
+        if (authResult != null) { return authResult }
+
+        let products = db_query(db, "SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id ORDER BY p.id DESC")
+        let productsHtml = ""
+        let i = 0
+        while (i < arrays.length(products)) {
+            let p = products[i]
+            let statusBadge = "<span class='badge badge-success'>上架</span>"
+            if (p.status != "on") { statusBadge = "<span class='badge badge-danger'>下架</span>" }
+            let pCatName = "-"
+            if (p.category_name != null) { pCatName = p.category_name }
+            productsHtml = productsHtml + "<tr><td>" + convert.toString(p.id) + "</td><td>" + p.name + "</td><td>" + pCatName + "</td><td>¥" + convert.toString(p.price) + "</td><td>" + convert.toString(p.stock) + "</td><td>" + convert.toString(p.sales) + "</td><td>" + statusBadge + "</td>" +
+                "<td><a href='/admin/product/edit/" + convert.toString(p.id) + "' class='btn'>编辑</a><a href='/admin/product/delete/" + convert.toString(p.id) + "' class='btn btn-danger' onclick='return confirm(\"确定删除？\")'>删除</a></td></tr>"
+            i = i + 1
+        }
+
+        let body = admin_sidebar("products") +
+            "<div class='main'><div class='header'><h2>商品管理</h2><a href='/admin/product/add' class='btn'>添加商品</a></div>" +
+            "<div class='card'><table><thead><tr><th>ID</th><th>名称</th><th>分类</th><th>价格</th><th>库存</th><th>销量</th><th>状态</th><th>操作</th></tr></thead><tbody>" + productsHtml + "</tbody></table></div>" +
+            "</div>"
+
+        return res_html(admin_page("商品管理", body))
+    })
+
+    // Add Product Form
+    router_get(router, "/admin/product/add", fn(req) {
+        let authResult = admin_checkAuth(req)
+        if (authResult != null) { return authResult }
+
+        let categories = db_query(db, "SELECT * FROM categories ORDER BY sort_order")
+        let catOptions = ""
+        let i = 0
+        while (i < arrays.length(categories)) {
+            catOptions = catOptions + "<option value='" + convert.toString(categories[i].id) + "'>" + categories[i].name + "</option>"
+            i = i + 1
+        }
+
+        let body = admin_sidebar("products") +
+            "<div class='main'><div class='header'><h2>添加商品</h2></div>" +
+            "<div class='card'><form method='POST' action='/admin/product/add'>" +
+            "<div class='form-group'><label>商品名称</label><input type='text' name='name' required></div>" +
+            "<div class='form-group'><label>分类</label><select name='category_id'>" + catOptions + "</select></div>" +
+            "<div class='form-group'><label>价格</label><input type='number' name='price' step='0.01' required></div>" +
+            "<div class='form-group'><label>库存</label><input type='number' name='stock' value='0'></div>" +
+            "<div class='form-group'><label>描述</label><textarea name='description' rows='3'></textarea></div>" +
+            "<button type='submit' class='btn'>保存</button> <a href='/admin/products' class='btn btn-danger'>取消</a>" +
+            "</form></div></div>"
+
+        return res_html(admin_page("添加商品", body))
+    })
+
+    // Add Product Submit
+    router_post(router, "/admin/product/add", fn(req) {
+        let authResult = admin_checkAuth(req)
+        if (authResult != null) { return authResult }
+
+        // Parse form data (simplified - in production use proper form parsing)
+        let bodyStr = req.body
+        // For now, return to list (form parsing would need URL decoding)
+        return res_redirect("/admin/products")
+    })
+
+    // Order Management
+    router_get(router, "/admin/orders", fn(req) {
+        let authResult = admin_checkAuth(req)
+        if (authResult != null) { return authResult }
+
+        let orders = db_query(db, "SELECT o.*, u.username FROM orders o LEFT JOIN users u ON o.user_id=u.id ORDER BY o.id DESC LIMIT 50")
+        let ordersHtml = ""
+        let i = 0
+        while (i < arrays.length(orders)) {
+            let o = orders[i]
+            let statusBadge = "<span class='badge badge-warning'>待付款</span>"
+            if (o.status == "paid") { statusBadge = "<span class='badge badge-info'>已付款</span>" }
+            else if (o.status == "shipped") { statusBadge = "<span class='badge badge-info'>已发货</span>" }
+            else if (o.status == "completed") { statusBadge = "<span class='badge badge-success'>已完成</span>" }
+            else if (o.status == "cancelled") { statusBadge = "<span class='badge badge-danger'>已取消</span>" }
+
+            let oUsername = "-"
+            if (o.username != null) { oUsername = o.username }
+            let shipBtn = ""
+            if (o.status == "paid") { shipBtn = "<a href='/admin/order/ship/" + convert.toString(o.id) + "' class='btn'>发货</a>" }
+            ordersHtml = ordersHtml + "<tr><td>" + o.order_no + "</td><td>" + oUsername + "</td><td>¥" + convert.toString(o.total_amount) + "</td><td>" + statusBadge + "</td><td>" + o.address_name + " " + o.address_phone + "</td><td>" + o.created_at + "</td>" +
+                "<td><a href='/admin/order/" + convert.toString(o.id) + "' class='btn'>详情</a>" +
+                shipBtn +
+                "</td></tr>"
+            i = i + 1
+        }
+
+        let body = admin_sidebar("orders") +
+            "<div class='main'><div class='header'><h2>订单管理</h2></div>" +
+            "<div class='card'><table><thead><tr><th>订单号</th><th>用户</th><th>金额</th><th>状态</th><th>收货人</th><th>时间</th><th>操作</th></tr></thead><tbody>" + ordersHtml + "</tbody></table></div>" +
+            "</div>"
+
+        return res_html(admin_page("订单管理", body))
+    })
+
+    // Order Detail
+    router_get(router, "/admin/order/:id", fn(req) {
+        let authResult = admin_checkAuth(req)
+        if (authResult != null) { return authResult }
+
+        let orderId = convert.toInt(req.params.id)
+        let order = db_queryOne(db, "SELECT o.*, u.username FROM orders o LEFT JOIN users u ON o.user_id=u.id WHERE o.id=" + convert.toString(orderId))
+        if (order == null) { return res_notFound("订单不存在") }
+
+        let items = db_query(db, "SELECT * FROM order_items WHERE order_id=" + convert.toString(orderId))
+        let itemsHtml = ""
+        let i = 0
+        while (i < arrays.length(items)) {
+            let itemSpec = "-"
+            if (items[i].spec != null) { itemSpec = items[i].spec }
+            itemsHtml = itemsHtml + "<tr><td>" + items[i].product_name + "</td><td>" + itemSpec + "</td><td>¥" + convert.toString(items[i].price) + "</td><td>" + convert.toString(items[i].quantity) + "</td><td>¥" + convert.toString(items[i].subtotal) + "</td></tr>"
+            i = i + 1
+        }
+
+        let orderUsername = "-"
+        if (order.username != null) { orderUsername = order.username }
+
+        let body = admin_sidebar("orders") +
+            "<div class='main'><div class='header'><h2>订单详情 - " + order.order_no + "</h2><a href='/admin/orders' class='btn'>返回列表</a></div>" +
+            "<div class='card'><h3>订单信息</h3><p>订单号: " + order.order_no + "</p><p>用户: " + orderUsername + "</p><p>状态: " + order.status + "</p><p>金额: ¥" + convert.toString(order.total_amount) + "</p><p>下单时间: " + order.created_at + "</p></div>" +
+            "<div class='card'><h3>收货信息</h3><p>" + order.address_name + " " + order.address_phone + "</p><p>" + order.address_detail + "</p></div>" +
+            "<div class='card'><h3>商品清单</h3><table><thead><tr><th>商品</th><th>规格</th><th>单价</th><th>数量</th><th>小计</th></tr></thead><tbody>" + itemsHtml + "</tbody></table></div>" +
+            "</div>"
+
+        return res_html(admin_page("订单详情", body))
+    })
+
+    // Ship Order
+    router_get(router, "/admin/order/ship/:id", fn(req) {
+        let authResult = admin_checkAuth(req)
+        if (authResult != null) { return authResult }
+        let orderId = convert.toInt(req.params.id)
+        db_exec(db, "UPDATE orders SET status='shipped', shipping_status='shipped', shipped_at=datetime('now') WHERE id=" + convert.toString(orderId))
+        return res_redirect("/admin/orders")
+    })
+
+    // User Management
+    router_get(router, "/admin/users", fn(req) {
+        let authResult = admin_checkAuth(req)
+        if (authResult != null) { return authResult }
+
+        let users = db_query(db, "SELECT * FROM users ORDER BY id DESC LIMIT 50")
+        let usersHtml = ""
+        let i = 0
+        while (i < arrays.length(users)) {
+            let u = users[i]
+            let roleBadge = "<span class='badge badge-info'>用户</span>"
+            if (u.role == "admin") { roleBadge = "<span class='badge badge-success'>管理员</span>" }
+            let statusBadge = "<span class='badge badge-success'>正常</span>"
+            if (u.status != "active") { statusBadge = "<span class='badge badge-danger'>禁用</span>" }
+
+            let uEmail = "-"
+            if (u.email != null) { uEmail = u.email }
+            usersHtml = usersHtml + "<tr><td>" + convert.toString(u.id) + "</td><td>" + u.username + "</td><td>" + uEmail + "</td><td>" + roleBadge + "</td><td>" + statusBadge + "</td><td>" + u.created_at + "</td></tr>"
+            i = i + 1
+        }
+
+        let body = admin_sidebar("users") +
+            "<div class='main'><div class='header'><h2>用户管理</h2></div>" +
+            "<div class='card'><table><thead><tr><th>ID</th><th>用户名</th><th>邮箱</th><th>角色</th><th>状态</th><th>注册时间</th></tr></thead><tbody>" + usersHtml + "</tbody></table></div>" +
+            "</div>"
+
+        return res_html(admin_page("用户管理", body))
+    })
+
+    // Category Management
+    router_get(router, "/admin/categories", fn(req) {
+        let authResult = admin_checkAuth(req)
+        if (authResult != null) { return authResult }
+
+        let categories = db_query(db, "SELECT * FROM categories ORDER BY sort_order")
+        let catHtml = ""
+        let i = 0
+        while (i < arrays.length(categories)) {
+            let c = categories[i]
+            catHtml = catHtml + "<tr><td>" + convert.toString(c.id) + "</td><td>" + c.name + "</td><td>" + convert.toString(c.parent_id) + "</td><td>" + convert.toString(c.sort_order) + "</td><td>" + c.status + "</td></tr>"
+            i = i + 1
+        }
+
+        let body = admin_sidebar("categories") +
+            "<div class='main'><div class='header'><h2>分类管理</h2></div>" +
+            "<div class='card'><table><thead><tr><th>ID</th><th>名称</th><th>父级ID</th><th>排序</th><th>状态</th></tr></thead><tbody>" + catHtml + "</tbody></table></div>" +
+            "</div>"
+
+        return res_html(admin_page("分类管理", body))
+    })
+}

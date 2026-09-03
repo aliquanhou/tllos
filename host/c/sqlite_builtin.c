@@ -16,6 +16,25 @@
 
 #include "tllvm.h"
 #include "sqlite3.h"
+#include <windows.h>
+
+/* Global mutex to serialize all SQLite access across HTTP worker threads */
+static CRITICAL_SECTION g_sqlite_mutex;
+static int g_sqlite_mutex_inited = 0;
+
+static void sqlite_lock(void) {
+    if (!g_sqlite_mutex_inited) {
+        InitializeCriticalSection(&g_sqlite_mutex);
+        g_sqlite_mutex_inited = 1;
+    }
+    EnterCriticalSection(&g_sqlite_mutex);
+}
+
+static void sqlite_unlock(void) {
+    if (g_sqlite_mutex_inited) {
+        LeaveCriticalSection(&g_sqlite_mutex);
+    }
+}
 
 /* Store sqlite3* as integer in a TLL map under "__sqlite_db" */
 static sqlite3 *get_db(TLLValue v) {
@@ -32,6 +51,8 @@ static TLLValue make_db_handle(sqlite3 *db) {
 }
 
 TLLValue sqlite_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount) {
+    sqlite_lock();
+    TLLValue result = tll_null();
     switch (idx) {
         case 150: { /* sqlite.open(path) */
             const char *path = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : ":memory:";
@@ -43,42 +64,47 @@ TLLValue sqlite_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount)
                 map_set(m.as.map, "error", tll_string(err));
                 map_set(m.as.map, "__sqlite_db", tll_int(0));
                 if (db) sqlite3_close(db);
-                return m;
+                result = m;
+                goto cleanup;
             }
-            /* Enable WAL mode for better concurrency */
             sqlite3_exec(db, "PRAGMA journal_mode=WAL;", NULL, NULL, NULL);
             sqlite3_exec(db, "PRAGMA foreign_keys=ON;", NULL, NULL, NULL);
-            return make_db_handle(db);
+            result = make_db_handle(db);
+            goto cleanup;
         }
         case 151: { /* sqlite.close(db) */
             sqlite3 *db = get_db(argCount > 0 ? args[0] : tll_null());
             if (db) sqlite3_close(db);
-            return tll_null();
+            result = tll_null();
+            goto cleanup;
         }
         case 152: { /* sqlite.exec(db, sql) -> changes count */
             sqlite3 *db = get_db(argCount > 0 ? args[0] : tll_null());
             const char *sql = (argCount > 1 && args[1].type == TLL_STRING) ? args[1].as.string : "";
-            if (!db || !sql) return tll_int(0);
+            if (!db || !sql) { result = tll_int(0); goto cleanup; }
             char *err = NULL;
             int rc = sqlite3_exec(db, sql, NULL, NULL, &err);
             if (rc != SQLITE_OK && err) {
                 fprintf(stderr, "tll sqlite exec error: %s\n", err);
                 sqlite3_free(err);
-                return tll_int(-1);
+                result = tll_int(-1);
+                goto cleanup;
             }
-            return tll_int(sqlite3_changes(db));
+            result = tll_int(sqlite3_changes(db));
+            goto cleanup;
         }
         case 153: { /* sqlite.query(db, sql) -> array of maps */
             sqlite3 *db = get_db(argCount > 0 ? args[0] : tll_null());
             const char *sql = (argCount > 1 && args[1].type == TLL_STRING) ? args[1].as.string : "";
-            TLLValue result = tll_array();
-            if (!db || !sql) return result;
+            TLLValue rows = tll_array();
+            if (!db || !sql) { result = rows; goto cleanup; }
 
             sqlite3_stmt *stmt = NULL;
             int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
             if (rc != SQLITE_OK) {
                 fprintf(stderr, "tll sqlite query error: %s\n", sqlite3_errmsg(db));
-                return result;
+                result = rows;
+                goto cleanup;
             }
 
             int colCount = sqlite3_column_count(stmt);
@@ -107,56 +133,66 @@ TLLValue sqlite_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount)
                     }
                     map_set(row.as.map, colName, val);
                 }
-                array_push(result.as.array, row);
+                array_push(rows.as.array, row);
             }
             sqlite3_finalize(stmt);
-            return result;
+            result = rows;
+            goto cleanup;
         }
         case 154: { /* sqlite.lastInsertRowid(db) */
             sqlite3 *db = get_db(argCount > 0 ? args[0] : tll_null());
-            if (!db) return tll_int(0);
-            return tll_int((long long)sqlite3_last_insert_rowid(db));
+            if (!db) { result = tll_int(0); goto cleanup; }
+            result = tll_int((long long)sqlite3_last_insert_rowid(db));
+            goto cleanup;
         }
         case 155: { /* sqlite.changes(db) */
             sqlite3 *db = get_db(argCount > 0 ? args[0] : tll_null());
-            if (!db) return tll_int(0);
-            return tll_int(sqlite3_changes(db));
+            if (!db) { result = tll_int(0); goto cleanup; }
+            result = tll_int(sqlite3_changes(db));
+            goto cleanup;
         }
         case 156: { /* sqlite.version() */
-            return tll_string(sqlite3_version);
+            result = tll_string(sqlite3_version);
+            goto cleanup;
         }
         case 157: { /* sqlite.tableExists(db, name) */
             sqlite3 *db = get_db(argCount > 0 ? args[0] : tll_null());
             const char *name = (argCount > 1 && args[1].type == TLL_STRING) ? args[1].as.string : "";
-            if (!db || !name) return tll_bool(0);
+            if (!db || !name) { result = tll_bool(0); goto cleanup; }
             sqlite3_stmt *stmt = NULL;
             int rc = sqlite3_prepare_v2(db, "SELECT name FROM sqlite_master WHERE type='table' AND name=?1", -1, &stmt, NULL);
-            if (rc != SQLITE_OK) return tll_bool(0);
+            if (rc != SQLITE_OK) { result = tll_bool(0); goto cleanup; }
             sqlite3_bind_text(stmt, 1, name, -1, SQLITE_TRANSIENT);
             int exists = (sqlite3_step(stmt) == SQLITE_ROW);
             sqlite3_finalize(stmt);
-            return tll_bool(exists);
+            result = tll_bool(exists);
+            goto cleanup;
         }
         case 158: { /* sqlite.columns(db, table) -> array of strings */
             sqlite3 *db = get_db(argCount > 0 ? args[0] : tll_null());
             const char *table = (argCount > 1 && args[1].type == TLL_STRING) ? args[1].as.string : "";
             TLLValue cols = tll_array();
-            if (!db || !table) return cols;
+            if (!db || !table) { result = cols; goto cleanup; }
             char sql[512];
             snprintf(sql, sizeof(sql), "PRAGMA table_info(%s)", table);
             sqlite3_stmt *stmt = NULL;
             if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {
                 while (sqlite3_step(stmt) == SQLITE_ROW) {
-                    const unsigned char *name = sqlite3_column_text(stmt, 1);
-                    if (name) array_push(cols.as.array, tll_string((const char *)name));
+                    const unsigned char *cname = sqlite3_column_text(stmt, 1);
+                    if (cname) array_push(cols.as.array, tll_string((const char *)cname));
                 }
                 sqlite3_finalize(stmt);
             }
-            return cols;
+            result = cols;
+            goto cleanup;
         }
         default:
             fprintf(stderr, "tll sqlite: unknown builtin index %d\n", idx);
-            return tll_null();
+            result = tll_null();
+            goto cleanup;
     }
+cleanup:
+    sqlite_unlock();
+    return result;
 }
 
