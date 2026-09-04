@@ -187,6 +187,29 @@ jobs:
           if ((Get-Content hmac_gate.log -Raw) -notmatch "ALL TESTS PASSED") { throw "HMAC gate did not PASS" }
           Write-Output "=== P1-03 HMAC-SHA256 Gate Test PASSED ==="
 
+      # === P1-03-R1: RFC 4231 Full Test Vector Suite ===
+      # All 7 test cases from RFC 4231, using TLL native \xNN hex escape for binary keys.
+      - name: P1-03 RFC 4231 Full Test Vector Suite (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/crypto/gate_rfc4231_full.tll -o tests/crypto/gate_rfc4231_full.tllbc
+          host/c/tllvm tests/crypto/gate_rfc4231_full.tllbc 2>&1 | tee /tmp/rfc4231_full.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          test "$EXIT_CODE" -eq 0
+          grep -q "ALL TESTS PASSED" /tmp/rfc4231_full.log
+          echo "=== P1-03 RFC 4231 Full Test Vector Suite PASSED (7/7 TC) ==="
+
+      - name: P1-03 RFC 4231 Full Test Vector Suite (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          & host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tests\crypto\gate_rfc4231_full.tll -o tests\crypto\gate_rfc4231_full.tllbc
+          if ($LASTEXITCODE -ne 0) { throw "RFC4231 full compile failed" }
+          & host\c\tllvm.exe tests\crypto\gate_rfc4231_full.tllbc 2>&1 | Tee-Object -FilePath rfc4231_full.log
+          if ($LASTEXITCODE -ne 0) { throw "RFC4231 full run failed" }
+          if ((Get-Content rfc4231_full.log -Raw) -notmatch "ALL TESTS PASSED") { throw "RFC4231 full did not PASS" }
+          Write-Output "=== P1-03 RFC 4231 Full Test Vector Suite PASSED (7/7 TC) ==="
+
       - name: Blockchain unit test (Linux/macOS)
         if: runner.os != 'Windows'
         run: |

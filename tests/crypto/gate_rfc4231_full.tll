@@ -1,0 +1,107 @@
+// RFC 4231 HMAC-SHA256 Full Test Vector Suite
+// All 7 test cases from RFC 4231, verified against Python hashlib
+
+io.println("=== RFC 4231 HMAC-SHA256 Full Test Suite ===")
+io.println("")
+
+let passCount = 0
+let failCount = 0
+
+fn testCase(name: string, key: string, data: string, expected: string) {
+    let result = hmac.sha256(key, data)
+    let pass = (result == expected)
+    if pass {
+        passCount = passCount + 1
+        io.println("PASS " + name)
+    } else {
+        failCount = failCount + 1
+        io.println("FAIL " + name)
+        io.println("  Got:      " + result)
+        io.println("  Expected: " + expected)
+    }
+}
+
+// TC1: Key = 0x0b * 20, Data = "Hi There"
+io.println("--- TC1: Key=0x0b*20, Data=\"Hi There\" ---")
+let tc1key = "\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b\x0b"
+io.println("  key length: " + strings.length(tc1key) + " (expected 20)")
+testCase("TC1", tc1key, "Hi There", "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7")
+io.println("")
+
+// TC2: Key = "Jefe", Data = "what do ya want for nothing?"
+io.println("--- TC2: Key=\"Jefe\", Data=\"what do ya want for nothing?\" ---")
+testCase("TC2", "Jefe", "what do ya want for nothing?", "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843")
+io.println("")
+
+// TC3: Key = 0xaa * 20, Data = 0xdd * 50
+io.println("--- TC3: Key=0xaa*20, Data=0xdd*50 ---")
+let tc3key = strings.repeat("\xaa", 20)
+let tc3data = strings.repeat("\xdd", 50)
+io.println("  key length: " + strings.length(tc3key) + " (expected 20)")
+io.println("  data length: " + strings.length(tc3data) + " (expected 50)")
+testCase("TC3", tc3key, tc3data, "773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514ced565fe")
+io.println("")
+
+// TC4: Key = 0x01-0x19 (25 bytes), Data = 0xcd * 50
+io.println("--- TC4: Key=0x01..0x19 (25 bytes), Data=0xcd*50 ---")
+let tc4key = "\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19"
+let tc4data = strings.repeat("\xcd", 50)
+io.println("  key length: " + strings.length(tc4key) + " (expected 25)")
+io.println("  data length: " + strings.length(tc4data) + " (expected 50)")
+testCase("TC4", tc4key, tc4data, "82558a389a443c0ea4cc819899f2083a85f0faa3e578f8077a2e3ff46729665b")
+io.println("")
+
+// TC5: Key = 0x0c * 20, Data = "Test With Truncation"
+io.println("--- TC5: Key=0x0c*20, Data=\"Test With Truncation\" ---")
+let tc5key = "\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c\x0c"
+io.println("  key length: " + strings.length(tc5key) + " (expected 20)")
+let tc5full = hmac.sha256(tc5key, "Test With Truncation")
+let tc5trunc = strings.substring(tc5full, 0, 32)
+let tc5expectedFull = "a3b6167473100ee06e0c796c2955552bfa6f7c0a6a8aef8b93f860aab0cd20c5"
+let tc5expectedTrunc = "a3b6167473100ee06e0c796c2955552b"
+if tc5full == tc5expectedFull {
+    passCount = passCount + 1
+    io.println("PASS TC5 (full 256-bit)")
+} else {
+    failCount = failCount + 1
+    io.println("FAIL TC5 (full)")
+    io.println("  Got:      " + tc5full)
+    io.println("  Expected: " + tc5expectedFull)
+}
+if tc5trunc == tc5expectedTrunc {
+    passCount = passCount + 1
+    io.println("PASS TC5 (truncated 128-bit)")
+} else {
+    failCount = failCount + 1
+    io.println("FAIL TC5 (truncated)")
+    io.println("  Got:      " + tc5trunc)
+    io.println("  Expected: " + tc5expectedTrunc)
+}
+io.println("")
+
+// TC6: Key = 0xaa * 131, Data = "Test Using Larger Than Block-Size Key - Hash Key First"
+io.println("--- TC6: Key=0xaa*131 (>block size), Data=text ---")
+let tc6key = strings.repeat("\xaa", 131)
+io.println("  key length: " + strings.length(tc6key) + " (expected 131)")
+testCase("TC6", tc6key, "Test Using Larger Than Block-Size Key - Hash Key First", "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54")
+io.println("")
+
+// TC7: Key = 0xaa * 131, Data = long text (> block size)
+io.println("--- TC7: Key=0xaa*131, Data=long text (>block size) ---")
+let tc7key = strings.repeat("\xaa", 131)
+let tc7data = "This is a test using a larger than block-size key and a larger than block-size data. The key needs to be hashed before being used by the HMAC algorithm."
+io.println("  key length: " + strings.length(tc7key) + " (expected 131)")
+io.println("  data length: " + strings.length(tc7data) + " (expected 152)")
+testCase("TC7", tc7key, tc7data, "9b09ffa71b942fcb27635fbcd5b0e944bfdc63644f0713938a7f51535c3a35e2")
+io.println("")
+
+// Summary
+io.println("=== Summary ===")
+io.println("PASS: " + passCount)
+io.println("FAIL: " + failCount)
+io.println("Total: " + (passCount + failCount))
+if failCount == 0 {
+    io.println("ALL TESTS PASSED")
+} else {
+    io.println("SOME TESTS FAILED")
+}

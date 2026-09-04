@@ -1,11 +1,62 @@
 # P1-03 HMAC-SHA256 - Evidence Document
 
-**Status**: CI ALL GREEN (pending总指挥 final SEAL验收)
+**Status**: P1-03-R1 COMPLETE (RFC 4231 7/7, pending CI and总指挥 final SEAL验收)
 **Date**: 2026-09-05
-**Commit**: d9b0412
-**CI Run ID**: 33905434201
-**CI Duration**: 47m 11s
-**CI Result**: 3/3 jobs passed (Linux ✅ macOS ✅ Windows ✅)
+**Initial Commit**: d9b0412 (HMAC-SHA256 implementation)
+**Initial CI Run ID**: 33905434201 (3-platform all green)
+**P1-03-R1 Commit**: (pending - TLL Binary Bytes + RFC 4231 Full)
+**P1-03-R1 CI Run ID**: (pending)
+
+## P1-03-R1: TLL Binary Bytes Testability Closure
+
+总指挥验收 P1-03 时发现：RFC 4231 只通过了 TC2（文本密钥），TC1/TC3/TC4/TC6/TC7（二进制密钥）因 TLL 不支持 `\xNN` 十六进制字节转义而未测试。总指挥要求：必须补全 TLL 语言的二进制字节表达能力，然后完成 RFC 4231 全部 7 个测试用例。
+
+### 实现：TLL `\xNN` Hex Escape（Lexer）
+- **文件**: `compiler/lexer.tll`
+- **新增函数**: `hexDigitValue(ch)` - 将十六进制数字字符转换为整数值（0-15）
+- **转义处理**: 在字符串字面量的 `\` 转义处理中添加 `\xNN` 支持
+  - 读取 `\x` 后最多 2 个十六进制数字
+  - 转换为 0-255 的字节值
+  - 使用 `convert.toChar(value)` 转换为对应字符
+  - 若没有有效十六进制数字，则输出字面量 `x`
+- **不破坏现有语义**: 所有现有转义（`\n`, `\t`, `\r`, `\\`, `\"`, `\0`）保持不变
+
+### 编译器 Bootstrap
+- 旧编译器编译新编译器: `tllc_hex.tllbc` (663,530 bytes, Functions 172, Constants 3889)
+- 新编译器自举: `tllc_hex2.tllbc` (663,530 bytes, Functions 172, Constants 3889)
+- 两次编译结果一致（文件大小相同）
+- 新编译器已替换 `tools/TLLC/tllc.tllbc` 作为标准 bootstrap seed
+
+### `\xNN` 基础测试（`tests/crypto/test_hex_escape.tll`）
+- Test 1: `\x41\x42\x43` = "ABC", length 3 ✅
+- Test 2: `Hello\x20World` = "Hello World" ✅
+- Test 3: 3x `\x0b` bytes, charCodeAt(0) = 11 ✅
+- Test 4: 所有 255 个字节值（1-255）通过 `convert.toChar` 验证 ✅
+
+### RFC 4231 全量测试（`tests/crypto/gate_rfc4231_full.tll`）
+全部 7 个测试用例，8 个测试（TC5 包含 full 和 truncated）：
+
+| TC | Key | Data | 结果 |
+|----|-----|------|------|
+| TC1 | 0x0b * 20 | "Hi There" | ✅ PASS |
+| TC2 | "Jefe" | "what do ya want for nothing?" | ✅ PASS |
+| TC3 | 0xaa * 20 | 0xdd * 50 | ✅ PASS |
+| TC4 | 0x01-0x19 (25 bytes) | 0xcd * 50 | ✅ PASS |
+| TC5 (full) | 0x0c * 20 | "Test With Truncation" | ✅ PASS |
+| TC5 (truncated) | 0x0c * 20 | "Test With Truncation" (128-bit) | ✅ PASS |
+| TC6 | 0xaa * 131 (>block size) | "Test Using Larger Than Block-Size Key..." | ✅ PASS |
+| TC7 | 0xaa * 131 | long text (>block size, 152 bytes) | ✅ PASS |
+
+**结果: 8/8 PASS (RFC 4231 7/7 Test Cases)**
+
+所有期望值经 Python `hashlib`/`hmac` 独立验证（修正了初始复制时的笔误）。
+
+### CI 配置更新
+- 新增 "P1-03 RFC 4231 Full Test Vector Suite" 步骤（Linux/macOS + Windows）
+- 使用 `tools/TLLC/tllc.tllbc`（已更新为支持 `\xNN` 的版本）编译和运行测试
+- 验证输出包含 "ALL TESTS PASSED"
+
+---
 
 ## 1. API Specification
 

@@ -127,6 +127,13 @@ fn isHexDigit(ch: string) -> bool {
     return isDigit(ch) || (ch >= "a" && ch <= "f") || (ch >= "A" && ch <= "F")
 }
 
+fn hexDigitValue(ch: string) -> int {
+    if ch >= "0" && ch <= "9" { return convert.toInt(ch) }
+    if ch >= "a" && ch <= "f" { return 10 + (strings.charCodeAt(ch, 0) - strings.charCodeAt("a", 0)) }
+    if ch >= "A" && ch <= "F" { return 10 + (strings.charCodeAt(ch, 0) - strings.charCodeAt("A", 0)) }
+    return 0
+}
+
 fn getKeywordType(word: string) -> string {
     if word == "let" { return TK_LET }
     if word == "const" { return TK_CONST }
@@ -214,6 +221,25 @@ export fn tokenize(input: string) -> list {
                         else if next == "\\" { value = value + "\\" }
                         else if next == "\"" { value = value + "\"" }
                         else if next == "0" { value = value + "\0" }
+                        else if next == "x" {
+                            let hexVal = 0
+                            let hexCount = 0
+                            while hexCount < 2 && pos < inputLen {
+                                let hc = strings.charAt(input, pos)
+                                if isHexDigit(hc) {
+                                    hexVal = hexVal * 16 + hexDigitValue(hc)
+                                    pos = pos + 1; column = column + 1
+                                    hexCount = hexCount + 1
+                                } else {
+                                    break
+                                }
+                            }
+                            if hexCount > 0 {
+                                value = value + convert.toChar(hexVal)
+                            } else {
+                                value = value + "x"
+                            }
+                        }
                         else { value = value + next }
                     }
                 } else {

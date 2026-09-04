@@ -1,0 +1,55 @@
+// Test \xNN hex escape support
+io.println("=== Test \\xNN Hex Escape ===")
+
+// Test 1: Simple hex escape
+let s1 = "\x41\x42\x43"
+io.println("Test 1 - \\x41\\x42\\x43 = '" + s1 + "'")
+io.println("  length = " + strings.length(s1))
+io.println("  expected 'ABC', length 3")
+if s1 == "ABC" && strings.length(s1) == 3 {
+    io.println("  PASS")
+} else {
+    io.println("  FAIL")
+}
+
+// Test 2: Mixed text and hex
+let s2 = "Hello\x20World"
+io.println("Test 2 - 'Hello\\x20World' = '" + s2 + "'")
+if s2 == "Hello World" {
+    io.println("  PASS")
+} else {
+    io.println("  FAIL")
+}
+
+// Test 3: Binary bytes (0x0b repeated)
+let s3 = "\x0b\x0b\x0b"
+io.println("Test 3 - 3x 0x0b bytes")
+io.println("  length = " + strings.length(s3))
+io.println("  charCodeAt(0) = " + strings.charCodeAt(s3, 0))
+if strings.length(s3) == 3 && strings.charCodeAt(s3, 0) == 11 {
+    io.println("  PASS")
+} else {
+    io.println("  FAIL")
+}
+
+// Test 4: All byte values 0-255 (skip 0 for C string)
+io.println("Test 4 - Byte values 1-255")
+let allPass = true
+for i in arrays.range(1, 256) {
+    let hex = ""
+    let hi = i / 16
+    let lo = i % 16
+    // This test just verifies charCodeAt works with convert.toChar
+    let ch = convert.toChar(i)
+    if strings.charCodeAt(ch, 0) != i {
+        io.println("  FAIL at byte " + i)
+        allPass = false
+        break
+    }
+}
+if allPass {
+    io.println("  PASS - all 255 bytes verified via convert.toChar")
+}
+
+io.println("")
+io.println("=== All Tests Complete ===")
