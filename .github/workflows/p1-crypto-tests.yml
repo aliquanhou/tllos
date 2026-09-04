@@ -4,8 +4,15 @@ on:
   push:
     paths:
       - 'host/c/crypto_builtin.c'
+      - 'host/c/sqlite_builtin.c'
+      - 'host/c/sqlite3.c'
       - 'host/c/tllvm.h'
       - 'host/c/builtin.c'
+      - 'host/c/main.c'
+      - 'host/c/vm.c'
+      - 'host/c/value.c'
+      - 'host/c/json.c'
+      - 'host/c/Makefile'
       - 'compiler/codegen.tll'
       - 'compiler/linker.tll'
       - 'tests/crypto/**'
