@@ -36,10 +36,27 @@ jobs:
 
       - name: Build tllvm
         run: |
+          set +e
           cd host/c
-          gcc -O2 -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread -ldl 2>&1
-          echo "Build exit code: $?"
-          ls -la tllvm
+          echo "=== GCC version ==="
+          gcc --version
+          echo "=== Memory before build ==="
+          free -h
+          echo "=== Starting build ==="
+          gcc -O2 -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread -ldl > build_output.txt 2>&1
+          BUILD_EXIT=$?
+          echo "=== Build exit code: $BUILD_EXIT ==="
+          echo "=== Build output (last 100 lines) ==="
+          tail -100 build_output.txt
+          echo "=== Memory after build ==="
+          free -h
+          echo "=== Binary check ==="
+          ls -la tllvm 2>&1 || echo "tllvm binary not found"
+          if [ $BUILD_EXIT -ne 0 ]; then
+            echo "=== BUILD FAILED - full error output ==="
+            cat build_output.txt
+            exit 1
+          fi
 
       - name: Build TLL compiler
         run: |
@@ -116,10 +133,25 @@ jobs:
 
       - name: Build tllvm
         run: |
+          set +e
           cd host/c
-          clang -O2 -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread 2>&1
-          echo "Build exit code: $?"
-          ls -la tllvm
+          echo "=== Clang version ==="
+          clang --version
+          echo "=== Memory before build ==="
+          vm_stat | head -5
+          echo "=== Starting build ==="
+          clang -O2 -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread > build_output.txt 2>&1
+          BUILD_EXIT=$?
+          echo "=== Build exit code: $BUILD_EXIT ==="
+          echo "=== Build output (last 100 lines) ==="
+          tail -100 build_output.txt
+          echo "=== Binary check ==="
+          ls -la tllvm 2>&1 || echo "tllvm binary not found"
+          if [ $BUILD_EXIT -ne 0 ]; then
+            echo "=== BUILD FAILED - full error output ==="
+            cat build_output.txt
+            exit 1
+          fi
 
       - name: Build TLL compiler
         run: |
