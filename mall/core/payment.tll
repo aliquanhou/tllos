@@ -491,7 +491,7 @@ fn payment_deductStock(db, orderId) {
     let i = 0
     while (i < arrays.length(items)) {
         let item = items[i]
-        let stockSql = "UPDATE products SET stock = stock - " + item.quantity + ", sales_count = sales_count + " + item.quantity + " WHERE id = " + item.product_id
+        let stockSql = "UPDATE products SET stock = stock - " + item.quantity + ", sales = sales + " + item.quantity + " WHERE id = " + item.product_id
         db_exec(db, stockSql)
         i = i + 1
     }

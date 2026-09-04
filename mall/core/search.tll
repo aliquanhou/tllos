@@ -225,7 +225,7 @@ fn search_products(req) {
     // If no results, get recommendations
     let recommendations = []
     if (arrays.length(products) == 0 && keyword != null && keyword != "") {
-        let recSql = "SELECT * FROM products WHERE status = 'on' ORDER BY sales_count DESC LIMIT 10"
+        let recSql = "SELECT * FROM products WHERE status = 'on' ORDER BY sales DESC LIMIT 10"
         recommendations = db_query(db, recSql)
     }
 
