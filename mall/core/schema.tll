@@ -273,6 +273,125 @@ fn schema_initAll(db) {
         created_at TEXT DEFAULT (datetime('now'))
     )")
 
+    // === Member Levels ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS member_levels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        level INTEGER DEFAULT 1,
+        discount REAL DEFAULT 10,
+        min_points INTEGER DEFAULT 0,
+        benefits TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === Point Logs ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS point_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        points INTEGER DEFAULT 0,
+        type TEXT DEFAULT 'earn',
+        description TEXT,
+        order_id INTEGER,
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === Account Logs ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS account_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        merchant_id INTEGER,
+        type TEXT DEFAULT 'income',
+        amount REAL DEFAULT 0,
+        balance_before REAL DEFAULT 0,
+        balance_after REAL DEFAULT 0,
+        description TEXT,
+        order_no TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === Articles ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS articles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        content TEXT,
+        category TEXT DEFAULT 'news',
+        status TEXT DEFAULT 'published',
+        view_count INTEGER DEFAULT 0,
+        sort_order INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === Announcements ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS announcements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        content TEXT,
+        type TEXT DEFAULT 'notice',
+        status TEXT DEFAULT 'active',
+        sort_order INTEGER DEFAULT 0,
+        start_at TEXT,
+        end_at TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === Sensitive Words ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS sensitive_words (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        word TEXT NOT NULL,
+        category TEXT DEFAULT 'abuse',
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === Logistics ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS logistics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        code TEXT,
+        status TEXT DEFAULT 'active',
+        sort_order INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === Merchant Levels ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS merchant_levels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        level INTEGER DEFAULT 1,
+        commission_rate REAL DEFAULT 0,
+        benefits TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === Merchant Categories ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS merchant_categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === User Collections ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS user_collections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        product_id INTEGER NOT NULL,
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === Realname Auth ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS realname_auth (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        real_name TEXT,
+        id_card TEXT,
+        status TEXT DEFAULT 'pending',
+        reject_reason TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        approved_at TEXT
+    )")
+
     // === Marketing: Coupons ===
     db_exec(db, "CREATE TABLE IF NOT EXISTS coupons (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

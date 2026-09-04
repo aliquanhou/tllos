@@ -1,0 +1,418 @@
+// TLL Mall - P4 Advanced Features
+// Member levels, points, balance, sensitive words, agreements, logistics, articles, announcements, system config, merchant levels, account logs, dashboard enhancement
+
+from "./database" import db_exec, db_query, db_queryOne
+from "./router" import router_get, router_post, res_json, res_html, res_redirect, res_notFound
+from "./auth" import auth_currentUser, cookie_getSessionId
+
+fn p4_checkAdmin(req) {
+    let sessionId = cookie_getSessionId(req)
+    let user = auth_currentUser(sessionId)
+    if (user == null) { return res_redirect("/login?redirect=/admin") }
+    if (user.role != "admin") { return res_html("<html><body><h1>403</h1></body></html>", 403) }
+    req.currentUser = user
+    return null
+}
+
+fn p4_checkUser(req) {
+    let sessionId = cookie_getSessionId(req)
+    let user = auth_currentUser(sessionId)
+    if (user == null) { return res_json({error: "Please login", success: false}) }
+    req.currentUser = user
+    return null
+}
+
+fn p4_esc(s) {
+    if (s == null) { return "" }
+    return strings.replace(s, "'", "''")
+}
+
+let P4_CSS = "body{font-family:sans-serif;background:#f5f5f5;margin:0;padding:20px}.container{max-width:1200px;margin:0 auto}.card{background:#fff;border-radius:8px;padding:20px;margin-bottom:20px}h1,h2,h3{margin:0 0 15px}table{width:100%;border-collapse:collapse}th,td{padding:8px;text-align:left;border-bottom:1px solid #eee}.btn{display:inline-block;padding:6px 12px;background:#1890ff;color:#fff;border-radius:4px;cursor:pointer;text-decoration:none;margin-right:8px}.btn-danger{background:#ff4d4f}.btn-success{background:#52c41a}.form-group{margin-bottom:10px}.form-group label{display:block;margin-bottom:4px}.form-group input,.form-group select,.form-group textarea{width:100%;padding:6px;border:1px solid #ddd;border-radius:4px}.badge{display:inline-block;padding:2px 6px;border-radius:8px;font-size:11px}.badge-success{background:#e8f5e9;color:#2e7d32}.badge-warning{background:#fff3e0;color:#e65100}.badge-danger{background:#ffebee;color:#c62828}.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:15px}.stat-card{background:#fff;border-radius:8px;padding:15px;text-align:center}.stat-card .num{font-size:24px;font-weight:bold;color:#1890ff}.stat-card .label{color:#999;margin-top:4px}"
+
+fn p4_layout(title, body) {
+    return "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>" + title + "</title><style>" + P4_CSS + "</style></head><body><div class='container'>" + body + "</div></body></html>"
+}
+
+// ============ MEMBER LEVELS & POINTS & BALANCE ============
+
+fn p4_registerMemberRoutes(router, db) {
+    // Member levels management
+    router_get(router, "/admin/member/levels", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let levels = db_query(db, "SELECT * FROM member_levels ORDER BY level ASC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(levels)) {
+            let lBenefits = "-"
+            if (levels[i].benefits != null) { lBenefits = levels[i].benefits }
+            html = html + "<tr><td>" + convert.toString(levels[i].level) + "</td><td>" + levels[i].name + "</td><td>" + convert.toString(levels[i].discount) + "%</td><td>" + convert.toString(levels[i].min_points) + "</td><td>" + lBenefits + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<div class='nav'><a href='/admin'>Dashboard</a><a href='/admin/member/levels'>Member Levels</a><a href='/admin/points/log'>Points Log</a><a href='/admin/balance/log'>Balance Log</a><a href='/admin/sensitive'>Sensitive Words</a><a href='/admin/articles'>Articles</a><a href='/admin/announcements'>Announcements</a><a href='/admin/system/config'>System Config</a></div>" +
+            "<h1>Member Level Management</h1><div class='card'><table><thead><tr><th>Level</th><th>Name</th><th>Discount</th><th>Min Points</th><th>Benefits</th></tr></thead><tbody>" + html + "</tbody></table></div>" +
+            "<div class='card'><h3>Add Level</h3><form method='POST' action='/admin/member/level/add'><div class='form-group'><label>Name</label><input type='text' name='name' required></div><div class='form-group'><label>Level</label><input type='number' name='level' value='1'></div><div class='form-group'><label>Discount (1-10)</label><input type='number' name='discount' step='0.1' value='10'></div><div class='form-group'><label>Min Points</label><input type='number' name='min_points' value='0'></div><button type='submit' class='btn btn-success'>Add</button></form></div>"
+        return res_html(p4_layout("Member Levels", body))
+    })
+
+    // Add member level
+    router_post(router, "/admin/member/level/add", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let data = json.parse(req.body)
+        let name = p4_esc(data.name)
+        let level = convert.toString(data.level)
+        let discount = convert.toString(data.discount)
+        let minPoints = convert.toString(data.min_points)
+        db_exec(db, "INSERT INTO member_levels (name, level, discount, min_points, created_at) VALUES ('" + name + "', " + level + ", " + discount + ", " + minPoints + ", datetime('now'))")
+        return res_redirect("/admin/member/levels")
+    })
+
+    // Points log
+    router_get(router, "/admin/points/log", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let logs = db_query(db, "SELECT p.*, u.username FROM point_logs p LEFT JOIN users u ON p.user_id=u.id ORDER BY p.id DESC LIMIT 50")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(logs)) {
+            let typeBadge = "<span class='badge badge-success'>+</span>"
+            if (logs[i].type == "spend") { typeBadge = "<span class='badge badge-danger'>-</span>" }
+            let plUsername = "-"
+            if (logs[i].username != null) { plUsername = logs[i].username }
+            html = html + "<tr><td>" + convert.toString(logs[i].id) + "</td><td>" + plUsername + "</td><td>" + typeBadge + " " + convert.toString(logs[i].points) + "</td><td>" + logs[i].description + "</td><td>" + logs[i].created_at + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<h1>Points Log</h1><div class='card'><table><thead><tr><th>ID</th><th>User</th><th>Points</th><th>Description</th><th>Time</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(p4_layout("Points Log", body))
+    })
+
+    // Balance log (account_logs)
+    router_get(router, "/admin/balance/log", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let logs = db_query(db, "SELECT a.*, u.username FROM account_logs a LEFT JOIN users u ON a.user_id=u.id ORDER BY a.id DESC LIMIT 50")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(logs)) {
+            let typeBadge = "<span class='badge badge-success'>Income</span>"
+            if (logs[i].type == "expense") { typeBadge = "<span class='badge badge-danger'>Expense</span>" }
+            else if (logs[i].type == "refund") { typeBadge = "<span class='badge badge-warning'>Refund</span>" }
+            let blUsername = "-"
+            if (logs[i].username != null) { blUsername = logs[i].username }
+            html = html + "<tr><td>" + convert.toString(logs[i].id) + "</td><td>" + blUsername + "</td><td>" + typeBadge + "</td><td>" + convert.toString(logs[i].amount) + "</td><td>" + convert.toString(logs[i].balance_before) + " -> " + convert.toString(logs[i].balance_after) + "</td><td>" + logs[i].description + "</td><td>" + logs[i].created_at + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<h1>Balance / Account Log</h1><div class='card'><table><thead><tr><th>ID</th><th>User</th><th>Type</th><th>Amount</th><th>Balance Change</th><th>Description</th><th>Time</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(p4_layout("Balance Log", body))
+    })
+
+    // User: my points
+    router_get(router, "/my/points", fn(req) {
+        let authResult = p4_checkUser(req)
+        if (authResult != null) { return authResult }
+        let userId = req.currentUser.id
+        let totalEarn = db_queryOne(db, "SELECT COALESCE(SUM(points),0) as total FROM point_logs WHERE user_id=" + convert.toString(userId) + " AND type='earn'")
+        let totalSpend = db_queryOne(db, "SELECT COALESCE(SUM(points),0) as total FROM point_logs WHERE user_id=" + convert.toString(userId) + " AND type='spend'")
+        let balance = totalEarn.total - totalSpend.total
+        let logs = db_query(db, "SELECT * FROM point_logs WHERE user_id=" + convert.toString(userId) + " ORDER BY id DESC LIMIT 20")
+        let logHtml = ""
+        let i = 0
+        while (i < arrays.length(logs)) {
+            logHtml = logHtml + "<tr><td>" + logs[i].type + "</td><td>" + convert.toString(logs[i].points) + "</td><td>" + logs[i].description + "</td><td>" + logs[i].created_at + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<h1>My Points</h1><div class='stat-grid'><div class='stat-card'><div class='num'>" + convert.toString(balance) + "</div><div class='label'>Available Points</div></div><div class='stat-card'><div class='num'>" + convert.toString(totalEarn.total) + "</div><div class='label'>Total Earned</div></div><div class='stat-card'><div class='num'>" + convert.toString(totalSpend.total) + "</div><div class='label'>Total Spent</div></div></div>" +
+            "<div class='card'><h3>Recent Logs</h3><table><thead><tr><th>Type</th><th>Points</th><th>Description</th><th>Time</th></tr></thead><tbody>" + logHtml + "</tbody></table></div>"
+        return res_html(p4_layout("My Points", body))
+    })
+
+    // User: my balance
+    router_get(router, "/my/balance", fn(req) {
+        let authResult = p4_checkUser(req)
+        if (authResult != null) { return authResult }
+        let userId = req.currentUser.id
+        let user = db_queryOne(db, "SELECT balance FROM users WHERE id=" + convert.toString(userId))
+        let balance = 0
+        if (user != null && user.balance != null) { balance = user.balance }
+        let logs = db_query(db, "SELECT * FROM account_logs WHERE user_id=" + convert.toString(userId) + " ORDER BY id DESC LIMIT 20")
+        let logHtml = ""
+        let i = 0
+        while (i < arrays.length(logs)) {
+            logHtml = logHtml + "<tr><td>" + logs[i].type + "</td><td>" + convert.toString(logs[i].amount) + "</td><td>" + logs[i].description + "</td><td>" + logs[i].created_at + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<h1>My Balance</h1><div class='stat-grid'><div class='stat-card'><div class='num'>" + convert.toString(balance) + "</div><div class='label'>Available Balance</div></div></div>" +
+            "<div class='card'><h3>Recharge</h3><form method='POST' action='/my/balance/recharge'><div class='form-group'><label>Amount</label><input type='number' name='amount' step='0.01' value='100'></div><button type='submit' class='btn btn-success'>Recharge (Simulated)</button></form></div>" +
+            "<div class='card'><h3>Recent Logs</h3><table><thead><tr><th>Type</th><th>Amount</th><th>Description</th><th>Time</th></tr></thead><tbody>" + logHtml + "</tbody></table></div>"
+        return res_html(p4_layout("My Balance", body))
+    })
+
+    // Recharge (simulated)
+    router_post(router, "/my/balance/recharge", fn(req) {
+        let authResult = p4_checkUser(req)
+        if (authResult != null) { return authResult }
+        let userId = req.currentUser.id
+        let data = json.parse(req.body)
+        let amount = convert.toString(data.amount)
+        let user = db_queryOne(db, "SELECT balance FROM users WHERE id=" + convert.toString(userId))
+        let oldBalance = 0
+        if (user != null && user.balance != null) { oldBalance = user.balance }
+        let newBalance = oldBalance + convert.toFloat(amount)
+        db_exec(db, "UPDATE users SET balance=" + convert.toString(newBalance) + " WHERE id=" + convert.toString(userId))
+        db_exec(db, "INSERT INTO account_logs (user_id, type, amount, balance_before, balance_after, description, created_at) VALUES (" + convert.toString(userId) + ", 'income', " + amount + ", " + convert.toString(oldBalance) + ", " + convert.toString(newBalance) + ", 'Account recharge', datetime('now'))")
+        return res_redirect("/my/balance")
+    })
+}
+
+// ============ SENSITIVE WORDS & AGREEMENTS ============
+
+fn p4_registerContentRoutes(router, db) {
+    // Sensitive words management
+    router_get(router, "/admin/sensitive", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let words = db_query(db, "SELECT * FROM sensitive_words ORDER BY id DESC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(words)) {
+            html = html + "<tr><td>" + convert.toString(words[i].id) + "</td><td>" + words[i].word + "</td><td>" + words[i].category + "</td><td>" + words[i].status + "</td><td><a href='/admin/sensitive/delete/" + convert.toString(words[i].id) + "' class='btn btn-danger'>Delete</a></td></tr>"
+            i = i + 1
+        }
+        let body = "<h1>Sensitive Word Management</h1><div class='card'><h3>Add Word</h3><form method='POST' action='/admin/sensitive/add'><div class='form-group'><label>Word</label><input type='text' name='word' required></div><div class='form-group'><label>Category</label><select name='category'><option value='abuse'>Abuse</option><option value='political'>Political</option><option value='porn'>Porn</option><option value='fraud'>Fraud</option><option value='other'>Other</option></select></div><button type='submit' class='btn btn-success'>Add</button></form></div>" +
+            "<div class='card'><table><thead><tr><th>ID</th><th>Word</th><th>Category</th><th>Status</th><th>Actions</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(p4_layout("Sensitive Words", body))
+    })
+
+    router_post(router, "/admin/sensitive/add", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let data = json.parse(req.body)
+        let word = p4_esc(data.word)
+        let category = data.category
+        db_exec(db, "INSERT INTO sensitive_words (word, category, status, created_at) VALUES ('" + word + "', '" + category + "', 'active', datetime('now'))")
+        return res_redirect("/admin/sensitive")
+    })
+
+    router_get(router, "/admin/sensitive/delete/:id", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "DELETE FROM sensitive_words WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/sensitive")
+    })
+
+    // User agreement
+    router_get(router, "/agreement/user", fn(req) {
+        let body = "<h1>User Agreement</h1><div class='card'><h3>Terms of Service</h3><p>Welcome to TLL Mall. By using this platform, you agree to the following terms:</p><ol><li>You must provide accurate information during registration.</li><li>You are responsible for maintaining the confidentiality of your account.</li><li>You agree not to use the platform for any illegal activities.</li><li>The platform reserves the right to modify these terms at any time.</li><li>All transactions are subject to our refund and return policy.</li></ol><p>Last updated: 2026-09-04</p></div>"
+        return res_html(p4_layout("User Agreement", body))
+    })
+
+    // Privacy policy
+    router_get(router, "/agreement/privacy", fn(req) {
+        let body = "<h1>Privacy Policy</h1><div class='card'><h3>How We Handle Your Data</h3><p>We are committed to protecting your privacy. This policy explains:</p><ul><li><strong>Data Collection:</strong> We collect your name, email, phone, and address for order processing.</li><li><strong>Data Usage:</strong> Your data is used solely for order fulfillment and customer service.</li><li><strong>Data Protection:</strong> We implement industry-standard security measures to protect your data.</li><li><strong>Data Sharing:</strong> We do not sell your personal data to third parties.</li><li><strong>Your Rights:</strong> You can request access, correction, or deletion of your personal data at any time.</li></ul><p>Last updated: 2026-09-04</p></div>"
+        return res_html(p4_layout("Privacy Policy", body))
+    })
+
+    // Articles list
+    router_get(router, "/articles", fn(req) {
+        let articles = db_query(db, "SELECT * FROM articles WHERE status='published' ORDER BY sort_order, id DESC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(articles)) {
+            html = html + "<div class='card'><h3><a href='/article/" + convert.toString(articles[i].id) + "'>" + articles[i].title + "</a></h3><p style='color:#999;font-size:12px'>" + articles[i].created_at + " | Views: " + convert.toString(articles[i].view_count) + "</p></div>"
+            i = i + 1
+        }
+        let body = "<h1>Articles & News</h1>" + html
+        return res_html(p4_layout("Articles", body))
+    })
+
+    // Article detail
+    router_get(router, "/article/:id", fn(req) {
+        let id = convert.toInt(req.params.id)
+        let article = db_queryOne(db, "SELECT * FROM articles WHERE id=" + convert.toString(id))
+        if (article == null) { return res_notFound("Article not found") }
+        db_exec(db, "UPDATE articles SET view_count=view_count+1 WHERE id=" + convert.toString(id))
+        let aContent = ""
+        if (article.content != null) { aContent = article.content }
+        let body = "<h1>" + article.title + "</h1><div class='card'><p style='color:#999;font-size:12px'>" + article.created_at + " | Views: " + convert.toString(article.view_count) + "</p><hr><div>" + aContent + "</div></div><a href='/articles' class='btn'>Back to Articles</a>"
+        return res_html(p4_layout(article.title, body))
+    })
+
+    // Articles management
+    router_get(router, "/admin/articles", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let articles = db_query(db, "SELECT * FROM articles ORDER BY id DESC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(articles)) {
+            html = html + "<tr><td>" + convert.toString(articles[i].id) + "</td><td>" + articles[i].title + "</td><td>" + articles[i].category + "</td><td>" + convert.toString(articles[i].view_count) + "</td><td>" + articles[i].status + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<h1>Article Management</h1><div class='card'><h3>Add Article</h3><form method='POST' action='/admin/article/add'><div class='form-group'><label>Title</label><input type='text' name='title' required></div><div class='form-group'><label>Category</label><select name='category'><option value='news'>News</option><option value='promotion'>Promotion</option><option value='help'>Help</option><option value='about'>About</option></select></div><div class='form-group'><label>Content</label><textarea name='content' rows='4'></textarea></div><button type='submit' class='btn btn-success'>Publish</button></form></div><div class='card'><table><thead><tr><th>ID</th><th>Title</th><th>Category</th><th>Views</th><th>Status</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(p4_layout("Articles", body))
+    })
+
+    router_post(router, "/admin/article/add", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let data = json.parse(req.body)
+        let title = p4_esc(data.title)
+        let content = p4_esc(data.content)
+        let category = data.category
+        db_exec(db, "INSERT INTO articles (title, content, category, status, created_at) VALUES ('" + title + "', '" + content + "', '" + category + "', 'published', datetime('now'))")
+        return res_redirect("/admin/articles")
+    })
+
+    router_get(router, "/admin/article/delete/:id", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "DELETE FROM articles WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/articles")
+    })
+
+    // Announcements
+    router_get(router, "/admin/announcements", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let list = db_query(db, "SELECT * FROM announcements ORDER BY id DESC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(list)) {
+            html = html + "<tr><td>" + convert.toString(list[i].id) + "</td><td>" + list[i].title + "</td><td>" + list[i].type + "</td><td>" + list[i].status + "</td><td>" + list[i].created_at + "</td><td><a href='/admin/announcement/delete/" + convert.toString(list[i].id) + "' class='btn btn-danger'>Delete</a></td></tr>"
+            i = i + 1
+        }
+        let body = "<h1>Announcement Management</h1><div class='card'><h3>Add Announcement</h3><form method='POST' action='/admin/announcement/add'><div class='form-group'><label>Title</label><input type='text' name='title' required></div><div class='form-group'><label>Content</label><textarea name='content' rows='3'></textarea></div><div class='form-group'><label>Type</label><select name='type'><option value='notice'>Notice</option><option value='promotion'>Promotion</option><option value='maintenance'>Maintenance</option></select></div><button type='submit' class='btn btn-success'>Publish</button></form></div>" +
+            "<div class='card'><table><thead><tr><th>ID</th><th>Title</th><th>Type</th><th>Status</th><th>Time</th><th>Actions</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(p4_layout("Announcements", body))
+    })
+
+    router_post(router, "/admin/announcement/add", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let data = json.parse(req.body)
+        let title = p4_esc(data.title)
+        let content = p4_esc(data.content)
+        let annType = data.type
+        db_exec(db, "INSERT INTO announcements (title, content, type, status, created_at) VALUES ('" + title + "', '" + content + "', '" + annType + "', 'active', datetime('now'))")
+        return res_redirect("/admin/announcements")
+    })
+
+    router_get(router, "/admin/announcement/delete/:id", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "DELETE FROM announcements WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/announcements")
+    })
+}
+
+// ============ SYSTEM CONFIG & LOGISTICS ============
+
+fn p4_registerSystemRoutes(router, db) {
+    // System config
+    router_get(router, "/admin/system/config", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let configs = db_query(db, "SELECT * FROM system_config ORDER BY id")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(configs)) {
+            html = html + "<tr><td>" + configs[i].key + "</td><td>" + configs[i].value + "</td><td>" + configs[i].description + "</td></tr>"
+            i = i + 1
+        }
+        let logistics = db_query(db, "SELECT * FROM logistics ORDER BY sort_order")
+        let logHtml = ""
+        i = 0
+        while (i < arrays.length(logistics)) {
+            let lgCode = "-"
+            if (logistics[i].code != null) { lgCode = logistics[i].code }
+            logHtml = logHtml + "<tr><td>" + convert.toString(logistics[i].id) + "</td><td>" + logistics[i].name + "</td><td>" + lgCode + "</td><td>" + logistics[i].status + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<h1>System Configuration</h1>" +
+            "<div class='card'><h3>Basic Config</h3><table><thead><tr><th>Key</th><th>Value</th><th>Description</th></tr></thead><tbody>" + html + "</tbody></table></div>" +
+            "<div class='card'><h3>Payment Config (Sandbox)</h3><p>WeChat Pay: <span class='badge badge-warning'>Sandbox Mode</span> - Add merchant key to go live</p><p>Alipay: <span class='badge badge-warning'>Sandbox Mode</span> - Add merchant key to go live</p><p>Balance Pay: <span class='badge badge-success'>Active</span></p></div>" +
+            "<div class='card'><h3>Logistics Config</h3><form method='POST' action='/admin/logistics/add'><div class='form-group'><label>Company Name</label><input type='text' name='name' required></div><div class='form-group'><label>Code</label><input type='text' name='code'></div><button type='submit' class='btn btn-success'>Add</button></form>" +
+            "<table style='margin-top:15px'><thead><tr><th>ID</th><th>Name</th><th>Code</th><th>Status</th></tr></thead><tbody>" + logHtml + "</tbody></table></div>"
+        return res_html(p4_layout("System Config", body))
+    })
+
+    router_post(router, "/admin/logistics/add", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let data = json.parse(req.body)
+        let name = p4_esc(data.name)
+        let code = p4_esc(data.code)
+        db_exec(db, "INSERT INTO logistics (name, code, status, created_at) VALUES ('" + name + "', '" + code + "', 'active', datetime('now'))")
+        return res_redirect("/admin/system/config")
+    })
+
+    // Low stock alert
+    router_get(router, "/admin/stock/alert", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let lowStock = db_query(db, "SELECT * FROM products WHERE stock < 10 AND status='on' ORDER BY stock ASC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(lowStock)) {
+            let alertClass = "alert-warning"
+            if (lowStock[i].stock < 5) { alertClass = "alert-danger" }
+            html = html + "<tr><td>" + convert.toString(lowStock[i].id) + "</td><td>" + lowStock[i].name + "</td><td><span class='" + alertClass + "'>" + convert.toString(lowStock[i].stock) + "</span></td><td><a href='/admin/product/edit/" + convert.toString(lowStock[i].id) + "' class='btn'>Restock</a></td></tr>"
+            i = i + 1
+        }
+        let body = "<h1>Low Stock Alert</h1><div class='card'><table><thead><tr><th>ID</th><th>Product</th><th>Stock</th><th>Actions</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(p4_layout("Stock Alert", body))
+    })
+
+    // Dashboard enhancement
+    router_get(router, "/admin/dashboard/advanced", fn(req) {
+        let authResult = p4_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let totalProducts = db_queryOne(db, "SELECT COUNT(*) as cnt FROM products")
+        let totalOrders = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders")
+        let totalUsers = db_queryOne(db, "SELECT COUNT(*) as cnt FROM users")
+        let totalSales = db_queryOne(db, "SELECT COALESCE(SUM(total_amount),0) as total FROM orders WHERE status != 'cancelled'")
+        let todayOrders = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE date(created_at) = date('now')")
+        let todaySales = db_queryOne(db, "SELECT COALESCE(SUM(total_amount),0) as total FROM orders WHERE date(created_at) = date('now') AND status != 'cancelled'")
+        let lowStock = db_queryOne(db, "SELECT COUNT(*) as cnt FROM products WHERE stock < 10 AND status='on'")
+        let pendingOrders = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE status='pending'")
+        let topProducts = db_query(db, "SELECT name, sales FROM products ORDER BY sales DESC LIMIT 5")
+        let recentOrders = db_query(db, "SELECT order_no, total_amount, status, created_at FROM orders ORDER BY id DESC LIMIT 5")
+
+        let topHtml = ""
+        let i = 0
+        while (i < arrays.length(topProducts)) {
+            topHtml = topHtml + "<tr><td>" + convert.toString(i+1) + "</td><td>" + topProducts[i].name + "</td><td>" + convert.toString(topProducts[i].sales) + "</td></tr>"
+            i = i + 1
+        }
+        let orderHtml = ""
+        i = 0
+        while (i < arrays.length(recentOrders)) {
+            orderHtml = orderHtml + "<tr><td>" + recentOrders[i].order_no + "</td><td>" + convert.toString(recentOrders[i].total_amount) + "</td><td>" + recentOrders[i].status + "</td><td>" + recentOrders[i].created_at + "</td></tr>"
+            i = i + 1
+        }
+
+        let body = "<h1>Advanced Dashboard</h1>" +
+            "<div class='stat-grid'><div class='stat-card'><div class='num'>" + convert.toString(totalSales.total) + "</div><div class='label'>Total GMV</div></div>" +
+            "<div class='stat-card'><div class='num'>" + convert.toString(todaySales.total) + "</div><div class='label'>Today Sales</div></div>" +
+            "<div class='stat-card'><div class='num'>" + convert.toString(totalOrders.cnt) + "</div><div class='label'>Total Orders</div></div>" +
+            "<div class='stat-card'><div class='num'>" + convert.toString(todayOrders.cnt) + "</div><div class='label'>Today Orders</div></div></div>" +
+            "<div class='stat-grid'><div class='stat-card'><div class='num'>" + convert.toString(totalUsers.cnt) + "</div><div class='label'>Total Users</div></div>" +
+            "<div class='stat-card'><div class='num'>" + convert.toString(totalProducts.cnt) + "</div><div class='label'>Products</div></div>" +
+            "<div class='stat-card'><div class='num' style='color:#ff4d4f'>" + convert.toString(pendingOrders.cnt) + "</div><div class='label'>Pending Orders</div></div>" +
+            "<div class='stat-card'><div class='num' style='color:#faad14'>" + convert.toString(lowStock.cnt) + "</div><div class='label'>Low Stock</div></div></div>" +
+            "<div class='card'><h3>Top Products by Sales</h3><table><thead><tr><th>Rank</th><th>Product</th><th>Sales</th></tr></thead><tbody>" + topHtml + "</tbody></table></div>" +
+            "<div class='card'><h3>Recent Orders</h3><table><thead><tr><th>Order No</th><th>Amount</th><th>Status</th><th>Time</th></tr></thead><tbody>" + orderHtml + "</tbody></table></div>"
+        return res_html(p4_layout("Advanced Dashboard", body))
+    })
+}
+
+// Register all P4 routes
+fn p4_registerAll(router, db) {
+    p4_registerMemberRoutes(router, db)
+    p4_registerContentRoutes(router, db)
+    p4_registerSystemRoutes(router, db)
+}
