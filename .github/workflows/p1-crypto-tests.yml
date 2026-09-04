@@ -49,22 +49,24 @@ jobs:
           /tmp/test
           echo "Simple compile OK"
 
-      - name: Build tllvm
+      - name: Build tllvm (per-file)
         run: |
           cd host/c
-          echo "=== Files in host/c ===" > build_log.txt
-          ls -la *.c >> build_log.txt 2>&1
-          echo "=== Starting build ===" >> build_log.txt
-          gcc -O0 -w -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread -ldl >> build_log.txt 2>&1
-          BUILD_EXIT=$?
-          echo "=== Build exit code: $BUILD_EXIT ===" >> build_log.txt
-          cat build_log.txt
-          if [ $BUILD_EXIT -ne 0 ]; then
-            echo "::error::Build failed with exit code $BUILD_EXIT"
-            echo "::error::=== Build log ==="
-            while IFS= read -r line; do
-              echo "::error::$line"
-            done < build_log.txt
+          echo "=== Compiling each file separately ==="
+          for f in main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c; do
+            echo "--- Compiling $f ---"
+            gcc -O0 -w -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -c $f -o ${f%.c}.o 2>&1
+            echo "  Exit: $?"
+          done
+          echo "--- Compiling sqlite3.c (may take a while) ---"
+          gcc -O0 -w -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -DSQLITE_THREADSAFE=1 -c sqlite3.c -o sqlite3.o 2>&1
+          echo "  sqlite3.c Exit: $?"
+          echo "=== Linking ==="
+          gcc -O0 -o tllvm main.o vm.o value.o json.o builtin.o sqlite_builtin.o crypto_builtin.o sqlite3.o -lm -lpthread -ldl 2>&1
+          LINK_EXIT=$?
+          echo "=== Link exit code: $LINK_EXIT ==="
+          if [ $LINK_EXIT -ne 0 ]; then
+            echo "::error::Link failed with exit code $LINK_EXIT"
             exit 1
           fi
           ls -la tllvm
