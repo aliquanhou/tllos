@@ -3,7 +3,7 @@
 
 from "./core/database" import db_open, db_close, db_exec, db_query, db_queryOne, db_insert, db_begin, db_commit, db_rollback, db_get, db_release
 from "./core/router" import router_create, router_get, router_post, router_handler, res_json, res_html, res_redirect, res_notFound, res_error, req_getQuery, req_getJsonBody, req_getCookie
-from "./core/session" import session_getOrCreate, session_cookieHeader, session_set, session_getValue, session_destroy, cache_set, cache_get, hash_password, verify_password
+from "./core/session" import session_getOrCreate, session_cookieHeader, session_set, session_getValue, session_destroy, cache_set, cache_get, hash_password, verify_password, session_initTables
 from "./core/auth" import auth_ensureTables, auth_register, auth_login, auth_logout, auth_currentUser, auth_isLoggedIn, auth_isAdmin, auth_requireLogin, auth_requireAdmin, auth_createAdmin, cookie_getSessionId
 from "./core/schema" import schema_initAll, schema_seedData
 from "./core/admin" import admin_registerRoutes
@@ -19,6 +19,8 @@ from "./core/icp" import icp_registerAll, icp_initTables
 from "./core/agreement" import agreement_registerAll, agreement_initTables
 from "./core/invoice" import invoice_registerAll, invoice_initTables
 from "./core/search" import search_registerAll, search_initTables
+from "./modules/user_center" import uc_registerAll
+from "./modules/user_services" import us_registerAll
 
 // === HTML Templates ===
 
@@ -59,6 +61,7 @@ let db = db_open("mall/data/mall.db")
 io.println("Database opened")
 
 schema_initAll(db)
+session_initTables(db)
 payment_initTables(db)
 icp_initTables(db)
 agreement_initTables(db)
@@ -602,26 +605,7 @@ router_get(mallRouter, "/logout", fn(req) {
     return res_redirect("/")
 })
 
-// --- User Center ---
-router_get(mallRouter, "/user", fn(req) {
-    let sessionId = cookie_getSessionId(req)
-    let currentUser = auth_currentUser(sessionId)
-    if (currentUser == null) { return res_redirect("/login") }
-
-    let orderCount = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM orders WHERE user_id=" + convert.toString(currentUser.id))
-    let cartCount = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM cart_items WHERE user_id=" + convert.toString(currentUser.id))
-
-    let body = html_header(currentUser) +
-        "<div class='container'><h2 style='margin-bottom:20px'>用户中心</h2>" +
-        "<div class='card'><h3>基本信息</h3><p>用户名: " + currentUser.username + "</p><p>角色: " + currentUser.role + "</p></div>" +
-        "<div class='card' style='display:grid;grid-template-columns:1fr 1fr;gap:20px'>" +
-        "<div style='text-align:center;padding:20px;background:#f9f9f9;border-radius:8px'><h2 style='color:#ff4400'>" + convert.toString(orderCount.cnt) + "</h2><p>我的订单</p><a href='/orders' class='btn btn-outline'>查看订单</a></div>" +
-        "<div style='text-align:center;padding:20px;background:#f9f9f9;border-radius:8px'><h2 style='color:#ff4400'>" + convert.toString(cartCount.cnt) + "</h2><p>购物车</p><a href='/cart' class='btn btn-outline'>去购物车</a></div>" +
-        "</div>" +
-        "<div class='card'><h3>快捷操作</h3><p><a href='/user/address'>地址管理</a></p><p><a href='/orders'>订单管理</a></p></div>" +
-        "</div>"
-    return res_html(html_page("用户中心", body))
-})
+// --- User Center (now handled by modules/user_center.tll) ---
 
 // --- Address Management ---
 router_get(mallRouter, "/user/address", fn(req) {
@@ -700,7 +684,9 @@ icp_registerAll(mallRouter)
 agreement_registerAll(mallRouter)
 invoice_registerAll(mallRouter)
 search_registerAll(mallRouter)
-io.println("Routes registered (basic + extended + marketing + p3 + p4 + new 5 modules + RESTful API = 17 modules with full CRUD)")
+uc_registerAll(mallRouter)
+us_registerAll(mallRouter)
+io.println("Routes registered (basic + extended + marketing + p3 + p4 + new 5 modules + RESTful API + user center + 13 user services = 17 modules with full CRUD)")
 
 // === Start Server ===
 io.println("=== TLL Mall Ready ===")

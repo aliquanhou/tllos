@@ -166,7 +166,13 @@ fn auth_requireAdmin(req) {
 
 // Helper to get session ID from request
 fn cookie_getSessionId(req) {
-    let cookieHeader = req_getHeader(req, "Cookie", null)
+    // Try both "Cookie" and "cookie" (HTTP/2 sends lowercase headers)
+    let cookieHeader = null
+    if (req.headers != null) {
+        cookieHeader = req.headers["Cookie"]
+        if (cookieHeader == null) { cookieHeader = req.headers["cookie"] }
+        if (cookieHeader == null) { cookieHeader = req.headers["COOKIE"] }
+    }
     if (cookieHeader == null) { return null }
     let parts = strings.split(cookieHeader, ";")
     let i = 0

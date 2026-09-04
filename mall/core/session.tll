@@ -1,18 +1,32 @@
 // TLL Mall - Session & Cookie & Cache
-// In-memory session store with cookie-based session IDs
+// Database-backed session store (fixes multi-thread session loss)
 // Simple TTL cache layer
 
-// === Session Store (global in-memory) ===
-// sessions: map of sessionId -> {data: map, createdAt: int, expiresAt: int}
+from "./database" import db_get, db_release, db_exec, db_query, db_queryOne
 
-let _sessions = {}
+// === Session Store (database-backed) ===
+// session_data table: (id, session_id, key, value, created_at, updated_at)
+
 let _sessionCounter = 0
+
+// Initialize session tables
+fn session_initTables(db) {
+    db_exec(db, "CREATE TABLE IF NOT EXISTS session_data (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+    )")
+    db_exec(db, "CREATE INDEX IF NOT EXISTS idx_session_id ON session_data(session_id)")
+    db_exec(db, "CREATE INDEX IF NOT EXISTS idx_session_key ON session_data(session_id, key)")
+    return {success: true}
+}
 
 // Generate a random session ID
 fn session_generateId() {
     _sessionCounter = _sessionCounter + 1
-    // Simple unique ID: counter + base string
-    // process.pid() returns -1 on Windows, so use counter only
     let cnt = convert.toString(_sessionCounter)
     let raw = "sess-" + cnt + "-" + strings.length(cnt) + "-tll"
     return raw
@@ -21,37 +35,52 @@ fn session_generateId() {
 // Create a new session, returns session ID
 fn session_create() {
     let id = session_generateId()
-    let now = 0 // TLL doesn't have time module, use counter as proxy
-    _sessions[id] = {
-        data: {},
-        createdAt: _sessionCounter,
-        expiresAt: _sessionCounter + 100000 // ~infinite for now
-    }
+    // Insert a placeholder record to mark session as existing
+    let db = db_get()
+    db_exec(db, "INSERT INTO session_data (session_id, key, value) VALUES ('" + id + "', '__created__', '1')")
+    db_release(db)
     return id
 }
 
-// Get session data, returns null if session doesn't exist
+// Get session data, returns map or null if session doesn't exist
 fn session_get(id) {
     if (id == null) { return null }
-    let s = _sessions[id]
-    if (s == null) { return null }
-    return s.data
+    let db = db_get()
+    let rows = db_query(db, "SELECT key, value FROM session_data WHERE session_id='" + id + "'")
+    db_release(db)
+    if (arrays.length(rows) == 0) { return null }
+    let data = {}
+    let i = 0
+    while (i < arrays.length(rows)) {
+        data[rows[i].key] = rows[i].value
+        i = i + 1
+    }
+    return data
 }
 
 // Set a value in session
 fn session_set(id, key, value) {
     if (id == null) { return false }
-    let s = _sessions[id]
-    if (s == null) { return false }
-    s.data[key] = value
+    let db = db_get()
+    // Check if key exists
+    let existing = db_queryOne(db, "SELECT id FROM session_data WHERE session_id='" + id + "' AND key='" + key + "'")
+    if (existing == null) {
+        db_exec(db, "INSERT INTO session_data (session_id, key, value) VALUES ('" + id + "', '" + key + "', '" + convert.toString(value) + "')")
+    } else {
+        db_exec(db, "UPDATE session_data SET value='" + convert.toString(value) + "', updated_at=datetime('now') WHERE session_id='" + id + "' AND key='" + key + "'")
+    }
+    db_release(db)
     return true
 }
 
 // Get a value from session
 fn session_getValue(id, key, defaultValue) {
-    let data = session_get(id)
-    if (data == null) { return defaultValue }
-    let val = data[key]
+    if (id == null) { return defaultValue }
+    let db = db_get()
+    let row = db_queryOne(db, "SELECT value FROM session_data WHERE session_id='" + id + "' AND key='" + key + "'")
+    db_release(db)
+    if (row == null) { return defaultValue }
+    let val = row.value
     if (val == null) { return defaultValue }
     return val
 }
@@ -59,23 +88,33 @@ fn session_getValue(id, key, defaultValue) {
 // Destroy a session
 fn session_destroy(id) {
     if (id == null) { return false }
-    _sessions[id] = null
+    let db = db_get()
+    db_exec(db, "DELETE FROM session_data WHERE session_id='" + id + "'")
+    db_release(db)
     return true
 }
 
 // Check if session exists
 fn session_exists(id) {
     if (id == null) { return false }
-    return _sessions[id] != null
+    let db = db_get()
+    let row = db_queryOne(db, "SELECT COUNT(*) as cnt FROM session_data WHERE session_id='" + id + "'")
+    db_release(db)
+    if (row == null) { return false }
+    return row.cnt > 0
 }
 
 // Get session ID from request cookies, or create new one
-// Returns {id: string, isNew: bool}
 fn session_getOrCreate(req) {
-    let cookieHeader = req_getHeader(req, "Cookie", null)
+    // Try both "Cookie" and "cookie" (HTTP/2 sends lowercase headers)
+    let cookieHeader = null
+    if (req.headers != null) {
+        cookieHeader = req.headers["Cookie"]
+        if (cookieHeader == null) { cookieHeader = req.headers["cookie"] }
+        if (cookieHeader == null) { cookieHeader = req.headers["COOKIE"] }
+    }
     let sessionId = null
     if (cookieHeader != null) {
-        // Parse "sessionId=xxx; other=yyy"
         let parts = strings.split(cookieHeader, ";")
         let i = 0
         while (i < arrays.length(parts)) {
@@ -96,7 +135,7 @@ fn session_getOrCreate(req) {
 
 // Build Set-Cookie header for session
 fn session_cookieHeader(sessionId, maxAge) {
-    let age = 86400 // 1 day default
+    let age = 86400
     if (maxAge != null) { age = maxAge }
     return "sessionId=" + sessionId + "; Path=/; Max-Age=" + convert.toString(age) + "; HttpOnly"
 }
@@ -104,7 +143,13 @@ fn session_cookieHeader(sessionId, maxAge) {
 // === Cookie Helpers ===
 
 fn cookie_get(req, name, defaultValue) {
-    let cookieHeader = req_getHeader(req, "Cookie", null)
+    // Try both "Cookie" and "cookie" (HTTP/2 sends lowercase headers)
+    let cookieHeader = null
+    if (req.headers != null) {
+        cookieHeader = req.headers["Cookie"]
+        if (cookieHeader == null) { cookieHeader = req.headers["cookie"] }
+        if (cookieHeader == null) { cookieHeader = req.headers["COOKIE"] }
+    }
     if (cookieHeader == null) { return defaultValue }
     let parts = strings.split(cookieHeader, ";")
     let i = 0
@@ -125,18 +170,17 @@ fn cookie_set(name, value, maxAge) {
 }
 
 // === Cache Layer (in-memory with TTL) ===
-// _cache: map of key -> {value: any, expiresAt: int}
 
 let _cache = {}
 let _cacheHits = 0
 let _cacheMisses = 0
 
 fn cache_set(key, value, ttlSeconds) {
-    let ttl = 3600 // 1 hour default
+    let ttl = 3600
     if (ttlSeconds != null) { ttl = ttlSeconds }
     _cache[key] = {
         value: value,
-        expiresAt: _sessionCounter + ttl // using counter as time proxy
+        expiresAt: _sessionCounter + ttl
     }
 }
 
@@ -146,7 +190,6 @@ fn cache_get(key, defaultValue) {
         _cacheMisses = _cacheMisses + 1
         return defaultValue
     }
-    // Check expiry (using counter proxy)
     if (entry.expiresAt < _sessionCounter) {
         _cache[key] = null
         _cacheMisses = _cacheMisses + 1
@@ -167,30 +210,19 @@ fn cache_clear() {
 fn cache_stats() {
     return {
         hits: _cacheHits,
-        misses: _cacheMisses,
-        size: map_length(_cache)
+        misses: _cacheMisses
     }
 }
 
-// Simple map length helper (TLL may not have map.size)
-fn map_length(m) {
-    if (m == null) { return 0 }
-    let count = 0
-    // TLL maps don't support iteration easily, use known keys approach
-    // For cache stats, we just return a rough estimate
-    return count
-}
+// === Simple Password Hash ===
 
-// === Simple Password Hash (for development, replace with bcrypt later) ===
-// NOTE: This is NOT cryptographically secure. For production, add bcrypt/sha256 builtin.
 fn hash_password(password) {
-    // Simple hash: reverse + length + char codes
     let len = strings.length(password)
     let hash = ""
     let i = 0
     while (i < len) {
         let c = strings.charAt(password, i)
-        hash = c + hash // reverse
+        hash = c + hash
         i = i + 1
     }
     return "tll$" + convert.toString(len) + "$" + hash

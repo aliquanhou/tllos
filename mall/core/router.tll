@@ -75,7 +75,13 @@ fn req_getHeader(req, key, defaultValue) {
 }
 
 fn req_getCookie(req, name, defaultValue) {
-    let cookieHeader = req_getHeader(req, "Cookie", null)
+    // Try both "Cookie" and "cookie" (HTTP/2 sends lowercase headers)
+    let cookieHeader = null
+    if (req.headers != null) {
+        cookieHeader = req.headers["Cookie"]
+        if (cookieHeader == null) { cookieHeader = req.headers["cookie"] }
+        if (cookieHeader == null) { cookieHeader = req.headers["COOKIE"] }
+    }
     if (cookieHeader == null) { return defaultValue }
     // Parse "name1=value1; name2=value2"
     let parts = strings.split(cookieHeader, ";")
