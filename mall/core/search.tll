@@ -1,0 +1,400 @@
+// ============================================================
+// TLLOS Mall - Search & Filter Module
+// 用户端搜索与筛选模块
+// ============================================================
+
+from "./database" import db_query, db_exec, db_lastInsertId
+from "./router" import res_json, res_html, router_get, router_post
+
+// ============================================================
+// Search Tables
+// ============================================================
+
+fn search_initTables(db) {
+    // Search history table
+    db_exec(db, "CREATE TABLE IF NOT EXISTS search_history (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, keyword TEXT NOT NULL, search_count INTEGER DEFAULT 1, last_search_at TEXT DEFAULT (datetime('now')), created_at TEXT DEFAULT (datetime('now')))")
+
+    // Hot keywords table
+    db_exec(db, "CREATE TABLE IF NOT EXISTS hot_keywords (id INTEGER PRIMARY KEY AUTOINCREMENT, keyword TEXT UNIQUE NOT NULL, search_count INTEGER DEFAULT 0, sort_order INTEGER DEFAULT 0, status TEXT DEFAULT 'active', created_at TEXT DEFAULT (datetime('now')))")
+
+    // Insert default hot keywords
+    let defaultKeywords = ["手机", "电脑", "服装", "鞋子", "化妆品", "食品", "图书", "家电", "数码", "运动"]
+    let i = 0
+    while (i < arrays.length(defaultKeywords)) {
+        let kw = defaultKeywords[i]
+        let checkSql = "SELECT id FROM hot_keywords WHERE keyword = '" + kw + "'"
+        let existing = db_query(db, checkSql)
+        if (arrays.length(existing) == 0) {
+            let insertSql = "INSERT INTO hot_keywords (keyword, search_count, sort_order, status) VALUES ('" + kw + "', " + convert.toString(100 - i * 10) + ", " + convert.toString(i) + ", 'active')"
+            db_exec(db, insertSql)
+        }
+        i = i + 1
+    }
+
+    io.println("[Search] Tables initialized: search_history, hot_keywords (10 default)")
+}
+
+// ============================================================
+// Search Helpers
+// ============================================================
+
+fn search_escapeKeyword(keyword) {
+    if (keyword == null) { return "" }
+    let result = strings.replace(keyword, "'", "''")
+    result = strings.replace(result, "\\", "\\\\")
+    result = strings.replace(result, "%", "\\%")
+    result = strings.replace(result, "_", "\\_")
+    return result
+}
+
+fn search_highlight(text, keyword) {
+    if (text == null || keyword == null || keyword == "") {
+        return text
+    }
+    let lowerText = strings.toLower(text)
+    let lowerKeyword = strings.toLower(keyword)
+    let index = strings.indexOf(lowerText, lowerKeyword)
+    if (index < 0) {
+        return text
+    }
+    // Simple highlight: wrap with markers
+    let before = strings.substring(text, 0, index)
+    let match = strings.substring(text, index, index + strings.length(keyword))
+    let after = strings.substring(text, index + strings.length(keyword), strings.length(text))
+    return before + "[HIGHLIGHT]" + match + "[/HIGHLIGHT]" + after
+}
+
+fn search_recordHistory(db, userId, keyword) {
+    if (keyword == null || keyword == "") { return }
+
+    // Check if already exists
+    let checkSql = "SELECT id, search_count FROM search_history WHERE "
+    if (userId != null) {
+        checkSql = checkSql + "user_id = " + userId + " AND "
+    } else {
+        checkSql = checkSql + "user_id IS NULL AND "
+    }
+    checkSql = checkSql + "keyword = '" + search_escapeKeyword(keyword) + "'"
+
+    let existing = db_query(db, checkSql)
+    if (arrays.length(existing) > 0) {
+        let updateSql = "UPDATE search_history SET search_count = search_count + 1, last_search_at = datetime('now') WHERE id = " + existing[0].id
+        db_exec(db, updateSql)
+    } else {
+        let userIdStr = "NULL"
+        if (userId != null) { userIdStr = convert.toString(userId) }
+        let insertSql = "INSERT INTO search_history (user_id, keyword, search_count) VALUES (" + userIdStr + ", '" + search_escapeKeyword(keyword) + "', 1)"
+        db_exec(db, insertSql)
+    }
+
+    // Update hot keywords count
+    let hotCheckSql = "SELECT id FROM hot_keywords WHERE keyword = '" + search_escapeKeyword(keyword) + "'"
+    let hotExisting = db_query(db, hotCheckSql)
+    if (arrays.length(hotExisting) > 0) {
+        let hotUpdateSql = "UPDATE hot_keywords SET search_count = search_count + 1 WHERE id = " + hotExisting[0].id
+        db_exec(db, hotUpdateSql)
+    }
+}
+
+// ============================================================
+// Search API
+// ============================================================
+
+fn search_products(req) {
+    let db = req.db
+
+    // Get parameters
+    let keyword = req_getQuery(req, "keyword", null)
+    let categoryId = req_getQuery(req, "category_id", null)
+    let brandId = req_getQuery(req, "brand_id", null)
+    let minPrice = req_getQuery(req, "min_price", null)
+    let maxPrice = req_getQuery(req, "max_price", null)
+    let sortBy = req_getQuery(req, "sort_by", "default")
+    let sortOrder = req_getQuery(req, "sort_order", "desc")
+    let page = req_getQuery(req, "page", "1")
+    let pageSize = req_getQuery(req, "page_size", "20")
+    let inStockOnly = req_getQuery(req, "in_stock_only", null)
+    let isNew = req_getQuery(req, "is_new", null)
+    let isHot = req_getQuery(req, "is_hot", null)
+
+    // Record search history
+    if (keyword != null && keyword != "") {
+        search_recordHistory(db, null, keyword)
+    }
+
+    // Build SQL
+    let sql = "SELECT p.*, c.name as category_name, b.name as brand_name FROM products p "
+    sql = sql + "LEFT JOIN categories c ON p.category_id = c.id "
+    sql = sql + "LEFT JOIN brands b ON p.brand_id = b.id "
+    sql = sql + "WHERE p.status = 'on' "
+
+    // Keyword search
+    if (keyword != null && keyword != "") {
+        let escapedKeyword = search_escapeKeyword(keyword)
+        sql = sql + "AND (p.name LIKE '%" + escapedKeyword + "%' "
+        sql = sql + "OR p.description LIKE '%" + escapedKeyword + "%') "
+    }
+
+    // Category filter
+    if (categoryId != null && categoryId != "") {
+        sql = sql + "AND p.category_id = " + categoryId + " "
+    }
+
+    // Brand filter
+    if (brandId != null && brandId != "") {
+        sql = sql + "AND p.brand_id = " + brandId + " "
+    }
+
+    // Price range filter
+    if (minPrice != null && minPrice != "") {
+        sql = sql + "AND p.price >= " + minPrice + " "
+    }
+    if (maxPrice != null && maxPrice != "") {
+        sql = sql + "AND p.price <= " + maxPrice + " "
+    }
+
+    // Stock filter
+    if (inStockOnly == "true" || inStockOnly == "1") {
+        sql = sql + "AND p.stock > 0 "
+    }
+
+    // New products filter
+    if (isNew == "true" || isNew == "1") {
+        sql = sql + "AND p.is_new = 1 "
+    }
+
+    // Hot products filter
+    if (isHot == "true" || isHot == "1") {
+        sql = sql + "AND p.is_hot = 1 "
+    }
+
+    // Sort
+    if (sortBy == "price") {
+        sql = sql + "ORDER BY p.price " + sortOrder + " "
+    } else if (sortBy == "sales") {
+        sql = sql + "ORDER BY p.sales " + sortOrder + " "
+    } else if (sortBy == "new") {
+        sql = sql + "ORDER BY p.created_at " + sortOrder + " "
+    } else {
+        sql = sql + "ORDER BY p.sort_order, p.id DESC "
+    }
+
+    // Pagination
+    let pageNum = parseInt(page)
+    let sizeNum = parseInt(pageSize)
+    if (pageNum < 1) { pageNum = 1 }
+    if (sizeNum < 1) { sizeNum = 20 }
+    if (sizeNum > 100) { sizeNum = 100 }
+    let offset = (pageNum - 1) * sizeNum
+
+    sql = sql + "LIMIT " + convert.toString(sizeNum) + " OFFSET " + convert.toString(offset)
+
+    // Execute query
+    let products = db_query(db, sql)
+
+    // Get total count
+    let countSql = "SELECT COUNT(*) as total FROM products p WHERE p.status = 'on' "
+    if (keyword != null && keyword != "") {
+        let escapedKeyword = search_escapeKeyword(keyword)
+        countSql = countSql + "AND (p.name LIKE '%" + escapedKeyword + "%' OR p.description LIKE '%" + escapedKeyword + "%') "
+    }
+    if (categoryId != null && categoryId != "") {
+        countSql = countSql + "AND p.category_id = " + categoryId + " "
+    }
+    if (minPrice != null && minPrice != "") {
+        countSql = countSql + "AND p.price >= " + minPrice + " "
+    }
+    if (maxPrice != null && maxPrice != "") {
+        countSql = countSql + "AND p.price <= " + maxPrice + " "
+    }
+    let countResult = db_query(db, countSql)
+    let total = 0
+    if (arrays.length(countResult) > 0) {
+        total = countResult[0].total
+    }
+
+    // Highlight keywords in product names
+    let i = 0
+    while (i < arrays.length(products)) {
+        if (keyword != null && keyword != "") {
+            products[i].name_highlighted = search_highlight(products[i].name, keyword)
+        }
+        i = i + 1
+    }
+
+    // If no results, get recommendations
+    let recommendations = []
+    if (arrays.length(products) == 0 && keyword != null && keyword != "") {
+        let recSql = "SELECT * FROM products WHERE status = 'on' ORDER BY sales_count DESC LIMIT 10"
+        recommendations = db_query(db, recSql)
+    }
+
+    return res_json({
+        success: true,
+        keyword: keyword,
+        total: total,
+        page: pageNum,
+        page_size: sizeNum,
+        total_pages: math.ceil(total / sizeNum),
+        count: arrays.length(products),
+        data: products,
+        recommendations: recommendations,
+        has_more: (pageNum * sizeNum) < total,
+        filters: {
+            category_id: categoryId,
+            brand_id: brandId,
+            min_price: minPrice,
+            max_price: maxPrice,
+            sort_by: sortBy,
+            sort_order: sortOrder,
+            in_stock_only: inStockOnly,
+            is_new: isNew,
+            is_hot: isHot
+        }
+    }, 200)
+}
+
+// ============================================================
+// Search Suggestions
+// ============================================================
+
+fn search_suggestions(req) {
+    let db = req.db
+    let keyword = req_getQuery(req, "keyword", null)
+
+    if (keyword == null || keyword == "") {
+        // Return hot keywords
+        let hotSql = "SELECT keyword, search_count FROM hot_keywords WHERE status = 'active' ORDER BY sort_order, search_count DESC LIMIT 10"
+        let hotKeywords = db_query(db, hotSql)
+        return res_json({success: true, type: "hot", data: hotKeywords}, 200)
+    }
+
+    // Search for matching keywords
+    let escapedKeyword = search_escapeKeyword(keyword)
+    let sql = "SELECT keyword, SUM(search_count) as total_count FROM search_history WHERE keyword LIKE '%" + escapedKeyword + "%' GROUP BY keyword ORDER BY total_count DESC LIMIT 10"
+    let suggestions = db_query(db, sql)
+
+    // Also search product names
+    let productSql = "SELECT DISTINCT name FROM products WHERE status = 'on' AND name LIKE '%" + escapedKeyword + "%' LIMIT 5"
+    let productSuggestions = db_query(db, productSql)
+
+    return res_json({
+        success: true,
+        type: "suggestions",
+        keyword: keyword,
+        history_suggestions: suggestions,
+        product_suggestions: productSuggestions
+    }, 200)
+}
+
+// ============================================================
+// Hot Keywords
+// ============================================================
+
+fn search_hotKeywords(req) {
+    let db = req.db
+    let sql = "SELECT keyword, search_count FROM hot_keywords WHERE status = 'active' ORDER BY sort_order, search_count DESC LIMIT 20"
+    let keywords = db_query(db, sql)
+    return res_json({success: true, count: arrays.length(keywords), data: keywords}, 200)
+}
+
+// ============================================================
+// Search History
+// ============================================================
+
+fn search_history(req) {
+    let db = req.db
+    let userId = req_getQuery(req, "user_id", null)
+
+    let sql = "SELECT keyword, search_count, last_search_at FROM search_history WHERE "
+    if (userId != null && userId != "") {
+        sql = sql + "user_id = " + userId + " "
+    } else {
+        sql = sql + "user_id IS NULL "
+    }
+    sql = sql + "ORDER BY last_search_at DESC LIMIT 20"
+
+    let history = db_query(db, sql)
+    return res_json({success: true, count: arrays.length(history), data: history}, 200)
+}
+
+fn search_clearHistory(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let userId = body.user_id
+
+    let sql = "DELETE FROM search_history WHERE "
+    if (userId != null) {
+        sql = sql + "user_id = " + userId
+    } else {
+        sql = sql + "user_id IS NULL"
+    }
+    db_exec(db, sql)
+
+    return res_json({success: true, message: "Search history cleared"}, 200)
+}
+
+// ============================================================
+// Filter Options
+// ============================================================
+
+fn search_filterOptions(req) {
+    let db = req.db
+    let categoryId = req_getQuery(req, "category_id", null)
+
+    // Get categories
+    let catSql = "SELECT id, name, parent_id FROM categories WHERE status = 'active' ORDER BY sort_order, id"
+    let categories = db_query(db, catSql)
+
+    // Get brands
+    let brandSql = "SELECT id, name, logo FROM brands WHERE status = 'active' ORDER BY sort_order, id"
+    let brands = db_query(db, brandSql)
+
+    // Get price range for category
+    let priceSql = "SELECT MIN(price) as min_price, MAX(price) as max_price FROM products WHERE status = 'on'"
+    if (categoryId != null && categoryId != "") {
+        priceSql = priceSql + " AND category_id = " + categoryId
+    }
+    let priceRange = db_query(db, priceSql)
+    let priceResult = {min_price: 0, max_price: 99999}
+    if (arrays.length(priceRange) > 0) {
+        if (priceRange[0].min_price != null) {
+            priceResult.min_price = priceRange[0].min_price
+        }
+        if (priceRange[0].max_price != null) {
+            priceResult.max_price = priceRange[0].max_price
+        }
+    }
+
+    // Get attributes for category (simplified)
+    let attributes = []
+
+    return res_json({
+        success: true,
+        categories: categories,
+        brands: brands,
+        price_range: priceResult,
+        attributes: attributes,
+        sort_options: [
+            {value: "default", label: "综合排序"},
+            {value: "sales", label: "销量优先"},
+            {value: "new", label: "新品优先"},
+            {value: "price_asc", label: "价格从低到高"},
+            {value: "price_desc", label: "价格从高到低"}
+        ]
+    }, 200)
+}
+
+// ============================================================
+// Register All Routes
+// ============================================================
+
+fn search_registerAll(router) {
+    router_get(router, "/search/products", search_products)
+    router_get(router, "/search/suggestions", search_suggestions)
+    router_get(router, "/search/hot-keywords", search_hotKeywords)
+    router_get(router, "/search/history", search_history)
+    router_post(router, "/search/clear-history", search_clearHistory)
+    router_get(router, "/search/filter-options", search_filterOptions)
+    io.println("[Search] Routes registered: 6 endpoints")
+}
