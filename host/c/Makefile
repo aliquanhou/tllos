@@ -9,11 +9,12 @@ LDFLAGS = -lm
 ifeq ($(OS),Windows_NT)
     EXE = tllvm.exe
     CFLAGS += -D_WIN32
+    LDFLAGS += -lbcrypt
 else
     EXE = tllvm
 endif
 
-SRCS = main.c vm.c value.c json.c builtin.c
+SRCS = main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c
 OBJS = $(SRCS:.c=.o)
 
 all: $(EXE)

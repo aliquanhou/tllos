@@ -1686,9 +1686,6 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
     if modName == "coroutine" {
         if fnName == "wakeChannel" { return 144 }
     }
-    if modName == "crypto" {
-        if fnName == "randomBytes" { return 145 }
-    }
     if modName == "agent" {
         if fnName == "run" { return 98 }
         if fnName == "chat" { return 99 }
@@ -1746,7 +1743,17 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
         if fnName == "version" { return 156 }
         if fnName == "tableExists" { return 157 }
         if fnName == "columns" { return 158 }
-    }    return -1
+    }
+    if modName == "crypto" {
+        if fnName == "secureRandomHex" { return 160 }
+        if fnName == "secureRandomBase64" { return 161 }
+        if fnName == "secureRandomInt" { return 162 }
+        if fnName == "uuid4" { return 163 }
+        if fnName == "randomHex" { return 164 }
+        if fnName == "secureRandomBytes" { return 165 }
+        if fnName == "randomBytes" { return 166 }
+    }
+    return -1
 }
 
 fn cg_compileArray(expr: map) -> int {

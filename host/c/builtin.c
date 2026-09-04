@@ -199,12 +199,261 @@ static DWORD WINAPI worker_thread(LPVOID param) {
 #include <dirent.h>
 #include <unistd.h>
 #include <alloca.h>
+#include <pthread.h>
+#include <semaphore.h>
 typedef int SOCKET;
 #define INVALID_SOCKET (-1)
 #define closesocket(s) close(s)
 #define CHDIR chdir
 #define GETCWD getcwd
+
+/* HttpTask type - Linux */
+typedef struct {
+    unsigned int client_fd;
+    TLLVM *vm;
+    TLLValue handler_fn;
+} HttpTask;
+static void http_process_task(HttpTask *task);
+
+/* Global VM lock - Linux pthread */
+static pthread_mutex_t g_vm_lock = PTHREAD_MUTEX_INITIALIZER;
+static int g_vm_lock_initialized = 1;
+
+/* === Worker Pool - Linux pthread === */
+#define WORKER_POOL_SIZE 8
+typedef struct TaskNode {
+    HttpTask *task;
+    struct TaskNode *next;
+} TaskNode;
+static TaskNode *g_task_head = NULL;
+static TaskNode *g_task_tail = NULL;
+static pthread_mutex_t g_queue_lock = PTHREAD_MUTEX_INITIALIZER;
+static sem_t g_task_sem;
+static int g_pool_initialized = 0;
+
+static void *worker_thread(void *param) {
+    (void)param;
+    while (1) {
+        sem_wait(&g_task_sem);
+        pthread_mutex_lock(&g_queue_lock);
+        TaskNode *node = g_task_head;
+        if (node) {
+            g_task_head = node->next;
+            if (!g_task_head) g_task_tail = NULL;
+        }
+        pthread_mutex_unlock(&g_queue_lock);
+        if (node) {
+            http_process_task(node->task);
+            free(node->task);
+            free(node);
+        }
+    }
+    return NULL;
+}
+
+static void init_worker_pool(void) {
+    sem_init(&g_task_sem, 0, 0);
+    pthread_t tid;
+    for (int i = 0; i < WORKER_POOL_SIZE; i++) {
+        pthread_create(&tid, NULL, worker_thread, NULL);
+        pthread_detach(tid);
+    }
+    g_pool_initialized = 1;
+    fprintf(stderr, "tllvm: worker pool initialized with %d threads\n", WORKER_POOL_SIZE);
+}
+
+static void enqueue_task(HttpTask *task) {
+    TaskNode *node = (TaskNode*)malloc(sizeof(TaskNode));
+    node->task = task;
+    node->next = NULL;
+    pthread_mutex_lock(&g_queue_lock);
+    if (g_task_tail) {
+        g_task_tail->next = node;
+    } else {
+        g_task_head = node;
+    }
+    g_task_tail = node;
+    pthread_mutex_unlock(&g_queue_lock);
+    sem_post(&g_task_sem);
+}
 #endif
+
+/* === HTTP task processor - cross-platform (used by both Windows and Linux) === */
+static void http_process_task(HttpTask *data) {
+    SOCKET client_fd = (SOCKET)data->client_fd;
+    TLLVM *vm = data->vm;
+    TLLValue handlerFn = data->handler_fn;
+
+    /* Read request */
+    char req_buf[65536];
+    int total_read = 0;
+    while (total_read < (int)sizeof(req_buf) - 1) {
+        int n = recv(client_fd, req_buf + total_read, sizeof(req_buf) - 1 - total_read, 0);
+        if (n <= 0) break;
+        total_read += n;
+        req_buf[total_read] = '\0';
+        if (strstr(req_buf, "\r\n\r\n") != NULL) {
+            char *cl = strstr(req_buf, "Content-Length:");
+            if (cl) {
+                int content_len = atoi(cl + 15);
+                char *body_start = strstr(req_buf, "\r\n\r\n");
+                if (body_start) {
+                    body_start += 4;
+                    int body_read = total_read - (int)(body_start - req_buf);
+                    if (body_read >= content_len) break;
+                }
+            } else {
+                break;
+            }
+        }
+    }
+    req_buf[total_read] = '\0';
+
+    /* Parse request line */
+    char method[16] = "GET";
+    char rawPath[1024] = "/";
+    char *line_end = strstr(req_buf, "\r\n");
+    if (line_end) {
+        *line_end = '\0';
+        sscanf(req_buf, "%15s %1023s", method, rawPath);
+    }
+    /* Parse path and query */
+    char path[1024] = "/";
+    char query[1024] = "";
+    char *qmark = strchr(rawPath, '?');
+    if (qmark) {
+        int plen = (int)(qmark - rawPath);
+        if (plen > 1023) plen = 1023;
+        strncpy(path, rawPath, plen); path[plen] = '\0';
+        strncpy(query, qmark + 1, 1023); query[1023] = '\0';
+    } else {
+        strncpy(path, rawPath, 1023); path[1023] = '\0';
+    }
+    /* Parse headers into map */
+    TLLValue headersMap = tll_map();
+    char *header_start = line_end ? line_end + 2 : req_buf;
+    char *header_end = strstr(header_start, "\r\n\r\n");
+    if (header_end) {
+        char *line = header_start;
+        while (line < header_end) {
+            char *next_line = strstr(line, "\r\n");
+            if (!next_line || next_line > header_end) break;
+            *next_line = '\0';
+            char *colon = strchr(line, ':');
+            if (colon) {
+                *colon = '\0';
+                char *val = colon + 1;
+                while (*val == ' ') val++;
+                map_set(headersMap.as.map, line, tll_string(val));
+            }
+            line = next_line + 2;
+        }
+    }
+    /* Parse query into map */
+    TLLValue queryMap = tll_map();
+    if (strlen(query) > 0) {
+        char *q = query;
+        while (*q) {
+            char *amp = strchr(q, '&');
+            if (amp) *amp = '\0';
+            char *eq = strchr(q, '=');
+            if (eq) {
+                *eq = '\0';
+                map_set(queryMap.as.map, q, tll_string(eq + 1));
+            } else {
+                map_set(queryMap.as.map, q, tll_string(""));
+            }
+            if (!amp) break;
+            q = amp + 1;
+        }
+    }
+    /* Build request map */
+    TLLValue reqMap = tll_map();
+    map_set(reqMap.as.map, "method", tll_string(method));
+    map_set(reqMap.as.map, "path", tll_string(path));
+    map_set(reqMap.as.map, "rawPath", tll_string(rawPath));
+    map_set(reqMap.as.map, "query", tll_string(query));
+    map_set(reqMap.as.map, "queryMap", queryMap);
+    map_set(reqMap.as.map, "headers", headersMap);
+    if (header_end) {
+        char *body_start = header_end + 4;
+        map_set(reqMap.as.map, "body", tll_string(body_start));
+    } else {
+        map_set(reqMap.as.map, "body", tll_string(""));
+    }
+
+    /* Call TLL handler under VM lock */
+    TLLValue handlerArgs[1] = { reqMap };
+#ifdef _WIN32
+    EnterCriticalSection(&g_vm_lock);
+#else
+    pthread_mutex_lock(&g_vm_lock);
+#endif
+    TLLValue resp = tll_vm_invoke(vm, handlerFn, handlerArgs, 1);
+#ifdef _WIN32
+    LeaveCriticalSection(&g_vm_lock);
+#else
+    pthread_mutex_unlock(&g_vm_lock);
+#endif
+
+    /* Build response */
+    char resp_buf[65536];
+    int resp_len = 0;
+    int status = 200;
+    const char *body = "";
+    const char *content_type = "text/html; charset=utf-8";
+    TLLValue respHeaders = tll_null();
+    if (resp.type == TLL_MAP) {
+        TLLValue sv = map_get(resp.as.map, "status");
+        if (sv.type == TLL_INT) status = (int)sv.as.integer;
+        TLLValue bv = map_get(resp.as.map, "body");
+        if (bv.type == TLL_STRING) body = bv.as.string;
+        TLLValue cv = map_get(resp.as.map, "contentType");
+        if (cv.type == TLL_STRING) content_type = cv.as.string;
+        TLLValue hv = map_get(resp.as.map, "headers");
+        if (hv.type == TLL_MAP) respHeaders = hv;
+    } else if (resp.type == TLL_STRING) {
+        body = resp.as.string;
+    }
+    const char *reason = "OK";
+    if (status == 201) reason = "Created";
+    else if (status == 204) reason = "No Content";
+    else if (status == 301) reason = "Moved Permanently";
+    else if (status == 302) reason = "Found";
+    else if (status == 400) reason = "Bad Request";
+    else if (status == 401) reason = "Unauthorized";
+    else if (status == 403) reason = "Forbidden";
+    else if (status == 404) reason = "Not Found";
+    else if (status == 405) reason = "Method Not Allowed";
+    else if (status == 500) reason = "Internal Server Error";
+    else if (status == 502) reason = "Bad Gateway";
+    else if (status == 503) reason = "Service Unavailable";
+    int hdr_len = snprintf(resp_buf, sizeof(resp_buf),
+        "HTTP/1.1 %d %s\r\n"
+        "Content-Type: %s\r\n"
+        "Content-Length: %d\r\n"
+        "Connection: close\r\n",
+        status, reason, content_type, (int)strlen(body));
+    if (respHeaders.type == TLL_MAP) {
+        for (int b = 0; b < respHeaders.as.map->bucketCount; b++) {
+            TLLMapEntry *e = respHeaders.as.map->buckets[b];
+            while (e) {
+                if (e->value.type == TLL_STRING) {
+                    hdr_len += snprintf(resp_buf + hdr_len, sizeof(resp_buf) - hdr_len,
+                        "%s: %s\r\n", e->key, e->value.as.string);
+                }
+                e = e->next;
+            }
+        }
+    }
+    hdr_len += snprintf(resp_buf + hdr_len, sizeof(resp_buf) - hdr_len, "\r\n");
+    resp_len = hdr_len + (int)strlen(body);
+    if (resp_len < (int)sizeof(resp_buf)) {
+        memcpy(resp_buf + hdr_len, body, strlen(body));
+    }
+    send(client_fd, resp_buf, resp_len, 0);
+    closesocket(client_fd);
+}
 
 /* === Helper: string operations === */
 static char *str_dup(const char *s) { return s ? strdup(s) : strdup(""); }
@@ -393,9 +642,13 @@ static void http_process_task(HttpTask *data) {
 
 TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
     (void)vm;
-    /* SQLite builtin binding (index 100-119) */
+    /* SQLite builtin binding (index 150-159) */
     if (idx >= 150 && idx < 160) {
         return sqlite_builtin_invoke(vm, idx, args, argCount);
+    }
+    /* Crypto builtin binding (index 160-179) */
+    if (idx >= 160 && idx < 180) {
+        return crypto_builtin_invoke(vm, idx, args, argCount);
     }
     /* io (0-2) */
     if (idx == 0) { /* println */
@@ -1225,8 +1478,53 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
         }
 #endif /* _WIN32 */
 #ifndef _WIN32
-        if (idx == 94) { /* http.serve - not supported on Linux/macOS */
-            fprintf(stderr, "tllvm: http.serve is not supported on this platform\n");
+        if (idx == 94) { /* http.serve - Linux implementation */
+            const char *addr = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "0.0.0.0:8080";
+            char host[256] = "0.0.0.0";
+            int port = 8080;
+            char *colon = strchr(addr, ':');
+            if (colon) {
+                int hlen = (int)(colon - addr);
+                if (hlen > 0 && hlen < 256) { strncpy(host, addr, hlen); host[hlen] = '\0'; }
+                port = atoi(colon + 1);
+            }
+            SOCKET server_fd = socket(AF_INET, SOCK_STREAM, 0);
+            if (server_fd == INVALID_SOCKET) {
+                fprintf(stderr, "tllvm: socket failed\n");
+                return tll_null();
+            }
+            int opt = 1;
+            setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+            struct sockaddr_in address;
+            address.sin_family = AF_INET;
+            address.sin_addr.s_addr = inet_addr(host);
+            address.sin_port = htons(port);
+            if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
+                fprintf(stderr, "tllvm: bind failed on %s:%d\n", host, port);
+                closesocket(server_fd);
+                return tll_null();
+            }
+            if (listen(server_fd, 10) < 0) {
+                fprintf(stderr, "tllvm: listen failed\n");
+                closesocket(server_fd);
+                return tll_null();
+            }
+            fprintf(stderr, "tllvm: HTTP server listening on %s:%d (worker pool, %d threads)\n", host, port, WORKER_POOL_SIZE);
+            if (!g_pool_initialized) {
+                init_worker_pool();
+            }
+            while (1) {
+                struct sockaddr_in client_addr;
+                socklen_t client_len = sizeof(client_addr);
+                SOCKET client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
+                if (client_fd == INVALID_SOCKET) continue;
+                HttpTask *task = (HttpTask*)malloc(sizeof(HttpTask));
+                task->client_fd = (unsigned int)client_fd;
+                task->vm = vm;
+                task->handler_fn = args[1];
+                enqueue_task(task);
+            }
+            closesocket(server_fd);
             return tll_null();
         }
 #endif
@@ -1268,6 +1566,97 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
             return tll_parse_json((const char**)&s);
         }
 #else
+        /* Linux/POSIX implementation of http builtins */
+        if (idx == 94) { /* http.serve - Linux implementation */
+            const char *addr = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "0.0.0.0:8080";
+            if (argCount < 2 || (args[1].type != TLL_FUNCTION && args[1].type != TLL_MAP)) {
+                fprintf(stderr, "tllvm: http.serve requires handler function\n");
+                return tll_null();
+            }
+            char host[256] = "0.0.0.0";
+            int port = 8080;
+            char *colon = strchr(addr, ':');
+            if (colon) {
+                int hlen = (int)(colon - addr);
+                if (hlen > 0 && hlen < 256) { strncpy(host, addr, hlen); host[hlen] = '\0'; }
+                port = atoi(colon + 1);
+            }
+            SOCKET server_fd = socket(AF_INET, SOCK_STREAM, 0);
+            if (server_fd == INVALID_SOCKET) {
+                fprintf(stderr, "tllvm: socket failed\n");
+                return tll_null();
+            }
+            int opt = 1;
+            setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
+            struct sockaddr_in address;
+            address.sin_family = AF_INET;
+            address.sin_addr.s_addr = inet_addr(host);
+            address.sin_port = htons(port);
+            if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
+                fprintf(stderr, "tllvm: bind failed on %s:%d\n", host, port);
+                closesocket(server_fd);
+                return tll_null();
+            }
+            if (listen(server_fd, 10) < 0) {
+                fprintf(stderr, "tllvm: listen failed\n");
+                closesocket(server_fd);
+                return tll_null();
+            }
+            fprintf(stderr, "tllvm: HTTP server listening on %s:%d (worker pool, %d threads)\n", host, port, WORKER_POOL_SIZE);
+            if (!g_pool_initialized) {
+                init_worker_pool();
+            }
+            while (1) {
+                struct sockaddr_in client_addr;
+                socklen_t client_len = sizeof(client_addr);
+                SOCKET client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
+                if (client_fd == INVALID_SOCKET) continue;
+                HttpTask *task = (HttpTask*)malloc(sizeof(HttpTask));
+                task->client_fd = (unsigned int)client_fd;
+                task->vm = vm;
+                task->handler_fn = args[1];
+                enqueue_task(task);
+            }
+            closesocket(server_fd);
+            return tll_null();
+        }
+        if (idx == 95) { /* http.encodeURI */
+            const char *s = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
+            char *out = (char*)malloc(strlen(s) * 3 + 1);
+            int oi = 0;
+            for (int i = 0; s[i]; i++) {
+                unsigned char c = (unsigned char)s[i];
+                if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
+                    out[oi++] = c;
+                } else {
+                    oi += snprintf(out + oi, 4, "%%%02X", c);
+                }
+            }
+            out[oi] = '\0';
+            TLLValue r = tll_string(out); free(out); return r;
+        }
+        if (idx == 96) { /* http.decodeURI */
+            const char *s = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
+            char *out = (char*)malloc(strlen(s) + 1);
+            int oi = 0;
+            for (int i = 0; s[i]; i++) {
+                if (s[i] == '%' && s[i+1] && s[i+2]) {
+                    char hex[3] = {s[i+1], s[i+2], 0};
+                    out[oi++] = (char)strtol(hex, NULL, 16);
+                    i += 2;
+                } else if (s[i] == '+') {
+                    out[oi++] = ' ';
+                } else {
+                    out[oi++] = s[i];
+                }
+            }
+            out[oi] = '\0';
+            TLLValue r = tll_string(out); free(out); return r;
+        }
+        if (idx == 97) { /* http.parseJSON */
+            const char *s = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
+            return tll_parse_json((const char**)&s);
+        }
         fprintf(stderr, "tllvm: http builtin %d not available on this platform\n", idx);
         return tll_null();
 #endif

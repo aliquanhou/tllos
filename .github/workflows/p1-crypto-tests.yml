@@ -1,0 +1,98 @@
+name: P1-01 Secure Random Tests
+
+on:
+  push:
+    paths:
+      - 'host/c/crypto_builtin.c'
+      - 'host/c/tllvm.h'
+      - 'host/c/builtin.c'
+      - 'compiler/codegen.tll'
+      - 'compiler/linker.tll'
+      - 'tests/crypto/**'
+      - '.github/workflows/p1-crypto-tests.yml'
+  pull_request:
+    paths:
+      - 'host/c/crypto_builtin.c'
+      - 'tests/crypto/**'
+
+jobs:
+  test-linux:
+    name: Linux (Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y gcc make
+
+      - name: Build tllvm
+        run: |
+          cd host/c
+          gcc -O2 -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread -ldl
+
+      - name: Build TLL compiler
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc.tllbc compile tools/TLLC/main.tll -o tools/TLLC/tllc_new.tllbc
+
+      - name: Run Secure Random Gate tests
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/crypto/gate_secure_random.tll -o tests/crypto/gate_secure_random.tllbc
+          ./host/c/tllvm tests/crypto/gate_secure_random.tllbc
+
+      - name: Run multi-thread tests
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/crypto/test_multithread.tll -o tests/crypto/test_multithread.tllbc
+          ./host/c/tllvm tests/crypto/test_multithread.tllbc
+
+  test-windows:
+    name: Windows (MSVC)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build tllvm.exe
+        run: |
+          cd host/c
+          cl /O2 /W3 /D_WIN32 /Fe:tllvm.exe main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c /link bcrypt.lib
+
+      - name: Build TLL compiler
+        run: |
+          ./host/c/tllvm.exe tools/TLLC/tllc.tllbc compile tools/TLLC/main.tll -o tools/TLLC/tllc_new.tllbc
+
+      - name: Run Secure Random Gate tests
+        run: |
+          ./host/c/tllvm.exe tools/TLLC/tllc_new.tllbc compile tests/crypto/gate_secure_random.tll -o tests/crypto/gate_secure_random.tllbc
+          ./host/c/tllvm.exe tests/crypto/gate_secure_random.tllbc
+
+      - name: Run multi-thread tests
+        run: |
+          ./host/c/tllvm.exe tools/TLLC/tllc_new.tllbc compile tests/crypto/test_multithread.tll -o tests/crypto/test_multithread.tllbc
+          ./host/c/tllvm.exe tests/crypto/test_multithread.tllbc
+
+  test-macos:
+    name: macOS (Apple Silicon / Intel)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build tllvm
+        run: |
+          cd host/c
+          clang -O2 -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread
+
+      - name: Build TLL compiler
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc.tllbc compile tools/TLLC/main.tll -o tools/TLLC/tllc_new.tllbc
+
+      - name: Run Secure Random Gate tests
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/crypto/gate_secure_random.tll -o tests/crypto/gate_secure_random.tllbc
+          ./host/c/tllvm tests/crypto/gate_secure_random.tllbc
+
+      - name: Run multi-thread tests
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/crypto/test_multithread.tll -o tests/crypto/test_multithread.tllbc
+          ./host/c/tllvm tests/crypto/test_multithread.tllbc
