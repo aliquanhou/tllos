@@ -1,0 +1,349 @@
+// TLL Mall - Marketing Module
+// P2: Coupons, After-sales, Product Reviews
+
+from "./database" import db_exec, db_query, db_queryOne
+from "./router" import router_get, router_post, res_json, res_html, res_redirect, res_notFound
+from "./auth" import auth_currentUser, cookie_getSessionId
+
+// Admin auth check
+fn mkt_checkAdmin(req) {
+    let sessionId = cookie_getSessionId(req)
+    let user = auth_currentUser(sessionId)
+    if (user == null) { return res_redirect("/login?redirect=/admin") }
+    if (user.role != "admin") { return res_html("<html><body><h1>403</h1></body></html>", 403) }
+    req.currentUser = user
+    return null
+}
+
+// User auth check
+fn mkt_checkUser(req) {
+    let sessionId = cookie_getSessionId(req)
+    let user = auth_currentUser(sessionId)
+    if (user == null) { return res_json({error: "Please login first", success: false}) }
+    req.currentUser = user
+    return null
+}
+
+// Simple layout
+fn mkt_layout(title, body) {
+    return "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>" + title + "</title><style>" +
+        "body{font-family:sans-serif;background:#f5f5f5;margin:0;padding:20px}.container{max-width:1200px;margin:0 auto}.card{background:#fff;border-radius:8px;padding:20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1)}" +
+        "h1,h2,h3{margin:0 0 15px}table{width:100%;border-collapse:collapse}th,td{padding:10px;text-align:left;border-bottom:1px solid #eee}th{background:#fafafa}" +
+        ".btn{display:inline-block;padding:8px 16px;background:#1890ff;color:#fff;border:none;border-radius:4px;cursor:pointer;text-decoration:none;margin-right:8px}.btn:hover{background:#40a9ff}.btn-danger{background:#ff4d4f}.btn-success{background:#52c41a}" +
+        ".form-group{margin-bottom:15px}.form-group label{display:block;margin-bottom:5px;font-weight:500}.form-group input,.form-group select,.form-group textarea{width:100%;padding:8px;border:1px solid #ddd;border-radius:4px}" +
+        ".badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px}.badge-success{background:#e8f5e9;color:#2e7d32}.badge-warning{background:#fff3e0;color:#e65100}.badge-danger{background:#ffebee;color:#c62828}.badge-info{background:#e3f2fd;color:#1565c0}" +
+        ".nav{background:#001529;padding:10px 20px;margin:-20px -20px 20px}.nav a{color:#fff;text-decoration:none;margin-right:20px}.nav a:hover{color:#1890ff}" +
+        "</style></head><body><div class='container'>" + body + "</div></body></html>"
+}
+
+fn db_esc(s) {
+    if (s == null) { return "" }
+    return strings.replace(s, "'", "''")
+}
+
+// ============ COUPON SYSTEM ============
+
+fn mkt_registerCouponRoutes(router, db) {
+    // Admin: coupon list (must be before /admin/coupon/:id)
+    router_get(router, "/admin/coupons", fn(req) {
+        let authResult = mkt_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let coupons = db_query(db, "SELECT * FROM coupons ORDER BY id DESC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(coupons)) {
+            let c = coupons[i]
+            let statusBadge = "<span class='badge badge-success'>Active</span>"
+            if (c.status != "active") { statusBadge = "<span class='badge badge-danger'>Inactive</span>" }
+            let typeLabel = "Fixed"
+            if (c.type == "percent") { typeLabel = "Percent" }
+            html = html + "<tr><td>" + convert.toString(c.id) + "</td><td>" + c.name + "</td><td>" + typeLabel + "</td><td>" + convert.toString(c.value) + "</td><td>" + convert.toString(c.min_amount) + "</td><td>" + convert.toString(c.total_count) + "</td><td>" + convert.toString(c.used_count) + "</td><td>" + statusBadge + "</td><td>" + c.start_at + " ~ " + c.end_at + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<div class='nav'><a href='/admin'>Dashboard</a><a href='/admin/coupons'>Coupons</a><a href='/admin/aftersales'>After Sales</a><a href='/admin/reviews'>Reviews</a></div>" +
+            "<h1>Coupon Management</h1>" +
+            "<div class='card'><h3>Add Coupon</h3><form method='POST' action='/admin/coupon/add'>" +
+            "<div class='form-group'><label>Name</label><input type='text' name='name' required></div>" +
+            "<div class='form-group'><label>Type</label><select name='type'><option value='fixed'>Fixed Amount</option><option value='percent'>Percent Discount</option></select></div>" +
+            "<div class='form-group'><label>Value</label><input type='number' name='value' step='0.01' required></div>" +
+            "<div class='form-group'><label>Min Order Amount</label><input type='number' name='min_amount' step='0.01' value='0'></div>" +
+            "<div class='form-group'><label>Total Count</label><input type='number' name='total_count' value='100'></div>" +
+            "<div class='form-group'><label>Start Date</label><input type='date' name='start_at'></div>" +
+            "<div class='form-group'><label>End Date</label><input type='date' name='end_at'></div>" +
+            "<button type='submit' class='btn btn-success'>Add Coupon</button></form></div>" +
+            "<div class='card'><table><thead><tr><th>ID</th><th>Name</th><th>Type</th><th>Value</th><th>Min Amount</th><th>Total</th><th>Used</th><th>Status</th><th>Valid Period</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(mkt_layout("Coupons", body))
+    })
+
+    // Admin: add coupon
+    router_post(router, "/admin/coupon/add", fn(req) {
+        let authResult = mkt_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let data = json.parse(req.body)
+        let name = db_esc(data.name)
+        let ctype = data.type
+        let value = convert.toString(data.value)
+        let minAmount = "0"
+        if (data.min_amount != null) { minAmount = convert.toString(data.min_amount) }
+        let totalCount = "100"
+        if (data.total_count != null) { totalCount = convert.toString(data.total_count) }
+        let startDate = ""
+        if (data.start_at != null) { startDate = data.start_at }
+        let endDate = ""
+        if (data.end_at != null) { endDate = data.end_at }
+        db_exec(db, "INSERT INTO coupons (name, type, value, min_amount, total_count, used_count, status, start_at, end_at, created_at) VALUES ('" + name + "', '" + ctype + "', " + value + ", " + minAmount + ", " + totalCount + ", 0, 'active', '" + startDate + "', '" + endDate + "', datetime('now'))")
+        return res_redirect("/admin/coupons")
+    })
+
+    // User: coupon list (available to claim)
+    router_get(router, "/coupons", fn(req) {
+        let authResult = mkt_checkUser(req)
+        if (authResult != null) { return authResult }
+        let userId = req.currentUser.id
+        let coupons = db_query(db, "SELECT * FROM coupons WHERE status='active' AND used_count < total_count ORDER BY id DESC")
+        let userCoupons = db_query(db, "SELECT coupon_id FROM user_coupons WHERE user_id=" + convert.toString(userId))
+        let claimedIds = {}
+        let i = 0
+        while (i < arrays.length(userCoupons)) {
+            claimedIds[convert.toString(userCoupons[i].coupon_id)] = true
+            i = i + 1
+        }
+        let html = ""
+        i = 0
+        while (i < arrays.length(coupons)) {
+            let c = coupons[i]
+            let claimed = claimedIds[convert.toString(c.id)]
+            let unit = ""
+            if (c.type == "percent") { unit = "%" }
+            let claimBtn = "<a href='/coupon/claim/" + convert.toString(c.id) + "' class='btn btn-success'>Claim</a>"
+            if (claimed == true) { claimBtn = "<span class='badge badge-info'>Claimed</span>" }
+            html = html + "<div class='card' style='display:inline-block;width:300px;margin-right:15px'><h3>" + c.name + "</h3><p style='font-size:24px;color:#ff4d4f;font-weight:bold'>" + convert.toString(c.value) + unit + " OFF</p><p>Min order: " + convert.toString(c.min_amount) + "</p><p>Valid: " + c.start_at + " ~ " + c.end_at + "</p>" + claimBtn + "</div>"
+            i = i + 1
+        }
+        let body = "<h1>Available Coupons</h1><div>" + html + "</div>"
+        return res_html(mkt_layout("Coupons", body))
+    })
+
+    // User: claim coupon
+    router_get(router, "/coupon/claim/:id", fn(req) {
+        let authResult = mkt_checkUser(req)
+        if (authResult != null) { return authResult }
+        let couponId = convert.toInt(req.params.id)
+        let userId = req.currentUser.id
+        let coupon = db_queryOne(db, "SELECT * FROM coupons WHERE id=" + convert.toString(couponId))
+        if (coupon == null) { return res_json({success: false, error: "Coupon not found"}) }
+        if (coupon.used_count >= coupon.total_count) { return res_json({success: false, error: "Coupon exhausted"}) }
+        let existing = db_queryOne(db, "SELECT * FROM user_coupons WHERE user_id=" + convert.toString(userId) + " AND coupon_id=" + convert.toString(couponId))
+        if (existing != null) { return res_json({success: false, error: "Already claimed"}) }
+        db_exec(db, "INSERT INTO user_coupons (user_id, coupon_id, status, created_at) VALUES (" + convert.toString(userId) + ", " + convert.toString(couponId) + ", 'unused', datetime('now'))")
+        db_exec(db, "UPDATE coupons SET used_count=used_count+1 WHERE id=" + convert.toString(couponId))
+        return res_redirect("/coupons")
+    })
+
+    // User: my coupons
+    router_get(router, "/my/coupons", fn(req) {
+        let authResult = mkt_checkUser(req)
+        if (authResult != null) { return authResult }
+        let userId = req.currentUser.id
+        let myCoupons = db_query(db, "SELECT uc.*, c.name, c.type, c.value, c.min_amount, c.start_at, c.end_at FROM user_coupons uc LEFT JOIN coupons c ON uc.coupon_id=c.id WHERE uc.user_id=" + convert.toString(userId) + " ORDER BY uc.id DESC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(myCoupons)) {
+            let mc = myCoupons[i]
+            let statusBadge = "<span class='badge badge-success'>Unused</span>"
+            if (mc.status == "used") { statusBadge = "<span class='badge badge-info'>Used</span>" }
+            else if (mc.status == "expired") { statusBadge = "<span class='badge badge-danger'>Expired</span>" }
+            let mcUnit = ""
+            if (mc.type == "percent") { mcUnit = "%" }
+            html = html + "<tr><td>" + mc.name + "</td><td>" + convert.toString(mc.value) + mcUnit + "</td><td>" + convert.toString(mc.min_amount) + "</td><td>" + mc.start_at + " ~ " + mc.end_at + "</td><td>" + statusBadge + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<h1>My Coupons</h1><div class='card'><table><thead><tr><th>Name</th><th>Discount</th><th>Min Amount</th><th>Valid Period</th><th>Status</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(mkt_layout("My Coupons", body))
+    })
+}
+
+// ============ AFTER-SALES SYSTEM ============
+
+fn mkt_registerAfterSaleRoutes(router, db) {
+    // Admin: after-sales list (before /admin/aftersale/:id)
+    router_get(router, "/admin/aftersales", fn(req) {
+        let authResult = mkt_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let list = db_query(db, "SELECT a.*, u.username, o.order_no FROM after_sales a LEFT JOIN users u ON a.user_id=u.id LEFT JOIN orders o ON a.order_id=o.id ORDER BY a.id DESC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(list)) {
+            let a = list[i]
+            let statusBadge = "<span class='badge badge-warning'>Pending</span>"
+            if (a.status == "approved") { statusBadge = "<span class='badge badge-success'>Approved</span>" }
+            else if (a.status == "rejected") { statusBadge = "<span class='badge badge-danger'>Rejected</span>" }
+            else if (a.status == "completed") { statusBadge = "<span class='badge badge-info'>Completed</span>" }
+            let typeLabel = "Refund"
+            if (a.type == "return") { typeLabel = "Return & Refund" }
+            else if (a.type == "exchange") { typeLabel = "Exchange" }
+            let aUsername = "-"
+            if (a.username != null) { aUsername = a.username }
+            let aOrderNo = "-"
+            if (a.order_no != null) { aOrderNo = a.order_no }
+            let aActions = "-"
+            if (a.status == "pending") { aActions = "<a href='/admin/aftersale/approve/" + convert.toString(a.id) + "' class='btn btn-success'>Approve</a> <a href='/admin/aftersale/reject/" + convert.toString(a.id) + "' class='btn btn-danger'>Reject</a>" }
+            html = html + "<tr><td>" + convert.toString(a.id) + "</td><td>" + aUsername + "</td><td>" + aOrderNo + "</td><td>" + typeLabel + "</td><td>" + convert.toString(a.amount) + "</td><td>" + a.reason + "</td><td>" + statusBadge + "</td><td>" + a.created_at + "</td>" +
+                "<td>" + aActions + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<div class='nav'><a href='/admin'>Dashboard</a><a href='/admin/coupons'>Coupons</a><a href='/admin/aftersales'>After Sales</a><a href='/admin/reviews'>Reviews</a></div>" +
+            "<h1>After-Sales Management</h1><div class='card'><table><thead><tr><th>ID</th><th>User</th><th>Order</th><th>Type</th><th>Amount</th><th>Reason</th><th>Status</th><th>Time</th><th>Actions</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(mkt_layout("After Sales", body))
+    })
+
+    // Admin: approve
+    router_get(router, "/admin/aftersale/approve/:id", fn(req) {
+        let authResult = mkt_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "UPDATE after_sales SET status='approved', approved_at=datetime('now') WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/aftersales")
+    })
+
+    // Admin: reject
+    router_get(router, "/admin/aftersale/reject/:id", fn(req) {
+        let authResult = mkt_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "UPDATE after_sales SET status='rejected', rejected_at=datetime('now') WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/aftersales")
+    })
+
+    // User: apply after-sales
+    router_post(router, "/aftersale/apply", fn(req) {
+        let authResult = mkt_checkUser(req)
+        if (authResult != null) { return authResult }
+        let data = json.parse(req.body)
+        let userId = req.currentUser.id
+        let orderId = convert.toString(data.order_id)
+        let orderItemId = "0"
+        if (data.order_item_id != null) { orderItemId = convert.toString(data.order_item_id) }
+        let atype = data.type
+        let amount = convert.toString(data.amount)
+        let reason = db_esc(data.reason)
+        db_exec(db, "INSERT INTO after_sales (user_id, order_id, order_item_id, type, amount, reason, status, created_at) VALUES (" + convert.toString(userId) + ", " + orderId + ", " + orderItemId + ", '" + atype + "', " + amount + ", '" + reason + "', 'pending', datetime('now'))")
+        return res_json({success: true})
+    })
+
+    // User: my after-sales
+    router_get(router, "/my/aftersales", fn(req) {
+        let authResult = mkt_checkUser(req)
+        if (authResult != null) { return authResult }
+        let userId = req.currentUser.id
+        let list = db_query(db, "SELECT a.*, o.order_no FROM after_sales a LEFT JOIN orders o ON a.order_id=o.id WHERE a.user_id=" + convert.toString(userId) + " ORDER BY a.id DESC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(list)) {
+            let a = list[i]
+            let statusBadge = "<span class='badge badge-warning'>Pending</span>"
+            if (a.status == "approved") { statusBadge = "<span class='badge badge-success'>Approved</span>" }
+            else if (a.status == "rejected") { statusBadge = "<span class='badge badge-danger'>Rejected</span>" }
+            let uaOrderNo = "-"
+            if (a.order_no != null) { uaOrderNo = a.order_no }
+            html = html + "<tr><td>" + convert.toString(a.id) + "</td><td>" + uaOrderNo + "</td><td>" + a.type + "</td><td>" + convert.toString(a.amount) + "</td><td>" + a.reason + "</td><td>" + statusBadge + "</td><td>" + a.created_at + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<h1>My After-Sales</h1><div class='card'><table><thead><tr><th>ID</th><th>Order</th><th>Type</th><th>Amount</th><th>Reason</th><th>Status</th><th>Time</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(mkt_layout("My After-Sales", body))
+    })
+}
+
+// ============ PRODUCT REVIEW SYSTEM ============
+
+fn mkt_registerReviewRoutes(router, db) {
+    // Admin: review list (before /admin/review/:id)
+    router_get(router, "/admin/reviews", fn(req) {
+        let authResult = mkt_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let reviews = db_query(db, "SELECT r.*, u.username, p.name as product_name FROM reviews r LEFT JOIN users u ON r.user_id=u.id LEFT JOIN products p ON r.product_id=p.id ORDER BY r.id DESC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(reviews)) {
+            let r = reviews[i]
+            let statusBadge = "<span class='badge badge-warning'>Pending</span>"
+            if (r.status == "approved") { statusBadge = "<span class='badge badge-success'>Approved</span>" }
+            else if (r.status == "rejected") { statusBadge = "<span class='badge badge-danger'>Rejected</span>" }
+            let stars = ""
+            let j = 0
+            while (j < r.rating) { stars = stars + "*"; j = j + 1 }
+            let rUsername = "-"
+            if (r.username != null) { rUsername = r.username }
+            let rProductName = "-"
+            if (r.product_name != null) { rProductName = r.product_name }
+            let rActions = "-"
+            if (r.status == "pending") { rActions = "<a href='/admin/review/approve/" + convert.toString(r.id) + "' class='btn btn-success'>Approve</a> <a href='/admin/review/reject/" + convert.toString(r.id) + "' class='btn btn-danger'>Reject</a>" }
+            html = html + "<tr><td>" + convert.toString(r.id) + "</td><td>" + rUsername + "</td><td>" + rProductName + "</td><td>" + stars + " (" + convert.toString(r.rating) + "/5)</td><td>" + r.content + "</td><td>" + statusBadge + "</td><td>" + r.created_at + "</td>" +
+                "<td>" + rActions + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<div class='nav'><a href='/admin'>Dashboard</a><a href='/admin/coupons'>Coupons</a><a href='/admin/aftersales'>After Sales</a><a href='/admin/reviews'>Reviews</a></div>" +
+            "<h1>Review Management</h1><div class='card'><table><thead><tr><th>ID</th><th>User</th><th>Product</th><th>Rating</th><th>Content</th><th>Status</th><th>Time</th><th>Actions</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(mkt_layout("Reviews", body))
+    })
+
+    // Admin: approve review
+    router_get(router, "/admin/review/approve/:id", fn(req) {
+        let authResult = mkt_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "UPDATE reviews SET status='approved' WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/reviews")
+    })
+
+    // Admin: reject review
+    router_get(router, "/admin/review/reject/:id", fn(req) {
+        let authResult = mkt_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "UPDATE reviews SET status='rejected' WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/reviews")
+    })
+
+    // User: submit review
+    router_post(router, "/review/submit", fn(req) {
+        let authResult = mkt_checkUser(req)
+        if (authResult != null) { return authResult }
+        let data = json.parse(req.body)
+        let userId = req.currentUser.id
+        let productId = convert.toString(data.product_id)
+        let orderId = "0"
+        if (data.order_id != null) { orderId = convert.toString(data.order_id) }
+        let rating = convert.toString(data.rating)
+        let content = db_esc(data.content)
+        db_exec(db, "INSERT INTO reviews (user_id, product_id, order_id, rating, content, status, created_at) VALUES (" + convert.toString(userId) + ", " + productId + ", " + orderId + ", " + rating + ", '" + content + "', 'pending', datetime('now'))")
+        return res_json({success: true})
+    })
+
+    // Product reviews (public) - use different path to avoid conflict with /product/:id
+    router_get(router, "/reviews/product/:id", fn(req) {
+        let productId = convert.toInt(req.params.id)
+        let reviews = db_query(db, "SELECT r.*, u.username FROM reviews r LEFT JOIN users u ON r.user_id=u.id WHERE r.product_id=" + convert.toString(productId) + " AND r.status='approved' ORDER BY r.id DESC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(reviews)) {
+            let r = reviews[i]
+            let stars = ""
+            let j = 0
+            while (j < r.rating) { stars = stars + "*"; j = j + 1 }
+            let pubUsername = "Anonymous"
+            if (r.username != null) { pubUsername = r.username }
+            html = html + "<div class='card'><p><strong>" + pubUsername + "</strong> <span style='color:#faad14'>" + stars + "</span></p><p>" + r.content + "</p><p style='color:#999;font-size:12px'>" + r.created_at + "</p></div>"
+            i = i + 1
+        }
+        let body = "<h1>Product Reviews</h1>" + html
+        return res_html(mkt_layout("Reviews", body))
+    })
+}
+
+// Register all marketing routes
+fn mkt_registerAll(router, db) {
+    mkt_registerCouponRoutes(router, db)
+    mkt_registerAfterSaleRoutes(router, db)
+    mkt_registerReviewRoutes(router, db)
+}

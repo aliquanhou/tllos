@@ -156,6 +156,21 @@ fn schema_initAll(db) {
         FOREIGN KEY (user_id) REFERENCES users(id)
     )")
 
+    // === Product Reviews ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS reviews (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        order_id INTEGER,
+        rating INTEGER DEFAULT 5,
+        content TEXT,
+        images TEXT,
+        status TEXT DEFAULT 'pending',
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (product_id) REFERENCES products(id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )")
+
     // === Marketing: Coupons ===
     db_exec(db, "CREATE TABLE IF NOT EXISTS coupons (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

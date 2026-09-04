@@ -8,6 +8,7 @@ from "./core/auth" import auth_ensureTables, auth_register, auth_login, auth_log
 from "./core/schema" import schema_initAll, schema_seedData
 from "./core/admin" import admin_registerRoutes
 from "./core/admin_extended" import adminx_registerAll
+from "./core/marketing" import mkt_registerAll
 
 // === HTML Templates ===
 
@@ -672,7 +673,8 @@ router_post(mallRouter, "/user/address/delete", fn(req) {
 // === Register Admin Routes ===
 admin_registerRoutes(mallRouter, db)
 adminx_registerAll(mallRouter, db)
-io.println("Admin routes registered (basic + extended)")
+mkt_registerAll(mallRouter, db)
+io.println("Admin routes registered (basic + extended + marketing)")
 
 // === Start Server ===
 io.println("=== TLL Mall Ready ===")
