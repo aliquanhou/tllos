@@ -1,0 +1,372 @@
+// TLL Mall - Admin Extended Module
+// P1: Product CRUD, Order state machine, User management, Catalog CRUD
+
+from "./database" import db_open, db_exec, db_query, db_queryOne, db_insert
+from "./router" import router_get, router_post, res_json, res_html, res_redirect, res_notFound
+from "./auth" import auth_currentUser, cookie_getSessionId
+
+// Admin auth check
+fn adminx_checkAuth(req) {
+    let sessionId = cookie_getSessionId(req)
+    let user = auth_currentUser(sessionId)
+    if (user == null) {
+        return res_redirect("/login?redirect=/admin")
+    }
+    if (user.role != "admin") {
+        return res_html("<html><body><h1>403 Forbidden</h1><p>Admin required</p><a href='/'>Home</a></body></html>", 403)
+    }
+    req.currentUser = user
+    return null
+}
+
+// Shared admin layout
+fn adminx_layout(title, active, body) {
+    let cls = ""
+    let items = [
+        ["dashboard", "/admin", "Dashboard"],
+        ["products", "/admin/products", "Products"],
+        ["orders", "/admin/orders", "Orders"],
+        ["users", "/admin/users", "Users"],
+        ["categories", "/admin/categories", "Categories"],
+        ["brands", "/admin/brands", "Brands"],
+        ["coupons", "/admin/coupons", "Coupons"],
+        ["aftersales", "/admin/aftersales", "After Sales"]
+    ]
+    let nav = ""
+    let i = 0
+    while (i < arrays.length(items)) {
+        let item = items[i]
+        let c = ""
+        if (item[0] == active) { c = "active" }
+        nav = nav + "<a href='" + item[1] + "' class='" + c + "'>" + item[2] + "</a>"
+        i = i + 1
+    }
+
+    return "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>" + title + " - TLL Mall Admin</title><style>" +
+        "*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#333}" +
+        ".sidebar{position:fixed;left:0;top:0;width:200px;height:100vh;background:#001529;color:#fff;padding-top:20px;overflow-y:auto}.sidebar h2{text-align:center;margin-bottom:20px;color:#fff;font-size:16px;padding:0 10px}" +
+        ".sidebar a{display:block;padding:10px 20px;color:#ccc;text-decoration:none;border-left:3px solid transparent;font-size:14px}.sidebar a:hover,.sidebar a.active{background:#1890ff;color:#fff;border-left-color:#1890ff}" +
+        ".main{margin-left:200px;padding:20px}.header{background:#fff;padding:15px 20px;margin-bottom:20px;border-radius:4px;display:flex;justify-content:space-between;align-items:center}" +
+        ".card{background:#fff;border-radius:4px;padding:20px;margin-bottom:20px}" +
+        "table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:10px;text-align:left;border-bottom:1px solid #eee}th{background:#fafafa;font-weight:600}" +
+        ".btn{display:inline-block;padding:5px 12px;background:#1890ff;color:#fff;border:none;border-radius:4px;cursor:pointer;text-decoration:none;font-size:13px;margin-right:5px}.btn:hover{background:#40a9ff}.btn-danger{background:#ff4d4f}.btn-danger:hover{background:#ff7875}.btn-success{background:#52c41a}.btn-warning{background:#faad14}" +
+        ".form-group{margin-bottom:15px}.form-group label{display:block;margin-bottom:5px;font-weight:500;font-size:14px}.form-group input,.form-group select,.form-group textarea{width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:14px}" +
+        ".badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px}.badge-success{background:#e8f5e9;color:#2e7d32}.badge-warning{background:#fff3e0;color:#e65100}.badge-danger{background:#ffebee;color:#c62828}.badge-info{background:#e3f2fd;color:#1565c0}.badge-default{background:#f5f5f5;color:#666}" +
+        ".alert{padding:12px 15px;border-radius:4px;margin-bottom:15px}.alert-success{background:#e8f5e9;color:#2e7d32}.alert-error{background:#ffebee;color:#c62828}" +
+        "</style></head><body><div class='sidebar'><h2>TLL Mall Admin</h2>" + nav + "<br><a href='/'>Front Store</a><a href='/logout'>Logout</a></div>" +
+        "<div class='main'>" + body + "</div></body></html>"
+}
+
+// ============ PRODUCT MANAGEMENT EXTENDED ============
+
+fn adminx_registerProductRoutes(router, db) {
+    // Edit product form
+    router_get(router, "/admin/product/edit/:id", fn(req) {
+        let authResult = adminx_checkAuth(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        let product = db_queryOne(db, "SELECT * FROM products WHERE id=" + convert.toString(id))
+        if (product == null) { return res_notFound("Product not found") }
+
+        let categories = db_query(db, "SELECT * FROM categories ORDER BY sort_order")
+        let brands = db_query(db, "SELECT * FROM brands ORDER BY id")
+        let catOptions = ""
+        let i = 0
+        while (i < arrays.length(categories)) {
+            let sel = ""
+            if (categories[i].id == product.category_id) { sel = "selected" }
+            catOptions = catOptions + "<option value='" + convert.toString(categories[i].id) + "' " + sel + ">" + categories[i].name + "</option>"
+            i = i + 1
+        }
+        let brandOptions = "<option value='0'>None</option>"
+        i = 0
+        while (i < arrays.length(brands)) {
+            let sel = ""
+            if (brands[i].id == product.brand_id) { sel = "selected" }
+            brandOptions = brandOptions + "<option value='" + convert.toString(brands[i].id) + "' " + sel + ">" + brands[i].name + "</option>"
+            i = i + 1
+        }
+
+        let statusOn = ""
+        let statusOff = ""
+        if (product.status == "on") { statusOn = "selected" } else { statusOff = "selected" }
+        let pDesc = ""
+        if (product.description != null) { pDesc = product.description }
+
+        let body = "<div class='header'><h2>Edit Product #" + convert.toString(id) + "</h2><a href='/admin/products' class='btn'>Back</a></div>" +
+            "<div class='card'><form method='POST' action='/admin/product/edit/" + convert.toString(id) + "'>" +
+            "<div class='form-group'><label>Name</label><input type='text' name='name' value='" + product.name + "' required></div>" +
+            "<div class='form-group'><label>Category</label><select name='category_id'>" + catOptions + "</select></div>" +
+            "<div class='form-group'><label>Brand</label><select name='brand_id'>" + brandOptions + "</select></div>" +
+            "<div class='form-group'><label>Price</label><input type='number' name='price' step='0.01' value='" + convert.toString(product.price) + "' required></div>" +
+            "<div class='form-group'><label>Stock</label><input type='number' name='stock' value='" + convert.toString(product.stock) + "'></div>" +
+            "<div class='form-group'><label>Status</label><select name='status'><option value='on' " + statusOn + ">On Sale</option><option value='off' " + statusOff + ">Off Shelf</option></select></div>" +
+            "<div class='form-group'><label>Description</label><textarea name='description' rows='4'>" + pDesc + "</textarea></div>" +
+            "<button type='submit' class='btn'>Save</button> <a href='/admin/products' class='btn btn-danger'>Cancel</a>" +
+            "</form></div>"
+
+        return res_html(adminx_layout("Edit Product", "products", body))
+    })
+
+    // Edit product submit
+    router_post(router, "/admin/product/edit/:id", fn(req) {
+        let authResult = adminx_checkAuth(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        // Parse JSON body (simplified - client sends JSON)
+        let body = req.body
+        let data = json.parse(body)
+        let name = db_escape(data.name)
+        let price = convert.toString(data.price)
+        let stock = convert.toString(data.stock)
+        let status = data.status
+        let categoryId = convert.toString(data.category_id)
+        let brandId = convert.toString(data.brand_id)
+        let desc = ""
+        if (data.description != null) { desc = db_escape(data.description) }
+
+        db_exec(db, "UPDATE products SET name='" + name + "', price=" + price + ", stock=" + stock + ", status='" + status + "', category_id=" + categoryId + ", brand_id=" + brandId + ", description='" + desc + "' WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/products")
+    })
+
+    // Delete product
+    router_get(router, "/admin/product/delete/:id", fn(req) {
+        let authResult = adminx_checkAuth(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "UPDATE products SET status='deleted' WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/products")
+    })
+
+    // Toggle product status
+    router_get(router, "/admin/product/toggle/:id", fn(req) {
+        let authResult = adminx_checkAuth(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        let product = db_queryOne(db, "SELECT status FROM products WHERE id=" + convert.toString(id))
+        if (product != null) {
+            let newStatus = "off"
+            if (product.status == "off") { newStatus = "on" }
+            db_exec(db, "UPDATE products SET status='" + newStatus + "' WHERE id=" + convert.toString(id))
+        }
+        return res_redirect("/admin/products")
+    })
+}
+
+// ============ ORDER MANAGEMENT EXTENDED ============
+
+fn adminx_registerOrderRoutes(router, db) {
+    // Cancel order
+    router_get(router, "/admin/order/cancel/:id", fn(req) {
+        let authResult = adminx_checkAuth(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        let order = db_queryOne(db, "SELECT * FROM orders WHERE id=" + convert.toString(id))
+        if (order != null) {
+            if (order.status == "pending" || order.status == "paid") {
+                // Restore stock
+                let items = db_query(db, "SELECT * FROM order_items WHERE order_id=" + convert.toString(id))
+                let i = 0
+                while (i < arrays.length(items)) {
+                    let skuId = items[i].sku_id
+                    let qty = items[i].quantity
+                    if (skuId != null && skuId > 0) {
+                        db_exec(db, "UPDATE product_skus SET stock=stock+" + convert.toString(qty) + " WHERE id=" + convert.toString(skuId))
+                    }
+                    db_exec(db, "UPDATE products SET stock=stock+" + convert.toString(qty) + " WHERE id=" + convert.toString(items[i].product_id))
+                    i = i + 1
+                }
+                db_exec(db, "UPDATE orders SET status='cancelled', cancelled_at=datetime('now') WHERE id=" + convert.toString(id))
+            }
+        }
+        return res_redirect("/admin/orders")
+    })
+
+    // Complete order
+    router_get(router, "/admin/order/complete/:id", fn(req) {
+        let authResult = adminx_checkAuth(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "UPDATE orders SET status='completed', completed_at=datetime('now') WHERE id=" + convert.toString(id) + " AND status='shipped'")
+        return res_redirect("/admin/orders")
+    })
+
+    // Order stats (use plural to avoid conflict with /admin/order/:id)
+    router_get(router, "/admin/orders/stats", fn(req) {
+        let authResult = adminx_checkAuth(req)
+        if (authResult != null) { return authResult }
+        let total = db_queryOne(db, "SELECT COUNT(*) as cnt, COALESCE(SUM(total_amount),0) as amount FROM orders")
+        let pending = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE status='pending'")
+        let paid = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE status='paid'")
+        let shipped = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE status='shipped'")
+        let completed = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE status='completed'")
+        let cancelled = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE status='cancelled'")
+
+        return res_json({
+            total_orders: total.cnt,
+            total_amount: total.amount,
+            pending: pending.cnt,
+            paid: paid.cnt,
+            shipped: shipped.cnt,
+            completed: completed.cnt,
+            cancelled: cancelled.cnt
+        })
+    })
+}
+
+// ============ USER MANAGEMENT EXTENDED ============
+
+fn adminx_registerUserRoutes(router, db) {
+    // User detail
+    router_get(router, "/admin/user/:id", fn(req) {
+        let authResult = adminx_checkAuth(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        let user = db_queryOne(db, "SELECT * FROM users WHERE id=" + convert.toString(id))
+        if (user == null) { return res_notFound("User not found") }
+
+        let addresses = db_query(db, "SELECT * FROM user_addresses WHERE user_id=" + convert.toString(id))
+        let orders = db_query(db, "SELECT * FROM orders WHERE user_id=" + convert.toString(id) + " ORDER BY id DESC LIMIT 10")
+        let orderCount = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE user_id=" + convert.toString(id))
+        let totalSpent = db_queryOne(db, "SELECT COALESCE(SUM(total_amount),0) as total FROM orders WHERE user_id=" + convert.toString(id) + " AND status != 'cancelled'")
+
+        let addrHtml = ""
+        let i = 0
+        while (i < arrays.length(addresses)) {
+            addrHtml = addrHtml + "<tr><td>" + addresses[i].name + "</td><td>" + addresses[i].phone + "</td><td>" + addresses[i].province + addresses[i].city + addresses[i].district + addresses[i].detail + "</td></tr>"
+            i = i + 1
+        }
+
+        let orderHtml = ""
+        i = 0
+        while (i < arrays.length(orders)) {
+            orderHtml = orderHtml + "<tr><td>" + orders[i].order_no + "</td><td>¥" + convert.toString(orders[i].total_amount) + "</td><td>" + orders[i].status + "</td><td>" + orders[i].created_at + "</td></tr>"
+            i = i + 1
+        }
+
+        let statusBadge = "<span class='badge badge-success'>Active</span>"
+        if (user.status != "active") { statusBadge = "<span class='badge badge-danger'>Banned</span>" }
+        let roleBadge = "<span class='badge badge-info'>User</span>"
+        if (user.role == "admin") { roleBadge = "<span class='badge badge-success'>Admin</span>" }
+        let uEmail = "-"
+        if (user.email != null) { uEmail = user.email }
+
+        let body = "<div class='header'><h2>User Detail #" + convert.toString(id) + "</h2><a href='/admin/users' class='btn'>Back</a></div>" +
+            "<div class='card'><h3>Basic Info</h3><p><strong>Username:</strong> " + user.username + "</p><p><strong>Email:</strong> " + uEmail + "</p><p><strong>Role:</strong> " + roleBadge + "</p><p><strong>Status:</strong> " + statusBadge + "</p><p><strong>Registered:</strong> " + user.created_at + "</p><p><strong>Total Orders:</strong> " + convert.toString(orderCount.cnt) + "</p><p><strong>Total Spent:</strong> ¥" + convert.toString(totalSpent.total) + "</p>" +
+            "<p style='margin-top:15px'><a href='/admin/user/toggle/" + convert.toString(id) + "' class='btn btn-warning'>Toggle Status</a> <a href='/admin/user/role/" + convert.toString(id) + "' class='btn'>Toggle Role</a></p></div>" +
+            "<div class='card'><h3>Addresses</h3><table><thead><tr><th>Name</th><th>Phone</th><th>Address</th></tr></thead><tbody>" + addrHtml + "</tbody></table></div>" +
+            "<div class='card'><h3>Recent Orders</h3><table><thead><tr><th>Order No</th><th>Amount</th><th>Status</th><th>Time</th></tr></thead><tbody>" + orderHtml + "</tbody></table></div>"
+
+        return res_html(adminx_layout("User Detail", "users", body))
+    })
+
+    // Toggle user status (ban/unban)
+    router_get(router, "/admin/user/toggle/:id", fn(req) {
+        let authResult = adminx_checkAuth(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        let user = db_queryOne(db, "SELECT status FROM users WHERE id=" + convert.toString(id))
+        if (user != null) {
+            let newStatus = "banned"
+            if (user.status == "banned") { newStatus = "active" }
+            db_exec(db, "UPDATE users SET status='" + newStatus + "' WHERE id=" + convert.toString(id))
+        }
+        return res_redirect("/admin/user/" + convert.toString(id))
+    })
+
+    // Toggle user role
+    router_get(router, "/admin/user/role/:id", fn(req) {
+        let authResult = adminx_checkAuth(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        let user = db_queryOne(db, "SELECT role FROM users WHERE id=" + convert.toString(id))
+        if (user != null) {
+            let newRole = "admin"
+            if (user.role == "admin") { newRole = "user" }
+            db_exec(db, "UPDATE users SET role='" + newRole + "' WHERE id=" + convert.toString(id))
+        }
+        return res_redirect("/admin/user/" + convert.toString(id))
+    })
+}
+
+// ============ CATEGORY / BRAND CRUD ============
+
+fn adminx_registerCatalogRoutes(router, db) {
+    // Brand management
+    router_get(router, "/admin/brands", fn(req) {
+        let authResult = adminx_checkAuth(req)
+        if (authResult != null) { return authResult }
+        let brands = db_query(db, "SELECT * FROM brands ORDER BY id")
+        let brandHtml = ""
+        let i = 0
+        while (i < arrays.length(brands)) {
+            let bLogo = "-"
+            if (brands[i].logo != null) { bLogo = brands[i].logo }
+            let bDesc = "-"
+            if (brands[i].description != null) { bDesc = brands[i].description }
+            brandHtml = brandHtml + "<tr><td>" + convert.toString(brands[i].id) + "</td><td>" + brands[i].name + "</td><td>" + bLogo + "</td><td>" + bDesc + "</td><td><a href='/admin/brand/delete/" + convert.toString(brands[i].id) + "' class='btn btn-danger'>Delete</a></td></tr>"
+            i = i + 1
+        }
+        let body = "<div class='header'><h2>Brand Management</h2></div>" +
+            "<div class='card'><h3>Add Brand</h3><form method='POST' action='/admin/brand/add'><div class='form-group'><label>Name</label><input type='text' name='name' required></div><div class='form-group'><label>Description</label><input type='text' name='description'></div><button type='submit' class='btn'>Add</button></form></div>" +
+            "<div class='card'><table><thead><tr><th>ID</th><th>Name</th><th>Logo</th><th>Description</th><th>Actions</th></tr></thead><tbody>" + brandHtml + "</tbody></table></div>"
+        return res_html(adminx_layout("Brands", "brands", body))
+    })
+
+    router_post(router, "/admin/brand/add", fn(req) {
+        let authResult = adminx_checkAuth(req)
+        if (authResult != null) { return authResult }
+        let data = json.parse(req.body)
+        let name = db_escape(data.name)
+        let desc = ""
+        if (data.description != null) { desc = db_escape(data.description) }
+        db_exec(db, "INSERT INTO brands (name, description, created_at) VALUES ('" + name + "', '" + desc + "', datetime('now'))")
+        return res_redirect("/admin/brands")
+    })
+
+    router_get(router, "/admin/brand/delete/:id", fn(req) {
+        let authResult = adminx_checkAuth(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "DELETE FROM brands WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/brands")
+    })
+
+    // Category add
+    router_post(router, "/admin/category/add", fn(req) {
+        let authResult = adminx_checkAuth(req)
+        if (authResult != null) { return authResult }
+        let data = json.parse(req.body)
+        let name = db_escape(data.name)
+        let parentId = "0"
+        if (data.parent_id != null) { parentId = convert.toString(data.parent_id) }
+        let sortOrder = "0"
+        if (data.sort_order != null) { sortOrder = convert.toString(data.sort_order) }
+        db_exec(db, "INSERT INTO categories (name, parent_id, sort_order, status, created_at) VALUES ('" + name + "', " + parentId + ", " + sortOrder + ", 'on', datetime('now'))")
+        return res_redirect("/admin/categories")
+    })
+
+    // Category delete
+    router_get(router, "/admin/category/delete/:id", fn(req) {
+        let authResult = adminx_checkAuth(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "DELETE FROM categories WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/categories")
+    })
+}
+
+// Helper: escape string for SQL
+fn db_escape(s) {
+    if (s == null) { return "" }
+    let result = strings.replace(s, "'", "''")
+    return result
+}
+
+// Register all extended routes
+fn adminx_registerAll(router, db) {
+    adminx_registerProductRoutes(router, db)
+    adminx_registerOrderRoutes(router, db)
+    adminx_registerUserRoutes(router, db)
+    adminx_registerCatalogRoutes(router, db)
+}

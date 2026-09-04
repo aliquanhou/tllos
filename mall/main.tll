@@ -7,6 +7,7 @@ from "./core/session" import session_getOrCreate, session_cookieHeader, session_
 from "./core/auth" import auth_ensureTables, auth_register, auth_login, auth_logout, auth_currentUser, auth_isLoggedIn, auth_isAdmin, auth_requireLogin, auth_requireAdmin, auth_createAdmin, cookie_getSessionId
 from "./core/schema" import schema_initAll, schema_seedData
 from "./core/admin" import admin_registerRoutes
+from "./core/admin_extended" import adminx_registerAll
 
 // === HTML Templates ===
 
@@ -670,7 +671,8 @@ router_post(mallRouter, "/user/address/delete", fn(req) {
 
 // === Register Admin Routes ===
 admin_registerRoutes(mallRouter, db)
-io.println("Admin routes registered")
+adminx_registerAll(mallRouter, db)
+io.println("Admin routes registered (basic + extended)")
 
 // === Start Server ===
 io.println("=== TLL Mall Ready ===")
