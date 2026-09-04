@@ -4,6 +4,7 @@
 from "./database" import db_exec, db_query, db_queryOne
 from "./router" import router_get, router_post, res_json, res_html, res_redirect, res_notFound
 from "./auth" import auth_currentUser, cookie_getSessionId
+from "./admin_layout" import admin_layout_sidebar, admin_layout_css
 
 // Admin auth check
 fn mkt_checkAdmin(req) {
@@ -24,16 +25,13 @@ fn mkt_checkUser(req) {
     return null
 }
 
-// Simple layout
+// Unified 17-module layout
 fn mkt_layout(title, body) {
-    return "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>" + title + "</title><style>" +
-        "body{font-family:sans-serif;background:#f5f5f5;margin:0;padding:20px}.container{max-width:1200px;margin:0 auto}.card{background:#fff;border-radius:8px;padding:20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1)}" +
-        "h1,h2,h3{margin:0 0 15px}table{width:100%;border-collapse:collapse}th,td{padding:10px;text-align:left;border-bottom:1px solid #eee}th{background:#fafafa}" +
-        ".btn{display:inline-block;padding:8px 16px;background:#1890ff;color:#fff;border:none;border-radius:4px;cursor:pointer;text-decoration:none;margin-right:8px}.btn:hover{background:#40a9ff}.btn-danger{background:#ff4d4f}.btn-success{background:#52c41a}" +
-        ".form-group{margin-bottom:15px}.form-group label{display:block;margin-bottom:5px;font-weight:500}.form-group input,.form-group select,.form-group textarea{width:100%;padding:8px;border:1px solid #ddd;border-radius:4px}" +
-        ".badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px}.badge-success{background:#e8f5e9;color:#2e7d32}.badge-warning{background:#fff3e0;color:#e65100}.badge-danger{background:#ffebee;color:#c62828}.badge-info{background:#e3f2fd;color:#1565c0}" +
-        ".nav{background:#001529;padding:10px 20px;margin:-20px -20px 20px}.nav a{color:#fff;text-decoration:none;margin-right:20px}.nav a:hover{color:#1890ff}" +
-        "</style></head><body><div class='container'>" + body + "</div></body></html>"
+    return "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>" + title + " - TLL OS 商城后台</title><style>" +
+        admin_layout_css() +
+        "</style></head><body>" +
+        admin_layout_sidebar("coupons") +
+        "<div class='main'>" + body + "</div></body></html>"
 }
 
 fn db_esc(s) {

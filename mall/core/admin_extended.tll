@@ -4,6 +4,7 @@
 from "./database" import db_open, db_exec, db_query, db_queryOne, db_insert
 from "./router" import router_get, router_post, res_json, res_html, res_redirect, res_notFound
 from "./auth" import auth_currentUser, cookie_getSessionId
+from "./admin_layout" import admin_layout_sidebar, admin_layout_css
 
 // Admin auth check
 fn adminx_checkAuth(req) {
@@ -21,39 +22,10 @@ fn adminx_checkAuth(req) {
 
 // Shared admin layout
 fn adminx_layout(title, active, body) {
-    let cls = ""
-    let items = [
-        ["dashboard", "/admin", "Dashboard"],
-        ["products", "/admin/products", "Products"],
-        ["orders", "/admin/orders", "Orders"],
-        ["users", "/admin/users", "Users"],
-        ["categories", "/admin/categories", "Categories"],
-        ["brands", "/admin/brands", "Brands"],
-        ["coupons", "/admin/coupons", "Coupons"],
-        ["aftersales", "/admin/aftersales", "After Sales"]
-    ]
-    let nav = ""
-    let i = 0
-    while (i < arrays.length(items)) {
-        let item = items[i]
-        let c = ""
-        if (item[0] == active) { c = "active" }
-        nav = nav + "<a href='" + item[1] + "' class='" + c + "'>" + item[2] + "</a>"
-        i = i + 1
-    }
-
-    return "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>" + title + " - TLL Mall Admin</title><style>" +
-        "*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#333}" +
-        ".sidebar{position:fixed;left:0;top:0;width:200px;height:100vh;background:#001529;color:#fff;padding-top:20px;overflow-y:auto}.sidebar h2{text-align:center;margin-bottom:20px;color:#fff;font-size:16px;padding:0 10px}" +
-        ".sidebar a{display:block;padding:10px 20px;color:#ccc;text-decoration:none;border-left:3px solid transparent;font-size:14px}.sidebar a:hover,.sidebar a.active{background:#1890ff;color:#fff;border-left-color:#1890ff}" +
-        ".main{margin-left:200px;padding:20px}.header{background:#fff;padding:15px 20px;margin-bottom:20px;border-radius:4px;display:flex;justify-content:space-between;align-items:center}" +
-        ".card{background:#fff;border-radius:4px;padding:20px;margin-bottom:20px}" +
-        "table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:10px;text-align:left;border-bottom:1px solid #eee}th{background:#fafafa;font-weight:600}" +
-        ".btn{display:inline-block;padding:5px 12px;background:#1890ff;color:#fff;border:none;border-radius:4px;cursor:pointer;text-decoration:none;font-size:13px;margin-right:5px}.btn:hover{background:#40a9ff}.btn-danger{background:#ff4d4f}.btn-danger:hover{background:#ff7875}.btn-success{background:#52c41a}.btn-warning{background:#faad14}" +
-        ".form-group{margin-bottom:15px}.form-group label{display:block;margin-bottom:5px;font-weight:500;font-size:14px}.form-group input,.form-group select,.form-group textarea{width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:14px}" +
-        ".badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px}.badge-success{background:#e8f5e9;color:#2e7d32}.badge-warning{background:#fff3e0;color:#e65100}.badge-danger{background:#ffebee;color:#c62828}.badge-info{background:#e3f2fd;color:#1565c0}.badge-default{background:#f5f5f5;color:#666}" +
-        ".alert{padding:12px 15px;border-radius:4px;margin-bottom:15px}.alert-success{background:#e8f5e9;color:#2e7d32}.alert-error{background:#ffebee;color:#c62828}" +
-        "</style></head><body><div class='sidebar'><h2>TLL Mall Admin</h2>" + nav + "<br><a href='/'>Front Store</a><a href='/logout'>Logout</a></div>" +
+    return "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>" + title + " - TLL OS 商城后台</title><style>" +
+        admin_layout_css() +
+        "</style></head><body>" +
+        admin_layout_sidebar(active) +
         "<div class='main'>" + body + "</div></body></html>"
 }
 
