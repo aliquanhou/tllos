@@ -16,8 +16,10 @@
 
 #include "tllvm.h"
 #include "sqlite3.h"
-#include <windows.h>
+#include <stdint.h>
 
+#ifdef _WIN32
+#include <windows.h>
 /* Global mutex to serialize all SQLite access across HTTP worker threads */
 static CRITICAL_SECTION g_sqlite_mutex;
 static int g_sqlite_mutex_inited = 0;
@@ -35,6 +37,19 @@ static void sqlite_unlock(void) {
         LeaveCriticalSection(&g_sqlite_mutex);
     }
 }
+#else
+#include <pthread.h>
+/* Global mutex to serialize all SQLite access across HTTP worker threads */
+static pthread_mutex_t g_sqlite_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static void sqlite_lock(void) {
+    pthread_mutex_lock(&g_sqlite_mutex);
+}
+
+static void sqlite_unlock(void) {
+    pthread_mutex_unlock(&g_sqlite_mutex);
+}
+#endif
 
 /* Store sqlite3* as integer in a TLL map under "__sqlite_db" */
 static sqlite3 *get_db(TLLValue v) {
