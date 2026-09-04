@@ -48,6 +48,15 @@ fn payment_initTables(db) {
     // Account logs table
     db_exec(db, "CREATE TABLE IF NOT EXISTS account_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, merchant_id INTEGER, log_type TEXT NOT NULL, amount REAL NOT NULL DEFAULT 0, balance_before REAL DEFAULT 0, balance_after REAL DEFAULT 0, related_order_no TEXT, related_payment_no TEXT, remark TEXT, created_at TEXT DEFAULT (datetime('now')))")
 
+    // Merchant settlements table
+    db_exec(db, "CREATE TABLE IF NOT EXISTS merchant_settlements (id INTEGER PRIMARY KEY AUTOINCREMENT, settlement_no TEXT UNIQUE NOT NULL, merchant_id INTEGER NOT NULL, merchant_name TEXT, period_start TEXT NOT NULL, period_end TEXT NOT NULL, total_orders INTEGER DEFAULT 0, total_amount REAL DEFAULT 0, platform_commission REAL DEFAULT 0, merchant_amount REAL DEFAULT 0, refund_amount REAL DEFAULT 0, net_amount REAL DEFAULT 0, status TEXT DEFAULT 'pending', settled_at TEXT, remark TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))")
+
+    // Merchant withdrawals table
+    db_exec(db, "CREATE TABLE IF NOT EXISTS merchant_withdrawals (id INTEGER PRIMARY KEY AUTOINCREMENT, withdrawal_no TEXT UNIQUE NOT NULL, merchant_id INTEGER NOT NULL, merchant_name TEXT, amount REAL NOT NULL DEFAULT 0, fee REAL DEFAULT 0, actual_amount REAL DEFAULT 0, bank_name TEXT, bank_account TEXT, account_name TEXT, status TEXT DEFAULT 'pending', audited_at TEXT, auditor_id INTEGER, audit_remark TEXT, paid_at TEXT, payment_proof TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))")
+
+    // Merchant balance table
+    db_exec(db, "CREATE TABLE IF NOT EXISTS merchant_balances (id INTEGER PRIMARY KEY AUTOINCREMENT, merchant_id INTEGER UNIQUE NOT NULL, available_balance REAL DEFAULT 0, frozen_balance REAL DEFAULT 0, total_income REAL DEFAULT 0, total_withdrawal REAL DEFAULT 0, updated_at TEXT DEFAULT (datetime('now')))")
+
     // Insert default configs
     let configs = [
         ["wechat_appid", "wx_your_appid", "string", "WeChat AppID"],
@@ -603,6 +612,227 @@ fn payment_accountLogs(req) {
 }
 
 // ============================================================
+// Merchant Balance Management
+// ============================================================
+
+fn payment_getMerchantBalance(db, merchantId) {
+    let sql = "SELECT * FROM merchant_balances WHERE merchant_id = " + merchantId
+    let rows = db_query(db, sql)
+    if (arrays.length(rows) > 0) {
+        return rows[0]
+    }
+    // Create balance record if not exists
+    let insertSql = "INSERT INTO merchant_balances (merchant_id, available_balance, frozen_balance, total_income, total_withdrawal) VALUES (" + merchantId + ", 0, 0, 0, 0)"
+    db_exec(db, insertSql)
+    let newRows = db_query(db, sql)
+    return newRows[0]
+}
+
+fn payment_updateMerchantBalance(db, merchantId, availableDelta, frozenDelta, incomeDelta, withdrawalDelta) {
+    let balance = payment_getMerchantBalance(db, merchantId)
+    let newAvailable = balance.available_balance + availableDelta
+    let newFrozen = balance.frozen_balance + frozenDelta
+    let newIncome = balance.total_income + incomeDelta
+    let newWithdrawal = balance.total_withdrawal + withdrawalDelta
+    let sql = "UPDATE merchant_balances SET available_balance = " + newAvailable + ", frozen_balance = " + newFrozen + ", total_income = " + newIncome + ", total_withdrawal = " + newWithdrawal + ", updated_at = datetime('now') WHERE merchant_id = " + merchantId
+    db_exec(db, sql)
+    return {available_balance: newAvailable, frozen_balance: newFrozen, total_income: newIncome, total_withdrawal: newWithdrawal}
+}
+
+// ============================================================
+// Settlement Generation
+// ============================================================
+
+fn payment_generateSettlement(db, merchantId, periodStart, periodEnd) {
+    // Get merchant info
+    let merchantSql = "SELECT * FROM merchants WHERE id = " + merchantId
+    let merchants = db_query(db, merchantSql)
+    let merchantName = "Unknown"
+    if (arrays.length(merchants) > 0) {
+        merchantName = merchants[0].shop_name
+        if (merchantName == null) { merchantName = merchants[0].name }
+    }
+
+    // Get orders in period
+    let ordersSql = "SELECT * FROM orders WHERE merchant_id = " + merchantId + " AND status >= 1 AND paid_at >= '" + periodStart + "' AND paid_at <= '" + periodEnd + "'"
+    let orders = db_query(db, ordersSql)
+    let totalOrders = arrays.length(orders)
+    let totalAmount = 0
+    let refundAmount = 0
+    let i = 0
+    while (i < totalOrders) {
+        totalAmount = totalAmount + orders[i].total_amount
+        if (orders[i].status == 5) {
+            refundAmount = refundAmount + orders[i].total_amount
+        }
+        i = i + 1
+    }
+
+    // Calculate commission
+    let rateStr = payment_getConfig(db, "platform_commission_rate")
+    let rate = 0.05
+    if (rateStr != null) { rate = parseFloat(rateStr) }
+    let platformCommission = totalAmount * rate
+    let merchantAmount = totalAmount - platformCommission
+    let netAmount = merchantAmount - refundAmount
+
+    // Create settlement
+    let settlementNo = payment_generateNo("SET")
+    let insertSql = "INSERT INTO merchant_settlements (settlement_no, merchant_id, merchant_name, period_start, period_end, total_orders, total_amount, platform_commission, merchant_amount, refund_amount, net_amount, status) VALUES ('"
+    insertSql = insertSql + settlementNo + "', " + merchantId + ", '" + merchantName + "', '" + periodStart + "', '" + periodEnd + "', " + totalOrders + ", " + totalAmount + ", " + platformCommission + ", " + merchantAmount + ", " + refundAmount + ", " + netAmount + ", 'pending')"
+    db_exec(db, insertSql)
+    let settlementId = db_lastInsertId(db)
+
+    // Add to merchant balance
+    if (netAmount > 0) {
+        payment_updateMerchantBalance(db, merchantId, netAmount, 0, netAmount, 0)
+        payment_addAccountLog(db, null, merchantId, "settlement", netAmount, 0, 0, null, settlementNo, "Settlement " + periodStart + " to " + periodEnd)
+    }
+
+    io.println("[Settlement] Generated: " + settlementNo + ", merchant: " + merchantId + ", net: " + netAmount)
+    return {id: settlementId, settlement_no: settlementNo, total_orders: totalOrders, total_amount: totalAmount, platform_commission: platformCommission, merchant_amount: merchantAmount, refund_amount: refundAmount, net_amount: netAmount}
+}
+
+fn payment_settlementList(req) {
+    let db = req.db
+    let merchantId = req_getQuery(req, "merchant_id", null)
+    let status = req_getQuery(req, "status", null)
+    let sql = "SELECT * FROM merchant_settlements WHERE 1=1"
+    if (merchantId != null) { sql = sql + " AND merchant_id = " + merchantId }
+    if (status != null) { sql = sql + " AND status = '" + status + "'" }
+    sql = sql + " ORDER BY id DESC LIMIT 100"
+    let settlements = db_query(db, sql)
+    return res_json({success: true, count: arrays.length(settlements), data: settlements}, 200)
+}
+
+fn payment_settlementDetail(req) {
+    let db = req.db
+    let id = req_getQuery(req, "id", null)
+    if (id == null) { return res_json({success: false, message: "Missing id"}, 400) }
+    let sql = "SELECT * FROM merchant_settlements WHERE id = " + id
+    let rows = db_query(db, sql)
+    if (arrays.length(rows) == 0) { return res_json({success: false, message: "Settlement not found"}, 404) }
+    return res_json({success: true, data: rows[0]}, 200)
+}
+
+fn payment_settlementConfirm(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let id = body.id
+    if (id == null) { return res_json({success: false, message: "Missing id"}, 400) }
+    let sql = "UPDATE merchant_settlements SET status = 'settled', settled_at = datetime('now'), updated_at = datetime('now') WHERE id = " + id
+    db_exec(db, sql)
+    return res_json({success: true, message: "Settlement confirmed"}, 200)
+}
+
+// ============================================================
+// Merchant Withdrawal
+// ============================================================
+
+fn payment_withdrawalApply(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let merchantId = body.merchant_id
+    let amount = body.amount
+    let bankName = body.bank_name
+    let bankAccount = body.bank_account
+    let accountName = body.account_name
+
+    if (merchantId == null || amount == null) {
+        return res_json({success: false, message: "Missing merchant_id or amount"}, 400)
+    }
+
+    let balance = payment_getMerchantBalance(db, merchantId)
+    if (balance.available_balance < amount) {
+        return res_json({success: false, message: "Insufficient balance", available: balance.available_balance, requested: amount}, 400)
+    }
+
+    // Calculate fee (1% default)
+    let fee = amount * 0.01
+    let actualAmount = amount - fee
+
+    let withdrawalNo = payment_generateNo("WIT")
+    let bankNameStr = payment_nvl(bankName, "")
+    let bankAccountStr = payment_nvl(bankAccount, "")
+    let accountNameStr = payment_nvl(accountName, "")
+
+    let insertSql = "INSERT INTO merchant_withdrawals (withdrawal_no, merchant_id, amount, fee, actual_amount, bank_name, bank_account, account_name, status) VALUES ('"
+    insertSql = insertSql + withdrawalNo + "', " + merchantId + ", " + amount + ", " + fee + ", " + actualAmount + ", '" + bankNameStr + "', '" + bankAccountStr + "', '" + accountNameStr + "', 'pending')"
+    db_exec(db, insertSql)
+    let withdrawalId = db_lastInsertId(db)
+
+    // Freeze balance
+    payment_updateMerchantBalance(db, merchantId, -amount, amount, 0, 0)
+    payment_addAccountLog(db, null, merchantId, "withdrawal_apply", amount, balance.available_balance, balance.available_balance - amount, null, withdrawalNo, "Withdrawal apply")
+
+    return res_json({success: true, message: "Withdrawal applied", data: {id: withdrawalId, withdrawal_no: withdrawalNo, amount: amount, fee: fee, actual_amount: actualAmount, status: "pending"}}, 200)
+}
+
+fn payment_withdrawalList(req) {
+    let db = req.db
+    let merchantId = req_getQuery(req, "merchant_id", null)
+    let status = req_getQuery(req, "status", null)
+    let sql = "SELECT * FROM merchant_withdrawals WHERE 1=1"
+    if (merchantId != null) { sql = sql + " AND merchant_id = " + merchantId }
+    if (status != null) { sql = sql + " AND status = '" + status + "'" }
+    sql = sql + " ORDER BY id DESC LIMIT 100"
+    let withdrawals = db_query(db, sql)
+    return res_json({success: true, count: arrays.length(withdrawals), data: withdrawals}, 200)
+}
+
+fn payment_withdrawalAudit(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let id = body.id
+    let approved = body.approved
+    let remark = body.remark
+
+    if (id == null) { return res_json({success: false, message: "Missing id"}, 400) }
+
+    let sql = "SELECT * FROM merchant_withdrawals WHERE id = " + id
+    let rows = db_query(db, sql)
+    if (arrays.length(rows) == 0) { return res_json({success: false, message: "Withdrawal not found"}, 404) }
+    let withdrawal = rows[0]
+
+    if (approved == true) {
+        let updateSql = "UPDATE merchant_withdrawals SET status = 'approved', audited_at = datetime('now'), audit_remark = '" + payment_nvl(remark, "") + "', updated_at = datetime('now') WHERE id = " + id
+        db_exec(db, updateSql)
+        // Deduct frozen balance and total withdrawal
+        payment_updateMerchantBalance(db, withdrawal.merchant_id, 0, -withdrawal.amount, 0, withdrawal.amount)
+        payment_addAccountLog(db, null, withdrawal.merchant_id, "withdrawal_approved", withdrawal.amount, 0, 0, null, withdrawal.withdrawal_no, "Withdrawal approved")
+        return res_json({success: true, message: "Withdrawal approved"}, 200)
+    } else {
+        let updateSql = "UPDATE merchant_withdrawals SET status = 'rejected', audited_at = datetime('now'), audit_remark = '" + payment_nvl(remark, "") + "', updated_at = datetime('now') WHERE id = " + id
+        db_exec(db, updateSql)
+        // Unfreeze balance
+        payment_updateMerchantBalance(db, withdrawal.merchant_id, withdrawal.amount, -withdrawal.amount, 0, 0)
+        payment_addAccountLog(db, null, withdrawal.merchant_id, "withdrawal_rejected", withdrawal.amount, 0, 0, null, withdrawal.withdrawal_no, "Withdrawal rejected")
+        return res_json({success: true, message: "Withdrawal rejected"}, 200)
+    }
+}
+
+fn payment_withdrawalPaid(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let id = body.id
+    let paymentProof = body.payment_proof
+
+    if (id == null) { return res_json({success: false, message: "Missing id"}, 400) }
+
+    let updateSql = "UPDATE merchant_withdrawals SET status = 'paid', paid_at = datetime('now'), payment_proof = '" + payment_nvl(paymentProof, "") + "', updated_at = datetime('now') WHERE id = " + id
+    db_exec(db, updateSql)
+    return res_json({success: true, message: "Withdrawal marked as paid"}, 200)
+}
+
+fn payment_merchantBalance(req) {
+    let db = req.db
+    let merchantId = req_getQuery(req, "merchant_id", null)
+    if (merchantId == null) { return res_json({success: false, message: "Missing merchant_id"}, 400) }
+    let balance = payment_getMerchantBalance(db, merchantId)
+    return res_json({success: true, data: balance}, 200)
+}
+
+// ============================================================
 // Register All Routes
 // ============================================================
 
@@ -617,5 +847,16 @@ fn payment_registerAll(router) {
     router_get(router, "/payment/config", payment_configList)
     router_put(router, "/payment/config", payment_configUpdate)
     router_get(router, "/payment/account-logs", payment_accountLogs)
-    io.println("[Payment] Routes registered: 11 endpoints")
+    // Settlement routes
+    router_get(router, "/payment/settlements", payment_settlementList)
+    router_get(router, "/payment/settlement/detail", payment_settlementDetail)
+    router_post(router, "/payment/settlement/confirm", payment_settlementConfirm)
+    // Withdrawal routes
+    router_post(router, "/payment/withdrawal/apply", payment_withdrawalApply)
+    router_get(router, "/payment/withdrawals", payment_withdrawalList)
+    router_post(router, "/payment/withdrawal/audit", payment_withdrawalAudit)
+    router_post(router, "/payment/withdrawal/paid", payment_withdrawalPaid)
+    // Merchant balance
+    router_get(router, "/payment/merchant/balance", payment_merchantBalance)
+    io.println("[Payment] Routes registered: 19 endpoints (payment + settlement + withdrawal)")
 }
