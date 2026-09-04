@@ -31,16 +31,20 @@ jobs:
           gcc --version
           free -h
           df -h
-          echo "=== File checks ==="
+          echo "=== Files in host/c ==="
           ls -la host/c/*.c
-          echo "=== sqlite3.c first 5 lines ==="
-          head -5 host/c/sqlite3.c
           echo "=== sqlite3.c size ==="
           wc -c host/c/sqlite3.c
-          echo "=== crypto_builtin.c first 5 lines ==="
-          head -5 host/c/crypto_builtin.c
-          echo "=== Check for CRLF ==="
-          file host/c/*.c | head -10
+          echo "=== sqlite3.c first 3 lines ==="
+          head -3 host/c/sqlite3.c
+
+      - name: Test simple compile
+        run: |
+          echo '#include <stdio.h>
+          int main() { printf("hello\\n"); return 0; }' > /tmp/test.c
+          gcc /tmp/test.c -o /tmp/test
+          /tmp/test
+          echo "Simple compile OK"
 
       - name: Build tllvm
         run: |
