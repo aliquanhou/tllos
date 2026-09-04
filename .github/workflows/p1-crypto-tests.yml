@@ -45,16 +45,22 @@ jobs:
       - name: Build tllvm
         run: |
           cd host/c
-          echo "Starting build at $(date)..." | tee build_log.txt
+          echo "=== Files in host/c ===" > build_log.txt
+          ls -la *.c >> build_log.txt 2>&1
+          echo "=== Starting build ===" >> build_log.txt
           gcc -O0 -w -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread -ldl >> build_log.txt 2>&1
           BUILD_EXIT=$?
-          echo "Build finished at $(date), exit code: $BUILD_EXIT" | tee -a build_log.txt
+          echo "=== Build exit code: $BUILD_EXIT ===" >> build_log.txt
+          cat build_log.txt
           if [ $BUILD_EXIT -ne 0 ]; then
-            echo "=== BUILD FAILED - full log ===" | tee -a build_log.txt
-            cat build_log.txt
+            echo "::error::Build failed with exit code $BUILD_EXIT"
+            echo "::error::=== Build log ==="
+            while IFS= read -r line; do
+              echo "::error::$line"
+            done < build_log.txt
             exit 1
           fi
-          ls -la tllvm | tee -a build_log.txt
+          ls -la tllvm
 
       - name: Upload build log
         if: always()
