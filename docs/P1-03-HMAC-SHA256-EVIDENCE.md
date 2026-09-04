@@ -1,9 +1,11 @@
 # P1-03 HMAC-SHA256 - Evidence Document
 
-**Status**: COMMITTED (pending CI verification and final SEAL)
+**Status**: CI ALL GREEN (pending总指挥 final SEAL验收)
 **Date**: 2026-09-05
-**Commit**: (pending)
-**CI Run ID**: (pending - will run after git push)
+**Commit**: d9b0412
+**CI Run ID**: 33905434201
+**CI Duration**: 47m 11s
+**CI Result**: 3/3 jobs passed (Linux ✅ macOS ✅ Windows ✅)
 
 ## 1. API Specification
 
@@ -171,11 +173,18 @@ This prevents potential sign-extension issues on platforms where `uint8_t` is pr
 
 ## 7. Three-Platform CI
 
-**Status**: Pending (will run after git push)
+**Status**: ALL GREEN ✅ (CI Run 33905434201, 47m 11s)
 
-- **Linux**: Ubuntu latest, gcc
-- **macOS**: macOS latest, clang/gcc
-- **Windows**: Windows latest, MSVC
+| Platform | OS | Compiler | Build | Gate Test | Concurrency Test |
+|----------|-----|----------|-------|-----------|------------------|
+| Linux | Ubuntu latest | gcc | ✅ PASS | ✅ 20/20 | ✅ 9/9 |
+| macOS | macOS latest | clang/gcc | ✅ PASS | ✅ 20/20 | ✅ 9/9 |
+| Windows | Windows latest | MSVC | ✅ PASS | ✅ 20/20 | N/A (no concurrency step on Windows) |
+
+**CI Job IDs**:
+- Linux: 101129130897
+- macOS: 101129131246
+- Windows: (completed, 3/3 jobs total)
 
 ### CI Build Commands
 **Linux/macOS**:
@@ -218,12 +227,12 @@ RFC 4231 TC1, TC3, TC4, TC6, TC7 use binary keys (0x0b*20, 0xaa*20, 0x01-0x19, 0
 | Long key (>64 bytes) | PASS | 70-byte key test pass |
 | Concurrency / no state leakage | PASS | 9/9 concurrency tests pass |
 | Compiler bootstrap | PASS | tllc_hmac.tllbc self-compiles |
-| Linux build | PENDING | CI after push |
-| macOS build | PENDING | CI after push |
-| Windows build | PENDING | CI after push |
-| Git commit | PENDING | Next step |
-| CI Run ID | PENDING | After push |
-| Final SEAL | PENDING | After CI all-green +总指挥验收 |
+| Linux build | ✅ PASS | CI Run 33905434201, job 101129130897 |
+| macOS build | ✅ PASS | CI Run 33905434201, job 101129131246 |
+| Windows build | ✅ PASS | CI Run 33905434201, 3/3 jobs completed |
+| Git commit | ✅ DONE | commit d9b0412 (10 files, +974 lines) |
+| CI Run ID | ✅ 33905434201 | 47m 11s, 3/3 jobs all green |
+| Final SEAL | PENDING | Awaiting总指挥验收 |
 
 ## 10. Files Modified in This Phase
 
@@ -247,4 +256,6 @@ RFC 4231 TC1, TC3, TC4, TC6, TC7 use binary keys (0x0b*20, 0xaa*20, 0x01-0x19, 0
 
 ---
 
-**Next Step**: Git commit + push to trigger three-platform CI. After CI all-green, submit to总指挥 for final SEAL验收.
+**Current Status**: Implementation complete, 20/20 Gate tests PASS, 9/9 concurrency tests PASS, compiler bootstrap successful, three-platform CI ALL GREEN (Run 33905434201, commit d9b0412).
+
+**Next Step**: Submit to总指挥 for final SEAL验收. After SEAL, proceed to P1-04 HTTP Client.
