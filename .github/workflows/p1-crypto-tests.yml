@@ -43,7 +43,7 @@ jobs:
           echo "=== Memory before build ==="
           free -h
           echo "=== Starting build ==="
-          gcc -O2 -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread -ldl > build_output.txt 2>&1
+          gcc -O2 -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread -ldl > build_output.txt 2>&1
           BUILD_EXIT=$?
           echo "=== Build exit code: $BUILD_EXIT ==="
           echo "=== Build output (last 100 lines) ==="
@@ -140,7 +140,7 @@ jobs:
           echo "=== Memory before build ==="
           vm_stat | head -5
           echo "=== Starting build ==="
-          clang -O2 -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread > build_output.txt 2>&1
+          clang -O2 -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread > build_output.txt 2>&1
           BUILD_EXIT=$?
           echo "=== Build exit code: $BUILD_EXIT ==="
           echo "=== Build output (last 100 lines) ==="

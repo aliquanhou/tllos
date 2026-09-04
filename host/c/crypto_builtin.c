@@ -17,6 +17,7 @@
  *   - NOT counter, NOT timestamp, NOT pseudo-random
  */
 
+#define _GNU_SOURCE
 #include "tllvm.h"
 #include <stdint.h>
 #include <string.h>
