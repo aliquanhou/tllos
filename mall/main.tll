@@ -16,6 +16,7 @@ from "./core/admin_new_modules" import new_modules_registerAll
 from "./core/admin_api" import api_registerAll
 from "./core/payment" import payment_registerAll, payment_initTables
 from "./core/icp" import icp_registerAll, icp_initTables
+from "./core/agreement" import agreement_registerAll, agreement_initTables
 
 // === HTML Templates ===
 
@@ -58,6 +59,7 @@ io.println("Database opened")
 schema_initAll(db)
 payment_initTables(db)
 icp_initTables(db)
+agreement_initTables(db)
 io.println("Schema initialized (20 tables)")
 
 schema_seedData(db)
@@ -691,6 +693,7 @@ new_modules_registerAll(mallRouter)
 api_registerAll(mallRouter)
 payment_registerAll(mallRouter)
 icp_registerAll(mallRouter)
+agreement_registerAll(mallRouter)
 io.println("Routes registered (basic + extended + marketing + p3 + p4 + new 5 modules + RESTful API = 17 modules with full CRUD)")
 
 // === Start Server ===

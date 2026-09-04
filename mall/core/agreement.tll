@@ -1,0 +1,316 @@
+// ============================================================
+// TLLOS Mall - Agreement & Privacy Module
+// User Agreement and Privacy Policy Management
+// ============================================================
+
+from "./database" import db_query, db_exec, db_lastInsertId
+from "./router" import res_json, res_html, router_get, router_put, router_post, router_delete
+from "./session" import hash_password
+
+// ============================================================
+// Agreement Tables
+// ============================================================
+
+fn agreement_initTables(db) {
+    db_exec(db, "CREATE TABLE IF NOT EXISTS agreements (id INTEGER PRIMARY KEY AUTOINCREMENT, agreement_type TEXT UNIQUE NOT NULL, title TEXT NOT NULL, current_version TEXT DEFAULT '1.0', status TEXT DEFAULT 'active', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))")
+    db_exec(db, "CREATE TABLE IF NOT EXISTS agreement_versions (id INTEGER PRIMARY KEY AUTOINCREMENT, agreement_id INTEGER NOT NULL, version TEXT NOT NULL, content TEXT NOT NULL, change_summary TEXT, status TEXT DEFAULT 'active', published_at TEXT DEFAULT (datetime('now')), created_at TEXT DEFAULT (datetime('now')))")
+    db_exec(db, "CREATE TABLE IF NOT EXISTS user_agreements (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, agreement_id INTEGER NOT NULL, agreement_type TEXT NOT NULL, version TEXT NOT NULL, signed_at TEXT DEFAULT (datetime('now')), ip_address TEXT, user_agent TEXT)")
+    db_exec(db, "CREATE TABLE IF NOT EXISTS data_export_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, request_type TEXT DEFAULT 'all', status TEXT DEFAULT 'pending', file_path TEXT, requested_at TEXT DEFAULT (datetime('now')), completed_at TEXT, expires_at TEXT)")
+    db_exec(db, "CREATE TABLE IF NOT EXISTS account_deletion_requests (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, reason TEXT, status TEXT DEFAULT 'pending', requested_at TEXT DEFAULT (datetime('now')), processed_at TEXT, deletion_date TEXT)")
+
+    let defaultAgreements = [
+        {type: "user_registration", title: "User Registration Agreement", version: "1.0"},
+        {type: "privacy_policy", title: "Privacy Policy", version: "1.0"},
+        {type: "merchant_entry", title: "Merchant Entry Agreement", version: "1.0"}
+    ]
+
+    let i = 0
+    while (i < arrays.length(defaultAgreements)) {
+        let item = defaultAgreements[i]
+        let checkSql = "SELECT id FROM agreements WHERE agreement_type = '" + item.type + "'"
+        let existing = db_query(db, checkSql)
+        if (arrays.length(existing) == 0) {
+            let insertSql = "INSERT INTO agreements (agreement_type, title, current_version, status) VALUES ('"
+            insertSql = insertSql + item.type + "', '" + item.title + "', '" + item.version + "', 'active')"
+            db_exec(db, insertSql)
+            let agreementId = db_lastInsertId(db)
+            let content = "Please refer to the full agreement document in mall/docs/agreements/ directory. Version: " + item.version
+            let versionSql = "INSERT INTO agreement_versions (agreement_id, version, content, change_summary, status) VALUES ("
+            versionSql = versionSql + convert.toString(agreementId) + ", '" + item.version + "', '" + content + "', 'Initial version', 'active')"
+            db_exec(db, versionSql)
+        }
+        i = i + 1
+    }
+
+    io.println("[Agreement] Tables initialized: 5 tables, 3 default agreements")
+}
+
+// ============================================================
+// Agreement API
+// ============================================================
+
+fn agreement_list(req) {
+    let db = req.db
+    let sql = "SELECT * FROM agreements ORDER BY id"
+    let agreements = db_query(db, sql)
+    return res_json({success: true, count: arrays.length(agreements), data: agreements}, 200)
+}
+
+fn agreement_detail(req) {
+    let db = req.db
+    let agreementType = req_getQuery(req, "type", null)
+    let ver = req_getQuery(req, "version", null)
+    if (agreementType == null) {
+        return res_json({success: false, message: "Missing type parameter"}, 400)
+    }
+    let agreementSql = "SELECT * FROM agreements WHERE agreement_type = '" + agreementType + "'"
+    let agreements = db_query(db, agreementSql)
+    if (arrays.length(agreements) == 0) {
+        return res_json({success: false, message: "Agreement not found"}, 404)
+    }
+    let agreement = agreements[0]
+    let targetVersion = ver
+    if (targetVersion == null) {
+        targetVersion = agreement.current_version
+    }
+    let versionSql = "SELECT * FROM agreement_versions WHERE agreement_id = " + agreement.id + " AND version = '" + targetVersion + "'"
+    let versions = db_query(db, versionSql)
+    if (arrays.length(versions) == 0) {
+        return res_json({success: false, message: "Version not found"}, 404)
+    }
+    return res_json({success: true, data: {agreement: agreement, version: versions[0]}}, 200)
+}
+
+fn agreement_update(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let agreementType = body.type
+    let content = body.content
+    let version = body.version
+    let changeSummary = body.change_summary
+    if (agreementType == null || content == null) {
+        return res_json({success: false, message: "Missing type or content"}, 400)
+    }
+    let agreementSql = "SELECT * FROM agreements WHERE agreement_type = '" + agreementType + "'"
+    let agreements = db_query(db, agreementSql)
+    if (arrays.length(agreements) == 0) {
+        return res_json({success: false, message: "Agreement not found"}, 404)
+    }
+    let agreement = agreements[0]
+    let newVersion = version
+    if (newVersion == null) {
+        let currentVersion = agreement.current_version
+        let parts = strings.split(currentVersion, ".")
+        let major = parseInt(parts[0])
+        let minor = parseInt(parts[1])
+        newVersion = convert.toString(major) + "." + convert.toString(minor + 1)
+    }
+    let insertSql = "INSERT INTO agreement_versions (agreement_id, version, content, change_summary, status) VALUES ("
+    insertSql = insertSql + agreement.id + ", '" + newVersion + "', '" + content + "', '" + payment_nvl(changeSummary, "Update agreement content") + "', 'active')"
+    db_exec(db, insertSql)
+    let updateSql = "UPDATE agreements SET current_version = '" + newVersion + "', updated_at = datetime('now') WHERE id = " + agreement.id
+    db_exec(db, updateSql)
+    return res_json({success: true, message: "Agreement updated", version: newVersion}, 200)
+}
+
+fn agreement_sign(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let userId = body.user_id
+    let agreementType = body.type
+    let version = body.version
+    if (userId == null || agreementType == null) {
+        return res_json({success: false, message: "Missing user_id or type"}, 400)
+    }
+    let agreementSql = "SELECT * FROM agreements WHERE agreement_type = '" + agreementType + "'"
+    let agreements = db_query(db, agreementSql)
+    if (arrays.length(agreements) == 0) {
+        return res_json({success: false, message: "Agreement not found"}, 404)
+    }
+    let agreement = agreements[0]
+    let targetVersion = version
+    if (targetVersion == null) {
+        targetVersion = agreement.current_version
+    }
+    let checkSql = "SELECT id FROM user_agreements WHERE user_id = " + userId + " AND agreement_type = '" + agreementType + "' AND version = '" + targetVersion + "'"
+    let existing = db_query(db, checkSql)
+    if (arrays.length(existing) > 0) {
+        return res_json({success: true, message: "Already signed", already_signed: true}, 200)
+    }
+    let insertSql = "INSERT INTO user_agreements (user_id, agreement_id, agreement_type, version, ip_address, user_agent) VALUES ("
+    insertSql = insertSql + userId + ", " + agreement.id + ", '" + agreementType + "', '" + targetVersion + "', '', '')"
+    db_exec(db, insertSql)
+    return res_json({success: true, message: "Agreement signed"}, 200)
+}
+
+fn agreement_checkSign(req) {
+    let db = req.db
+    let userId = req_getQuery(req, "user_id", null)
+    let agreementType = req_getQuery(req, "type", null)
+    if (userId == null || agreementType == null) {
+        return res_json({success: false, message: "Missing user_id or type"}, 400)
+    }
+    let agreementSql = "SELECT * FROM agreements WHERE agreement_type = '" + agreementType + "'"
+    let agreements = db_query(db, agreementSql)
+    if (arrays.length(agreements) == 0) {
+        return res_json({success: false, message: "Agreement not found"}, 404)
+    }
+    let agreement = agreements[0]
+    let checkSql = "SELECT * FROM user_agreements WHERE user_id = " + userId + " AND agreement_type = '" + agreementType + "' AND version = '" + agreement.current_version + "' ORDER BY signed_at DESC LIMIT 1"
+    let records = db_query(db, checkSql)
+    let signed = arrays.length(records) > 0
+    let signedAt = null
+    if (signed) {
+        signedAt = records[0].signed_at
+    }
+    return res_json({success: true, signed: signed, version: agreement.current_version, signed_at: signedAt}, 200)
+}
+
+// ============================================================
+// User Data Export
+// ============================================================
+
+fn data_export_request(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let userId = body.user_id
+    let requestType = body.request_type
+    if (userId == null) {
+        return res_json({success: false, message: "Missing user_id"}, 400)
+    }
+    let checkSql = "SELECT id FROM data_export_requests WHERE user_id = " + userId + " AND status = 'pending'"
+    let existing = db_query(db, checkSql)
+    if (arrays.length(existing) > 0) {
+        return res_json({success: false, message: "Existing pending request"}, 400)
+    }
+    let targetType = payment_nvl(requestType, "all")
+    let insertSql = "INSERT INTO data_export_requests (user_id, request_type, status) VALUES (" + userId + ", '" + targetType + "', 'pending')"
+    db_exec(db, insertSql)
+    let requestId = db_lastInsertId(db)
+    let exportData = data_export_generate(db, userId, targetType)
+    let updateSql = "UPDATE data_export_requests SET status = 'completed', completed_at = datetime('now') WHERE id = " + requestId
+    db_exec(db, updateSql)
+    return res_json({success: true, message: "Data export completed", request_id: requestId, data: exportData}, 200)
+}
+
+fn data_export_generate(db, userId, requestType) {
+    let result = {}
+    if (requestType == "all" || requestType == "profile") {
+        let userSql = "SELECT id, username, email, phone, avatar, created_at FROM users WHERE id = " + userId
+        let users = db_query(db, userSql)
+        if (arrays.length(users) > 0) {
+            result.profile = users[0]
+        }
+    }
+    if (requestType == "all" || requestType == "orders") {
+        let orderSql = "SELECT * FROM orders WHERE user_id = " + userId + " ORDER BY created_at DESC"
+        let orders = db_query(db, orderSql)
+        result.orders = orders
+        result.order_count = arrays.length(orders)
+    }
+    if (requestType == "all" || requestType == "addresses") {
+        let addrSql = "SELECT * FROM user_addresses WHERE user_id = " + userId
+        let addresses = db_query(db, addrSql)
+        result.addresses = addresses
+    }
+    if (requestType == "all" || requestType == "favorites") {
+        let favSql = "SELECT * FROM user_collections WHERE user_id = " + userId
+        let favorites = db_query(db, favSql)
+        result.favorites = favorites
+    }
+    if (requestType == "all" || requestType == "balance") {
+        let balanceSql = "SELECT * FROM account_logs WHERE user_id = " + userId + " ORDER BY created_at DESC"
+        let balanceLogs = db_query(db, balanceSql)
+        result.balance_logs = balanceLogs
+    }
+    if (requestType == "all" || requestType == "agreements") {
+        let agreeSql = "SELECT * FROM user_agreements WHERE user_id = " + userId + " ORDER BY signed_at DESC"
+        let agreements = db_query(db, agreeSql)
+        result.agreement_signs = agreements
+    }
+    result.export_time = io.date()
+    result.export_type = requestType
+    return result
+}
+
+// ============================================================
+// User Account Deletion
+// ============================================================
+
+fn account_delete_request(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let userId = body.user_id
+    let reason = body.reason
+    let confirmPassword = body.confirm_password
+    if (userId == null) {
+        return res_json({success: false, message: "Missing user_id"}, 400)
+    }
+    if (confirmPassword != null) {
+        let userSql = "SELECT password FROM users WHERE id = " + userId
+        let users = db_query(db, userSql)
+        if (arrays.length(users) == 0) {
+            return res_json({success: false, message: "User not found"}, 404)
+        }
+        let hashedInput = hash_password(confirmPassword)
+        if (users[0].password != hashedInput) {
+            return res_json({success: false, message: "Incorrect password"}, 400)
+        }
+    }
+    let checkSql = "SELECT id FROM account_deletion_requests WHERE user_id = " + userId + " AND status = 'pending'"
+    let existing = db_query(db, checkSql)
+    if (arrays.length(existing) > 0) {
+        return res_json({success: false, message: "Existing pending deletion request"}, 400)
+    }
+    let orderSql = "SELECT COUNT(*) as cnt FROM orders WHERE user_id = " + userId + " AND status IN (0, 1, 2)"
+    let orderResult = db_query(db, orderSql)
+    let pendingOrders = 0
+    if (arrays.length(orderResult) > 0) {
+        pendingOrders = orderResult[0].cnt
+    }
+    if (pendingOrders > 0) {
+        return res_json({success: false, message: "You have pending orders, please complete them first"}, 400)
+    }
+    let insertSql = "INSERT INTO account_deletion_requests (user_id, reason, status, deletion_date) VALUES ("
+    insertSql = insertSql + userId + ", '" + payment_nvl(reason, "") + "', 'pending', datetime('now', '+30 days'))"
+    db_exec(db, insertSql)
+    let requestId = db_lastInsertId(db)
+    let updateUserSql = "UPDATE users SET status = 'disabled', updated_at = datetime('now') WHERE id = " + userId
+    db_exec(db, updateUserSql)
+    return res_json({success: true, message: "Account deletion request submitted, data will be permanently deleted after 30 days", request_id: requestId}, 200)
+}
+
+fn account_delete_cancel(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let userId = body.user_id
+    if (userId == null) {
+        return res_json({success: false, message: "Missing user_id"}, 400)
+    }
+    let checkSql = "SELECT id FROM account_deletion_requests WHERE user_id = " + userId + " AND status = 'pending'"
+    let existing = db_query(db, checkSql)
+    if (arrays.length(existing) == 0) {
+        return res_json({success: false, message: "No pending deletion request"}, 400)
+    }
+    let updateSql = "UPDATE account_deletion_requests SET status = 'cancelled', processed_at = datetime('now') WHERE id = " + existing[0].id
+    db_exec(db, updateSql)
+    let updateUserSql = "UPDATE users SET status = 'active', updated_at = datetime('now') WHERE id = " + userId
+    db_exec(db, updateUserSql)
+    return res_json({success: true, message: "Account deletion request cancelled, account restored"}, 200)
+}
+
+// ============================================================
+// Register All Routes
+// ============================================================
+
+fn agreement_registerAll(router) {
+    router_get(router, "/agreement/list", agreement_list)
+    router_get(router, "/agreement/detail", agreement_detail)
+    router_put(router, "/agreement/update", agreement_update)
+    router_post(router, "/agreement/sign", agreement_sign)
+    router_get(router, "/agreement/check-sign", agreement_checkSign)
+    router_post(router, "/data/export", data_export_request)
+    router_post(router, "/account/delete", account_delete_request)
+    router_post(router, "/account/delete/cancel", account_delete_cancel)
+    io.println("[Agreement] Routes registered: 9 endpoints")
+}
