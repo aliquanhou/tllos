@@ -25,24 +25,41 @@ jobs:
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y gcc make
 
+      - name: Check compiler version
+        run: gcc --version
+
+      - name: Verify source files
+        run: |
+          ls -la host/c/*.c | head -20
+          ls -la tools/TLLC/
+          ls -la tests/crypto/
+
       - name: Build tllvm
         run: |
           cd host/c
-          gcc -O2 -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread -ldl
+          gcc -O2 -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread -ldl 2>&1
+          echo "Build exit code: $?"
+          ls -la tllvm
 
       - name: Build TLL compiler
         run: |
-          ./host/c/tllvm tools/TLLC/tllc.tllbc compile tools/TLLC/main.tll -o tools/TLLC/tllc_new.tllbc
+          ./host/c/tllvm tools/TLLC/tllc.tllbc compile tools/TLLC/main.tll -o tools/TLLC/tllc_new.tllbc 2>&1
+          echo "Compiler build exit code: $?"
+          ls -la tools/TLLC/tllc_new.tllbc
 
       - name: Run Secure Random Gate tests
         run: |
-          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/crypto/gate_secure_random.tll -o tests/crypto/gate_secure_random.tllbc
-          ./host/c/tllvm tests/crypto/gate_secure_random.tllbc
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/crypto/gate_secure_random.tll -o tests/crypto/gate_secure_random.tllbc 2>&1
+          echo "Gate compile exit code: $?"
+          ./host/c/tllvm tests/crypto/gate_secure_random.tllbc 2>&1
+          echo "Gate run exit code: $?"
 
       - name: Run multi-thread tests
         run: |
-          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/crypto/test_multithread.tll -o tests/crypto/test_multithread.tllbc
-          ./host/c/tllvm tests/crypto/test_multithread.tllbc
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/crypto/test_multithread.tll -o tests/crypto/test_multithread.tllbc 2>&1
+          echo "MT compile exit code: $?"
+          ./host/c/tllvm tests/crypto/test_multithread.tllbc 2>&1
+          echo "MT run exit code: $?"
 
   test-windows:
     name: Windows (MSVC)
@@ -53,24 +70,37 @@ jobs:
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Verify source files
+        run: |
+          dir host\c\*.c
+          dir tools\TLLC\
+          dir tests\crypto\
+
       - name: Build tllvm.exe
         run: |
-          cd host/c
-          cl /O2 /W3 /D_WIN32 /Fe:tllvm.exe main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c /link bcrypt.lib
+          cd host\c
+          cl /O2 /W3 /D_WIN32 /Fe:tllvm.exe main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c /link bcrypt.lib advapi32.lib 2>&1
+          echo "Build exit code: %ERRORLEVEL%"
+          dir tllvm.exe
 
       - name: Build TLL compiler
         run: |
-          ./host/c/tllvm.exe tools/TLLC/tllc.tllbc compile tools/TLLC/main.tll -o tools/TLLC/tllc_new.tllbc
+          .\host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tools\TLLC\main.tll -o tools\TLLC\tllc_new.tllbc 2>&1
+          echo "Compiler build exit code: %ERRORLEVEL%"
 
       - name: Run Secure Random Gate tests
         run: |
-          ./host/c/tllvm.exe tools/TLLC/tllc_new.tllbc compile tests/crypto/gate_secure_random.tll -o tests/crypto/gate_secure_random.tllbc
-          ./host/c/tllvm.exe tests/crypto/gate_secure_random.tllbc
+          .\host\c\tllvm.exe tools\TLLC\tllc_new.tllbc compile tests\crypto\gate_secure_random.tll -o tests\crypto\gate.tllbc 2>&1
+          echo "Gate compile exit code: %ERRORLEVEL%"
+          .\host\c\tllvm.exe tests\crypto\gate.tllbc 2>&1
+          echo "Gate run exit code: %ERRORLEVEL%"
 
       - name: Run multi-thread tests
         run: |
-          ./host/c/tllvm.exe tools/TLLC/tllc_new.tllbc compile tests/crypto/test_multithread.tll -o tests/crypto/test_multithread.tllbc
-          ./host/c/tllvm.exe tests/crypto/test_multithread.tllbc
+          .\host\c\tllvm.exe tools\TLLC\tllc_new.tllbc compile tests\crypto\test_multithread.tll -o tests\crypto\mt.tllbc 2>&1
+          echo "MT compile exit code: %ERRORLEVEL%"
+          .\host\c\tllvm.exe tests\crypto\mt.tllbc 2>&1
+          echo "MT run exit code: %ERRORLEVEL%"
 
   test-macos:
     name: macOS (Apple Silicon / Intel)
@@ -78,21 +108,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify source files
+        run: |
+          ls -la host/c/*.c | head -20
+          ls -la tools/TLLC/
+          ls -la tests/crypto/
+
       - name: Build tllvm
         run: |
           cd host/c
-          clang -O2 -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread
+          clang -O2 -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread 2>&1
+          echo "Build exit code: $?"
+          ls -la tllvm
 
       - name: Build TLL compiler
         run: |
-          ./host/c/tllvm tools/TLLC/tllc.tllbc compile tools/TLLC/main.tll -o tools/TLLC/tllc_new.tllbc
+          ./host/c/tllvm tools/TLLC/tllc.tllbc compile tools/TLLC/main.tll -o tools/TLLC/tllc_new.tllbc 2>&1
+          echo "Compiler build exit code: $?"
+          ls -la tools/TLLC/tllc_new.tllbc
 
       - name: Run Secure Random Gate tests
         run: |
-          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/crypto/gate_secure_random.tll -o tests/crypto/gate_secure_random.tllbc
-          ./host/c/tllvm tests/crypto/gate_secure_random.tllbc
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/crypto/gate_secure_random.tll -o tests/crypto/gate_secure_random.tllbc 2>&1
+          echo "Gate compile exit code: $?"
+          ./host/c/tllvm tests/crypto/gate_secure_random.tllbc 2>&1
+          echo "Gate run exit code: $?"
 
       - name: Run multi-thread tests
         run: |
-          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/crypto/test_multithread.tll -o tests/crypto/test_multithread.tllbc
-          ./host/c/tllvm tests/crypto/test_multithread.tllbc
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/crypto/test_multithread.tll -o tests/crypto/test_multithread.tllbc 2>&1
+          echo "MT compile exit code: $?"
+          ./host/c/tllvm tests/crypto/test_multithread.tllbc 2>&1
+          echo "MT run exit code: $?"
