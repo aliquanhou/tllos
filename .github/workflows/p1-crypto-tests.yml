@@ -45,21 +45,24 @@ jobs:
       - name: Build tllvm
         run: |
           cd host/c
-          echo "Starting build at $(date)..."
-          gcc -O0 -w -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread -ldl 2>&1
+          echo "Starting build at $(date)..." | tee build_log.txt
+          gcc -O0 -w -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread -ldl >> build_log.txt 2>&1
           BUILD_EXIT=$?
-          echo "Build finished at $(date), exit code: $BUILD_EXIT"
+          echo "Build finished at $(date), exit code: $BUILD_EXIT" | tee -a build_log.txt
           if [ $BUILD_EXIT -ne 0 ]; then
-            echo "=== BUILD FAILED ==="
-            echo "=== dmesg (OOM check) ==="
-            dmesg | tail -20 || true
-            echo "=== Memory ==="
-            free -h
-            echo "=== Disk ==="
-            df -h
+            echo "=== BUILD FAILED - full log ===" | tee -a build_log.txt
+            cat build_log.txt
             exit 1
           fi
-          ls -la tllvm
+          ls -la tllvm | tee -a build_log.txt
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build-log
+          path: host/c/build_log.txt
+          retention-days: 7
 
       - name: Build TLL compiler
         run: |
