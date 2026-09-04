@@ -1,0 +1,85 @@
+# ============================================================
+# TLLOS 商城 Systemd 服务配置
+# 部署到 /etc/systemd/system/tll-shop.service
+# ============================================================
+
+[Unit]
+Description=TLLOS Shop - High Performance E-Commerce Platform
+Documentation=https://github.com/aliquanhou/tllos
+After=network.target nginx.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+
+# 工作目录（商城文件所在目录）
+WorkingDirectory=/var/www/tllos.com/shop
+
+# 启动命令
+ExecStart=/var/www/tllos.com/shop/tllvm /var/www/tllos.com/shop/main.tllbc
+
+# 重启策略
+Restart=always
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=5
+
+# 环境变量
+Environment=NODE_ENV=production
+Environment=TLL_SHOP_PORT=8090
+Environment=TLL_SHOP_DB_PATH=/var/www/tllos.com/shop/data/mall.db
+
+# 安全限制
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/tllos.com/shop/data
+ReadOnlyPaths=/var/www/tllos.com/shop
+
+# 资源限制
+LimitNOFILE=65536
+LimitNPROC=4096
+MemoryMax=512M
+CPUQuota=200%
+
+# 日志
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tll-shop
+
+[Install]
+WantedBy=multi-user.target
+
+
+# ============================================================
+# 部署命令
+# ============================================================
+#
+# 1. 复制服务文件:
+#    sudo cp tll-shop.service /etc/systemd/system/
+#
+# 2. 重新加载 systemd:
+#    sudo systemctl daemon-reload
+#
+# 3. 启动服务:
+#    sudo systemctl start tll-shop
+#
+# 4. 设置开机自启动:
+#    sudo systemctl enable tll-shop
+#
+# 5. 查看服务状态:
+#    sudo systemctl status tll-shop
+#
+# 6. 查看日志:
+#    sudo journalctl -u tll-shop -f
+#
+# 7. 重启服务:
+#    sudo systemctl restart tll-shop
+#
+# 8. 停止服务:
+#    sudo systemctl stop tll-shop
+#
+# ============================================================
