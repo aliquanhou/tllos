@@ -114,13 +114,33 @@ jobs:
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Build tllvm.exe
+      - name: Build tllvm.exe (per-file)
         shell: cmd
         run: |
           cd host\c
-          cl /O2 /D_CRT_SECURE_NO_WARNINGS /D_WIN32 /Fe:tllvm.exe main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c /link bcrypt.lib advapi32.lib
+          echo === Compiling each file separately === > build_log.txt
+          for %%f in (main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c) do (
+            echo --- Compiling %%f --- >> build_log.txt
+            cl /c /O0 /w /D_CRT_SECURE_NO_WARNINGS /D_WIN32 %%f >> build_log.txt 2>&1
+            echo   Exit: %errorlevel% >> build_log.txt
+          )
+          echo --- Compiling sqlite3.c --- >> build_log.txt
+          cl /c /O0 /w /D_CRT_SECURE_NO_WARNINGS /D_WIN32 /DSQLITE_THREADSAFE=1 sqlite3.c >> build_log.txt 2>&1
+          echo   sqlite3.c Exit: %errorlevel% >> build_log.txt
+          echo === Linking === >> build_log.txt
+          link /OUT:tllvm.exe main.obj vm.obj value.obj json.obj builtin.obj sqlite_builtin.obj crypto_builtin.obj sqlite3.obj bcrypt.lib advapi32.lib >> build_log.txt 2>&1
+          echo === Link exit code: %errorlevel% === >> build_log.txt
+          type build_log.txt
           if errorlevel 1 exit /b 1
           dir tllvm.exe
+
+      - name: Upload build log (Windows)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build-log
+          path: host/c/build_log.txt
+          retention-days: 7
 
       - name: Build TLL compiler
         shell: cmd
@@ -153,11 +173,36 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - name: Build tllvm
+      - name: Build tllvm (per-file)
         run: |
           cd host/c
-          clang -O2 -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread
+          echo "=== Compiling each file separately ===" > build_log.txt
+          for f in main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c; do
+            echo "--- Compiling $f ---" >> build_log.txt
+            clang -O0 -w -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -c $f -o ${f%.c}.o >> build_log.txt 2>&1
+            echo "  Exit: $?" >> build_log.txt
+          done
+          echo "--- Compiling sqlite3.c ---" >> build_log.txt
+          clang -O0 -w -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -DSQLITE_THREADSAFE=1 -c sqlite3.c -o sqlite3.o >> build_log.txt 2>&1
+          echo "  sqlite3.c Exit: $?" >> build_log.txt
+          echo "=== Linking ===" >> build_log.txt
+          clang -O0 -o tllvm main.o vm.o value.o json.o builtin.o sqlite_builtin.o crypto_builtin.o sqlite3.o -lm -lpthread >> build_log.txt 2>&1
+          LINK_EXIT=$?
+          echo "=== Link exit code: $LINK_EXIT ===" >> build_log.txt
+          cat build_log.txt
+          if [ $LINK_EXIT -ne 0 ]; then
+            echo "::error::Link failed with exit code $LINK_EXIT"
+            exit 1
+          fi
           ls -la tllvm
+
+      - name: Upload build log (macOS)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build-log
+          path: host/c/build_log.txt
+          retention-days: 7
 
       - name: Build TLL compiler
         run: |
