@@ -1,0 +1,446 @@
+// ============================================================
+// TLLOS Mall - Invoice Management Module
+// 发票管理模块
+// ============================================================
+
+from "./database" import db_query, db_exec, db_lastInsertId
+from "./router" import res_json, res_html, router_get, router_put, router_post, router_delete
+
+// ============================================================
+// Invoice Tables
+// ============================================================
+
+fn invoice_initTables(db) {
+    // Invoices table
+    db_exec(db, "CREATE TABLE IF NOT EXISTS invoices (id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_no TEXT UNIQUE, order_id INTEGER NOT NULL, order_no TEXT, user_id INTEGER NOT NULL, invoice_type TEXT DEFAULT 'personal', title_type TEXT DEFAULT 'personal', title TEXT NOT NULL, tax_no TEXT, bank_name TEXT, bank_account TEXT, address TEXT, phone TEXT, email TEXT, amount REAL NOT NULL DEFAULT 0, tax_rate REAL DEFAULT 0.06, tax_amount REAL DEFAULT 0, total_amount REAL DEFAULT 0, status TEXT DEFAULT 'pending', reject_reason TEXT, issued_at TEXT, sent_at TEXT, invoice_content TEXT, remark TEXT, created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))")
+
+    // Invoice settings table
+    db_exec(db, "CREATE TABLE IF NOT EXISTS invoice_settings (id INTEGER PRIMARY KEY AUTOINCREMENT, setting_key TEXT UNIQUE NOT NULL, setting_value TEXT, setting_name TEXT, remark TEXT, updated_at TEXT DEFAULT (datetime('now')))")
+
+    // Insert default settings
+    let defaultSettings = [
+        {key: "invoice_enabled", value: "true", name: "发票功能开关", remark: "是否启用发票功能"},
+        {key: "invoice_tax_rate", value: "0.06", name: "默认税率", remark: "默认增值税税率"},
+        {key: "invoice_company_name", value: "惠州市大亚湾福多多信息科技中心", name: "开票公司名称", remark: "发票销售方名称"},
+        {key: "invoice_tax_no", value: "", name: "开票公司税号", remark: "发票销售方税号"},
+        {key: "invoice_address", value: "", name: "开票公司地址", remark: "发票销售方地址"},
+        {key: "invoice_phone", value: "", name: "开票公司电话", remark: "发票销售方电话"},
+        {key: "invoice_bank_name", value: "", name: "开票公司开户行", remark: "发票销售方开户行"},
+        {key: "invoice_bank_account", value: "", name: "开票公司银行账号", remark: "发票销售方银行账号"},
+        {key: "invoice_auto_issue", value: "false", name: "自动开票", remark: "申请后是否自动开具发票"},
+        {key: "invoice_email_enabled", value: "false", name: "邮件发送开关", remark: "是否自动发送发票邮件"}
+    ]
+
+    let i = 0
+    while (i < arrays.length(defaultSettings)) {
+        let item = defaultSettings[i]
+        let checkSql = "SELECT id FROM invoice_settings WHERE setting_key = '" + item.key + "'"
+        let existing = db_query(db, checkSql)
+        if (arrays.length(existing) == 0) {
+            let insertSql = "INSERT INTO invoice_settings (setting_key, setting_value, setting_name, remark) VALUES ('"
+            insertSql = insertSql + item.key + "', '" + item.value + "', '" + item.name + "', '" + item.remark + "')"
+            db_exec(db, insertSql)
+        }
+        i = i + 1
+    }
+
+    io.println("[Invoice] Tables initialized: invoices, invoice_settings (10 default settings)")
+}
+
+// ============================================================
+// Invoice Helpers
+// ============================================================
+
+fn invoice_getSetting(db, key) {
+    let sql = "SELECT setting_value FROM invoice_settings WHERE setting_key = '" + key + "'"
+    let rows = db_query(db, sql)
+    if (arrays.length(rows) > 0) {
+        return rows[0].setting_value
+    }
+    return null
+}
+
+fn invoice_generateNo() {
+    let timestamp = io.date()
+    let random = convert.toString(math.floor(math.random() * 9000) + 1000)
+    return "INV" + timestamp + random
+}
+
+// ============================================================
+// User Invoice APIs
+// ============================================================
+
+fn invoice_apply(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+
+    let orderId = body.order_id
+    let userId = body.user_id
+    let invoiceType = body.invoice_type
+    let titleType = body.title_type
+    let title = body.title
+    let taxNo = body.tax_no
+    let bankName = body.bank_name
+    let bankAccount = body.bank_account
+    let address = body.address
+    let phone = body.phone
+    let email = body.email
+    let remark = body.remark
+
+    // Validate required fields
+    if (orderId == null || userId == null || title == null) {
+        return res_json({success: false, message: "Missing required fields: order_id, user_id, title"}, 400)
+    }
+
+    // Check if invoice already applied for this order
+    let checkSql = "SELECT id FROM invoices WHERE order_id = " + orderId + " AND status != 'rejected'"
+    let existing = db_query(db, checkSql)
+    if (arrays.length(existing) > 0) {
+        return res_json({success: false, message: "Invoice already applied for this order"}, 400)
+    }
+
+    // Get order info
+    let orderSql = "SELECT * FROM orders WHERE id = " + orderId
+    let orders = db_query(db, orderSql)
+    if (arrays.length(orders) == 0) {
+        return res_json({success: false, message: "Order not found"}, 404)
+    }
+    let order = orders[0]
+
+    // Check order status (must be paid or completed)
+    if (order.status < 1) {
+        return res_json({success: false, message: "Order not paid, cannot apply invoice"}, 400)
+    }
+
+    // Calculate invoice amount
+    let amount = order.total_amount
+    let taxRateStr = invoice_getSetting(db, "invoice_tax_rate")
+    let taxRate = 0.06
+    if (taxRateStr != null) { taxRate = parseFloat(taxRateStr) }
+    let taxAmount = amount * taxRate / (1 + taxRate)
+    let totalAmount = amount
+
+    // Generate invoice number
+    let invoiceNo = invoice_generateNo()
+
+    // Insert invoice
+    let insertSql = "INSERT INTO invoices (invoice_no, order_id, order_no, user_id, invoice_type, title_type, title, tax_no, bank_name, bank_account, address, phone, email, amount, tax_rate, tax_amount, total_amount, status, remark) VALUES ('"
+    insertSql = insertSql + invoiceNo + "', " + orderId + ", '" + payment_nvl(order.order_no, "") + "', " + userId + ", '"
+    insertSql = insertSql + payment_nvl(invoiceType, "personal") + "', '" + payment_nvl(titleType, "personal") + "', '" + title + "', '"
+    insertSql = insertSql + payment_nvl(taxNo, "") + "', '" + payment_nvl(bankName, "") + "', '" + payment_nvl(bankAccount, "") + "', '"
+    insertSql = insertSql + payment_nvl(address, "") + "', '" + payment_nvl(phone, "") + "', '" + payment_nvl(email, "") + "', "
+    insertSql = insertSql + convert.toString(amount) + ", " + convert.toString(taxRate) + ", " + convert.toString(taxAmount) + ", " + convert.toString(totalAmount) + ", 'pending', '" + payment_nvl(remark, "") + "')"
+    db_exec(db, insertSql)
+    let invoiceId = db_lastInsertId(db)
+
+    // Auto issue if enabled
+    let autoIssue = invoice_getSetting(db, "invoice_auto_issue")
+    if (autoIssue == "true") {
+        let updateSql = "UPDATE invoices SET status = 'issued', issued_at = datetime('now'), updated_at = datetime('now') WHERE id = " + invoiceId
+        db_exec(db, updateSql)
+    }
+
+    return res_json({success: true, message: "Invoice application submitted", data: {id: invoiceId, invoice_no: invoiceNo, amount: amount, status: "pending"}}, 200)
+}
+
+fn invoice_userList(req) {
+    let db = req.db
+    let userId = req_getQuery(req, "user_id", null)
+    let status = req_getQuery(req, "status", null)
+
+    if (userId == null) {
+        return res_json({success: false, message: "Missing user_id"}, 400)
+    }
+
+    let sql = "SELECT * FROM invoices WHERE user_id = " + userId
+    if (status != null) {
+        sql = sql + " AND status = '" + status + "'"
+    }
+    sql = sql + " ORDER BY id DESC LIMIT 100"
+
+    let invoices = db_query(db, sql)
+    return res_json({success: true, count: arrays.length(invoices), data: invoices}, 200)
+}
+
+fn invoice_detail(req) {
+    let db = req.db
+    let id = req_getQuery(req, "id", null)
+    let invoiceNo = req_getQuery(req, "invoice_no", null)
+
+    if (id == null && invoiceNo == null) {
+        return res_json({success: false, message: "Missing id or invoice_no"}, 400)
+    }
+
+    let sql = "SELECT * FROM invoices WHERE "
+    if (id != null) {
+        sql = sql + "id = " + id
+    } else {
+        sql = sql + "invoice_no = '" + invoiceNo + "'"
+    }
+
+    let invoices = db_query(db, sql)
+    if (arrays.length(invoices) == 0) {
+        return res_json({success: false, message: "Invoice not found"}, 404)
+    }
+
+    return res_json({success: true, data: invoices[0]}, 200)
+}
+
+// ============================================================
+// Admin Invoice APIs
+// ============================================================
+
+fn invoice_adminList(req) {
+    let db = req.db
+    let status = req_getQuery(req, "status", null)
+    let invoiceType = req_getQuery(req, "invoice_type", null)
+
+    let sql = "SELECT * FROM invoices WHERE 1=1"
+    if (status != null) {
+        sql = sql + " AND status = '" + status + "'"
+    }
+    if (invoiceType != null) {
+        sql = sql + " AND invoice_type = '" + invoiceType + "'"
+    }
+    sql = sql + " ORDER BY id DESC LIMIT 100"
+
+    let invoices = db_query(db, sql)
+
+    // Get statistics
+    let pendingCount = arrays.length(db_query(db, "SELECT id FROM invoices WHERE status = 'pending'"))
+    let issuedCount = arrays.length(db_query(db, "SELECT id FROM invoices WHERE status = 'issued'"))
+    let rejectedCount = arrays.length(db_query(db, "SELECT id FROM invoices WHERE status = 'rejected'"))
+    let totalAmountResult = db_query(db, "SELECT SUM(amount) as total FROM invoices WHERE status = 'issued'")
+    let totalAmount = 0
+    if (arrays.length(totalAmountResult) > 0 && totalAmountResult[0].total != null) {
+        totalAmount = totalAmountResult[0].total
+    }
+
+    return res_json({success: true, count: arrays.length(invoices), data: invoices, statistics: {pending: pendingCount, issued: issuedCount, rejected: rejectedCount, total_amount: totalAmount}}, 200)
+}
+
+fn invoice_issue(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let id = body.id
+    let invoiceContent = body.invoice_content
+
+    if (id == null) {
+        return res_json({success: false, message: "Missing id"}, 400)
+    }
+
+    // Check invoice exists and status
+    let checkSql = "SELECT * FROM invoices WHERE id = " + id
+    let invoices = db_query(db, checkSql)
+    if (arrays.length(invoices) == 0) {
+        return res_json({success: false, message: "Invoice not found"}, 404)
+    }
+    if (invoices[0].status != "pending") {
+        return res_json({success: false, message: "Invoice status is not pending, cannot issue"}, 400)
+    }
+
+    // Generate invoice content (HTML)
+    let content = invoiceContent
+    if (content == null) {
+        content = invoice_generateHtml(db, invoices[0])
+    }
+
+    // Update invoice status
+    let updateSql = "UPDATE invoices SET status = 'issued', issued_at = datetime('now'), invoice_content = '" + content + "', updated_at = datetime('now') WHERE id = " + id
+    db_exec(db, updateSql)
+
+    return res_json({success: true, message: "Invoice issued", data: {id: id, status: "issued", issued_at: io.date()}}, 200)
+}
+
+fn invoice_reject(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let id = body.id
+    let reason = body.reason
+
+    if (id == null) {
+        return res_json({success: false, message: "Missing id"}, 400)
+    }
+
+    let updateSql = "UPDATE invoices SET status = 'rejected', reject_reason = '" + payment_nvl(reason, "") + "', updated_at = datetime('now') WHERE id = " + id
+    db_exec(db, updateSql)
+
+    return res_json({success: true, message: "Invoice rejected"}, 200)
+}
+
+fn invoice_send(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let id = body.id
+    let email = body.email
+
+    if (id == null) {
+        return res_json({success: false, message: "Missing id"}, 400)
+    }
+
+    // Check invoice exists and status
+    let checkSql = "SELECT * FROM invoices WHERE id = " + id
+    let invoices = db_query(db, checkSql)
+    if (arrays.length(invoices) == 0) {
+        return res_json({success: false, message: "Invoice not found"}, 404)
+    }
+    if (invoices[0].status != "issued") {
+        return res_json({success: false, message: "Invoice not issued, cannot send"}, 400)
+    }
+
+    let targetEmail = email
+    if (targetEmail == null) {
+        targetEmail = invoices[0].email
+    }
+
+    // Update sent status (simplified - in production, integrate with email service)
+    let updateSql = "UPDATE invoices SET sent_at = datetime('now'), updated_at = datetime('now') WHERE id = " + id
+    db_exec(db, updateSql)
+
+    return res_json({success: true, message: "Invoice sent to " + targetEmail, data: {id: id, sent_at: io.date(), email: targetEmail}}, 200)
+}
+
+// ============================================================
+// Invoice HTML Generation
+// ============================================================
+
+fn invoice_generateHtml(db, invoice) {
+    let companyName = invoice_getSetting(db, "invoice_company_name")
+    let companyTaxNo = invoice_getSetting(db, "invoice_tax_no")
+    let companyAddress = invoice_getSetting(db, "invoice_address")
+    let companyPhone = invoice_getSetting(db, "invoice_phone")
+    let companyBankName = invoice_getSetting(db, "invoice_bank_name")
+    let companyBankAccount = invoice_getSetting(db, "invoice_bank_account")
+
+    let html = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>电子发票 " + payment_nvl(invoice.invoice_no, "") + "</title>"
+    html = html + "<style>body{font-family:Arial,sans-serif;padding:40px;background:#f5f5f5}.invoice{background:#fff;padding:40px;max-width:800px;margin:0 auto;border:1px solid #ddd}.invoice-header{text-align:center;margin-bottom:30px}.invoice-title{font-size:24px;font-weight:bold;margin-bottom:10px}.invoice-no{color:#666;font-size:14px}.invoice-info{display:flex;justify-content:space-between;margin-bottom:30px}.info-block{flex:1}.info-block h3{font-size:14px;color:#666;margin-bottom:8px}.info-block p{font-size:14px;margin:4px 0}.invoice-table{width:100%;border-collapse:collapse;margin-bottom:30px}.invoice-table th,.invoice-table td{border:1px solid #ddd;padding:10px;text-align:left;font-size:14px}.invoice-table th{background:#f5f5f5;font-weight:bold}.invoice-total{text-align:right;margin-bottom:30px}.invoice-total p{font-size:16px;margin:8px 0}.invoice-total .total-amount{font-size:20px;font-weight:bold;color:#ff4400}.invoice-footer{text-align:center;color:#999;font-size:12px;margin-top:40px;border-top:1px solid #ddd;padding-top:20px}</style>"
+    html = html + "</head><body><div class='invoice'>"
+
+    // Header
+    html = html + "<div class='invoice-header'><div class='invoice-title'>电子普通发票</div><div class='invoice-no'>发票号码：" + payment_nvl(invoice.invoice_no, "") + "</div><div class='invoice-no'>开票日期：" + payment_nvl(invoice.issued_at, io.date()) + "</div></div>"
+
+    // Info
+    html = html + "<div class='invoice-info'>"
+    html = html + "<div class='info-block'><h3>购买方</h3><p>名称：" + payment_nvl(invoice.title, "") + "</p>"
+    if (invoice.tax_no != null && invoice.tax_no != "") {
+        html = html + "<p>税号：" + invoice.tax_no + "</p>"
+    }
+    if (invoice.address != null && invoice.address != "") {
+        html = html + "<p>地址：" + invoice.address + "</p>"
+    }
+    if (invoice.phone != null && invoice.phone != "") {
+        html = html + "<p>电话：" + invoice.phone + "</p>"
+    }
+    if (invoice.bank_name != null && invoice.bank_name != "") {
+        html = html + "<p>开户行：" + invoice.bank_name + "</p>"
+    }
+    if (invoice.bank_account != null && invoice.bank_account != "") {
+        html = html + "<p>账号：" + invoice.bank_account + "</p>"
+    }
+    html = html + "</div>"
+
+    html = html + "<div class='info-block'><h3>销售方</h3><p>名称：" + payment_nvl(companyName, "") + "</p>"
+    if (companyTaxNo != null && companyTaxNo != "") {
+        html = html + "<p>税号：" + companyTaxNo + "</p>"
+    }
+    if (companyAddress != null && companyAddress != "") {
+        html = html + "<p>地址：" + companyAddress + "</p>"
+    }
+    if (companyPhone != null && companyPhone != "") {
+        html = html + "<p>电话：" + companyPhone + "</p>"
+    }
+    if (companyBankName != null && companyBankName != "") {
+        html = html + "<p>开户行：" + companyBankName + "</p>"
+    }
+    if (companyBankAccount != null && companyBankAccount != "") {
+        html = html + "<p>账号：" + companyBankAccount + "</p>"
+    }
+    html = html + "</div></div>"
+
+    // Table
+    html = html + "<table class='invoice-table'><thead><tr><th>项目名称</th><th>规格型号</th><th>数量</th><th>单价</th><th>金额</th><th>税率</th><th>税额</th></tr></thead><tbody>"
+    html = html + "<tr><td>商品订单 " + payment_nvl(invoice.order_no, "") + "</td><td>-</td><td>1</td><td>" + convert.toString(invoice.amount) + "</td><td>" + convert.toString(invoice.amount - invoice.tax_amount) + "</td><td>" + convert.toString(invoice.tax_rate * 100) + "%</td><td>" + convert.toString(invoice.tax_amount) + "</td></tr>"
+    html = html + "</tbody></table>"
+
+    // Total
+    html = html + "<div class='invoice-total'><p>合计金额：¥" + convert.toString(invoice.amount - invoice.tax_amount) + "</p><p>合计税额：¥" + convert.toString(invoice.tax_amount) + "</p><p class='total-amount'>价税合计：¥" + convert.toString(invoice.total_amount) + "</p></div>"
+
+    // Footer
+    html = html + "<div class='invoice-footer'><p>本发票由 TLLOS 商城系统自动生成</p><p>如有疑问，请联系客服：support@tllos.com</p></div>"
+
+    html = html + "</div></body></html>"
+    return html
+}
+
+fn invoice_viewHtml(req) {
+    let db = req.db
+    let id = req_getQuery(req, "id", null)
+
+    if (id == null) {
+        return res_html("<h1>Missing invoice id</h1>", 400)
+    }
+
+    let sql = "SELECT * FROM invoices WHERE id = " + id
+    let invoices = db_query(db, sql)
+    if (arrays.length(invoices) == 0) {
+        return res_html("<h1>Invoice not found</h1>", 404)
+    }
+
+    let html = invoice_generateHtml(db, invoices[0])
+    return res_html(html, 200)
+}
+
+// ============================================================
+// Invoice Settings APIs
+// ============================================================
+
+fn invoice_settingsList(req) {
+    let db = req.db
+    let sql = "SELECT * FROM invoice_settings ORDER BY id"
+    let settings = db_query(db, sql)
+    return res_json({success: true, count: arrays.length(settings), data: settings}, 200)
+}
+
+fn invoice_settingsUpdate(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+
+    let keys = ["invoice_enabled", "invoice_tax_rate", "invoice_company_name", "invoice_tax_no", "invoice_address", "invoice_phone", "invoice_bank_name", "invoice_bank_account", "invoice_auto_issue", "invoice_email_enabled"]
+    let updated = 0
+    let i = 0
+    while (i < arrays.length(keys)) {
+        let key = keys[i]
+        if (body[key] != null) {
+            let updateSql = "UPDATE invoice_settings SET setting_value = '" + body[key] + "', updated_at = datetime('now') WHERE setting_key = '" + key + "'"
+            db_exec(db, updateSql)
+            updated = updated + 1
+        }
+        i = i + 1
+    }
+
+    return res_json({success: true, message: "Settings updated", updated: updated}, 200)
+}
+
+// ============================================================
+// Register All Routes
+// ============================================================
+
+fn invoice_registerAll(router) {
+    // User APIs
+    router_post(router, "/invoice/apply", invoice_apply)
+    router_get(router, "/invoice/user-list", invoice_userList)
+    router_get(router, "/invoice/detail", invoice_detail)
+    router_get(router, "/invoice/view", invoice_viewHtml)
+
+    // Admin APIs
+    router_get(router, "/invoice/admin-list", invoice_adminList)
+    router_post(router, "/invoice/issue", invoice_issue)
+    router_post(router, "/invoice/reject", invoice_reject)
+    router_post(router, "/invoice/send", invoice_send)
+
+    // Settings APIs
+    router_get(router, "/invoice/settings", invoice_settingsList)
+    router_put(router, "/invoice/settings", invoice_settingsUpdate)
+
+    io.println("[Invoice] Routes registered: 10 endpoints")
+}
