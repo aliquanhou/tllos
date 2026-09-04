@@ -1,0 +1,151 @@
+// ============================================================
+// TLLOS Mall - ICP Configuration Module
+// ICP备案与经营资质配置
+// ============================================================
+
+from "./database" import db_query, db_exec, db_lastInsertId
+from "./router" import res_json, res_html, router_get, router_put, router_post
+
+// ============================================================
+// ICP Config Table
+// ============================================================
+
+fn icp_initTables(db) {
+    db_exec(db, "CREATE TABLE IF NOT EXISTS icp_configs (id INTEGER PRIMARY KEY AUTOINCREMENT, config_key TEXT UNIQUE NOT NULL, config_value TEXT, config_name TEXT, remark TEXT, updated_at TEXT DEFAULT (datetime('now')))")
+
+    // Insert default configs
+    let defaults = [
+        {key: "icp_number", value: "", name: "ICP备案号", remark: "如：粤ICP备XXXXXXXX号"},
+        {key: "icp_url", value: "https://beian.miit.gov.cn", name: "ICP备案查询链接", remark: "工信部备案查询网站"},
+        {key: "police_number", value: "", name: "公安备案号", remark: "如：粤公网安备 XXXXXXXXXXXXX号"},
+        {key: "police_url", value: "http://www.beian.gov.cn", name: "公安备案查询链接", remark: "公安备案查询网站"},
+        {key: "company_name", value: "惠州市大亚湾福多多信息科技中心", name: "公司名称", remark: "网站底部显示的公司名称"},
+        {key: "copyright_year", value: "2026", name: "版权年份", remark: "网站底部显示的版权年份"},
+        {key: "icp_license_number", value: "", name: "经营性ICP许可证号", remark: "如：粤B2-XXXXXXXX"},
+        {key: "business_license", value: "", name: "营业执照号", remark: "统一社会信用代码"}
+    ]
+
+    let i = 0
+    while (i < arrays.length(defaults)) {
+        let item = defaults[i]
+        let checkSql = "SELECT id FROM icp_configs WHERE config_key = '" + item.key + "'"
+        let existing = db_query(db, checkSql)
+        if (arrays.length(existing) == 0) {
+            let insertSql = "INSERT INTO icp_configs (config_key, config_value, config_name, remark) VALUES ('"
+            insertSql = insertSql + item.key + "', '" + item.value + "', '" + item.name + "', '" + item.remark + "')"
+            db_exec(db, insertSql)
+        }
+        i = i + 1
+    }
+
+    io.println("[ICP] Tables initialized: icp_configs (8 default configs)")
+}
+
+// ============================================================
+// Config Helpers
+// ============================================================
+
+fn icp_getConfig(db, key) {
+    let sql = "SELECT config_value FROM icp_configs WHERE config_key = '" + key + "'"
+    let rows = db_query(db, sql)
+    if (arrays.length(rows) > 0) {
+        return rows[0].config_value
+    }
+    return null
+}
+
+fn icp_setConfig(db, key, value) {
+    let sql = "UPDATE icp_configs SET config_value = '" + value + "', updated_at = datetime('now') WHERE config_key = '" + key + "'"
+    db_exec(db, sql)
+}
+
+// ============================================================
+// API Endpoints
+// ============================================================
+
+fn icp_configList(req) {
+    let db = req.db
+    let sql = "SELECT * FROM icp_configs ORDER BY id"
+    let configs = db_query(db, sql)
+    return res_json({success: true, count: arrays.length(configs), data: configs}, 200)
+}
+
+fn icp_configUpdate(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+
+    // Update all provided configs
+    let keys = ["icp_number", "icp_url", "police_number", "police_url", "company_name", "copyright_year", "icp_license_number", "business_license"]
+    let updated = 0
+    let i = 0
+    while (i < arrays.length(keys)) {
+        let key = keys[i]
+        if (body[key] != null) {
+            icp_setConfig(db, key, body[key])
+            updated = updated + 1
+        }
+        i = i + 1
+    }
+
+    return res_json({success: true, message: "Config updated", updated: updated}, 200)
+}
+
+// ============================================================
+// Footer HTML
+// ============================================================
+
+fn icp_getFooterHtml(db) {
+    let icpNumber = icp_getConfig(db, "icp_number")
+    let icpUrl = icp_getConfig(db, "icp_url")
+    let policeNumber = icp_getConfig(db, "police_number")
+    let policeUrl = icp_getConfig(db, "police_url")
+    let companyName = icp_getConfig(db, "company_name")
+    let copyrightYear = icp_getConfig(db, "copyright_year")
+    let icpLicenseNumber = icp_getConfig(db, "icp_license_number")
+
+    let html = "<div class='icp-footer' style='text-align:center; padding:20px; color:#999; font-size:12px; line-height:1.8;'>"
+
+    // ICP license number (if exists)
+    if (icpLicenseNumber != null && icpLicenseNumber != "") {
+        html = html + "<p style='margin:5px 0;'>"
+        html = html + "<a href='" + icpUrl + "' target='_blank' style='color:#999; text-decoration:none;'>" + icpLicenseNumber + "</a>"
+        html = html + "</p>"
+    }
+
+    // ICP record number
+    if (icpNumber != null && icpNumber != "") {
+        html = html + "<p style='margin:5px 0;'>"
+        html = html + "<a href='" + icpUrl + "' target='_blank' style='color:#999; text-decoration:none;'>" + icpNumber + "</a>"
+        html = html + "</p>"
+    }
+
+    // Police record number
+    if (policeNumber != null && policeNumber != "") {
+        html = html + "<p style='margin:5px 0;'>"
+        html = html + "<a href='" + policeUrl + "' target='_blank' style='color:#999; text-decoration:none;'>" + policeNumber + "</a>"
+        html = html + "</p>"
+    }
+
+    // Copyright
+    html = html + "<p style='margin:5px 0;'>© " + copyrightYear + " " + companyName + " 版权所有</p>"
+    html = html + "</div>"
+
+    return html
+}
+
+fn icp_footer(req) {
+    let db = req.db
+    let html = icp_getFooterHtml(db)
+    return res_html(html, 200)
+}
+
+// ============================================================
+// Register All Routes
+// ============================================================
+
+fn icp_registerAll(router) {
+    router_get(router, "/icp/config", icp_configList)
+    router_put(router, "/icp/config", icp_configUpdate)
+    router_get(router, "/icp/footer", icp_footer)
+    io.println("[ICP] Routes registered: 3 endpoints")
+}
