@@ -17,18 +17,27 @@ on:
 
 jobs:
   test-linux:
-    name: Linux (Ubuntu)
-    runs-on: ubuntu-latest
+    name: Linux (Ubuntu 22.04)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y gcc make
 
+      - name: Check environment
+        run: |
+          gcc --version
+          free -h
+          df -h
+
       - name: Build tllvm
         run: |
           cd host/c
-          gcc -O2 -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread -ldl
+          echo "Starting build..."
+          gcc -O0 -w -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread -ldl
+          echo "Build exit code: $?"
           ls -la tllvm
 
       - name: Build TLL compiler
