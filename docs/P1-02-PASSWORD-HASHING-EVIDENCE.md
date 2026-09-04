@@ -1,8 +1,9 @@
 # P1-02 Password Hashing - Evidence Document
 
-**Status**: SEALED (pending final verification)
+**Status**: SEALED
 **Date**: 2026-09-05
-**Commit**: (pending)
+**Commit**: 06be89d (implementation) + 56924a1 (CI fix)
+**CI Run ID**: 33900664012 (3-platform all green)
 
 ## 1. API Specification
 
@@ -182,9 +183,9 @@ ID: 1, Username: admin, Hash: $2b$12$oQgeFJOz9QKfsS.X60idROP..., Role: admin
 - [x] Legacy password migration implemented and verified
 - [x] Admin login verified after migration
 - [x] Makefile updated
-- [ ] Three-platform CI (pending git push)
-- [ ] Evidence document complete
-- [ ] Git commit and push
+- [x] Three-platform CI (Linux/macOS/Windows all green, Run 33900664012)
+- [x] Evidence document complete
+- [x] Git commit and push
 
 ## 11. Next Steps
 
