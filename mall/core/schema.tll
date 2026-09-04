@@ -449,7 +449,125 @@ fn schema_initAll(db) {
         created_at TEXT DEFAULT (datetime('now'))
     )")
 
-    return {success: true, tables: 20}
+    // === 9. Decoration (装修管理) ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS decoration_pages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        page_type TEXT DEFAULT 'custom',
+        content TEXT,
+        status TEXT DEFAULT 'active',
+        sort_order INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+    db_exec(db, "CREATE TABLE IF NOT EXISTS decoration_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        description TEXT,
+        preview_image TEXT,
+        content TEXT,
+        is_default INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+    db_exec(db, "CREATE TABLE IF NOT EXISTS nav_icons (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        icon TEXT,
+        link_url TEXT,
+        status TEXT DEFAULT 'active',
+        sort_order INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === 11. Permissions (权限管理) ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS admin_roles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        role_key TEXT,
+        description TEXT,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+    db_exec(db, "CREATE TABLE IF NOT EXISTS admin_menus (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        parent_id INTEGER DEFAULT 0,
+        path TEXT,
+        icon TEXT,
+        sort_order INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+    db_exec(db, "CREATE TABLE IF NOT EXISTS admin_users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        password TEXT,
+        real_name TEXT,
+        role_id INTEGER,
+        status TEXT DEFAULT 'active',
+        last_login_at TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+    db_exec(db, "CREATE TABLE IF NOT EXISTS operation_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        admin_username TEXT,
+        action TEXT,
+        module TEXT,
+        ip_address TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === 13. Organization (组织管理) ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS departments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        parent_id INTEGER DEFAULT 0,
+        leader TEXT,
+        sort_order INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+    db_exec(db, "CREATE TABLE IF NOT EXISTS positions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        department_id INTEGER,
+        position_code TEXT,
+        sort_order INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    // === 14. Channels (渠道设置) ===
+    db_exec(db, "CREATE TABLE IF NOT EXISTS wechat_menus (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        parent_id INTEGER DEFAULT 0,
+        menu_type TEXT,
+        menu_value TEXT,
+        sort_order INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+    db_exec(db, "CREATE TABLE IF NOT EXISTS wechat_auto_replies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        keyword TEXT,
+        match_mode TEXT DEFAULT 'exact',
+        reply_type TEXT DEFAULT 'text',
+        reply_content TEXT,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+    db_exec(db, "CREATE TABLE IF NOT EXISTS promotion_channels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        channel_code TEXT UNIQUE,
+        visit_count INTEGER DEFAULT 0,
+        register_count INTEGER DEFAULT 0,
+        order_count INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        created_at TEXT DEFAULT (datetime('now'))
+    )")
+
+    return {success: true, tables: 49}
 }
 
 // Seed initial data: categories, brands, sample products

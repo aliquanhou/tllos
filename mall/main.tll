@@ -11,6 +11,8 @@ from "./core/admin_extended" import adminx_registerAll
 from "./core/marketing" import mkt_registerAll
 from "./core/p3_features" import p3_registerAll
 from "./core/p4_advanced" import p4_registerAll
+from "./core/admin_layout" import admin_layout_page, admin_layout_sidebar, admin_layout_css
+from "./core/admin_new_modules" import new_modules_registerAll
 
 // === HTML Templates ===
 
@@ -680,7 +682,8 @@ adminx_registerAll(mallRouter, db)
 mkt_registerAll(mallRouter, db)
 p3_registerAll(mallRouter, db)
 p4_registerAll(mallRouter, db)
-io.println("Routes registered (basic + extended + marketing + p3 + p4)")
+new_modules_registerAll(mallRouter)
+io.println("Routes registered (basic + extended + marketing + p3 + p4 + new 5 modules = 17 modules total)")
 
 // === Start Server ===
 io.println("=== TLL Mall Ready ===")

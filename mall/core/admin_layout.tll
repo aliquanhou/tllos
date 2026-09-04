@@ -1,0 +1,200 @@
+// TLL Mall - Admin Layout & 17 Modules Navigation
+// Unified sidebar with all 17 business modules
+// NOTE: TLL does NOT support ternary operator (?:), use if/else instead
+
+fn _activeClass(active, expected) {
+    if (active == expected) { return "active" }
+    return ""
+}
+
+fn admin_layout_sidebar(active) {
+    let menu = "<div class='sidebar'><h2>TLL OS 商城</h2><div class='sidebar-scroll'>"
+
+    // 1. 工作台
+    menu = menu + "<div class='menu-group'><div class='menu-title'>工作台</div>"
+    menu = menu + "<a href='/admin' class='" + _activeClass(active, "dashboard") + "'>数据概览</a>"
+    menu = menu + "<a href='/admin/dashboard/advanced' class='" + _activeClass(active, "dashboard_advanced") + "'>高级看板</a>"
+    menu = menu + "</div>"
+
+    // 2. 商品管理
+    menu = menu + "<div class='menu-group'><div class='menu-title'>商品管理</div>"
+    menu = menu + "<a href='/admin/products' class='" + _activeClass(active, "products") + "'>商品列表</a>"
+    menu = menu + "<a href='/admin/product/add' class='" + _activeClass(active, "product_add") + "'>添加商品</a>"
+    menu = menu + "<a href='/admin/categories' class='" + _activeClass(active, "categories") + "'>分类管理</a>"
+    menu = menu + "<a href='/admin/brands' class='" + _activeClass(active, "brands") + "'>品牌管理</a>"
+    menu = menu + "<a href='/admin/reviews' class='" + _activeClass(active, "reviews") + "'>评价管理</a>"
+    menu = menu + "<a href='/admin/stock/alert' class='" + _activeClass(active, "stock_alert") + "'>库存预警</a>"
+    menu = menu + "</div>"
+
+    // 3. 订单管理
+    menu = menu + "<div class='menu-group'><div class='menu-title'>订单管理</div>"
+    menu = menu + "<a href='/admin/orders' class='" + _activeClass(active, "orders") + "'>订单列表</a>"
+    menu = menu + "<a href='/admin/aftersales' class='" + _activeClass(active, "aftersales") + "'>售后管理</a>"
+    menu = menu + "<a href='/admin/refunds' class='" + _activeClass(active, "refunds") + "'>退款管理</a>"
+    menu = menu + "<a href='/admin/logistics' class='" + _activeClass(active, "logistics") + "'>物流轨迹</a>"
+    menu = menu + "</div>"
+
+    // 4. 商家管理
+    menu = menu + "<div class='menu-group'><div class='menu-title'>商家管理</div>"
+    menu = menu + "<a href='/admin/merchants' class='" + _activeClass(active, "merchants") + "'>商家列表</a>"
+    menu = menu + "<a href='/admin/merchant/apply' class='" + _activeClass(active, "merchant_apply") + "'>入驻审核</a>"
+    menu = menu + "<a href='/admin/merchant/levels' class='" + _activeClass(active, "merchant_levels") + "'>商家等级</a>"
+    menu = menu + "<a href='/admin/merchant/categories' class='" + _activeClass(active, "merchant_categories") + "'>商家分类</a>"
+    menu = menu + "<a href='/admin/merchant/logs' class='" + _activeClass(active, "merchant_logs") + "'>账户日志</a>"
+    menu = menu + "</div>"
+
+    // 5. 用户管理
+    menu = menu + "<div class='menu-group'><div class='menu-title'>用户管理</div>"
+    menu = menu + "<a href='/admin/users' class='" + _activeClass(active, "users") + "'>用户列表</a>"
+    menu = menu + "<a href='/admin/member/levels' class='" + _activeClass(active, "member_levels") + "'>会员等级</a>"
+    menu = menu + "<a href='/admin/points/log' class='" + _activeClass(active, "points_log") + "'>积分日志</a>"
+    menu = menu + "<a href='/admin/balance/log' class='" + _activeClass(active, "balance_log") + "'>余额日志</a>"
+    menu = menu + "<a href='/admin/user/recharge' class='" + _activeClass(active, "user_recharge") + "'>充值管理</a>"
+    menu = menu + "<a href='/admin/user/withdraw' class='" + _activeClass(active, "user_withdraw") + "'>提现管理</a>"
+    menu = menu + "</div>"
+
+    // 6. 分销管理
+    menu = menu + "<div class='menu-group'><div class='menu-title'>分销管理</div>"
+    menu = menu + "<a href='/admin/distribution' class='" + _activeClass(active, "distribution") + "'>分销概览</a>"
+    menu = menu + "<a href='/admin/distribution/products' class='" + _activeClass(active, "distribution_products") + "'>分销商品</a>"
+    menu = menu + "<a href='/admin/distribution/orders' class='" + _activeClass(active, "distribution_orders") + "'>分销订单</a>"
+    menu = menu + "<a href='/admin/distribution/levels' class='" + _activeClass(active, "distribution_levels") + "'>分销等级</a>"
+    menu = menu + "<a href='/admin/distribution/apply' class='" + _activeClass(active, "distribution_apply") + "'>分销商审核</a>"
+    menu = menu + "<a href='/admin/distribution/settings' class='" + _activeClass(active, "distribution_settings") + "'>分销设置</a>"
+    menu = menu + "</div>"
+
+    // 7. 营销管理
+    menu = menu + "<div class='menu-group'><div class='menu-title'>营销管理</div>"
+    menu = menu + "<a href='/admin/coupons' class='" + _activeClass(active, "coupons") + "'>优惠券</a>"
+    menu = menu + "<a href='/admin/marketing/discount' class='" + _activeClass(active, "marketing_discount") + "'>会员折扣</a>"
+    menu = menu + "<a href='/admin/marketing/seckill' class='" + _activeClass(active, "marketing_seckill") + "'>秒杀活动</a>"
+    menu = menu + "<a href='/admin/marketing/group' class='" + _activeClass(active, "marketing_group") + "'>拼团活动</a>"
+    menu = menu + "</div>"
+
+    // 8. 应用管理
+    menu = menu + "<div class='menu-group'><div class='menu-title'>应用管理</div>"
+    menu = menu + "<a href='/admin/upload' class='" + _activeClass(active, "upload") + "'>素材管理</a>"
+    menu = menu + "<a href='/admin/articles' class='" + _activeClass(active, "articles") + "'>文章管理</a>"
+    menu = menu + "<a href='/admin/announcements' class='" + _activeClass(active, "announcements") + "'>商城公告</a>"
+    menu = menu + "<a href='/admin/messages' class='" + _activeClass(active, "messages") + "'>消息管理</a>"
+    menu = menu + "<a href='/admin/cs' class='" + _activeClass(active, "cs") + "'>客服系统</a>"
+    menu = menu + "<a href='/admin/sensitive' class='" + _activeClass(active, "sensitive") + "'>敏感词库</a>"
+    menu = menu + "</div>"
+
+    // 9. 装修管理
+    menu = menu + "<div class='menu-group'><div class='menu-title'>装修管理</div>"
+    menu = menu + "<a href='/admin/decoration/pages' class='" + _activeClass(active, "decoration_pages") + "'>页面装修</a>"
+    menu = menu + "<a href='/admin/decoration/templates' class='" + _activeClass(active, "decoration_templates") + "'>模板管理</a>"
+    menu = menu + "<a href='/admin/decoration/banners' class='" + _activeClass(active, "decoration_banners") + "'>轮播图</a>"
+    menu = menu + "<a href='/admin/decoration/navs' class='" + _activeClass(active, "decoration_navs") + "'>导航图标</a>"
+    menu = menu + "</div>"
+
+    // 10. 财务管理
+    menu = menu + "<div class='menu-group'><div class='menu-title'>财务管理</div>"
+    menu = menu + "<a href='/admin/finance' class='" + _activeClass(active, "finance") + "'>资金流水</a>"
+    menu = menu + "<a href='/admin/finance/payments' class='" + _activeClass(active, "finance_payments") + "'>收款记录</a>"
+    menu = menu + "<a href='/admin/finance/refunds' class='" + _activeClass(active, "finance_refunds") + "'>退款记录</a>"
+    menu = menu + "<a href='/admin/finance/withdraw' class='" + _activeClass(active, "finance_withdraw") + "'>提现审核</a>"
+    menu = menu + "<a href='/admin/finance/settlement' class='" + _activeClass(active, "finance_settlement") + "'>商家结算</a>"
+    menu = menu + "<a href='/admin/payments' class='" + _activeClass(active, "payments") + "'>支付配置</a>"
+    menu = menu + "</div>"
+
+    // 11. 权限管理
+    menu = menu + "<div class='menu-group'><div class='menu-title'>权限管理</div>"
+    menu = menu + "<a href='/admin/permissions/roles' class='" + _activeClass(active, "perm_roles") + "'>角色管理</a>"
+    menu = menu + "<a href='/admin/permissions/menus' class='" + _activeClass(active, "perm_menus") + "'>菜单管理</a>"
+    menu = menu + "<a href='/admin/permissions/admins' class='" + _activeClass(active, "perm_admins") + "'>管理员</a>"
+    menu = menu + "<a href='/admin/permissions/logs' class='" + _activeClass(active, "perm_logs") + "'>操作日志</a>"
+    menu = menu + "</div>"
+
+    // 12. 系统设置
+    menu = menu + "<div class='menu-group'><div class='menu-title'>系统设置</div>"
+    menu = menu + "<a href='/admin/system/config' class='" + _activeClass(active, "system_config") + "'>基础配置</a>"
+    menu = menu + "<a href='/admin/system/payment' class='" + _activeClass(active, "system_payment") + "'>支付配置</a>"
+    menu = menu + "<a href='/admin/system/logistics' class='" + _activeClass(active, "system_logistics") + "'>物流配置</a>"
+    menu = menu + "<a href='/admin/system/shipping' class='" + _activeClass(active, "system_shipping") + "'>配送方式</a>"
+    menu = menu + "<a href='/admin/system/agreement' class='" + _activeClass(active, "system_agreement") + "'>协议管理</a>"
+    menu = menu + "</div>"
+
+    // 13. 组织管理
+    menu = menu + "<div class='menu-group'><div class='menu-title'>组织管理</div>"
+    menu = menu + "<a href='/admin/org/departments' class='" + _activeClass(active, "org_departments") + "'>部门管理</a>"
+    menu = menu + "<a href='/admin/org/positions' class='" + _activeClass(active, "org_positions") + "'>岗位管理</a>"
+    menu = menu + "</div>"
+
+    // 14. 渠道设置
+    menu = menu + "<div class='menu-group'><div class='menu-title'>渠道设置</div>"
+    menu = menu + "<a href='/admin/channel/wechat/menu' class='" + _activeClass(active, "channel_wechat_menu") + "'>公众号菜单</a>"
+    menu = menu + "<a href='/admin/channel/wechat/reply' class='" + _activeClass(active, "channel_wechat_reply") + "'>自动回复</a>"
+    menu = menu + "<a href='/admin/channel/channels' class='" + _activeClass(active, "channel_list") + "'>推广渠道</a>"
+    menu = menu + "</div>"
+
+    // 15. 开发工具
+    menu = menu + "<div class='menu-group'><div class='menu-title'>开发工具</div>"
+    menu = menu + "<a href='/admin/dev/generator' class='" + _activeClass(active, "dev_generator") + "'>代码生成器</a>"
+    menu = menu + "<a href='/admin/dev/export' class='" + _activeClass(active, "dev_export") + "'>数据导出</a>"
+    menu = menu + "<a href='/admin/dev/import' class='" + _activeClass(active, "dev_import") + "'>数据导入</a>"
+    menu = menu + "<a href='/admin/dev/api' class='" + _activeClass(active, "dev_api") + "'>API文档</a>"
+    menu = menu + "</div>"
+
+    // 16-17. 外部链接
+    menu = menu + "<div class='menu-group'><div class='menu-title'>外部入口</div>"
+    menu = menu + "<a href='/' target='_blank'>H5用户端</a>"
+    menu = menu + "<a href='/merchant' target='_blank'>商家端</a>"
+    menu = menu + "</div>"
+
+    menu = menu + "</div></div>"
+    return menu
+}
+
+fn admin_layout_css() {
+    return ".sidebar{position:fixed;left:0;top:0;width:220px;height:100vh;background:#001529;color:#fff;overflow-y:auto;z-index:100}" +
+        ".sidebar h2{text-align:center;padding:20px 0;margin:0;color:#fff;font-size:18px;border-bottom:1px solid #1f3a5f}" +
+        ".sidebar-scroll{padding-bottom:20px}" +
+        ".menu-group{margin-top:8px}" +
+        ".menu-title{padding:8px 20px;color:#8c9eb5;font-size:12px;text-transform:uppercase;letter-spacing:1px}" +
+        ".sidebar a{display:block;padding:10px 20px 10px 32px;color:#ccc;text-decoration:none;font-size:14px;border-left:3px solid transparent}" +
+        ".sidebar a:hover{background:#1890ff;color:#fff}" +
+        ".sidebar a.active{background:#1890ff;color:#fff;border-left-color:#fff}" +
+        ".main{margin-left:220px;padding:20px;min-height:100vh;background:#f0f2f5}" +
+        ".header{background:#fff;padding:15px 20px;margin-bottom:20px;border-radius:4px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 3px rgba(0,0,0,0.1)}" +
+        ".header h2{margin:0;color:#333}" +
+        ".card{background:#fff;border-radius:4px;padding:20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1)}" +
+        ".stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-bottom:20px}" +
+        ".stat-card{background:#fff;border-radius:4px;padding:20px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.1)}" +
+        ".stat-card .number{font-size:32px;font-weight:bold;color:#1890ff}" +
+        ".stat-card .label{color:#999;margin-top:5px;font-size:14px}" +
+        ".btn{display:inline-block;padding:8px 16px;background:#1890ff;color:#fff;text-decoration:none;border-radius:4px;border:none;cursor:pointer;font-size:14px}" +
+        ".btn:hover{background:#40a9ff}" +
+        ".btn-danger{background:#ff4d4f}" +
+        ".btn-danger:hover{background:#ff7875}" +
+        ".btn-success{background:#52c41a}" +
+        ".btn-success:hover{background:#73d13d}" +
+        "table{width:100%;border-collapse:collapse}" +
+        "th,td{padding:12px;text-align:left;border-bottom:1px solid #f0f0f0}" +
+        "th{background:#fafafa;font-weight:600;color:#333}" +
+        "tr:hover{background:#fafafa}" +
+        ".form-group{margin-bottom:16px}" +
+        ".form-group label{display:block;margin-bottom:6px;color:#333;font-weight:500}" +
+        ".form-group input,.form-group select,.form-group textarea{width:100%;padding:8px 12px;border:1px solid #d9d9d9;border-radius:4px;font-size:14px;box-sizing:border-box}" +
+        ".form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:#1890ff;box-shadow:0 0 0 2px rgba(24,144,255,0.2)}" +
+        ".tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px}" +
+        ".tag-success{background:#f6ffed;color:#52c41a;border:1px solid #b7eb8f}" +
+        ".tag-warning{background:#fffbe6;color:#faad14;border:1px solid #ffe58f}" +
+        ".tag-danger{background:#fff2f0;color:#ff4d4f;border:1px solid #ffccc7}" +
+        ".tag-info{background:#e6f7ff;color:#1890ff;border:1px solid #91d5ff}" +
+        ".empty{text-align:center;padding:40px;color:#999}" +
+        ".pagination{margin-top:20px;text-align:center}" +
+        ".pagination a{display:inline-block;padding:6px 12px;margin:0 2px;border:1px solid #d9d9d9;border-radius:4px;color:#333;text-decoration:none}" +
+        ".pagination a.active{background:#1890ff;color:#fff;border-color:#1890ff}"
+}
+
+fn admin_layout_page(title, active, bodyContent, currentUser) {
+    let username = "admin"
+    if (currentUser != null) { username = currentUser.username }
+    return "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>" + title + " - TLL OS 商城后台</title><style>" + admin_layout_css() + "</style></head><body>" +
+        admin_layout_sidebar(active) +
+        "<div class='main'><div class='header'><h2>" + title + "</h2><span>欢迎, " + username + " | <a href='/logout' style='color:#1890ff;text-decoration:none'>退出</a></span></div>" +
+        bodyContent +
+        "</div></body></html>"
+}
