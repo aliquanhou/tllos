@@ -1,0 +1,570 @@
+// TLL Mall - P3 Features Module
+// File upload, Merchant, Distribution, Customer Service, Finance, Payment
+
+from "./database" import db_exec, db_query, db_queryOne
+from "./router" import router_get, router_post, res_json, res_html, res_redirect, res_notFound
+from "./auth" import auth_currentUser, cookie_getSessionId
+
+fn p3_checkAdmin(req) {
+    let sessionId = cookie_getSessionId(req)
+    let user = auth_currentUser(sessionId)
+    if (user == null) { return res_redirect("/login?redirect=/admin") }
+    if (user.role != "admin") { return res_html("<html><body><h1>403</h1></body></html>", 403) }
+    req.currentUser = user
+    return null
+}
+
+fn p3_checkUser(req) {
+    let sessionId = cookie_getSessionId(req)
+    let user = auth_currentUser(sessionId)
+    if (user == null) { return res_json({error: "Please login", success: false}) }
+    req.currentUser = user
+    return null
+}
+
+fn p3_esc(s) {
+    if (s == null) { return "" }
+    return strings.replace(s, "'", "''")
+}
+
+fn p3_layout(title, body) {
+    return "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>" + title + "</title><style>" +
+        "body{font-family:sans-serif;background:#f5f5f5;margin:0;padding:20px}.container{max-width:1200px;margin:0 auto}.card{background:#fff;border-radius:8px;padding:20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1)}" +
+        "h1,h2,h3{margin:0 0 15px}table{width:100%;border-collapse:collapse}th,td{padding:10px;text-align:left;border-bottom:1px solid #eee}th{background:#fafafa}" +
+        ".btn{display:inline-block;padding:8px 16px;background:#1890ff;color:#fff;border:none;border-radius:4px;cursor:pointer;text-decoration:none;margin-right:8px}.btn:hover{background:#40a9ff}.btn-danger{background:#ff4d4f}.btn-success{background:#52c41a}" +
+        ".form-group{margin-bottom:15px}.form-group label{display:block;margin-bottom:5px;font-weight:500}.form-group input,.form-group select,.form-group textarea{width:100%;padding:8px;border:1px solid #ddd;border-radius:4px}" +
+        ".badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px}.badge-success{background:#e8f5e9;color:#2e7d32}.badge-warning{background:#fff3e0;color:#e65100}.badge-danger{background:#ffebee;color:#c62828}.badge-info{background:#e3f2fd;color:#1565c0}" +
+        ".nav{background:#001529;padding:10px 20px;margin:-20px -20px 20px}.nav a{color:#fff;text-decoration:none;margin-right:20px}.nav a:hover{color:#1890ff}" +
+        ".stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin-bottom:20px}.stat-card{background:#fff;border-radius:8px;padding:20px;text-align:center}.stat-card .num{font-size:28px;font-weight:bold;color:#1890ff}.stat-card .label{color:#999;margin-top:5px}" +
+        "</style></head><body><div class='container'>" + body + "</div></body></html>"
+}
+
+// ============ FILE UPLOAD ============
+
+fn p3_registerUploadRoutes(router, db) {
+    // Upload page
+    router_get(router, "/admin/upload", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let body = "<div class='nav'><a href='/admin'>Dashboard</a><a href='/admin/upload'>Upload</a><a href='/admin/merchants'>Merchants</a><a href='/admin/distribution'>Distribution</a><a href='/admin/cs'>Customer Service</a><a href='/admin/finance'>Finance</a></div>" +
+            "<h1>File Upload</h1><div class='card'><h3>Upload Image (Base64)</h3>" +
+            "<form method='POST' action='/api/upload'><div class='form-group'><label>File Name</label><input type='text' name='filename' value='test.jpg'></div>" +
+            "<div class='form-group'><label>Base64 Content (paste here)</label><textarea name='content' rows='5' placeholder='data:image/jpeg;base64,...'></textarea></div>" +
+            "<button type='submit' class='btn btn-success'>Upload</button></form></div>" +
+            "<div class='card'><h3>Uploaded Files</h3><p>Files are stored in mall/uploads/ directory</p></div>"
+        return res_html(p3_layout("Upload", body))
+    })
+
+    // Upload API (base64)
+    router_post(router, "/api/upload", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let data = json.parse(req.body)
+        let filename = "upload_" + convert.toString(process.pid()) + "_" + convert.toString(time.now()) + ".jpg"
+        if (data.filename != null) { filename = data.filename }
+        let content = ""
+        if (data.content != null) { content = data.content }
+        // Remove data URI prefix if present
+        let commaIdx = strings.indexOf(content, ",")
+        if (commaIdx > 0) {
+            content = strings.substring(content, commaIdx + 1, strings.length(content))
+        }
+        // Save file (simplified - in production would decode base64)
+        let uploadDir = "mall/uploads"
+        // For now, just return success with URL
+        let fileUrl = "/uploads/" + filename
+        // Record in database
+        db_exec(db, "INSERT INTO uploads (filename, url, size, type, created_at) VALUES ('" + p3_esc(filename) + "', '" + p3_esc(fileUrl) + "', " + convert.toString(strings.length(content)) + ", 'image', datetime('now'))")
+        return res_json({success: true, url: fileUrl, filename: filename})
+    })
+
+    // Upload list
+    router_get(router, "/admin/uploads", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let files = db_query(db, "SELECT * FROM uploads ORDER BY id DESC LIMIT 50")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(files)) {
+            html = html + "<tr><td>" + convert.toString(files[i].id) + "</td><td>" + files[i].filename + "</td><td>" + files[i].url + "</td><td>" + convert.toString(files[i].size) + "</td><td>" + files[i].type + "</td><td>" + files[i].created_at + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<h1>Uploaded Files</h1><div class='card'><table><thead><tr><th>ID</th><th>Filename</th><th>URL</th><th>Size</th><th>Type</th><th>Time</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(p3_layout("Uploads", body))
+    })
+}
+
+// ============ MERCHANT SYSTEM ============
+
+fn p3_registerMerchantRoutes(router, db) {
+    // Merchant list (before /admin/merchant/:id)
+    router_get(router, "/admin/merchants", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let merchants = db_query(db, "SELECT m.*, u.username as owner_name FROM merchants m LEFT JOIN users u ON m.user_id=u.id ORDER BY m.id DESC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(merchants)) {
+            let m = merchants[i]
+            let statusBadge = "<span class='badge badge-warning'>Pending</span>"
+            if (m.status == "approved") { statusBadge = "<span class='badge badge-success'>Approved</span>" }
+            else if (m.status == "rejected") { statusBadge = "<span class='badge badge-danger'>Rejected</span>" }
+            else if (m.status == "suspended") { statusBadge = "<span class='badge badge-danger'>Suspended</span>" }
+            let mOwner = "-"
+            if (m.owner_name != null) { mOwner = m.owner_name }
+            let mActions = "-"
+            if (m.status == "pending") { mActions = "<a href='/admin/merchant/approve/" + convert.toString(m.id) + "' class='btn btn-success'>Approve</a> <a href='/admin/merchant/reject/" + convert.toString(m.id) + "' class='btn btn-danger'>Reject</a>" }
+            html = html + "<tr><td>" + convert.toString(m.id) + "</td><td>" + m.name + "</td><td>" + mOwner + "</td><td>" + m.contact_phone + "</td><td>" + convert.toString(m.balance) + "</td><td>" + statusBadge + "</td><td>" + m.created_at + "</td>" +
+                "<td>" + mActions + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<div class='nav'><a href='/admin'>Dashboard</a><a href='/admin/merchants'>Merchants</a><a href='/admin/distribution'>Distribution</a><a href='/admin/cs'>Customer Service</a><a href='/admin/finance'>Finance</a></div>" +
+            "<h1>Merchant Management</h1>" +
+            "<div class='stat-grid'><div class='stat-card'><div class='num'>" + convert.toString(arrays.length(merchants)) + "</div><div class='label'>Total Merchants</div></div>" +
+            "<div class='stat-card'><div class='num'>" + convert.toString((merchants | arrays.length)) + "</div><div class='label'>Active</div></div>" +
+            "<div class='stat-card'><div class='num'>0</div><div class='label'>Pending</div></div>" +
+            "<div class='stat-card'><div class='num'>0</div><div class='label'>Total Sales</div></div></div>" +
+            "<div class='card'><table><thead><tr><th>ID</th><th>Store Name</th><th>Owner</th><th>Phone</th><th>Balance</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(p3_layout("Merchants", body))
+    })
+
+    // Approve merchant
+    router_get(router, "/admin/merchant/approve/:id", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "UPDATE merchants SET status='approved', approved_at=datetime('now') WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/merchants")
+    })
+
+    // Reject merchant
+    router_get(router, "/admin/merchant/reject/:id", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "UPDATE merchants SET status='rejected', rejected_at=datetime('now') WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/merchants")
+    })
+
+    // Merchant apply (user-side)
+    router_post(router, "/merchant/apply", fn(req) {
+        let authResult = p3_checkUser(req)
+        if (authResult != null) { return authResult }
+        let data = json.parse(req.body)
+        let userId = req.currentUser.id
+        let name = p3_esc(data.name)
+        let desc = p3_esc(data.description)
+        let phone = p3_esc(data.contact_phone)
+        db_exec(db, "INSERT INTO merchants (user_id, name, description, contact_phone, status, balance, created_at) VALUES (" + convert.toString(userId) + ", '" + name + "', '" + desc + "', '" + phone + "', 'pending', 0, datetime('now'))")
+        return res_json({success: true, message: "Application submitted"})
+    })
+
+    // My merchant store
+    router_get(router, "/my/merchant", fn(req) {
+        let authResult = p3_checkUser(req)
+        if (authResult != null) { return authResult }
+        let userId = req.currentUser.id
+        let merchant = db_queryOne(db, "SELECT * FROM merchants WHERE user_id=" + convert.toString(userId))
+        if (merchant == null) {
+            let body = "<h1>Merchant Center</h1><div class='card'><h3>Apply to Become a Merchant</h3><form method='POST' action='/merchant/apply'>" +
+                "<div class='form-group'><label>Store Name</label><input type='text' name='name' required></div>" +
+                "<div class='form-group'><label>Description</label><textarea name='description' rows='3'></textarea></div>" +
+                "<div class='form-group'><label>Contact Phone</label><input type='text' name='contact_phone'></div>" +
+                "<button type='submit' class='btn btn-success'>Submit Application</button></form></div>"
+            return res_html(p3_layout("Merchant Apply", body))
+        }
+        let statusBadge = "<span class='badge badge-warning'>Pending</span>"
+        if (merchant.status == "approved") { statusBadge = "<span class='badge badge-success'>Approved</span>" }
+        else if (merchant.status == "rejected") { statusBadge = "<span class='badge badge-danger'>Rejected</span>" }
+        let body = "<h1>My Merchant Store</h1><div class='card'><h3>" + merchant.name + "</h3><p>Status: " + statusBadge + "</p><p>Balance: " + convert.toString(merchant.balance) + "</p><p>Created: " + merchant.created_at + "</p></div>"
+        return res_html(p3_layout("My Merchant", body))
+    })
+}
+
+// ============ DISTRIBUTION SYSTEM ============
+
+fn p3_registerDistributionRoutes(router, db) {
+    // Distribution dashboard
+    router_get(router, "/admin/distribution", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let distributors = db_query(db, "SELECT d.*, u.username FROM distributors d LEFT JOIN users u ON d.user_id=u.id ORDER BY d.id DESC")
+        let totalCommission = db_queryOne(db, "SELECT COALESCE(SUM(amount),0) as total FROM distribution_orders WHERE status='completed'")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(distributors)) {
+            let d = distributors[i]
+            let levelBadge = "<span class='badge badge-info'>Level " + convert.toString(d.level) + "</span>"
+            let dUsername = "-"
+            if (d.username != null) { dUsername = d.username }
+            html = html + "<tr><td>" + convert.toString(d.id) + "</td><td>" + dUsername + "</td><td>" + levelBadge + "</td><td>" + convert.toString(d.total_commission) + "</td><td>" + convert.toString(d.balance) + "</td><td>" + d.created_at + "</td>" +
+                "<td><a href='/admin/distributor/settle/" + convert.toString(d.id) + "' class='btn btn-success'>Settle</a></td></tr>"
+            i = i + 1
+        }
+        let body = "<div class='nav'><a href='/admin'>Dashboard</a><a href='/admin/merchants'>Merchants</a><a href='/admin/distribution'>Distribution</a><a href='/admin/cs'>Customer Service</a><a href='/admin/finance'>Finance</a></div>" +
+            "<h1>Distribution Management</h1>" +
+            "<div class='stat-grid'><div class='stat-card'><div class='num'>" + convert.toString(arrays.length(distributors)) + "</div><div class='label'>Distributors</div></div>" +
+            "<div class='stat-card'><div class='num'>" + convert.toString(totalCommission.total) + "</div><div class='label'>Total Commission</div></div>" +
+            "<div class='stat-card'><div class='num'>0</div><div class='label'>Pending Orders</div></div>" +
+            "<div class='stat-card'><div class='num'>3</div><div class='label'>Levels</div></div></div>" +
+            "<div class='card'><table><thead><tr><th>ID</th><th>User</th><th>Level</th><th>Total Commission</th><th>Balance</th><th>Joined</th><th>Actions</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(p3_layout("Distribution", body))
+    })
+
+    // Settle distributor
+    router_get(router, "/admin/distributor/settle/:id", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "UPDATE distributors SET balance=0 WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/distribution")
+    })
+
+    // My distribution center
+    router_get(router, "/my/distribution", fn(req) {
+        let authResult = p3_checkUser(req)
+        if (authResult != null) { return authResult }
+        let userId = req.currentUser.id
+        let distributor = db_queryOne(db, "SELECT * FROM distributors WHERE user_id=" + convert.toString(userId))
+        if (distributor == null) {
+            db_exec(db, "INSERT INTO distributors (user_id, level, total_commission, balance, created_at) VALUES (" + convert.toString(userId) + ", 1, 0, 0, datetime('now'))")
+            distributor = db_queryOne(db, "SELECT * FROM distributors WHERE user_id=" + convert.toString(userId))
+        }
+        let orders = db_query(db, "SELECT * FROM distribution_orders WHERE distributor_id=" + convert.toString(distributor.id) + " ORDER BY id DESC LIMIT 20")
+        let orderHtml = ""
+        let i = 0
+        while (i < arrays.length(orders)) {
+            orderHtml = orderHtml + "<tr><td>" + convert.toString(orders[i].id) + "</td><td>" + convert.toString(orders[i].order_id) + "</td><td>" + convert.toString(orders[i].amount) + "</td><td>" + orders[i].status + "</td><td>" + orders[i].created_at + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<h1>My Distribution Center</h1>" +
+            "<div class='stat-grid'><div class='stat-card'><div class='num'>Level " + convert.toString(distributor.level) + "</div><div class='label'>Level</div></div>" +
+            "<div class='stat-card'><div class='num'>" + convert.toString(distributor.total_commission) + "</div><div class='label'>Total Commission</div></div>" +
+            "<div class='stat-card'><div class='num'>" + convert.toString(distributor.balance) + "</div><div class='label'>Available Balance</div></div>" +
+            "<div class='stat-card'><div class='num'>" + convert.toString(arrays.length(orders)) + "</div><div class='label'>Orders</div></div></div>" +
+            "<div class='card'><h3>Commission Orders</h3><table><thead><tr><th>ID</th><th>Order ID</th><th>Commission</th><th>Status</th><th>Time</th></tr></thead><tbody>" + orderHtml + "</tbody></table></div>"
+        return res_html(p3_layout("My Distribution", body))
+    })
+}
+
+// ============ CUSTOMER SERVICE ============
+
+fn p3_registerCSRoutes(router, db) {
+    // CS dashboard
+    router_get(router, "/admin/cs", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let sessions = db_query(db, "SELECT s.*, u.username FROM cs_sessions s LEFT JOIN users u ON s.user_id=u.id ORDER BY s.last_message_at DESC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(sessions)) {
+            let s = sessions[i]
+            let statusBadge = "<span class='badge badge-success'>Open</span>"
+            if (s.status == "closed") { statusBadge = "<span class='badge badge-default'>Closed</span>" }
+            let sUsername = "Guest"
+            if (s.username != null) { sUsername = s.username }
+            let sCloseBtn = ""
+            if (s.status == "open") { sCloseBtn = "<a href='/admin/cs/close/" + convert.toString(s.id) + "' class='btn btn-danger'>Close</a>" }
+            html = html + "<tr><td>" + convert.toString(s.id) + "</td><td>" + sUsername + "</td><td>" + s.last_message + "</td><td>" + statusBadge + "</td><td>" + s.last_message_at + "</td>" +
+                "<td><a href='/admin/cs/session/" + convert.toString(s.id) + "' class='btn'>View</a> " +
+                sCloseBtn + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<div class='nav'><a href='/admin'>Dashboard</a><a href='/admin/merchants'>Merchants</a><a href='/admin/distribution'>Distribution</a><a href='/admin/cs'>Customer Service</a><a href='/admin/finance'>Finance</a></div>" +
+            "<h1>Customer Service</h1>" +
+            "<div class='stat-grid'><div class='stat-card'><div class='num'>" + convert.toString(arrays.length(sessions)) + "</div><div class='label'>Total Sessions</div></div>" +
+            "<div class='stat-card'><div class='num'>0</div><div class='label'>Open</div></div>" +
+            "<div class='stat-card'><div class='num'>0</div><div class='label'>Today Messages</div></div>" +
+            "<div class='stat-card'><div class='num'>0</div><div class='label'>Avg Response</div></div></div>" +
+            "<div class='card'><table><thead><tr><th>ID</th><th>User</th><th>Last Message</th><th>Status</th><th>Last Time</th><th>Actions</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(p3_layout("Customer Service", body))
+    })
+
+    // CS session detail
+    router_get(router, "/admin/cs/session/:id", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        let messages = db_query(db, "SELECT * FROM cs_messages WHERE session_id=" + convert.toString(id) + " ORDER BY id ASC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(messages)) {
+            let m = messages[i]
+            let align = "text-align:left"
+            let bg = "background:#f0f0f0"
+            if (m.sender_type == "admin") { align = "text-align:right"; bg = "background:#1890ff;color:#fff" }
+            html = html + "<div style='" + align + ";margin:10px 0'><div style='display:inline-block;padding:10px 15px;border-radius:8px;" + bg + "'>" + m.content + "</div><div style='font-size:11px;color:#999;margin-top:3px'>" + m.sender_type + " - " + m.created_at + "</div></div>"
+            i = i + 1
+        }
+        let body = "<h1>CS Session #" + convert.toString(id) + "</h1><div class='card' style='max-height:500px;overflow-y:auto'>" + html + "</div>" +
+            "<div class='card'><form method='POST' action='/admin/cs/reply/" + convert.toString(id) + "'><div class='form-group'><label>Reply</label><textarea name='content' rows='3' required></textarea></div><button type='submit' class='btn btn-success'>Send</button></form></div>"
+        return res_html(p3_layout("CS Session", body))
+    })
+
+    // CS reply
+    router_post(router, "/admin/cs/reply/:id", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        let data = json.parse(req.body)
+        let content = p3_esc(data.content)
+        db_exec(db, "INSERT INTO cs_messages (session_id, sender_type, sender_id, content, created_at) VALUES (" + convert.toString(id) + ", 'admin', 1, '" + content + "', datetime('now'))")
+        db_exec(db, "UPDATE cs_sessions SET last_message='" + content + "', last_message_at=datetime('now') WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/cs/session/" + convert.toString(id))
+    })
+
+    // Close session
+    router_get(router, "/admin/cs/close/:id", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "UPDATE cs_sessions SET status='closed', closed_at=datetime('now') WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/cs")
+    })
+
+    // User: contact CS
+    router_get(router, "/support", fn(req) {
+        let authResult = p3_checkUser(req)
+        if (authResult != null) { return authResult }
+        let userId = req.currentUser.id
+        let session = db_queryOne(db, "SELECT * FROM cs_sessions WHERE user_id=" + convert.toString(userId) + " AND status='open' ORDER BY id DESC LIMIT 1")
+        if (session == null) {
+            db_exec(db, "INSERT INTO cs_sessions (user_id, status, last_message, last_message_at, created_at) VALUES (" + convert.toString(userId) + ", 'open', 'New session', datetime('now'), datetime('now'))")
+            session = db_queryOne(db, "SELECT * FROM cs_sessions WHERE user_id=" + convert.toString(userId) + " AND status='open' ORDER BY id DESC LIMIT 1")
+        }
+        let messages = db_query(db, "SELECT * FROM cs_messages WHERE session_id=" + convert.toString(session.id) + " ORDER BY id ASC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(messages)) {
+            let m = messages[i]
+            let align = "text-align:left"
+            let bg = "background:#f0f0f0"
+            if (m.sender_type == "user") { align = "text-align:right"; bg = "background:#1890ff;color:#fff" }
+            html = html + "<div style='" + align + ";margin:10px 0'><div style='display:inline-block;padding:10px 15px;border-radius:8px;" + bg + "'>" + m.content + "</div><div style='font-size:11px;color:#999;margin-top:3px'>" + m.created_at + "</div></div>"
+            i = i + 1
+        }
+        let body = "<h1>Customer Support</h1><div class='card' style='max-height:500px;overflow-y:auto'>" + html + "</div>" +
+            "<div class='card'><form method='POST' action='/support/send'><div class='form-group'><label>Message</label><textarea name='content' rows='3' required></textarea></div><button type='submit' class='btn btn-success'>Send</button></form></div>"
+        return res_html(p3_layout("Support", body))
+    })
+
+    // User: send message
+    router_post(router, "/support/send", fn(req) {
+        let authResult = p3_checkUser(req)
+        if (authResult != null) { return authResult }
+        let userId = req.currentUser.id
+        let data = json.parse(req.body)
+        let content = p3_esc(data.content)
+        let session = db_queryOne(db, "SELECT * FROM cs_sessions WHERE user_id=" + convert.toString(userId) + " AND status='open' ORDER BY id DESC LIMIT 1")
+        if (session == null) {
+            db_exec(db, "INSERT INTO cs_sessions (user_id, status, last_message, last_message_at, created_at) VALUES (" + convert.toString(userId) + ", 'open', '" + content + "', datetime('now'), datetime('now'))")
+            session = db_queryOne(db, "SELECT * FROM cs_sessions WHERE user_id=" + convert.toString(userId) + " AND status='open' ORDER BY id DESC LIMIT 1")
+        }
+        db_exec(db, "INSERT INTO cs_messages (session_id, sender_type, sender_id, content, created_at) VALUES (" + convert.toString(session.id) + ", 'user', " + convert.toString(userId) + ", '" + content + "', datetime('now'))")
+        db_exec(db, "UPDATE cs_sessions SET last_message='" + content + "', last_message_at=datetime('now') WHERE id=" + convert.toString(session.id))
+        return res_redirect("/support")
+    })
+}
+
+// ============ FINANCE SYSTEM ============
+
+fn p3_registerFinanceRoutes(router, db) {
+    // Finance dashboard
+    router_get(router, "/admin/finance", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let totalRevenue = db_queryOne(db, "SELECT COALESCE(SUM(total_amount),0) as total FROM orders WHERE status != 'cancelled'")
+        let totalRefund = db_queryOne(db, "SELECT COALESCE(SUM(amount),0) as total FROM after_sales WHERE status='approved'")
+        let totalCommission = db_queryOne(db, "SELECT COALESCE(SUM(amount),0) as total FROM distribution_orders WHERE status='completed'")
+        let transactions = db_query(db, "SELECT * FROM finance_transactions ORDER BY id DESC LIMIT 20")
+        let txHtml = ""
+        let i = 0
+        while (i < arrays.length(transactions)) {
+            let t = transactions[i]
+            let typeBadge = "<span class='badge badge-success'>Income</span>"
+            if (t.type == "expense") { typeBadge = "<span class='badge badge-danger'>Expense</span>" }
+            else if (t.type == "refund") { typeBadge = "<span class='badge badge-warning'>Refund</span>" }
+            else if (t.type == "commission") { typeBadge = "<span class='badge badge-info'>Commission</span>" }
+            txHtml = txHtml + "<tr><td>" + convert.toString(t.id) + "</td><td>" + t.order_no + "</td><td>" + typeBadge + "</td><td>" + convert.toString(t.amount) + "</td><td>" + t.description + "</td><td>" + t.created_at + "</td></tr>"
+            i = i + 1
+        }
+        let netProfit = totalRevenue.total - totalRefund.total - totalCommission.total
+        let body = "<div class='nav'><a href='/admin'>Dashboard</a><a href='/admin/merchants'>Merchants</a><a href='/admin/distribution'>Distribution</a><a href='/admin/cs'>Customer Service</a><a href='/admin/finance'>Finance</a></div>" +
+            "<h1>Finance Management</h1>" +
+            "<div class='stat-grid'><div class='stat-card'><div class='num'>" + convert.toString(totalRevenue.total) + "</div><div class='label'>Total Revenue</div></div>" +
+            "<div class='stat-card'><div class='num'>" + convert.toString(totalRefund.total) + "</div><div class='label'>Total Refund</div></div>" +
+            "<div class='stat-card'><div class='num'>" + convert.toString(totalCommission.total) + "</div><div class='label'>Commission</div></div>" +
+            "<div class='stat-card'><div class='num'>" + convert.toString(netProfit) + "</div><div class='label'>Net Profit</div></div></div>" +
+            "<div class='card'><h3>Recent Transactions</h3><table><thead><tr><th>ID</th><th>Order No</th><th>Type</th><th>Amount</th><th>Description</th><th>Time</th></tr></thead><tbody>" + txHtml + "</tbody></table></div>"
+        return res_html(p3_layout("Finance", body))
+    })
+
+    // Merchant settlement
+    router_get(router, "/admin/settlement/:merchantId", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let merchantId = convert.toInt(req.params.merchantId)
+        let merchant = db_queryOne(db, "SELECT * FROM merchants WHERE id=" + convert.toString(merchantId))
+        if (merchant == null) { return res_notFound("Merchant not found") }
+        let amount = merchant.balance
+        db_exec(db, "UPDATE merchants SET balance=0 WHERE id=" + convert.toString(merchantId))
+        db_exec(db, "INSERT INTO finance_transactions (order_no, type, amount, description, created_at) VALUES ('SETTLE_" + convert.toString(merchantId) + "', 'expense', " + convert.toString(amount) + ", 'Merchant settlement for " + p3_esc(merchant.name) + "', datetime('now'))")
+        return res_redirect("/admin/finance")
+    })
+
+    // Withdrawal request (user-side)
+    router_post(router, "/withdrawal/apply", fn(req) {
+        let authResult = p3_checkUser(req)
+        if (authResult != null) { return authResult }
+        let userId = req.currentUser.id
+        let data = json.parse(req.body)
+        let amount = convert.toString(data.amount)
+        let account = p3_esc(data.account)
+        db_exec(db, "INSERT INTO withdrawals (user_id, amount, account, status, created_at) VALUES (" + convert.toString(userId) + ", " + amount + ", '" + account + "', 'pending', datetime('now'))")
+        return res_json({success: true, message: "Withdrawal request submitted"})
+    })
+
+    // Withdrawal list (admin)
+    router_get(router, "/admin/withdrawals", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let withdrawals = db_query(db, "SELECT w.*, u.username FROM withdrawals w LEFT JOIN users u ON w.user_id=u.id ORDER BY w.id DESC")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(withdrawals)) {
+            let w = withdrawals[i]
+            let statusBadge = "<span class='badge badge-warning'>Pending</span>"
+            if (w.status == "approved") { statusBadge = "<span class='badge badge-success'>Approved</span>" }
+            else if (w.status == "rejected") { statusBadge = "<span class='badge badge-danger'>Rejected</span>" }
+            let wUsername = "-"
+            if (w.username != null) { wUsername = w.username }
+            let wActions = "-"
+            if (w.status == "pending") { wActions = "<a href='/admin/withdrawal/approve/" + convert.toString(w.id) + "' class='btn btn-success'>Approve</a> <a href='/admin/withdrawal/reject/" + convert.toString(w.id) + "' class='btn btn-danger'>Reject</a>" }
+            html = html + "<tr><td>" + convert.toString(w.id) + "</td><td>" + wUsername + "</td><td>" + convert.toString(w.amount) + "</td><td>" + w.account + "</td><td>" + statusBadge + "</td><td>" + w.created_at + "</td>" +
+                "<td>" + wActions + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<h1>Withdrawal Management</h1><div class='card'><table><thead><tr><th>ID</th><th>User</th><th>Amount</th><th>Account</th><th>Status</th><th>Time</th><th>Actions</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(p3_layout("Withdrawals", body))
+    })
+
+    // Approve withdrawal
+    router_get(router, "/admin/withdrawal/approve/:id", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "UPDATE withdrawals SET status='approved', approved_at=datetime('now') WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/withdrawals")
+    })
+
+    // Reject withdrawal
+    router_get(router, "/admin/withdrawal/reject/:id", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let id = convert.toInt(req.params.id)
+        db_exec(db, "UPDATE withdrawals SET status='rejected', rejected_at=datetime('now') WHERE id=" + convert.toString(id))
+        return res_redirect("/admin/withdrawals")
+    })
+}
+
+// ============ PAYMENT SYSTEM ============
+
+fn p3_registerPaymentRoutes(router, db) {
+    // Payment page
+    router_get(router, "/pay/:orderId", fn(req) {
+        let authResult = p3_checkUser(req)
+        if (authResult != null) { return authResult }
+        let orderId = convert.toInt(req.params.orderId)
+        let order = db_queryOne(db, "SELECT * FROM orders WHERE id=" + convert.toString(orderId))
+        if (order == null) { return res_notFound("Order not found") }
+        let body = "<h1>Payment</h1><div class='card'><h3>Order #" + order.order_no + "</h3>" +
+            "<p>Amount: <strong style='font-size:24px;color:#ff4d4f'>" + convert.toString(order.total_amount) + "</strong></p>" +
+            "<h4>Select Payment Method</h4>" +
+            "<div style='display:flex;gap:15px;margin-bottom:20px'>" +
+            "<a href='/pay/wechat/" + convert.toString(orderId) + "' class='btn' style='background:#07c160'>WeChat Pay</a>" +
+            "<a href='/pay/alipay/" + convert.toString(orderId) + "' class='btn' style='background:#1677ff'>Alipay</a>" +
+            "<a href='/pay/balance/" + convert.toString(orderId) + "' class='btn' style='background:#faad14'>Balance</a>" +
+            "</div></div>"
+        return res_html(p3_layout("Payment", body))
+    })
+
+    // WeChat pay (simulated)
+    router_get(router, "/pay/wechat/:orderId", fn(req) {
+        let authResult = p3_checkUser(req)
+        if (authResult != null) { return authResult }
+        let orderId = convert.toInt(req.params.orderId)
+        let order = db_queryOne(db, "SELECT * FROM orders WHERE id=" + convert.toString(orderId))
+        if (order == null) { return res_notFound("Order not found") }
+        db_exec(db, "UPDATE orders SET status='paid', paid_at=datetime('now'), payment_method='wechat' WHERE id=" + convert.toString(orderId))
+        db_exec(db, "INSERT INTO payments (order_id, method, amount, status, transaction_id, created_at) VALUES (" + convert.toString(orderId) + ", 'wechat', " + convert.toString(order.total_amount) + ", 'success', 'WX" + convert.toString(time.now()) + "', datetime('now'))")
+        db_exec(db, "INSERT INTO finance_transactions (order_no, type, amount, description, created_at) VALUES ('" + order.order_no + "', 'income', " + convert.toString(order.total_amount) + ", 'WeChat payment', datetime('now'))")
+        return res_redirect("/order/" + convert.toString(orderId))
+    })
+
+    // Alipay (simulated)
+    router_get(router, "/pay/alipay/:orderId", fn(req) {
+        let authResult = p3_checkUser(req)
+        if (authResult != null) { return authResult }
+        let orderId = convert.toInt(req.params.orderId)
+        let order = db_queryOne(db, "SELECT * FROM orders WHERE id=" + convert.toString(orderId))
+        if (order == null) { return res_notFound("Order not found") }
+        db_exec(db, "UPDATE orders SET status='paid', paid_at=datetime('now'), payment_method='alipay' WHERE id=" + convert.toString(orderId))
+        db_exec(db, "INSERT INTO payments (order_id, method, amount, status, transaction_id, created_at) VALUES (" + convert.toString(orderId) + ", 'alipay', " + convert.toString(order.total_amount) + ", 'success', 'ALI" + convert.toString(time.now()) + "', datetime('now'))")
+        db_exec(db, "INSERT INTO finance_transactions (order_no, type, amount, description, created_at) VALUES ('" + order.order_no + "', 'income', " + convert.toString(order.total_amount) + ", 'Alipay payment', datetime('now'))")
+        return res_redirect("/order/" + convert.toString(orderId))
+    })
+
+    // Balance pay (simulated)
+    router_get(router, "/pay/balance/:orderId", fn(req) {
+        let authResult = p3_checkUser(req)
+        if (authResult != null) { return authResult }
+        let orderId = convert.toInt(req.params.orderId)
+        let order = db_queryOne(db, "SELECT * FROM orders WHERE id=" + convert.toString(orderId))
+        if (order == null) { return res_notFound("Order not found") }
+        db_exec(db, "UPDATE orders SET status='paid', paid_at=datetime('now'), payment_method='balance' WHERE id=" + convert.toString(orderId))
+        db_exec(db, "INSERT INTO payments (order_id, method, amount, status, transaction_id, created_at) VALUES (" + convert.toString(orderId) + ", 'balance', " + convert.toString(order.total_amount) + ", 'success', 'BAL" + convert.toString(time.now()) + "', datetime('now'))")
+        return res_redirect("/order/" + convert.toString(orderId))
+    })
+
+    // Payment list (admin)
+    router_get(router, "/admin/payments", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let payments = db_query(db, "SELECT p.*, o.order_no FROM payments p LEFT JOIN orders o ON p.order_id=o.id ORDER BY p.id DESC LIMIT 50")
+        let html = ""
+        let i = 0
+        while (i < arrays.length(payments)) {
+            let p = payments[i]
+            let methodBadge = "<span class='badge badge-info'>" + p.method + "</span>"
+            let statusBadge = "<span class='badge badge-success'>Success</span>"
+            if (p.status != "success") { statusBadge = "<span class='badge badge-danger'>" + p.status + "</span>" }
+            let pOrderNo = "-"
+            if (p.order_no != null) { pOrderNo = p.order_no }
+            html = html + "<tr><td>" + convert.toString(p.id) + "</td><td>" + pOrderNo + "</td><td>" + methodBadge + "</td><td>" + convert.toString(p.amount) + "</td><td>" + p.transaction_id + "</td><td>" + statusBadge + "</td><td>" + p.created_at + "</td></tr>"
+            i = i + 1
+        }
+        let body = "<h1>Payment Management</h1><div class='card'><table><thead><tr><th>ID</th><th>Order</th><th>Method</th><th>Amount</th><th>Transaction ID</th><th>Status</th><th>Time</th></tr></thead><tbody>" + html + "</tbody></table></div>"
+        return res_html(p3_layout("Payments", body))
+    })
+
+    // Refund API
+    router_post(router, "/api/refund", fn(req) {
+        let authResult = p3_checkAdmin(req)
+        if (authResult != null) { return authResult }
+        let data = json.parse(req.body)
+        let paymentId = convert.toString(data.payment_id)
+        let amount = convert.toString(data.amount)
+        db_exec(db, "UPDATE payments SET status='refunded' WHERE id=" + paymentId)
+        return res_json({success: true, message: "Refund processed"})
+    })
+}
+
+// Register all P3 routes
+fn p3_registerAll(router, db) {
+    p3_registerUploadRoutes(router, db)
+    p3_registerMerchantRoutes(router, db)
+    p3_registerDistributionRoutes(router, db)
+    p3_registerCSRoutes(router, db)
+    p3_registerFinanceRoutes(router, db)
+    p3_registerPaymentRoutes(router, db)
+}

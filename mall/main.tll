@@ -9,6 +9,7 @@ from "./core/schema" import schema_initAll, schema_seedData
 from "./core/admin" import admin_registerRoutes
 from "./core/admin_extended" import adminx_registerAll
 from "./core/marketing" import mkt_registerAll
+from "./core/p3_features" import p3_registerAll
 
 // === HTML Templates ===
 
@@ -674,7 +675,8 @@ router_post(mallRouter, "/user/address/delete", fn(req) {
 admin_registerRoutes(mallRouter, db)
 adminx_registerAll(mallRouter, db)
 mkt_registerAll(mallRouter, db)
-io.println("Admin routes registered (basic + extended + marketing)")
+p3_registerAll(mallRouter, db)
+io.println("Routes registered (basic + extended + marketing + p3)")
 
 // === Start Server ===
 io.println("=== TLL Mall Ready ===")
