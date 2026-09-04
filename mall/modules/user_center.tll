@@ -1,0 +1,277 @@
+// TLLOS Mall - User Center Module (Taobao-level experience)
+// All implemented in TLL high-frame-rate language
+
+from "../core/database" import db_query, db_queryOne, db_exec, db_get, db_release
+from "../core/router" import router_get, router_post, res_html, res_json, res_redirect, req_getQuery, req_getJsonBody
+from "../core/session" import cookie_getSessionId
+from "../core/auth" import auth_currentUser
+
+// === Ensure user fields exist ===
+fn uc_ensureFields(db) {
+    db_exec(db, "ALTER TABLE users ADD COLUMN points INTEGER DEFAULT 0")
+    db_exec(db, "ALTER TABLE users ADD COLUMN balance REAL DEFAULT 0")
+    db_exec(db, "ALTER TABLE users ADD COLUMN level_id INTEGER DEFAULT 1")
+    db_exec(db, "ALTER TABLE users ADD COLUMN nickname TEXT")
+    db_exec(db, "ALTER TABLE users ADD COLUMN real_name TEXT")
+    db_exec(db, "ALTER TABLE users ADD COLUMN id_card TEXT")
+    db_exec(db, "ALTER TABLE users ADD COLUMN verified INTEGER DEFAULT 0")
+    return {success: true}
+}
+
+// === CSS for user center (mobile-first, Taobao-style) ===
+fn uc_css() {
+    return "<style>" +
+    "*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}" +
+    "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#f5f5f5;color:#333;font-size:14px;line-height:1.5}" +
+    ".uc-header{background:linear-gradient(135deg,#ff6a00,#ee0979);color:#fff;padding:20px 16px 60px;position:relative}" +
+    ".uc-user-row{display:flex;align-items:center;gap:12px}" +
+    ".uc-avatar{width:60px;height:60px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:bold;color:#ff6a00;border:2px solid rgba(255,255,255,0.5);flex-shrink:0}" +
+    ".uc-user-info{flex:1;min-width:0}" +
+    ".uc-nickname{font-size:18px;font-weight:bold;margin-bottom:4px}" +
+    ".uc-level-badge{display:inline-block;background:rgba(255,255,255,0.25);padding:2px 10px;border-radius:10px;font-size:12px}" +
+    ".uc-stats-row{display:flex;background:#fff;border-radius:12px;margin:-40px 16px 12px;padding:16px 0;box-shadow:0 2px 12px rgba(0,0,0,0.08);position:relative;z-index:1}" +
+    ".uc-stat-item{flex:1;text-align:center;border-right:1px solid #f0f0f0}" +
+    ".uc-stat-item:last-child{border-right:none}" +
+    ".uc-stat-num{font-size:20px;font-weight:bold;color:#ff6a00}" +
+    ".uc-stat-label{font-size:12px;color:#999;margin-top:2px}" +
+    ".uc-section{background:#fff;margin:0 16px 12px;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.04)}" +
+    ".uc-section-title{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #f5f5f5}" +
+    ".uc-section-title h3{font-size:15px;font-weight:600}" +
+    ".uc-section-more{font-size:12px;color:#999}" +
+    ".uc-order-tabs{display:flex;padding:12px 0}" +
+    ".uc-order-tab{flex:1;text-align:center;position:relative;cursor:pointer}" +
+    ".uc-order-icon{font-size:24px;margin-bottom:4px;position:relative;display:inline-block}" +
+    ".uc-order-badge{position:absolute;top:-4px;right:-8px;background:#ff4400;color:#fff;font-size:10px;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 4px}" +
+    ".uc-order-label{font-size:12px;color:#666}" +
+    ".uc-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:16px}" +
+    ".uc-grid-item{text-align:center;cursor:pointer;padding:8px 4px;border-radius:8px;transition:background 0.2s}" +
+    ".uc-grid-item:active{background:#f5f5f5}" +
+    ".uc-grid-icon{font-size:22px;margin-bottom:6px}" +
+    ".uc-grid-label{font-size:11px;color:#666}" +
+    ".uc-banner{margin:0 16px 12px;border-radius:12px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:16px;display:flex;justify-content:space-between;align-items:center}" +
+    ".uc-banner-title{font-size:15px;font-weight:600;margin-bottom:4px}" +
+    ".uc-banner-desc{font-size:12px;opacity:0.8}" +
+    ".uc-banner-btn{background:#fff;color:#667eea;padding:6px 16px;border-radius:16px;font-size:12px;font-weight:600}" +
+    ".uc-bottom-nav{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;border-top:1px solid #eee;padding:6px 0;z-index:100;padding-bottom:env(safe-area-inset-bottom)}" +
+    ".uc-nav-item{flex:1;text-align:center;cursor:pointer;padding:4px 0}" +
+    ".uc-nav-icon{font-size:20px;margin-bottom:2px}" +
+    ".uc-nav-label{font-size:10px;color:#999}" +
+    ".uc-nav-item.active .uc-nav-label{color:#ff6a00}" +
+    ".uc-empty{text-align:center;padding:40px 20px;color:#999}" +
+    ".uc-empty-icon{font-size:48px;margin-bottom:12px;opacity:0.3}" +
+    ".uc-product-card{display:flex;padding:12px 16px;border-bottom:1px solid #f5f5f5;cursor:pointer}" +
+    ".uc-product-img{width:80px;height:80px;border-radius:8px;background:#f0f0f0;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:24px}" +
+    ".uc-product-info{flex:1;margin-left:12px;min-width:0}" +
+    ".uc-product-name{font-size:14px;color:#333;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}" +
+    ".uc-product-price{font-size:16px;color:#ff4400;font-weight:bold}" +
+    ".uc-product-status{font-size:12px;color:#999;margin-top:4px}" +
+    ".uc-order-card{padding:12px 16px;border-bottom:1px solid #f5f5f5}" +
+    ".uc-order-header{display:flex;justify-content:space-between;margin-bottom:8px;font-size:12px;color:#999}" +
+    ".uc-order-status{color:#ff6a00;font-weight:600}" +
+    ".uc-order-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}" +
+    ".uc-btn{padding:6px 14px;border-radius:16px;font-size:12px;border:1px solid #ddd;background:#fff;color:#666;cursor:pointer}" +
+    ".uc-btn-primary{background:#ff6a00;color:#fff;border-color:#ff6a00}" +
+    ".uc-content{padding-bottom:70px}" +
+    ".uc-top-bar{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;background:transparent;color:#fff;position:absolute;top:0;left:0;right:0;z-index:2}" +
+    ".uc-top-bar-title{font-size:17px;font-weight:600}" +
+    ".uc-top-bar-icon{font-size:20px;cursor:pointer}" +
+    "</style>"
+}
+
+// === User Center Home Page ===
+fn uc_homePage(req, currentUser) {
+    let db = req.db
+
+    // Ensure fields
+    uc_ensureFields(db)
+
+    // Get user stats
+    let userInfo = db_queryOne(db, "SELECT * FROM users WHERE id=" + convert.toString(currentUser.id))
+    let points = 0
+    let balance = 0.0
+    let levelId = 1
+    let nickname = currentUser.username
+    if (userInfo != null) {
+        if (userInfo.points != null) { points = userInfo.points }
+        if (userInfo.balance != null) { balance = userInfo.balance }
+        if (userInfo.level_id != null) { levelId = userInfo.level_id }
+        if (userInfo.nickname != null) { nickname = userInfo.nickname }
+    }
+
+    // Get level info
+    let levelInfo = db_queryOne(db, "SELECT * FROM member_levels WHERE id=" + convert.toString(levelId))
+    let levelName = "普通会员"
+    if (levelInfo != null) { levelName = levelInfo.name }
+
+    // Get order counts by status
+    let pendingPayment = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE user_id=" + convert.toString(currentUser.id) + " AND status='pending'")
+    let pendingShipment = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE user_id=" + convert.toString(currentUser.id) + " AND status='paid'")
+    let pendingReceipt = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE user_id=" + convert.toString(currentUser.id) + " AND status='shipped'")
+    let pendingReview = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE user_id=" + convert.toString(currentUser.id) + " AND status='completed'")
+    let afterSale = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE user_id=" + convert.toString(currentUser.id) + " AND status='refund'")
+
+    let ppCnt = 0
+    let psCnt = 0
+    let prCnt = 0
+    let pvCnt = 0
+    let asCnt = 0
+    if (pendingPayment != null) { ppCnt = pendingPayment.cnt }
+    if (pendingShipment != null) { psCnt = pendingShipment.cnt }
+    if (pendingReceipt != null) { prCnt = pendingReceipt.cnt }
+    if (pendingReview != null) { pvCnt = pendingReview.cnt }
+    if (afterSale != null) { asCnt = afterSale.cnt }
+
+    // Get coupon count
+    let couponCount = db_queryOne(db, "SELECT COUNT(*) as cnt FROM user_coupons WHERE user_id=" + convert.toString(currentUser.id) + " AND status='unused'")
+    let cpCnt = 0
+    if (couponCount != null) { cpCnt = couponCount.cnt }
+
+    // Get collection count
+    let collectCount = db_queryOne(db, "SELECT COUNT(*) as cnt FROM user_collections WHERE user_id=" + convert.toString(currentUser.id))
+    let clCnt = 0
+    if (collectCount != null) { clCnt = collectCount.cnt }
+
+    // Get recent orders
+    let recentOrders = db_query(db, "SELECT * FROM orders WHERE user_id=" + convert.toString(currentUser.id) + " ORDER BY created_at DESC LIMIT 3")
+
+    // Build order badges
+    let ppBadge = ""
+    let psBadge = ""
+    let prBadge = ""
+    let pvBadge = ""
+    let asBadge = ""
+    if (ppCnt > 0) { ppBadge = "<span class='uc-order-badge'>" + convert.toString(ppCnt) + "</span>" }
+    if (psCnt > 0) { psBadge = "<span class='uc-order-badge'>" + convert.toString(psCnt) + "</span>" }
+    if (prCnt > 0) { prBadge = "<span class='uc-order-badge'>" + convert.toString(prCnt) + "</span>" }
+    if (pvCnt > 0) { pvBadge = "<span class='uc-order-badge'>" + convert.toString(pvCnt) + "</span>" }
+    if (asCnt > 0) { asBadge = "<span class='uc-order-badge'>" + convert.toString(asCnt) + "</span>" }
+
+    // Build recent orders HTML
+    let ordersHtml = ""
+    if (arrays.length(recentOrders) == 0) {
+        ordersHtml = "<div class='uc-empty'><div class='uc-empty-icon'>📦</div><div>暂无订单</div><div style='margin-top:12px'><a href='/' class='uc-btn uc-btn-primary'>去逛逛</a></div></div>"
+    } else {
+        let i = 0
+        while (i < arrays.length(recentOrders)) {
+            let o = recentOrders[i]
+            let statusText = "待付款"
+            if (o.status == "paid") { statusText = "待发货" }
+            if (o.status == "shipped") { statusText = "待收货" }
+            if (o.status == "completed") { statusText = "已完成" }
+            if (o.status == "refund") { statusText = "退款中" }
+            if (o.status == "cancelled") { statusText = "已取消" }
+            ordersHtml = ordersHtml +
+                "<div class='uc-order-card' onclick=\"location.href='/orders/" + convert.toString(o.id) + "'\">" +
+                "<div class='uc-order-header'><span>订单号: " + o.order_no + "</span><span class='uc-order-status'>" + statusText + "</span></div>" +
+                "<div class='uc-product-info'><div class='uc-product-name'>订单金额: ¥" + convert.toString(o.total_amount) + "</div></div>" +
+                "<div class='uc-order-footer'>"
+            if (o.status == "pending") {
+                ordersHtml = ordersHtml + "<button class='uc-btn'>取消订单</button><button class='uc-btn uc-btn-primary'>去支付</button>"
+            }
+            if (o.status == "shipped") {
+                ordersHtml = ordersHtml + "<button class='uc-btn'>查看物流</button><button class='uc-btn uc-btn-primary'>确认收货</button>"
+            }
+            if (o.status == "completed") {
+                ordersHtml = ordersHtml + "<button class='uc-btn'>申请售后</button><button class='uc-btn uc-btn-primary'>评价</button>"
+            }
+            ordersHtml = ordersHtml + "</div></div>"
+            i = i + 1
+        }
+    }
+
+    // Avatar first letter
+    let avatarLetter = strings.toUpperCase(strings.substring(nickname, 0, 1))
+
+    // Build page
+    let html = "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'><title>用户中心 - TLL Mall</title>" +
+        uc_css() +
+        "</head><body>" +
+        "<div class='uc-content'>" +
+        // Top bar
+        "<div class='uc-top-bar'><span></span><span class='uc-top-bar-title'>用户中心</span><span class='uc-top-bar-icon'>⚙️</span></div>" +
+        // Header with user info
+        "<div class='uc-header'>" +
+        "<div style='height:30px'></div>" +
+        "<div class='uc-user-row'>" +
+        "<div class='uc-avatar'>" + avatarLetter + "</div>" +
+        "<div class='uc-user-info'>" +
+        "<div class='uc-nickname'>" + nickname + "</div>" +
+        "<div class='uc-level-badge'>👑 " + levelName + "</div>" +
+        "</div>" +
+        "<div style='font-size:24px;opacity:0.8'>›</div>" +
+        "</div>" +
+        "</div>" +
+        // Stats row (points, balance, coupons, collections)
+        "<div class='uc-stats-row'>" +
+        "<div class='uc-stat-item'><div class='uc-stat-num'>" + convert.toString(points) + "</div><div class='uc-stat-label'>积分</div></div>" +
+        "<div class='uc-stat-item'><div class='uc-stat-num'>¥" + convert.toString(balance) + "</div><div class='uc-stat-label'>余额</div></div>" +
+        "<div class='uc-stat-item'><div class='uc-stat-num'>" + convert.toString(cpCnt) + "</div><div class='uc-stat-label'>优惠券</div></div>" +
+        "<div class='uc-stat-item'><div class='uc-stat-num'>" + convert.toString(clCnt) + "</div><div class='uc-stat-label'>收藏</div></div>" +
+        "</div>" +
+        // Member benefits banner
+        "<div class='uc-banner'>" +
+        "<div><div class='uc-banner-title'>🎁 会员专属权益</div><div class='uc-banner-desc'>升级会员享更多折扣和专属服务</div></div>" +
+        "<div class='uc-banner-btn'>立即升级</div>" +
+        "</div>" +
+        // My Orders section
+        "<div class='uc-section'>" +
+        "<div class='uc-section-title'><h3>我的订单</h3><span class='uc-section-more'>查看全部 ›</span></div>" +
+        "<div class='uc-order-tabs'>" +
+        "<div class='uc-order-tab' onclick=\"location.href='/orders?status=pending'\"><div class='uc-order-icon'>💰" + ppBadge + "</div><div class='uc-order-label'>待付款</div></div>" +
+        "<div class='uc-order-tab' onclick=\"location.href='/orders?status=paid'\"><div class='uc-order-icon'>📦" + psBadge + "</div><div class='uc-order-label'>待发货</div></div>" +
+        "<div class='uc-order-tab' onclick=\"location.href='/orders?status=shipped'\"><div class='uc-order-icon'>🚚" + prBadge + "</div><div class='uc-order-label'>待收货</div></div>" +
+        "<div class='uc-order-tab' onclick=\"location.href='/orders?status=completed'\"><div class='uc-order-icon'>⭐" + pvBadge + "</div><div class='uc-order-label'>待评价</div></div>" +
+        "<div class='uc-order-tab' onclick=\"location.href='/orders?status=refund'\"><div class='uc-order-icon'>🔄" + asBadge + "</div><div class='uc-order-label'>退款/售后</div></div>" +
+        "</div>" +
+        "</div>" +
+        // Recent orders
+        "<div class='uc-section'>" +
+        "<div class='uc-section-title'><h3>最近订单</h3></div>" +
+        ordersHtml +
+        "</div>" +
+        // Quick actions grid
+        "<div class='uc-section'>" +
+        "<div class='uc-section-title'><h3>我的服务</h3></div>" +
+        "<div class='uc-grid'>" +
+        "<div class='uc-grid-item' onclick=\"location.href='/user/address'\"><div class='uc-grid-icon'>📍</div><div class='uc-grid-label'>地址管理</div></div>" +
+        "<div class='uc-grid-item' onclick=\"location.href='/user/coupons'\"><div class='uc-grid-icon'>🎫</div><div class='uc-grid-label'>优惠券</div></div>" +
+        "<div class='uc-grid-item' onclick=\"location.href='/user/collections'\"><div class='uc-grid-icon'>❤️</div><div class='uc-grid-label'>我的收藏</div></div>" +
+        "<div class='uc-grid-item' onclick=\"location.href='/user/points'\"><div class='uc-grid-icon'>✨</div><div class='uc-grid-label'>积分明细</div></div>" +
+        "<div class='uc-grid-item' onclick=\"location.href='/user/balance'\"><div class='uc-grid-icon'>💳</div><div class='uc-grid-label'>余额明细</div></div>" +
+        "<div class='uc-grid-item' onclick=\"location.href='/user/verify'\"><div class='uc-grid-icon'>🪪</div><div class='uc-grid-label'>实名认证</div></div>" +
+        "<div class='uc-grid-item' onclick=\"location.href='/user/security'\"><div class='uc-grid-icon'>🔒</div><div class='uc-grid-label'>账户安全</div></div>" +
+        "<div class='uc-grid-item' onclick=\"location.href='/user/messages'\"><div class='uc-grid-icon'>🔔</div><div class='uc-grid-label'>消息通知</div></div>" +
+        "<div class='uc-grid-item' onclick=\"location.href='/user/service'\"><div class='uc-grid-icon'>💬</div><div class='uc-grid-label'>联系客服</div></div>" +
+        "<div class='uc-grid-item' onclick=\"location.href='/user/help'\"><div class='uc-grid-icon'>❓</div><div class='uc-grid-label'>帮助中心</div></div>" +
+        "<div class='uc-grid-item' onclick=\"location.href='/user/settings'\"><div class='uc-grid-icon'>⚙️</div><div class='uc-grid-label'>设置</div></div>" +
+        "<div class='uc-grid-item' onclick=\"location.href='/user/invite'\"><div class='uc-grid-icon'>🎁</div><div class='uc-grid-label'>邀请有礼</div></div>" +
+        "<div class='uc-grid-item' onclick=\"location.href='/user/history'\"><div class='uc-grid-icon'>👣</div><div class='uc-grid-label'>浏览历史</div></div>" +
+        "<div class='uc-grid-item' onclick=\"location.href='/user/complaint'\"><div class='uc-grid-icon'>📝</div><div class='uc-grid-label'>投诉建议</div></div>" +
+        "<div class='uc-grid-item' onclick=\"location.href='/logout'\"><div class='uc-grid-icon'>🚪</div><div class='uc-grid-label'>退出登录</div></div>" +
+        "</div>" +
+        "</div>" +
+        "</div>" +
+        // Bottom navigation
+        "<div class='uc-bottom-nav'>" +
+        "<div class='uc-nav-item' onclick=\"location.href='/'\"><div class='uc-nav-icon'>🏠</div><div class='uc-nav-label'>首页</div></div>" +
+        "<div class='uc-nav-item' onclick=\"location.href='/category'\"><div class='uc-nav-icon'>📋</div><div class='uc-nav-label'>分类</div></div>" +
+        "<div class='uc-nav-item' onclick=\"location.href='/cart'\"><div class='uc-nav-icon'>🛒</div><div class='uc-nav-label'>购物车</div></div>" +
+        "<div class='uc-nav-item active'><div class='uc-nav-icon'>👤</div><div class='uc-nav-label'>我的</div></div>" +
+        "</div>" +
+        "</body></html>"
+
+    return html
+}
+
+// === Register all user center routes ===
+fn uc_registerAll(router) {
+    router_get(router, "/user", fn(req) {
+        let sessionId = cookie_getSessionId(req)
+        let currentUser = auth_currentUser(sessionId)
+        if (currentUser == null) { return res_redirect("/login") }
+        return res_html(uc_homePage(req, currentUser))
+    })
+
+    io.println("[UserCenter] Routes registered: home")
+    return {success: true}
+}
