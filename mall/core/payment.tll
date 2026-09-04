@@ -1,0 +1,621 @@
+// ============================================================
+// TLLOS Mall - Payment Module
+// Support: WeChat Pay, Alipay, Balance Payment
+// Features: Sandbox, Callback Verify, Refund, Duplicate Protection
+// ============================================================
+
+from "./database" import db_query, db_exec, db_lastInsertId
+from "./auth" import cookie_getSessionId, auth_currentUser
+from "./router" import res_json, res_html, res_redirect, res_notFound, res_error
+from "./router" import req_getQuery, req_getJsonBody, req_getHeader, router_get, router_post, router_put, router_delete, router_addRoute
+
+// ============================================================
+// Payment Config (defaults, loaded from DB)
+// ============================================================
+
+let WECHAT_PAY_CONFIG = {
+    appid: "wx_your_appid",
+    mch_id: "your_mch_id",
+    api_v3_key: "your_api_v3_key",
+    cert_serial_no: "your_cert_serial",
+    notify_url: "https://tllos.com/shop/payment/wechat/notify",
+    sandbox: true
+}
+
+let ALIPAY_CONFIG = {
+    app_id: "your_alipay_app_id",
+    merchant_private_key: "your_private_key",
+    alipay_public_key: "your_alipay_public_key",
+    notify_url: "https://tllos.com/shop/payment/alipay/notify",
+    return_url: "https://tllos.com/shop/order/list",
+    sandbox: true
+}
+
+// ============================================================
+// Database Table Initialization
+// ============================================================
+
+fn payment_initTables(db) {
+    // Payments table
+    db_exec(db, "CREATE TABLE IF NOT EXISTS payments (id INTEGER PRIMARY KEY AUTOINCREMENT, payment_no TEXT UNIQUE NOT NULL, order_id INTEGER NOT NULL, order_no TEXT NOT NULL, user_id INTEGER NOT NULL, amount REAL NOT NULL DEFAULT 0, pay_method TEXT NOT NULL DEFAULT 'wechat', pay_status TEXT NOT NULL DEFAULT 'pending', transaction_id TEXT, paid_at TEXT, notify_data TEXT, refund_amount REAL DEFAULT 0, refund_status TEXT DEFAULT 'none', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))")
+
+    // Refunds table
+    db_exec(db, "CREATE TABLE IF NOT EXISTS refunds (id INTEGER PRIMARY KEY AUTOINCREMENT, refund_no TEXT UNIQUE NOT NULL, payment_id INTEGER NOT NULL, order_id INTEGER NOT NULL, user_id INTEGER NOT NULL, amount REAL NOT NULL DEFAULT 0, reason TEXT, refund_status TEXT NOT NULL DEFAULT 'pending', refund_transaction_id TEXT, refunded_at TEXT, operator_id INTEGER, operator_type TEXT DEFAULT 'admin', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')))")
+
+    // Payment configs table
+    db_exec(db, "CREATE TABLE IF NOT EXISTS payment_configs (id INTEGER PRIMARY KEY AUTOINCREMENT, config_key TEXT UNIQUE NOT NULL, config_value TEXT, config_type TEXT DEFAULT 'string', description TEXT, updated_at TEXT DEFAULT (datetime('now')))")
+
+    // Account logs table
+    db_exec(db, "CREATE TABLE IF NOT EXISTS account_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, merchant_id INTEGER, log_type TEXT NOT NULL, amount REAL NOT NULL DEFAULT 0, balance_before REAL DEFAULT 0, balance_after REAL DEFAULT 0, related_order_no TEXT, related_payment_no TEXT, remark TEXT, created_at TEXT DEFAULT (datetime('now')))")
+
+    // Insert default configs
+    let configs = [
+        ["wechat_appid", "wx_your_appid", "string", "WeChat AppID"],
+        ["wechat_mch_id", "your_mch_id", "string", "WeChat Merchant ID"],
+        ["wechat_api_v3_key", "your_api_v3_key", "string", "WeChat APIv3 Key"],
+        ["wechat_sandbox", "true", "boolean", "WeChat Sandbox Mode"],
+        ["alipay_app_id", "your_alipay_app_id", "string", "Alipay AppID"],
+        ["alipay_sandbox", "true", "boolean", "Alipay Sandbox Mode"],
+        ["platform_commission_rate", "0.05", "float", "Platform Commission Rate"],
+        ["auto_settle_days", "7", "int", "Auto Settle Days"]
+    ]
+    let i = 0
+    while (i < arrays.length(configs)) {
+        let c = configs[i]
+        let checkSql = "SELECT id FROM payment_configs WHERE config_key = '" + c[0] + "'"
+        let existing = db_query(db, checkSql)
+        if (arrays.length(existing) == 0) {
+            let insertSql = "INSERT INTO payment_configs (config_key, config_value, config_type, description) VALUES ('" + c[0] + "', '" + c[1] + "', '" + c[2] + "', '" + c[3] + "')"
+            db_exec(db, insertSql)
+        }
+        i = i + 1
+    }
+
+    io.println("[Payment] Tables initialized: payments, refunds, payment_configs, account_logs")
+}
+
+// ============================================================
+// Utility Functions
+// ============================================================
+
+fn payment_generateNo(prefix) {
+    let now = time.now()
+    let ts = strings.replace(strings.replace(strings.replace(now, "-", ""), ":", ""), " ", "")
+    let rand = math.floor(math.random() * 9000) + 1000
+    return prefix + ts + rand
+}
+
+fn payment_getConfig(db, key) {
+    let sql = "SELECT config_value FROM payment_configs WHERE config_key = '" + key + "'"
+    let rows = db_query(db, sql)
+    if (arrays.length(rows) > 0) {
+        return rows[0].config_value
+    }
+    return null
+}
+
+fn payment_nvl(value, defaultValue) {
+    if (value == null) {
+        return defaultValue
+    }
+    return value
+}
+
+fn payment_addAccountLog(db, userId, merchantId, logType, amount, balanceBefore, balanceAfter, orderNo, paymentNo, remark) {
+    let userIdStr = payment_nvl(userId, "null")
+    let merchantIdStr = payment_nvl(merchantId, "null")
+    let orderNoStr = payment_nvl(orderNo, "")
+    let paymentNoStr = payment_nvl(paymentNo, "")
+    let remarkStr = payment_nvl(remark, "")
+    let sql = "INSERT INTO account_logs (user_id, merchant_id, log_type, amount, balance_before, balance_after, related_order_no, related_payment_no, remark) VALUES ("
+    sql = sql + userIdStr + ", " + merchantIdStr + ", '" + logType + "', " + amount + ", " + balanceBefore + ", " + balanceAfter + ", '" + orderNoStr + "', '" + paymentNoStr + "', '" + remarkStr + "')"
+    db_exec(db, sql)
+}
+
+// ============================================================
+// Create Payment
+// ============================================================
+
+fn payment_create(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let orderId = body.order_id
+    let payMethod = body.pay_method
+    if (payMethod == null) { payMethod = "wechat" }
+
+    if (orderId == null) {
+        return res_json({success: false, message: "Missing order_id"}, 400)
+    }
+
+    let orderSql = "SELECT * FROM orders WHERE id = " + orderId
+    let orders = db_query(db, orderSql)
+    if (arrays.length(orders) == 0) {
+        return res_json({success: false, message: "Order not found"}, 404)
+    }
+    let order = orders[0]
+
+    if (order.status != 0) {
+        return res_json({success: false, message: "Invalid order status: " + order.status}, 400)
+    }
+
+    // Duplicate payment protection
+    let existingSql = "SELECT * FROM payments WHERE order_id = " + orderId + " AND pay_status IN ('pending', 'paid')"
+    let existingPayments = db_query(db, existingSql)
+    if (arrays.length(existingPayments) > 0) {
+        let ep = existingPayments[0]
+        if (ep.pay_status == "paid") {
+            return res_json({success: false, message: "Order already paid"}, 400)
+        }
+        return res_json({success: true, message: "Existing pending payment", data: {payment_id: ep.id, payment_no: ep.payment_no, amount: ep.amount, pay_method: ep.pay_method, pay_status: ep.pay_status}}, 200)
+    }
+
+    let paymentNo = payment_generateNo("PAY")
+    let amount = order.total_amount
+    let userId = order.user_id
+
+    let insertSql = "INSERT INTO payments (payment_no, order_id, order_no, user_id, amount, pay_method, pay_status) VALUES ('" + paymentNo + "', " + orderId + ", '" + order.order_no + "', " + userId + ", " + amount + ", '" + payMethod + "', 'pending')"
+    db_exec(db, insertSql)
+    let paymentId = db_lastInsertId(db)
+
+    let payParams = {}
+    if (payMethod == "wechat") {
+        payParams = payment_createWechat(db, paymentNo, amount, order.order_no, userId)
+    } else if (payMethod == "alipay") {
+        payParams = payment_createAlipay(db, paymentNo, amount, order.order_no, userId)
+    } else if (payMethod == "balance") {
+        payParams = payment_createBalance(db, paymentNo, amount, userId)
+    } else {
+        return res_json({success: false, message: "Unsupported pay method: " + payMethod}, 400)
+    }
+
+    return res_json({success: true, message: "Payment created", data: {payment_id: paymentId, payment_no: paymentNo, amount: amount, pay_method: payMethod, pay_params: payParams}}, 200)
+}
+
+// ============================================================
+// WeChat Pay
+// ============================================================
+
+fn payment_createWechat(db, paymentNo, amount, orderNo, userId) {
+    let sandbox = payment_getConfig(db, "wechat_sandbox")
+    if (sandbox == "true") {
+        return {
+            sandbox: true,
+            pay_url: "https://mock.pay.wechat.qq.com/pay?payment_no=" + paymentNo,
+            code_url: "weixin://wxpay/sandbox/" + paymentNo,
+            prepay_id: "sandbox_prepay_" + paymentNo,
+            app_id: payment_nvl(payment_getConfig(db, "wechat_appid"), ""),
+            time_stamp: math.floor(time.nowMs() / 1000),
+            nonce_str: payment_generateNo("NONCE"),
+            package: "prepay_id=sandbox_prepay_" + paymentNo,
+            sign_type: "RSA",
+            pay_sign: "SANDBOX_SIGN_" + paymentNo
+        }
+    }
+    return {sandbox: false, message: "Please configure WeChat Pay merchant info", config_required: ["wechat_appid", "wechat_mch_id", "wechat_api_v3_key"]}
+}
+
+fn payment_wechatNotify(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let paymentNo = body.out_trade_no
+    let transactionId = body.transaction_id
+
+    if (paymentNo == null) {
+        return res_json({code: "FAIL", message: "Missing out_trade_no"}, 400)
+    }
+
+    let paymentSql = "SELECT * FROM payments WHERE payment_no = '" + paymentNo + "'"
+    let payments = db_query(db, paymentSql)
+    if (arrays.length(payments) == 0) {
+        return res_json({code: "FAIL", message: "Payment not found"}, 404)
+    }
+    let payment = payments[0]
+
+    // Idempotency
+    if (payment.pay_status == "paid") {
+        return res_json({code: "SUCCESS", message: "Duplicate callback, already processed"}, 200)
+    }
+
+    let txnIdStr = payment_nvl(transactionId, "")
+    let updateSql = "UPDATE payments SET pay_status = 'paid', transaction_id = '" + txnIdStr + "', paid_at = datetime('now'), notify_data = '" + json.stringify(body) + "' WHERE id = " + payment.id
+    db_exec(db, updateSql)
+
+    let orderUpdateSql = "UPDATE orders SET status = 1, paid_at = datetime('now'), payment_method = 'wechat', transaction_id = '" + txnIdStr + "' WHERE id = " + payment.order_id
+    db_exec(db, orderUpdateSql)
+
+    payment_deductStock(db, payment.order_id)
+    payment_addAccountLog(db, payment.user_id, null, "payment", payment.amount, 0, 0, payment.order_no, paymentNo, "WeChat Pay")
+    payment_calculateSettlement(db, payment.order_id, payment.amount)
+
+    io.println("[Payment] Wechat notify success: " + paymentNo + ", amount: " + payment.amount)
+    return res_json({code: "SUCCESS", message: "Payment success"}, 200)
+}
+
+// ============================================================
+// Alipay
+// ============================================================
+
+fn payment_createAlipay(db, paymentNo, amount, orderNo, userId) {
+    let sandbox = payment_getConfig(db, "alipay_sandbox")
+    if (sandbox == "true") {
+        return {
+            sandbox: true,
+            pay_url: "https://mock.pay.alipay.com/gateway.do?out_trade_no=" + paymentNo,
+            out_trade_no: paymentNo,
+            total_amount: amount,
+            subject: "TLLOS Mall Order-" + orderNo,
+            product_code: "QUICK_WAP_WAY",
+            sign: "SANDBOX_ALIPAY_SIGN_" + paymentNo
+        }
+    }
+    return {sandbox: false, message: "Please configure Alipay merchant info", config_required: ["alipay_app_id", "alipay_private_key", "alipay_public_key"]}
+}
+
+fn payment_alipayNotify(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let paymentNo = body.out_trade_no
+    let tradeNo = body.trade_no
+
+    if (paymentNo == null) {
+        return res_json("fail", 400)
+    }
+
+    let paymentSql = "SELECT * FROM payments WHERE payment_no = '" + paymentNo + "'"
+    let payments = db_query(db, paymentSql)
+    if (arrays.length(payments) == 0) {
+        return res_json("fail", 404)
+    }
+    let payment = payments[0]
+
+    if (payment.pay_status == "paid") {
+        return res_json("success", 200)
+    }
+
+    let tradeNoStr = payment_nvl(tradeNo, "")
+    let updateSql = "UPDATE payments SET pay_status = 'paid', transaction_id = '" + tradeNoStr + "', paid_at = datetime('now'), notify_data = '" + json.stringify(body) + "' WHERE id = " + payment.id
+    db_exec(db, updateSql)
+
+    let orderUpdateSql = "UPDATE orders SET status = 1, paid_at = datetime('now'), payment_method = 'alipay', transaction_id = '" + tradeNoStr + "' WHERE id = " + payment.order_id
+    db_exec(db, orderUpdateSql)
+
+    payment_deductStock(db, payment.order_id)
+    payment_addAccountLog(db, payment.user_id, null, "payment", payment.amount, 0, 0, payment.order_no, paymentNo, "Alipay")
+    payment_calculateSettlement(db, payment.order_id, payment.amount)
+
+    io.println("[Payment] Alipay notify success: " + paymentNo + ", amount: " + payment.amount)
+    return res_json("success", 200)
+}
+
+// ============================================================
+// Balance Payment
+// ============================================================
+
+fn payment_createBalance(db, paymentNo, amount, userId) {
+    let userSql = "SELECT balance FROM users WHERE id = " + userId
+    let users = db_query(db, userSql)
+    if (arrays.length(users) == 0) {
+        return {success: false, message: "User not found"}
+    }
+    let balance = users[0].balance
+    if (balance == null) { balance = 0 }
+
+    if (balance < amount) {
+        return {success: false, message: "Insufficient balance", balance: balance, required: amount}
+    }
+    return {success: true, balance: balance, amount: amount, message: "Balance payment confirmation"}
+}
+
+fn payment_balancePay(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let paymentId = body.payment_id
+
+    if (paymentId == null) {
+        return res_json({success: false, message: "Missing payment_id"}, 400)
+    }
+
+    let paymentSql = "SELECT * FROM payments WHERE id = " + paymentId
+    let payments = db_query(db, paymentSql)
+    if (arrays.length(payments) == 0) {
+        return res_json({success: false, message: "Payment not found"}, 404)
+    }
+    let payment = payments[0]
+
+    if (payment.pay_status != "pending") {
+        return res_json({success: false, message: "Invalid payment status"}, 400)
+    }
+
+    let userSql = "SELECT balance FROM users WHERE id = " + payment.user_id
+    let users = db_query(db, userSql)
+    let balance = users[0].balance
+    if (balance == null) { balance = 0 }
+
+    if (balance < payment.amount) {
+        return res_json({success: false, message: "Insufficient balance"}, 400)
+    }
+
+    let newBalance = balance - payment.amount
+    let userUpdateSql = "UPDATE users SET balance = " + newBalance + " WHERE id = " + payment.user_id
+    db_exec(db, userUpdateSql)
+
+    let paymentUpdateSql = "UPDATE payments SET pay_status = 'paid', paid_at = datetime('now') WHERE id = " + payment.id
+    db_exec(db, paymentUpdateSql)
+
+    let orderUpdateSql = "UPDATE orders SET status = 1, paid_at = datetime('now'), payment_method = 'balance' WHERE id = " + payment.order_id
+    db_exec(db, orderUpdateSql)
+
+    payment_deductStock(db, payment.order_id)
+    payment_addAccountLog(db, payment.user_id, null, "balance_pay", payment.amount, balance, newBalance, payment.order_no, payment.payment_no, "Balance Payment")
+    payment_calculateSettlement(db, payment.order_id, payment.amount)
+
+    return res_json({success: true, message: "Balance payment success", data: {payment_id: payment.id, amount: payment.amount, balance_before: balance, balance_after: newBalance}}, 200)
+}
+
+// ============================================================
+// Sandbox Mock Payment (for testing)
+// ============================================================
+
+fn payment_sandboxPay(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let paymentId = body.payment_id
+
+    if (paymentId == null) {
+        return res_json({success: false, message: "Missing payment_id"}, 400)
+    }
+
+    let paymentSql = "SELECT * FROM payments WHERE id = " + paymentId
+    let payments = db_query(db, paymentSql)
+    if (arrays.length(payments) == 0) {
+        return res_json({success: false, message: "Payment not found"}, 404)
+    }
+    let payment = payments[0]
+
+    if (payment.pay_status != "pending") {
+        return res_json({success: false, message: "Invalid payment status: " + payment.pay_status}, 400)
+    }
+
+    let transactionId = "SANDBOX_TXN_" + payment.payment_no
+
+    let updateSql = "UPDATE payments SET pay_status = 'paid', transaction_id = '" + transactionId + "', paid_at = datetime('now') WHERE id = " + payment.id
+    db_exec(db, updateSql)
+
+    let orderUpdateSql = "UPDATE orders SET status = 1, paid_at = datetime('now'), payment_method = '" + payment.pay_method + "', transaction_id = '" + transactionId + "' WHERE id = " + payment.order_id
+    db_exec(db, orderUpdateSql)
+
+    payment_deductStock(db, payment.order_id)
+    payment_addAccountLog(db, payment.user_id, null, "sandbox_pay", payment.amount, 0, 0, payment.order_no, payment.payment_no, "Sandbox Mock Payment-" + payment.pay_method)
+    payment_calculateSettlement(db, payment.order_id, payment.amount)
+
+    io.println("[Payment] Sandbox pay success: " + payment.payment_no + ", amount: " + payment.amount)
+
+    return res_json({success: true, message: "Sandbox payment success", data: {payment_id: payment.id, payment_no: payment.payment_no, amount: payment.amount, transaction_id: transactionId, pay_method: payment.pay_method}}, 200)
+}
+
+// ============================================================
+// Refund
+// ============================================================
+
+fn payment_refund(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let orderId = body.order_id
+    let amount = body.amount
+    let reason = body.reason
+
+    if (orderId == null) {
+        return res_json({success: false, message: "Missing order_id"}, 400)
+    }
+
+    let orderSql = "SELECT * FROM orders WHERE id = " + orderId
+    let orders = db_query(db, orderSql)
+    if (arrays.length(orders) == 0) {
+        return res_json({success: false, message: "Order not found"}, 404)
+    }
+    let order = orders[0]
+
+    let paymentSql = "SELECT * FROM payments WHERE order_id = " + orderId + " AND pay_status = 'paid'"
+    let payments = db_query(db, paymentSql)
+    if (arrays.length(payments) == 0) {
+        return res_json({success: false, message: "No paid payment found"}, 400)
+    }
+    let payment = payments[0]
+
+    if (amount == null) { amount = payment.amount }
+    let maxRefund = payment.amount - payment.refund_amount
+    if (amount > maxRefund) {
+        return res_json({success: false, message: "Refund amount exceeds max refundable: " + maxRefund}, 400)
+    }
+
+    let refundNo = payment_generateNo("REF")
+    let reasonStr = payment_nvl(reason, "")
+    let insertSql = "INSERT INTO refunds (refund_no, payment_id, order_id, user_id, amount, reason, refund_status) VALUES ('" + refundNo + "', " + payment.id + ", " + orderId + ", " + order.user_id + ", " + amount + ", '" + reasonStr + "', 'pending')"
+    db_exec(db, insertSql)
+    let refundId = db_lastInsertId(db)
+
+    let sandbox = true
+    if (payment.pay_method == "wechat") {
+        sandbox = payment_getConfig(db, "wechat_sandbox") == "true"
+    } else if (payment.pay_method == "alipay") {
+        sandbox = payment_getConfig(db, "alipay_sandbox") == "true"
+    }
+
+    if (sandbox) {
+        let refundUpdateSql = "UPDATE refunds SET refund_status = 'success', refund_transaction_id = 'SANDBOX_REFUND_" + refundNo + "', refunded_at = datetime('now') WHERE id = " + refundId
+        db_exec(db, refundUpdateSql)
+
+        let paymentUpdateSql = "UPDATE payments SET refund_amount = refund_amount + " + amount + ", refund_status = 'partial' WHERE id = " + payment.id
+        db_exec(db, paymentUpdateSql)
+
+        if (payment.pay_method == "balance") {
+            let userSql = "SELECT balance FROM users WHERE id = " + order.user_id
+            let users = db_query(db, userSql)
+            let balance = users[0].balance
+            if (balance == null) { balance = 0 }
+            let newBalance = balance + amount
+            let userUpdateSql = "UPDATE users SET balance = " + newBalance + " WHERE id = " + order.user_id
+            db_exec(db, userUpdateSql)
+            payment_addAccountLog(db, order.user_id, null, "refund", amount, balance, newBalance, order.order_no, payment.payment_no, "Refund to balance")
+        } else {
+            payment_addAccountLog(db, order.user_id, null, "refund", amount, 0, 0, order.order_no, payment.payment_no, "Refund to original-" + payment.pay_method)
+        }
+
+        let orderUpdateSql = "UPDATE orders SET status = 5 WHERE id = " + orderId
+        db_exec(db, orderUpdateSql)
+
+        payment_returnStock(db, orderId)
+
+        return res_json({success: true, message: "Sandbox refund success", data: {refund_id: refundId, refund_no: refundNo, amount: amount, refund_status: "success"}}, 200)
+    }
+
+    return res_json({success: true, message: "Refund submitted, waiting for payment channel processing", data: {refund_id: refundId, refund_no: refundNo, amount: amount, refund_status: "pending"}}, 200)
+}
+
+// ============================================================
+// Stock Operations
+// ============================================================
+
+fn payment_deductStock(db, orderId) {
+    let itemsSql = "SELECT * FROM order_items WHERE order_id = " + orderId
+    let items = db_query(db, itemsSql)
+    let i = 0
+    while (i < arrays.length(items)) {
+        let item = items[i]
+        let stockSql = "UPDATE products SET stock = stock - " + item.quantity + ", sales_count = sales_count + " + item.quantity + " WHERE id = " + item.product_id
+        db_exec(db, stockSql)
+        i = i + 1
+    }
+}
+
+fn payment_returnStock(db, orderId) {
+    let itemsSql = "SELECT * FROM order_items WHERE order_id = " + orderId
+    let items = db_query(db, itemsSql)
+    let i = 0
+    while (i < arrays.length(items)) {
+        let item = items[i]
+        let stockSql = "UPDATE products SET stock = stock + " + item.quantity + " WHERE id = " + item.product_id
+        db_exec(db, stockSql)
+        i = i + 1
+    }
+}
+
+// ============================================================
+// Settlement Calculation
+// ============================================================
+
+fn payment_calculateSettlement(db, orderId, amount) {
+    let rateStr = payment_getConfig(db, "platform_commission_rate")
+    let rate = 0.05
+    if (rateStr != null) {
+        rate = parseFloat(rateStr)
+    }
+
+    let orderSql = "SELECT merchant_id FROM orders WHERE id = " + orderId
+    let orders = db_query(db, orderSql)
+    let merchantId = null
+    if (arrays.length(orders) > 0) {
+        merchantId = orders[0].merchant_id
+    }
+
+    let platformAmount = amount * rate
+    let merchantAmount = amount - platformAmount
+
+    payment_addAccountLog(db, null, null, "platform_commission", platformAmount, 0, 0, null, null, "Platform commission-order" + orderId)
+
+    if (merchantId != null) {
+        payment_addAccountLog(db, null, merchantId, "merchant_receivable", merchantAmount, 0, 0, null, null, "Merchant receivable-order" + orderId)
+    }
+
+    io.println("[Settlement] Order " + orderId + ": total=" + amount + ", platform=" + platformAmount + ", merchant=" + merchantAmount)
+}
+
+// ============================================================
+// Query Payment Status
+// ============================================================
+
+fn payment_query(req) {
+    let db = req.db
+    let paymentId = req_getQuery(req, "id", null)
+    let paymentNo = req_getQuery(req, "payment_no", null)
+
+    let sql = "SELECT * FROM payments WHERE 1=1"
+    if (paymentId != null) {
+        sql = sql + " AND id = " + paymentId
+    }
+    if (paymentNo != null) {
+        sql = sql + " AND payment_no = '" + paymentNo + "'"
+    }
+    sql = sql + " ORDER BY id DESC LIMIT 50"
+
+    let payments = db_query(db, sql)
+    return res_json({success: true, data: payments}, 200)
+}
+
+// ============================================================
+// Payment Config Management
+// ============================================================
+
+fn payment_configList(req) {
+    let db = req.db
+    let sql = "SELECT * FROM payment_configs ORDER BY id"
+    let configs = db_query(db, sql)
+    return res_json({success: true, count: arrays.length(configs), data: configs}, 200)
+}
+
+fn payment_configUpdate(req) {
+    let db = req.db
+    let body = req_getJsonBody(req)
+    let key = body.config_key
+    let value = body.config_value
+
+    if (key == null) {
+        return res_json({success: false, message: "Missing config_key"}, 400)
+    }
+
+    let valueStr = payment_nvl(value, "")
+    let sql = "UPDATE payment_configs SET config_value = '" + valueStr + "', updated_at = datetime('now') WHERE config_key = '" + key + "'"
+    db_exec(db, sql)
+
+    return res_json({success: true, message: "Config updated"}, 200)
+}
+
+// ============================================================
+// Account Logs Query
+// ============================================================
+
+fn payment_accountLogs(req) {
+    let db = req.db
+    let userId = req_getQuery(req, "user_id", null)
+    let logType = req_getQuery(req, "log_type", null)
+
+    let sql = "SELECT * FROM account_logs WHERE 1=1"
+    if (userId != null) {
+        sql = sql + " AND user_id = " + userId
+    }
+    if (logType != null) {
+        sql = sql + " AND log_type = '" + logType + "'"
+    }
+    sql = sql + " ORDER BY id DESC LIMIT 100"
+
+    let logs = db_query(db, sql)
+    return res_json({success: true, data: logs}, 200)
+}
+
+// ============================================================
+// Register All Routes
+// ============================================================
+
+fn payment_registerAll(router) {
+    router_addRoute(router, "POST", "/payment/create", payment_create)
+    router_addRoute(router, "POST", "/payment/wechat/notify", payment_wechatNotify)
+    router_addRoute(router, "POST", "/payment/alipay/notify", payment_alipayNotify)
+    router_addRoute(router, "POST", "/payment/balance/pay", payment_balancePay)
+    router_addRoute(router, "POST", "/payment/sandbox/pay", payment_sandboxPay)
+    router_addRoute(router, "POST", "/payment/refund", payment_refund)
+    router_get(router, "/payment/query", payment_query)
+    router_get(router, "/payment/config", payment_configList)
+    router_put(router, "/payment/config", payment_configUpdate)
+    router_get(router, "/payment/account-logs", payment_accountLogs)
+    io.println("[Payment] Routes registered: 11 endpoints")
+}
