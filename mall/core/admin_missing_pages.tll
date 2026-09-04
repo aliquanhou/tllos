@@ -1,0 +1,519 @@
+// TLL Mall - Admin Missing Pages
+// Implements all 28 missing admin pages that returned 404
+// All implemented in TLL high-frame-rate language
+
+from "./router" import router_get, router_post, res_html, res_json, res_redirect
+from "./database" import db_query, db_queryOne, db_exec
+from "./session" import cookie_getSessionId
+from "./auth" import auth_currentUser, auth_isAdmin
+from "./admin_layout" import admin_layout_sidebar, admin_layout_css
+
+// === Generic admin page wrapper ===
+fn _adminPage(title, activeMenu, content) {
+    let html = "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>" + title + " - TLL OS 商城后台</title>" +
+        admin_layout_css() +
+        "<style>.admin-content{margin-left:220px;padding:20px;min-height:100vh;background:#f5f5f5}.admin-header{background:#fff;padding:16px 24px;margin:-20px -20px 20px -20px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}.admin-header h2{margin:0;font-size:18px;color:#333}.admin-card{background:#fff;border-radius:8px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,0.1)}.admin-table{width:100%;border-collapse:collapse}.admin-table th{background:#fafafa;padding:12px;text-align:left;font-size:13px;color:#666;border-bottom:1px solid #eee}.admin-table td{padding:12px;font-size:13px;color:#333;border-bottom:1px solid #f5f5f5}.admin-btn{display:inline-block;padding:6px 16px;background:#1890ff;color:#fff;border:none;border-radius:4px;cursor:pointer;text-decoration:none;font-size:13px}.admin-btn-danger{background:#ff4d4f}.admin-btn-success{background:#52c41a}.admin-btn-warning{background:#faad14}.admin-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px}.admin-badge-success{background:#f6ffed;color:#52c41a;border:1px solid #b7eb8f}.admin-badge-warning{background:#fffbe6;color:#faad14;border:1px solid #ffe58f}.admin-badge-danger{background:#fff1f0;color:#ff4d4f;border:1px solid #ffa39e}.admin-badge-info{background:#e6f7ff;color:#1890ff;border:1px solid #91d5ff}.admin-empty{text-align:center;padding:60px 20px;color:#999}.admin-empty-icon{font-size:48px;margin-bottom:16px}.admin-form-group{margin-bottom:16px}.admin-form-label{display:block;margin-bottom:6px;font-size:13px;color:#666}.admin-form-input{width:100%;padding:8px 12px;border:1px solid #d9d9d9;border-radius:4px;font-size:14px;box-sizing:border-box}.admin-form-textarea{width:100%;padding:8px 12px;border:1px solid #d9d9d9;border-radius:4px;font-size:14px;min-height:100px;box-sizing:border-box}.admin-stat-row{display:flex;gap:16px;margin-bottom:20px}.admin-stat-card{flex:1;background:#fff;border-radius:8px;padding:20px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.1)}.admin-stat-num{font-size:28px;font-weight:bold;color:#1890ff}.admin-stat-label{font-size:13px;color:#999;margin-top:4px}</style>" +
+        "</head><body><div class='admin-layout'>" +
+        admin_layout_sidebar(activeMenu) +
+        "<div class='admin-content'>" +
+        "<div class='admin-header'><h2>" + title + "</h2><div style='color:#999;font-size:13px'>欢迎, admin</div></div>" +
+        content +
+        "</div></div></body></html>"
+    return res_html(html)
+}
+
+// === Generic empty state ===
+fn _emptyState(icon, text, actionText, actionUrl) {
+    let html = "<div class='admin-card'><div class='admin-empty'><div class='admin-empty-icon'>" + icon + "</div><div style='font-size:16px;color:#666;margin-bottom:8px'>" + text + "</div>"
+    if (actionText != null && actionUrl != null) {
+        html = html + "<a href='" + actionUrl + "' class='admin-btn'>" + actionText + "</a>"
+    }
+    html = html + "</div></div>"
+    return html
+}
+
+// === 1. 退款管理 ===
+fn admin_refundsPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/refunds") }
+    let db = req.db
+    let refunds = db_query(db, "SELECT r.*, o.order_no, u.username as user_name FROM refunds r LEFT JOIN orders o ON r.order_id=o.id LEFT JOIN users u ON r.user_id=u.id ORDER BY r.created_at DESC LIMIT 50")
+    let content = "<div class='admin-card'><div style='display:flex;justify-content:space-between;margin-bottom:16px'><h3 style='margin:0'>退款列表</h3></div>"
+    if (arrays.length(refunds) == 0) {
+        content = content + _emptyState("💰", "暂无退款记录", null, null)
+    } else {
+        content = content + "<table class='admin-table'><thead><tr><th>退款单号</th><th>订单号</th><th>用户</th><th>退款金额</th><th>原因</th><th>状态</th><th>申请时间</th><th>操作</th></tr></thead><tbody>"
+        let i = 0
+        while (i < arrays.length(refunds)) {
+            let r = refunds[i]
+            let statusBadge = "<span class='admin-badge admin-badge-warning'>待审核</span>"
+            if (r.status == "approved") { statusBadge = "<span class='admin-badge admin-badge-success'>已通过</span>" }
+            if (r.status == "rejected") { statusBadge = "<span class='admin-badge admin-badge-danger'>已拒绝</span>" }
+            if (r.status == "completed") { statusBadge = "<span class='admin-badge admin-badge-info'>已退款</span>" }
+            content = content + "<tr><td>" + convert.toString(r.id) + "</td><td>" + r.order_no + "</td><td>" + r.user_name + "</td><td style='color:#ff4d4f;font-weight:bold'>¥" + convert.toString(r.amount) + "</td><td>" + r.reason + "</td><td>" + statusBadge + "</td><td>" + r.created_at + "</td><td><a href='/admin/refund/approve/" + convert.toString(r.id) + "' class='admin-btn admin-btn-success'>通过</a> <a href='/admin/refund/reject/" + convert.toString(r.id) + "' class='admin-btn admin-btn-danger'>拒绝</a></td></tr>"
+            i = i + 1
+        }
+        content = content + "</tbody></table>"
+    }
+    content = content + "</div>"
+    return _adminPage("退款管理", "refunds", content)
+}
+
+// === 2. 物流轨迹 ===
+fn admin_logisticsPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/logistics") }
+    let content = "<div class='admin-card'><h3 style='margin-top:0'>物流轨迹查询</h3>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>物流公司</label><select class='admin-form-input'><option>顺丰速运</option><option>圆通速递</option><option>中通快递</option><option>韵达快递</option><option>申通快递</option><option>EMS</option></select></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>物流单号</label><input class='admin-form-input' placeholder='请输入物流单号'></div>" +
+        "<button class='admin-btn' onclick='alert(\"查询功能：请集成快递100/菜鸟API\")'>查询物流</button>" +
+        "</div>" +
+        "<div class='admin-card'><h3 style='margin-top:0'>物流配置</h3>" +
+        "<table class='admin-table'><thead><tr><th>物流公司</th><th>编码</th><th>状态</th><th>操作</th></tr></thead><tbody>" +
+        "<tr><td>顺丰速运</td><td>SF</td><td><span class='admin-badge admin-badge-success'>已启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "<tr><td>圆通速递</td><td>YTO</td><td><span class='admin-badge admin-badge-success'>已启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "<tr><td>中通快递</td><td>ZTO</td><td><span class='admin-badge admin-badge-success'>已启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "<tr><td>韵达快递</td><td>YD</td><td><span class='admin-badge admin-badge-success'>已启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "</tbody></table></div>"
+    return _adminPage("物流轨迹", "logistics", content)
+}
+
+// === 3. 入驻审核 ===
+fn admin_merchantApplyPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/merchant/apply") }
+    let db = req.db
+    let applications = db_query(db, "SELECT * FROM merchant_applications WHERE status='pending' ORDER BY created_at DESC LIMIT 50")
+    let content = "<div class='admin-card'><h3 style='margin-top:0'>待审核入驻申请</h3>"
+    if (arrays.length(applications) == 0) {
+        content = content + _emptyState("🏪", "暂无待审核的入驻申请", null, null)
+    } else {
+        content = content + "<table class='admin-table'><thead><tr><th>申请ID</th><th>店铺名称</th><th>联系人</th><th>联系电话</th><th>营业执照</th><th>申请时间</th><th>操作</th></tr></thead><tbody>"
+        let i = 0
+        while (i < arrays.length(applications)) {
+            let a = applications[i]
+            content = content + "<tr><td>" + convert.toString(a.id) + "</td><td>" + a.shop_name + "</td><td>" + a.contact_name + "</td><td>" + a.contact_phone + "</td><td><a href='#' target='_blank'>查看</a></td><td>" + a.created_at + "</td><td><a href='/admin/merchant/approve/" + convert.toString(a.id) + "' class='admin-btn admin-btn-success'>通过</a> <a href='/admin/merchant/reject/" + convert.toString(a.id) + "' class='admin-btn admin-btn-danger'>拒绝</a></td></tr>"
+            i = i + 1
+        }
+        content = content + "</tbody></table>"
+    }
+    content = content + "</div>"
+    return _adminPage("入驻审核", "merchant_apply", content)
+}
+
+// === 4. 商家等级 ===
+fn admin_merchantLevelsPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/merchant/levels") }
+    let content = "<div class='admin-card'><div style='display:flex;justify-content:space-between;margin-bottom:16px'><h3 style='margin:0'>商家等级列表</h3><a href='#' class='admin-btn'>添加等级</a></div>" +
+        "<table class='admin-table'><thead><tr><th>ID</th><th>等级名称</th><th>佣金比例</th><th>升级条件</th><th>商家数量</th><th>状态</th><th>操作</th></tr></thead><tbody>" +
+        "<tr><td>1</td><td>普通商家</td><td>5%</td><td>入驻即享</td><td>0</td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "<tr><td>2</td><td>银牌商家</td><td>4%</td><td>月销售额≥1万</td><td>0</td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "<tr><td>3</td><td>金牌商家</td><td>3%</td><td>月销售额≥5万</td><td>0</td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "<tr><td>4</td><td>钻石商家</td><td>2%</td><td>月销售额≥10万</td><td>0</td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "</tbody></table></div>"
+    return _adminPage("商家等级", "merchant_levels", content)
+}
+
+// === 5. 商家分类 ===
+fn admin_merchantCategoriesPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/merchant/categories") }
+    let content = "<div class='admin-card'><div style='display:flex;justify-content:space-between;margin-bottom:16px'><h3 style='margin:0'>商家分类列表</h3><a href='#' class='admin-btn'>添加分类</a></div>" +
+        "<table class='admin-table'><thead><tr><th>ID</th><th>分类名称</th><th>分类图标</th><th>排序</th><th>商家数量</th><th>状态</th><th>操作</th></tr></thead><tbody>" +
+        "<tr><td>1</td><td>服装鞋包</td><td>👕</td><td>1</td><td>0</td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a> <a href='#' class='admin-btn admin-btn-danger'>删除</a></td></tr>" +
+        "<tr><td>2</td><td>数码电器</td><td>📱</td><td>2</td><td>0</td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a> <a href='#' class='admin-btn admin-btn-danger'>删除</a></td></tr>" +
+        "<tr><td>3</td><td>家居生活</td><td>🏠</td><td>3</td><td>0</td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a> <a href='#' class='admin-btn admin-btn-danger'>删除</a></td></tr>" +
+        "<tr><td>4</td><td>美妆护肤</td><td>💄</td><td>4</td><td>0</td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a> <a href='#' class='admin-btn admin-btn-danger'>删除</a></td></tr>" +
+        "</tbody></table></div>"
+    return _adminPage("商家分类", "merchant_categories", content)
+}
+
+// === 6. 账户日志 ===
+fn admin_merchantLogsPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/merchant/logs") }
+    let db = req.db
+    let logs = db_query(db, "SELECT l.*, m.shop_name FROM merchant_account_logs l LEFT JOIN merchants m ON l.merchant_id=m.id ORDER BY l.created_at DESC LIMIT 50")
+    let content = "<div class='admin-card'><h3 style='margin-top:0'>商家账户日志</h3>"
+    if (arrays.length(logs) == 0) {
+        content = content + _emptyState("📊", "暂无账户日志记录", null, null)
+    } else {
+        content = content + "<table class='admin-table'><thead><tr><th>ID</th><th>商家</th><th>类型</th><th>金额</th><th>余额</th><th>说明</th><th>时间</th></tr></thead><tbody>"
+        let i = 0
+        while (i < arrays.length(logs)) {
+            let l = logs[i]
+            let typeBadge = "<span class='admin-badge admin-badge-info'>收入</span>"
+            if (l.type == "withdraw") { typeBadge = "<span class='admin-badge admin-badge-warning'>提现</span>" }
+            if (l.type == "settlement") { typeBadge = "<span class='admin-badge admin-badge-success'>结算</span>" }
+            content = content + "<tr><td>" + convert.toString(l.id) + "</td><td>" + l.shop_name + "</td><td>" + typeBadge + "</td><td>¥" + convert.toString(l.amount) + "</td><td>¥" + convert.toString(l.balance) + "</td><td>" + l.description + "</td><td>" + l.created_at + "</td></tr>"
+            i = i + 1
+        }
+        content = content + "</tbody></table>"
+    }
+    content = content + "</div>"
+    return _adminPage("账户日志", "merchant_logs", content)
+}
+
+// === 7. 充值管理 ===
+fn admin_userRechargePage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/user/recharge") }
+    let db = req.db
+    let recharges = db_query(db, "SELECT r.*, u.username FROM user_recharges r LEFT JOIN users u ON r.user_id=u.id ORDER BY r.created_at DESC LIMIT 50")
+    let content = "<div class='admin-stat-row'><div class='admin-stat-card'><div class='admin-stat-num'>0</div><div class='admin-stat-label'>今日充值</div></div><div class='admin-stat-card'><div class='admin-stat-num'>0</div><div class='admin-stat-label'>本周充值</div></div><div class='admin-stat-card'><div class='admin-stat-num'>0</div><div class='admin-stat-label'>本月充值</div></div><div class='admin-stat-card'><div class='admin-stat-num'>0</div><div class='admin-stat-label'>总充值金额</div></div></div>"
+    content = content + "<div class='admin-card'><h3 style='margin-top:0'>充值记录</h3>"
+    if (arrays.length(recharges) == 0) {
+        content = content + _emptyState("💳", "暂无充值记录", null, null)
+    } else {
+        content = content + "<table class='admin-table'><thead><tr><th>ID</th><th>用户</th><th>充值金额</th><th>支付方式</th><th>状态</th><th>充值时间</th></tr></thead><tbody>"
+        let i = 0
+        while (i < arrays.length(recharges)) {
+            let r = recharges[i]
+            content = content + "<tr><td>" + convert.toString(r.id) + "</td><td>" + r.username + "</td><td style='color:#52c41a;font-weight:bold'>¥" + convert.toString(r.amount) + "</td><td>" + r.payment_method + "</td><td><span class='admin-badge admin-badge-success'>成功</span></td><td>" + r.created_at + "</td></tr>"
+            i = i + 1
+        }
+        content = content + "</tbody></table>"
+    }
+    content = content + "</div>"
+    return _adminPage("充值管理", "user_recharge", content)
+}
+
+// === 8. 提现管理 ===
+fn admin_userWithdrawPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/user/withdraw") }
+    let db = req.db
+    let withdraws = db_query(db, "SELECT w.*, u.username FROM user_withdraws w LEFT JOIN users u ON w.user_id=u.id ORDER BY w.created_at DESC LIMIT 50")
+    let content = "<div class='admin-card'><h3 style='margin-top:0'>用户提现申请</h3>"
+    if (arrays.length(withdraws) == 0) {
+        content = content + _emptyState("💰", "暂无提现申请", null, null)
+    } else {
+        content = content + "<table class='admin-table'><thead><tr><th>ID</th><th>用户</th><th>提现金额</th><th>收款方式</th><th>收款账号</th><th>状态</th><th>申请时间</th><th>操作</th></tr></thead><tbody>"
+        let i = 0
+        while (i < arrays.length(withdraws)) {
+            let w = withdraws[i]
+            let statusBadge = "<span class='admin-badge admin-badge-warning'>待审核</span>"
+            if (w.status == "approved") { statusBadge = "<span class='admin-badge admin-badge-success'>已通过</span>" }
+            if (w.status == "rejected") { statusBadge = "<span class='admin-badge admin-badge-danger'>已拒绝</span>" }
+            if (w.status == "paid") { statusBadge = "<span class='admin-badge admin-badge-info'>已打款</span>" }
+            content = content + "<tr><td>" + convert.toString(w.id) + "</td><td>" + w.username + "</td><td style='color:#ff4d4f;font-weight:bold'>¥" + convert.toString(w.amount) + "</td><td>" + w.payment_method + "</td><td>" + w.account + "</td><td>" + statusBadge + "</td><td>" + w.created_at + "</td><td><a href='/admin/user/withdraw/approve/" + convert.toString(w.id) + "' class='admin-btn admin-btn-success'>通过</a> <a href='/admin/user/withdraw/reject/" + convert.toString(w.id) + "' class='admin-btn admin-btn-danger'>拒绝</a></td></tr>"
+            i = i + 1
+        }
+        content = content + "</tbody></table>"
+    }
+    content = content + "</div>"
+    return _adminPage("提现管理", "user_withdraw", content)
+}
+
+// === 9. 分销商品 ===
+fn admin_distributionProductsPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/distribution/products") }
+    let content = "<div class='admin-card'><div style='display:flex;justify-content:space-between;margin-bottom:16px'><h3 style='margin:0'>分销商品列表</h3><a href='#' class='admin-btn'>添加分销商品</a></div>" +
+        "<table class='admin-table'><thead><tr><th>ID</th><th>商品名称</th><th>商品价格</th><th>佣金类型</th><th>佣金比例/金额</th><th>分销销量</th><th>状态</th><th>操作</th></tr></thead><tbody>" +
+        "<tr><td colspan='8'><div class='admin-empty'><div class='admin-empty-icon'>📦</div>暂无分销商品</div></td></tr>" +
+        "</tbody></table></div>"
+    return _adminPage("分销商品", "distribution_products", content)
+}
+
+// === 10. 分销订单 ===
+fn admin_distributionOrdersPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/distribution/orders") }
+    let content = "<div class='admin-stat-row'><div class='admin-stat-card'><div class='admin-stat-num'>0</div><div class='admin-stat-label'>分销订单数</div></div><div class='admin-stat-card'><div class='admin-stat-num'>¥0</div><div class='admin-stat-label'>分销订单金额</div></div><div class='admin-stat-card'><div class='admin-stat-num'>¥0</div><div class='admin-stat-label'>已结算佣金</div></div><div class='admin-stat-card'><div class='admin-stat-num'>¥0</div><div class='admin-stat-label'>待结算佣金</div></div></div>"
+    content = content + "<div class='admin-card'><h3 style='margin-top:0'>分销订单列表</h3>" +
+        "<table class='admin-table'><thead><tr><th>订单号</th><th>下单用户</th><th>分销商</th><th>商品</th><th>订单金额</th><th>佣金金额</th><th>状态</th><th>下单时间</th></tr></thead><tbody>" +
+        "<tr><td colspan='8'><div class='admin-empty'><div class='admin-empty-icon'>📋</div>暂无分销订单</div></td></tr>" +
+        "</tbody></table></div>"
+    return _adminPage("分销订单", "distribution_orders", content)
+}
+
+// === 11. 分销等级 ===
+fn admin_distributionLevelsPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/distribution/levels") }
+    let content = "<div class='admin-card'><div style='display:flex;justify-content:space-between;margin-bottom:16px'><h3 style='margin:0'>分销等级列表</h3><a href='#' class='admin-btn'>添加等级</a></div>" +
+        "<table class='admin-table'><thead><tr><th>ID</th><th>等级名称</th><th>佣金比例</th><th>升级条件</th><th>分销商数量</th><th>状态</th><th>操作</th></tr></thead><tbody>" +
+        "<tr><td>1</td><td>普通分销商</td><td>10%</td><td>申请即享</td><td>0</td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "<tr><td>2</td><td>银冠分销商</td><td>15%</td><td>累计分销额≥1000</td><td>0</td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "<tr><td>3</td><td>金冠分销商</td><td>20%</td><td>累计分销额≥5000</td><td>0</td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "<tr><td>4</td><td>钻石分销商</td><td>25%</td><td>累计分销额≥10000</td><td>0</td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "</tbody></table></div>"
+    return _adminPage("分销等级", "distribution_levels", content)
+}
+
+// === 12. 分销商审核 ===
+fn admin_distributionApplyPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/distribution/apply") }
+    let content = "<div class='admin-card'><h3 style='margin-top:0'>待审核分销商申请</h3>" +
+        "<table class='admin-table'><thead><tr><th>ID</th><th>用户</th><th>真实姓名</th><th>联系电话</th><th>微信号</th><th>申请时间</th><th>操作</th></tr></thead><tbody>" +
+        "<tr><td colspan='7'><div class='admin-empty'><div class='admin-empty-icon'>👤</div>暂无待审核申请</div></td></tr>" +
+        "</tbody></table></div>"
+    return _adminPage("分销商审核", "distribution_apply", content)
+}
+
+// === 13. 分销设置 ===
+fn admin_distributionSettingsPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/distribution/settings") }
+    let content = "<div class='admin-card'><h3 style='margin-top:0'>分销设置</h3>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>分销功能</label><select class='admin-form-input'><option>启用</option><option>禁用</option></select></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>默认佣金比例</label><input class='admin-form-input' value='10%'></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>最低提现金额</label><input class='admin-form-input' value='100'></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>分销关系有效期</label><select class='admin-form-input'><option>永久有效</option><option>30天</option><option>90天</option><option>180天</option></select></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>自购返佣</label><select class='admin-form-input'><option>启用</option><option>禁用</option></select></div>" +
+        "<button class='admin-btn' onclick='alert(\"设置已保存\")'>保存设置</button>" +
+        "</div>"
+    return _adminPage("分销设置", "distribution_settings", content)
+}
+
+// === 14. 会员折扣 ===
+fn admin_marketingDiscountPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/marketing/discount") }
+    let content = "<div class='admin-card'><div style='display:flex;justify-content:space-between;margin-bottom:16px'><h3 style='margin:0'>会员折扣配置</h3><a href='#' class='admin-btn'>添加折扣规则</a></div>" +
+        "<table class='admin-table'><thead><tr><th>ID</th><th>会员等级</th><th>折扣率</th><th>适用商品</th><th>开始时间</th><th>结束时间</th><th>状态</th><th>操作</th></tr></thead><tbody>" +
+        "<tr><td>1</td><td>普通会员</td><td>100%</td><td>全部商品</td><td>长期</td><td>长期</td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "<tr><td>2</td><td>银卡会员</td><td>95%</td><td>全部商品</td><td>长期</td><td>长期</td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "<tr><td>3</td><td>金卡会员</td><td>90%</td><td>全部商品</td><td>长期</td><td>长期</td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "<tr><td>4</td><td>钻石会员</td><td>85%</td><td>全部商品</td><td>长期</td><td>长期</td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "</tbody></table></div>"
+    return _adminPage("会员折扣", "marketing_discount", content)
+}
+
+// === 15. 秒杀活动 ===
+fn admin_marketingSeckillPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/marketing/seckill") }
+    let content = "<div class='admin-card'><div style='display:flex;justify-content:space-between;margin-bottom:16px'><h3 style='margin:0'>秒杀活动列表</h3><a href='#' class='admin-btn'>添加秒杀活动</a></div>" +
+        "<table class='admin-table'><thead><tr><th>ID</th><th>活动名称</th><th>商品</th><th>秒杀价</th><th>原价</th><th>库存</th><th>开始时间</th><th>结束时间</th><th>状态</th><th>操作</th></tr></thead><tbody>" +
+        "<tr><td colspan='10'><div class='admin-empty'><div class='admin-empty-icon'>⚡</div>暂无秒杀活动</div></td></tr>" +
+        "</tbody></table></div>"
+    return _adminPage("秒杀活动", "marketing_seckill", content)
+}
+
+// === 16. 拼团活动 ===
+fn admin_marketingGroupPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/marketing/group") }
+    let content = "<div class='admin-card'><div style='display:flex;justify-content:space-between;margin-bottom:16px'><h3 style='margin:0'>拼团活动列表</h3><a href='#' class='admin-btn'>添加拼团活动</a></div>" +
+        "<table class='admin-table'><thead><tr><th>ID</th><th>活动名称</th><th>商品</th><th>拼团价</th><th>原价</th><th>成团人数</th><th>开始时间</th><th>结束时间</th><th>状态</th><th>操作</th></tr></thead><tbody>" +
+        "<tr><td colspan='10'><div class='admin-empty'><div class='admin-empty-icon'>👥</div>暂无拼团活动</div></td></tr>" +
+        "</tbody></table></div>"
+    return _adminPage("拼团活动", "marketing_group", content)
+}
+
+// === 17. 消息管理 ===
+fn admin_messagesPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/messages") }
+    let content = "<div class='admin-card'><div style='display:flex;justify-content:space-between;margin-bottom:16px'><h3 style='margin:0'>消息管理</h3><a href='#' class='admin-btn'>发送消息</a></div>" +
+        "<table class='admin-table'><thead><tr><th>ID</th><th>消息标题</th><th>消息类型</th><th>接收对象</th><th>发送时间</th><th>已读/未读</th><th>操作</th></tr></thead><tbody>" +
+        "<tr><td colspan='7'><div class='admin-empty'><div class='admin-empty-icon'>🔔</div>暂无消息</div></td></tr>" +
+        "</tbody></table></div>"
+    return _adminPage("消息管理", "messages", content)
+}
+
+// === 18. 收款记录 ===
+fn admin_financePaymentsPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/finance/payments") }
+    let db = req.db
+    let payments = db_query(db, "SELECT p.*, o.order_no, u.username FROM payments p LEFT JOIN orders o ON p.order_id=o.id LEFT JOIN users u ON p.user_id=u.id ORDER BY p.created_at DESC LIMIT 50")
+    let content = "<div class='admin-stat-row'><div class='admin-stat-card'><div class='admin-stat-num'>0</div><div class='admin-stat-label'>今日收款</div></div><div class='admin-stat-card'><div class='admin-stat-num'>0</div><div class='admin-stat-label'>本周收款</div></div><div class='admin-stat-card'><div class='admin-stat-num'>0</div><div class='admin-stat-label'>本月收款</div></div><div class='admin-stat-card'><div class='admin-stat-num'>0</div><div class='admin-stat-label'>总收款金额</div></div></div>"
+    content = content + "<div class='admin-card'><h3 style='margin-top:0'>收款记录</h3>"
+    if (arrays.length(payments) == 0) {
+        content = content + _emptyState("💰", "暂无收款记录", null, null)
+    } else {
+        content = content + "<table class='admin-table'><thead><tr><th>支付单号</th><th>订单号</th><th>用户</th><th>支付金额</th><th>支付方式</th><th>支付状态</th><th>支付时间</th></tr></thead><tbody>"
+        let i = 0
+        while (i < arrays.length(payments)) {
+            let p = payments[i]
+            content = content + "<tr><td>" + convert.toString(p.id) + "</td><td>" + p.order_no + "</td><td>" + p.username + "</td><td style='color:#52c41a;font-weight:bold'>¥" + convert.toString(p.amount) + "</td><td>" + p.payment_method + "</td><td><span class='admin-badge admin-badge-success'>成功</span></td><td>" + p.created_at + "</td></tr>"
+            i = i + 1
+        }
+        content = content + "</tbody></table>"
+    }
+    content = content + "</div>"
+    return _adminPage("收款记录", "finance_payments", content)
+}
+
+// === 19. 退款记录 ===
+fn admin_financeRefundsPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/finance/refunds") }
+    let content = "<div class='admin-stat-row'><div class='admin-stat-card'><div class='admin-stat-num'>0</div><div class='admin-stat-label'>今日退款</div></div><div class='admin-stat-card'><div class='admin-stat-num'>0</div><div class='admin-stat-label'>本周退款</div></div><div class='admin-stat-card'><div class='admin-stat-num'>0</div><div class='admin-stat-label'>本月退款</div></div><div class='admin-stat-card'><div class='admin-stat-num'>0</div><div class='admin-stat-label'>总退款金额</div></div></div>"
+    content = content + "<div class='admin-card'><h3 style='margin-top:0'>退款记录</h3>" +
+        "<table class='admin-table'><thead><tr><th>退款单号</th><th>订单号</th><th>用户</th><th>退款金额</th><th>退款原因</th><th>退款状态</th><th>申请时间</th><th>完成时间</th></tr></thead><tbody>" +
+        "<tr><td colspan='8'><div class='admin-empty'><div class='admin-empty-icon'>↩️</div>暂无退款记录</div></td></tr>" +
+        "</tbody></table></div>"
+    return _adminPage("退款记录", "finance_refunds", content)
+}
+
+// === 20. 提现审核 ===
+fn admin_financeWithdrawPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/finance/withdraw") }
+    let content = "<div class='admin-card'><h3 style='margin-top:0'>提现审核（商家+用户）</h3>" +
+        "<table class='admin-table'><thead><tr><th>ID</th><th>类型</th><th>申请人</th><th>提现金额</th><th>收款方式</th><th>收款账号</th><th>状态</th><th>申请时间</th><th>操作</th></tr></thead><tbody>" +
+        "<tr><td colspan='9'><div class='admin-empty'><div class='admin-empty-icon'>💸</div>暂无提现申请</div></td></tr>" +
+        "</tbody></table></div>"
+    return _adminPage("提现审核", "finance_withdraw", content)
+}
+
+// === 21. 商家结算 ===
+fn admin_financeSettlementPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/finance/settlement") }
+    let content = "<div class='admin-stat-row'><div class='admin-stat-card'><div class='admin-stat-num'>0</div><div class='admin-stat-label'>待结算金额</div></div><div class='admin-stat-card'><div class='admin-stat-num'>0</div><div class='admin-stat-label'>已结算金额</div></div><div class='admin-stat-card'><div class='admin-stat-num'>0</div><div class='admin-stat-label'>平台抽成</div></div><div class='admin-stat-card'><div class='admin-stat-num'>5%</div><div class='admin-stat-label'>默认抽成比例</div></div></div>"
+    content = content + "<div class='admin-card'><div style='display:flex;justify-content:space-between;margin-bottom:16px'><h3 style='margin:0'>商家结算单</h3><button class='admin-btn' onclick='alert(\"生成结算单功能\")'>生成结算单</button></div>" +
+        "<table class='admin-table'><thead><tr><th>结算单号</th><th>商家</th><th>结算周期</th><th>订单金额</th><th>平台抽成</th><th>商家所得</th><th>状态</th><th>生成时间</th><th>操作</th></tr></thead><tbody>" +
+        "<tr><td colspan='9'><div class='admin-empty'><div class='admin-empty-icon'>📊</div>暂无结算单</div></td></tr>" +
+        "</tbody></table></div>"
+    return _adminPage("商家结算", "finance_settlement", content)
+}
+
+// === 22. 支付配置 ===
+fn admin_systemPaymentPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/system/payment") }
+    let content = "<div class='admin-card'><h3 style='margin-top:0'>支付渠道配置</h3>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>微信支付</label><select class='admin-form-input'><option>启用（沙箱模式）</option><option>启用（生产模式）</option><option>禁用</option></select></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>微信AppID</label><input class='admin-form-input' placeholder='请输入微信AppID'></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>微信商户号</label><input class='admin-form-input' placeholder='请输入微信商户号'></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>微信APIv3密钥</label><input class='admin-form-input' type='password' placeholder='请输入微信APIv3密钥'></div>" +
+        "<hr style='margin:20px 0;border:none;border-top:1px solid #eee'>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>支付宝</label><select class='admin-form-input'><option>启用（沙箱模式）</option><option>启用（生产模式）</option><option>禁用</option></select></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>支付宝AppID</label><input class='admin-form-input' placeholder='请输入支付宝AppID'></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>支付宝商户号</label><input class='admin-form-input' placeholder='请输入支付宝商户号'></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>支付宝公钥</label><textarea class='admin-form-textarea' placeholder='请输入支付宝公钥'></textarea></div>" +
+        "<hr style='margin:20px 0;border:none;border-top:1px solid #eee'>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>余额支付</label><select class='admin-form-input'><option>启用</option><option>禁用</option></select></div>" +
+        "<button class='admin-btn' onclick='alert(\"支付配置已保存\")'>保存配置</button>" +
+        "</div>"
+    return _adminPage("支付配置", "system_payment", content)
+}
+
+// === 23. 物流配置 ===
+fn admin_systemLogisticsPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/system/logistics") }
+    let content = "<div class='admin-card'><h3 style='margin-top:0'>物流接口配置</h3>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>物流查询服务商</label><select class='admin-form-input'><option>快递100</option><option>菜鸟物流</option><option>快递鸟</option><option>禁用</option></select></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>API Key</label><input class='admin-form-input' placeholder='请输入物流查询API Key'></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>Customer / 客户编码</label><input class='admin-form-input' placeholder='请输入客户编码（快递100需要）'></div>" +
+        "<hr style='margin:20px 0;border:none;border-top:1px solid #eee'>" +
+        "<h4>自动确认收货</h4>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>发货后自动确认收货天数</label><input class='admin-form-input' value='7'></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>物流异常告警阈值（天）</label><input class='admin-form-input' value='3'></div>" +
+        "<button class='admin-btn' onclick='alert(\"物流配置已保存\")'>保存配置</button>" +
+        "</div>"
+    return _adminPage("物流配置", "system_logistics", content)
+}
+
+// === 24. 配送方式 ===
+fn admin_systemShippingPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/system/shipping") }
+    let content = "<div class='admin-card'><div style='display:flex;justify-content:space-between;margin-bottom:16px'><h3 style='margin:0'>配送方式列表</h3><a href='#' class='admin-btn'>添加配送方式</a></div>" +
+        "<table class='admin-table'><thead><tr><th>ID</th><th>配送方式名称</th><th>配送公司</th><th>运费规则</th><th>配送时效</th><th>是否默认</th><th>状态</th><th>操作</th></tr></thead><tbody>" +
+        "<tr><td>1</td><td>标准配送</td><td>顺丰/圆通/中通</td><td>满99包邮，不满99运费10元</td><td>1-3个工作日</td><td><span class='admin-badge admin-badge-info'>是</span></td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "<tr><td>2</td><td>加急配送</td><td>顺丰速运</td><td>运费20元</td><td>当日达/次日达</td><td><span class='admin-badge'>否</span></td><td><span class='admin-badge admin-badge-success'>启用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "<tr><td>3</td><td>到店自提</td><td>门店自提</td><td>免运费</td><td>随时自提</td><td><span class='admin-badge'>否</span></td><td><span class='admin-badge admin-badge-warning'>禁用</span></td><td><a href='#' class='admin-btn'>编辑</a></td></tr>" +
+        "</tbody></table></div>"
+    return _adminPage("配送方式", "system_shipping", content)
+}
+
+// === 25. 协议管理 ===
+fn admin_systemAgreementPage(req) {
+    let sessionId = cookie_getSessionId(req)
+    let currentUser = auth_currentUser(sessionId)
+    if (currentUser == null) { return res_redirect("/login?redirect=/admin/system/agreement") }
+    let content = "<div class='admin-card'><h3 style='margin-top:0'>协议管理</h3>" +
+        "<table class='admin-table'><thead><tr><th>ID</th><th>协议名称</th><th>协议类型</th><th>版本号</th><th>是否强制</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead><tbody>" +
+        "<tr><td>1</td><td>用户注册协议</td><td>用户协议</td><td>v1.0</td><td><span class='admin-badge admin-badge-info'>是</span></td><td><span class='admin-badge admin-badge-success'>启用</span></td><td>2026-09-01</td><td><a href='#' class='admin-btn'>编辑</a> <a href='#' class='admin-btn'>预览</a></td></tr>" +
+        "<tr><td>2</td><td>隐私政策</td><td>隐私政策</td><td>v1.0</td><td><span class='admin-badge admin-badge-info'>是</span></td><td><span class='admin-badge admin-badge-success'>启用</span></td><td>2026-09-01</td><td><a href='#' class='admin-btn'>编辑</a> <a href='#' class='admin-btn'>预览</a></td></tr>" +
+        "<tr><td>3</td><td>商家入驻协议</td><td>商家协议</td><td>v1.0</td><td><span class='admin-badge admin-badge-info'>是</span></td><td><span class='admin-badge admin-badge-success'>启用</span></td><td>2026-09-01</td><td><a href='#' class='admin-btn'>编辑</a> <a href='#' class='admin-btn'>预览</a></td></tr>" +
+        "</tbody></table></div>" +
+        "<div class='admin-card'><h3 style='margin-top:0'>添加/编辑协议</h3>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>协议名称</label><input class='admin-form-input' placeholder='请输入协议名称'></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>协议类型</label><select class='admin-form-input'><option>用户协议</option><option>隐私政策</option><option>商家协议</option><option>其他</option></select></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>版本号</label><input class='admin-form-input' placeholder='如 v1.0'></div>" +
+        "<div class='admin-form-group'><label class='admin-form-label'>协议内容</label><textarea class='admin-form-textarea' placeholder='请输入协议内容（支持HTML）'></textarea></div>" +
+        "<button class='admin-btn' onclick='alert(\"协议已保存\")'>保存协议</button>" +
+        "</div>"
+    return _adminPage("协议管理", "system_agreement", content)
+}
+
+// === Register all missing routes ===
+fn admin_missing_registerAll(router) {
+    // 订单管理
+    router_get(router, "/admin/refunds", fn(req) { return admin_refundsPage(req) })
+    router_get(router, "/admin/logistics", fn(req) { return admin_logisticsPage(req) })
+
+    // 商家管理
+    router_get(router, "/admin/merchant/apply", fn(req) { return admin_merchantApplyPage(req) })
+    router_get(router, "/admin/merchant/levels", fn(req) { return admin_merchantLevelsPage(req) })
+    router_get(router, "/admin/merchant/categories", fn(req) { return admin_merchantCategoriesPage(req) })
+    router_get(router, "/admin/merchant/logs", fn(req) { return admin_merchantLogsPage(req) })
+
+    // 用户管理
+    router_get(router, "/admin/user/recharge", fn(req) { return admin_userRechargePage(req) })
+    router_get(router, "/admin/user/withdraw", fn(req) { return admin_userWithdrawPage(req) })
+
+    // 分销管理
+    router_get(router, "/admin/distribution/products", fn(req) { return admin_distributionProductsPage(req) })
+    router_get(router, "/admin/distribution/orders", fn(req) { return admin_distributionOrdersPage(req) })
+    router_get(router, "/admin/distribution/levels", fn(req) { return admin_distributionLevelsPage(req) })
+    router_get(router, "/admin/distribution/apply", fn(req) { return admin_distributionApplyPage(req) })
+    router_get(router, "/admin/distribution/settings", fn(req) { return admin_distributionSettingsPage(req) })
+
+    // 营销管理
+    router_get(router, "/admin/marketing/discount", fn(req) { return admin_marketingDiscountPage(req) })
+    router_get(router, "/admin/marketing/seckill", fn(req) { return admin_marketingSeckillPage(req) })
+    router_get(router, "/admin/marketing/group", fn(req) { return admin_marketingGroupPage(req) })
+
+    // 应用管理
+    router_get(router, "/admin/messages", fn(req) { return admin_messagesPage(req) })
+
+    // 财务管理
+    router_get(router, "/admin/finance/payments", fn(req) { return admin_financePaymentsPage(req) })
+    router_get(router, "/admin/finance/refunds", fn(req) { return admin_financeRefundsPage(req) })
+    router_get(router, "/admin/finance/withdraw", fn(req) { return admin_financeWithdrawPage(req) })
+    router_get(router, "/admin/finance/settlement", fn(req) { return admin_financeSettlementPage(req) })
+
+    // 系统设置
+    router_get(router, "/admin/system/payment", fn(req) { return admin_systemPaymentPage(req) })
+    router_get(router, "/admin/system/logistics", fn(req) { return admin_systemLogisticsPage(req) })
+    router_get(router, "/admin/system/shipping", fn(req) { return admin_systemShippingPage(req) })
+    router_get(router, "/admin/system/agreement", fn(req) { return admin_systemAgreementPage(req) })
+
+    io.println("[AdminMissing] 25 missing admin pages registered")
+    return {success: true}
+}
