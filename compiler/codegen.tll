@@ -1753,6 +1753,13 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
         if fnName == "secureRandomBytes" { return 165 }
         if fnName == "randomBytes" { return 166 }
     }
+    if modName == "password" {
+        if fnName == "hash" { return 180 }
+        if fnName == "hashWithCost" { return 181 }
+        if fnName == "verify" { return 182 }
+        if fnName == "needsRehash" { return 183 }
+        if fnName == "hashInfo" { return 184 }
+    }
     return -1
 }
 

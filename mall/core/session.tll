@@ -214,21 +214,35 @@ fn cache_stats() {
     }
 }
 
-// === Simple Password Hash ===
+// === Password Hashing (bcrypt via TLL builtin) ===
 
 fn hash_password(password) {
-    let len = strings.length(password)
-    let hash = ""
-    let i = 0
-    while (i < len) {
-        let c = strings.charAt(password, i)
-        hash = c + hash
-        i = i + 1
-    }
-    return "tll$" + convert.toString(len) + "$" + hash
+    return password.hash(password)
 }
 
 fn verify_password(password, hash) {
-    let expected = hash_password(password)
-    return expected == hash
+    // Support legacy "tll$len$reversed" format for migration
+    if (strings.startsWith(hash, "tll$")) {
+        let parts = strings.split(hash, "$")
+        if (arrays.length(parts) == 3) {
+            let expectedLen = convert.toInt(parts[1])
+            let reversed = parts[2]
+            if (strings.length(password) == expectedLen) {
+                let check = ""
+                let i = 0
+                while (i < expectedLen) {
+                    check = strings.charAt(password, i) + check
+                    i = i + 1
+                }
+                return check == reversed
+            }
+        }
+        return false
+    }
+    // bcrypt format
+    return password.verify(password, hash)
+}
+
+fn needs_password_rehash(hash) {
+    return !strings.startsWith(hash, "$2b$")
 }

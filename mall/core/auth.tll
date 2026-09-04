@@ -86,6 +86,12 @@ fn auth_login(db, username, password) {
         return {error: "Invalid username or password"}
     }
 
+    // Auto-migrate legacy password hash to bcrypt
+    if (needs_password_rehash(user.password_hash)) {
+        let newHash = hash_password(password)
+        db_exec(db, "UPDATE users SET password_hash = '" + newHash + "' WHERE id = " + convert.toString(user.id))
+    }
+
     // Create session
     let sessionId = session_create()
     session_set(sessionId, "userId", user.id)

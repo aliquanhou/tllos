@@ -823,7 +823,7 @@ fn api_registerPermissionRoutes(router) {
         if (body.real_name != null) { realName = api_escape(body.real_name) }
         let roleId = 0
         if (body.role_id != null) { roleId = body.role_id }
-        let hashed = "tll$" + convert.toString(strings.length(password)) + "$" + strings.reverse(password)
+        let hashed = hash_password(password)
         db_exec(req.db, "INSERT INTO admin_users (username, password, real_name, role_id, status) VALUES ('" + username + "','" + hashed + "','" + realName + "'," + convert.toString(roleId) + ",'active')")
         return api_success(null, "Admin created successfully")
     })

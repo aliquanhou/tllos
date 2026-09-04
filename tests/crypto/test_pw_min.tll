@@ -1,0 +1,5 @@
+io.println("test 1: start")
+let h = password.hash("abc")
+io.println("test 2: hash done")
+io.println(h)
+io.println("test 3: end")

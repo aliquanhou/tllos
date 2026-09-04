@@ -1,0 +1,6 @@
+let m = map()
+m["key1"] = "value1"
+m["key2"] = 42
+io.println(m["key1"])
+io.println(m["key2"])
+io.println(m["nonexistent"])

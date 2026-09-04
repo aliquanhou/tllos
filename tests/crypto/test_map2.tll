@@ -1,0 +1,4 @@
+let m = {key1: "value1", key2: 42}
+io.println(m.key1)
+io.println(m.key2)
+io.println(m["key1"])

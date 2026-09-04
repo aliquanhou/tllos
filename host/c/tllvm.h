@@ -283,6 +283,9 @@ TLLValue sqlite_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount)
 /* Crypto builtin binding (crypto_builtin.c) - index range 160-179 */
 TLLValue crypto_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount);
 
+/* Password hashing builtin binding (password_builtin.c) - index range 180-189 */
+TLLValue password_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount);
+
 /* P0-15.16 IO-aware scheduler: wake all coroutines waiting on a specific channel.
  * Called from builtin coroutine.wakeChannel(channelMap). Returns number woken. */
 int coroutine_wake_channel(TLLVM *vm, void *channelPtr);

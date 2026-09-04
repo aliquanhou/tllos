@@ -1,0 +1,5 @@
+let s = "hello world"
+io.println(s)
+io.println(strings.length(s))
+io.println(strings.substring(s, 0, 5))
+io.println(strings.substring(s, 6, 11))

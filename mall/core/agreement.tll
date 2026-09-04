@@ -247,13 +247,12 @@ fn account_delete_request(req) {
         return res_json({success: false, message: "Missing user_id"}, 400)
     }
     if (confirmPassword != null) {
-        let userSql = "SELECT password FROM users WHERE id = " + userId
+        let userSql = "SELECT password_hash FROM users WHERE id = " + userId
         let users = db_query(db, userSql)
         if (arrays.length(users) == 0) {
             return res_json({success: false, message: "User not found"}, 404)
         }
-        let hashedInput = hash_password(confirmPassword)
-        if (users[0].password != hashedInput) {
+        if (!verify_password(confirmPassword, users[0].password_hash)) {
             return res_json({success: false, message: "Incorrect password"}, 400)
         }
     }

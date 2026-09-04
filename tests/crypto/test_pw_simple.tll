@@ -1,0 +1,16 @@
+// P1-02 Password Hashing - Simple Test
+io.println("=== P1-02 Password Test ===")
+
+let h = password.hash("test123")
+io.println("hash:")
+io.println(h)
+
+let ok = password.verify("test123", h)
+io.println("verify correct:")
+io.println(ok)
+
+let bad = password.verify("wrong", h)
+io.println("verify wrong:")
+io.println(bad)
+
+io.println("=== DONE ===")
