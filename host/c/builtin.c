@@ -483,6 +483,10 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
     if (idx >= 180 && idx < 190) {
         return password_builtin_invoke(vm, idx, args, argCount);
     }
+    /* HMAC-SHA256 builtin binding (index 190-199) */
+    if (idx >= 190 && idx < 200) {
+        return hmac_builtin_invoke(vm, idx, args, argCount);
+    }
     /* io (0-2) */
     if (idx == 0) { /* println */
         if (argCount > 0) { char *s = tll_to_string(args[0]); puts(s); free(s); }

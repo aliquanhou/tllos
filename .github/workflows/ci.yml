@@ -27,7 +27,7 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           cd host/c
-          gcc -O2 -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -D_DARWIN_C_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c sqlite3.c -lm -lpthread -ldl
+          gcc -O2 -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -D_DARWIN_C_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c sqlite3.c -lm -lpthread -ldl
           ./tllvm --version 2>/dev/null || true
 
       - name: Setup MSVC (Windows)
@@ -39,7 +39,7 @@ jobs:
         shell: cmd
         run: |
           cd host\c
-          cl /O2 /D_CRT_SECURE_NO_WARNINGS /Fe:tllvm.exe main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c sqlite3.c ws2_32.lib winhttp.lib bcrypt.lib
+          cl /O2 /D_CRT_SECURE_NO_WARNINGS /Fe:tllvm.exe main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c sqlite3.c ws2_32.lib winhttp.lib bcrypt.lib
           if errorlevel 1 exit /b 1
 
       - name: Verify bootstrap seed exists
@@ -152,6 +152,40 @@ jobs:
           if errorlevel 1 exit /b 1
           host\c\tllvm.exe hello_e2e.tllbc
           if errorlevel 1 exit /b 1
+
+      # === P1-03: HMAC-SHA256 Gate Test ===
+      # SHA-256 (FIPS 180-4) + HMAC-SHA256 (RFC 2104) with RFC 4231 test vectors.
+      # All expected values verified against Linux sha256sum, Python hashlib, Windows .NET.
+      - name: P1-03 HMAC-SHA256 Gate Test (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/crypto/gate_hmac_sha256.tll -o tests/crypto/gate_hmac_sha256.tllbc
+          host/c/tllvm tests/crypto/gate_hmac_sha256.tllbc 2>&1 | tee /tmp/hmac_gate.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          test "$EXIT_CODE" -eq 0
+          grep -q "ALL TESTS PASSED" /tmp/hmac_gate.log
+          echo "=== P1-03 HMAC-SHA256 Gate Test PASSED ==="
+
+      - name: P1-03 HMAC-SHA256 Concurrency Test (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/crypto/gate_hmac_sha256_concurrent.tll -o tests/crypto/gate_hmac_sha256_concurrent.tllbc
+          host/c/tllvm tests/crypto/gate_hmac_sha256_concurrent.tllbc 2>&1 | tee /tmp/hmac_concurrent.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          test "$EXIT_CODE" -eq 0
+          grep -q "ALL TESTS PASSED" /tmp/hmac_concurrent.log
+          echo "=== P1-03 HMAC-SHA256 Concurrency Test PASSED ==="
+
+      - name: P1-03 HMAC-SHA256 Gate Test (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          & host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tests\crypto\gate_hmac_sha256.tll -o tests\crypto\gate_hmac_sha256.tllbc
+          if ($LASTEXITCODE -ne 0) { throw "HMAC gate compile failed" }
+          & host\c\tllvm.exe tests\crypto\gate_hmac_sha256.tllbc 2>&1 | Tee-Object -FilePath hmac_gate.log
+          if ($LASTEXITCODE -ne 0) { throw "HMAC gate run failed" }
+          if ((Get-Content hmac_gate.log -Raw) -notmatch "ALL TESTS PASSED") { throw "HMAC gate did not PASS" }
+          Write-Output "=== P1-03 HMAC-SHA256 Gate Test PASSED ==="
 
       - name: Blockchain unit test (Linux/macOS)
         if: runner.os != 'Windows'

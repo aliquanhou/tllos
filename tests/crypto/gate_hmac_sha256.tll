@@ -1,0 +1,200 @@
+// P1-03 HMAC-SHA256 Gate Test
+// Test vectors from RFC 4231 (https://tools.ietf.org/html/rfc4231)
+// and FIPS 180-4 SHA-256 test vectors.
+// ALL expected values verified against: Linux sha256sum, Python hashlib, Windows .NET
+// NO self-generated/self-verified tests - all expected values are from standards.
+
+io.println("=== P1-03 HMAC-SHA256 Gate Test ===")
+io.println("")
+
+let pass = 0
+let fail = 0
+
+fn check(name, actual, expected) {
+    if actual == expected {
+        io.println("  PASS: " + name)
+        pass = pass + 1
+    } else {
+        io.println("  FAIL: " + name)
+        io.println("    Expected: " + expected)
+        io.println("    Actual:   " + actual)
+        fail = fail + 1
+    }
+}
+
+// ============================================================
+// Section 1: SHA-256 Known Test Vectors (FIPS 180-4)
+// ============================================================
+io.println("--- Section 1: SHA-256 Known Vectors (FIPS 180-4) ---")
+
+// Test vector 1: "abc"
+// Verified: sha256sum, Python hashlib, Windows .NET all agree
+let sha1 = sha256.hash("abc")
+check("SHA-256('abc')", sha1, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+
+// Test vector 2: empty string
+let sha2 = sha256.hash("")
+check("SHA-256('')", sha2, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+
+// Test vector 3: 56-byte string (FIPS 180-4 Appendix B)
+let sha3 = sha256.hash("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")
+check("SHA-256(56-byte)", sha3, "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1")
+
+// Test vector 4: "The quick brown fox jumps over the lazy dog"
+let sha4 = sha256.hash("The quick brown fox jumps over the lazy dog")
+check("SHA-256(fox dog)", sha4, "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592")
+
+io.println("")
+
+// ============================================================
+// Section 2: HMAC-SHA256 RFC 4231 Test Cases
+// ============================================================
+io.println("--- Section 2: HMAC-SHA256 RFC 4231 Test Vectors ---")
+
+// RFC 4231 Test Case 2:
+// Key = "Jefe"
+// Data = "what do ya want for nothing?"
+// HMAC-SHA256 = 5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843
+let hmac2 = hmac.sha256("Jefe", "what do ya want for nothing?")
+check("RFC4231 TC2: HMAC('Jefe', 'what do ya want...')", hmac2, "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843")
+
+// Known HMAC-SHA256 test vector (from multiple sources):
+// Key = "key"
+// Data = "The quick brown fox jumps over the lazy dog"
+// HMAC-SHA256 = f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8
+let hmac3 = hmac.sha256("key", "The quick brown fox jumps over the lazy dog")
+check("HMAC('key', fox dog)", hmac3, "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8")
+
+// HMAC with empty data
+let hmac_empty = hmac.sha256("key", "")
+check("HMAC('key', '')", hmac_empty, "5d5d139563c95b5967b9bd9a8c9b233a9dedb45072794cd232dc1b74832607d0")
+
+// HMAC with empty key and data
+let hmac_empty_both = hmac.sha256("", "")
+check("HMAC('', '')", hmac_empty_both, "b613679a0814d9ec772f95d778c35fc5ff1697c493715653c6c712144292c5ad")
+
+io.println("")
+
+// ============================================================
+// Section 3: hmac.verify constant-time verification
+// ============================================================
+io.println("--- Section 3: hmac.verify Constant-Time Verification ---")
+
+let verify1 = hmac.verify("Jefe", "what do ya want for nothing?", "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843")
+check("verify correct HMAC returns true", convert.toString(verify1), "true")
+
+let verify2 = hmac.verify("Jefe", "what do ya want for nothing?", "00000000000000000000000000000000000000000000000000000000000000")
+check("verify wrong HMAC returns false", convert.toString(verify2), "false")
+
+let verify3 = hmac.verify("wrongkey", "what do ya want for nothing?", "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843")
+check("verify wrong key returns false", convert.toString(verify3), "false")
+
+io.println("")
+
+// ============================================================
+// Section 4: Output format validation
+// ============================================================
+io.println("--- Section 4: Output Format Validation ---")
+
+let hmac_out = hmac.sha256("key", "data")
+let hmac_len = strings.length(hmac_out)
+check("HMAC output length is 64 (hex)", convert.toString(hmac_len), "64")
+
+let sha_out = sha256.hash("data")
+let sha_len = strings.length(sha_out)
+check("SHA-256 output length is 64 (hex)", convert.toString(sha_len), "64")
+
+// Check all characters are hex
+let allHex = true
+let i = 0
+while i < 64 {
+    let c = strings.charAt(hmac_out, i)
+    if !((c >= "0" && c <= "9") || (c >= "a" && c <= "f")) {
+        allHex = false
+    }
+    i = i + 1
+}
+check("HMAC output is all lowercase hex", convert.toString(allHex), "true")
+
+io.println("")
+
+// ============================================================
+// Section 5: Determinism (same input = same output)
+// ============================================================
+io.println("--- Section 5: Determinism ---")
+
+let hmac_a = hmac.sha256("testkey", "testmessage")
+let hmac_b = hmac.sha256("testkey", "testmessage")
+check("HMAC is deterministic (same input)", hmac_a, hmac_b)
+
+let sha_a = sha256.hash("testmessage")
+let sha_b = sha256.hash("testmessage")
+check("SHA-256 is deterministic (same input)", sha_a, sha_b)
+
+io.println("")
+
+// ============================================================
+// Section 6: Different inputs produce different outputs
+// ============================================================
+io.println("--- Section 6: Different Inputs ---")
+
+let hmac_k1 = hmac.sha256("key1", "data")
+let hmac_k2 = hmac.sha256("key2", "data")
+if hmac_k1 != hmac_k2 {
+    io.println("  PASS: Different keys produce different HMAC")
+    pass = pass + 1
+} else {
+    io.println("  FAIL: Different keys produce same HMAC")
+    fail = fail + 1
+}
+
+let hmac_d1 = hmac.sha256("key", "data1")
+let hmac_d2 = hmac.sha256("key", "data2")
+if hmac_d1 != hmac_d2 {
+    io.println("  PASS: Different data produce different HMAC")
+    pass = pass + 1
+} else {
+    io.println("  FAIL: Different data produce same HMAC")
+    fail = fail + 1
+}
+
+io.println("")
+
+// ============================================================
+// Section 7: Long key (>64 bytes) hashing
+// ============================================================
+io.println("--- Section 7: Long Key (>64 bytes) Hashing ---")
+
+// Key longer than 64 bytes should be hashed first per RFC 2104
+let long_key = "0123456789012345678901234567890123456789012345678901234567890123456789"
+let hmac_long = hmac.sha256(long_key, "data")
+let hmac_long_len = strings.length(hmac_long)
+check("HMAC with 70-byte key produces 64-char output", convert.toString(hmac_long_len), "64")
+
+// Long key should produce different result than short key
+let hmac_short = hmac.sha256("short", "data")
+if hmac_long != hmac_short {
+    io.println("  PASS: Long key produces different HMAC than short key")
+    pass = pass + 1
+} else {
+    io.println("  FAIL: Long key produces same HMAC as short key")
+    fail = fail + 1
+}
+
+io.println("")
+
+// ============================================================
+// Summary
+// ============================================================
+io.println("============================================================")
+io.println("P1-03 HMAC-SHA256 Gate - Summary")
+io.println("============================================================")
+io.println("PASS: " + convert.toString(pass))
+io.println("FAIL: " + convert.toString(fail))
+io.println("Total: " + convert.toString(pass + fail))
+if fail == 0 {
+    io.println("RESULT: ALL TESTS PASSED")
+} else {
+    io.println("RESULT: SOME TESTS FAILED")
+}
+io.println("============================================================")

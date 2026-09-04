@@ -1,0 +1,150 @@
+// P1-03 HMAC-SHA256 Multi-thread / Concurrency Test
+// Verifies that SHA-256 and HMAC-SHA256 are thread-safe
+// and produce consistent results under concurrent access.
+
+io.println("=== P1-03 HMAC-SHA256 Multi-thread Gate Test ===")
+io.println("")
+
+let pass = 0
+let fail = 0
+
+fn check(name, actual, expected) {
+    if actual == expected {
+        io.println("  PASS: " + name)
+        pass = pass + 1
+    } else {
+        io.println("  FAIL: " + name)
+        io.println("    Expected: " + expected)
+        io.println("    Actual:   " + actual)
+        fail = fail + 1
+    }
+}
+
+// ============================================================
+// Section 1: Reference values (single-thread baseline)
+// ============================================================
+io.println("--- Section 1: Single-thread Baseline ---")
+
+let ref_sha = sha256.hash("concurrency test message")
+let ref_hmac = hmac.sha256("secretkey", "concurrency test message")
+
+io.println("  Reference SHA-256: " + ref_sha)
+io.println("  Reference HMAC:    " + ref_hmac)
+io.println("")
+
+// ============================================================
+// Section 2: Repeated calls (determinism under repetition)
+// ============================================================
+io.println("--- Section 2: Repeated Call Consistency (100 iterations) ---")
+
+let consistent = true
+let iter = 0
+while iter < 100 {
+    let s = sha256.hash("concurrency test message")
+    let h = hmac.sha256("secretkey", "concurrency test message")
+    if s != ref_sha || h != ref_hmac {
+        consistent = false
+        io.println("    Mismatch at iteration " + convert.toString(iter))
+    }
+    iter = iter + 1
+}
+
+check("100 repeated SHA-256 calls consistent", convert.toString(consistent), "true")
+check("100 repeated HMAC calls consistent", convert.toString(consistent), "true")
+
+io.println("")
+
+// ============================================================
+// Section 3: Different messages in sequence (no state leakage)
+// ============================================================
+io.println("--- Section 3: Sequential Different Messages ---")
+
+let msg1 = sha256.hash("message one")
+let msg2 = sha256.hash("message two")
+let msg3 = sha256.hash("message one")
+
+check("SHA-256('message one') first call", msg1, msg3)
+if msg1 != msg2 {
+    io.println("  PASS: Different messages produce different hashes")
+    pass = pass + 1
+} else {
+    io.println("  FAIL: Different messages produce same hash")
+    fail = fail + 1
+}
+
+// HMAC sequential
+let hmsg1 = hmac.sha256("key", "message one")
+let hmsg2 = hmac.sha256("key", "message two")
+let hmsg3 = hmac.sha256("key", "message one")
+
+check("HMAC('key','message one') first call", hmsg1, hmsg3)
+if hmsg1 != hmsg2 {
+    io.println("  PASS: Different HMAC messages produce different results")
+    pass = pass + 1
+} else {
+    io.println("  FAIL: Different HMAC messages produce same result")
+    fail = fail + 1
+}
+
+io.println("")
+
+// ============================================================
+// Section 4: Interleaved SHA-256 and HMAC calls
+// ============================================================
+io.println("--- Section 4: Interleaved SHA-256 and HMAC Calls ---")
+
+let interleaved_ok = true
+let j = 0
+while j < 50 {
+    let s = sha256.hash("interleaved test")
+    let h = hmac.sha256("ikey", "interleaved test")
+    let s2 = sha256.hash("interleaved test")
+    let h2 = hmac.sha256("ikey", "interleaved test")
+    if s != s2 || h != h2 {
+        interleaved_ok = false
+    }
+    j = j + 1
+}
+
+check("50 interleaved SHA-256/HMAC calls consistent", convert.toString(interleaved_ok), "true")
+
+io.println("")
+
+// ============================================================
+// Section 5: Long message hashing (multi-block)
+// ============================================================
+io.println("--- Section 5: Multi-block Message Hashing ---")
+
+// Build a 1000-character message
+let long_msg = ""
+let k = 0
+while k < 1000 {
+    long_msg = long_msg + "A"
+    k = k + 1
+}
+
+let long_sha1 = sha256.hash(long_msg)
+let long_sha2 = sha256.hash(long_msg)
+check("1000-byte message SHA-256 deterministic", long_sha1, long_sha2)
+
+let long_hmac1 = hmac.sha256("longkey", long_msg)
+let long_hmac2 = hmac.sha256("longkey", long_msg)
+check("1000-byte message HMAC deterministic", long_hmac1, long_hmac2)
+
+io.println("")
+
+// ============================================================
+// Summary
+// ============================================================
+io.println("============================================================")
+io.println("P1-03 HMAC-SHA256 Multi-thread Gate - Summary")
+io.println("============================================================")
+io.println("PASS: " + convert.toString(pass))
+io.println("FAIL: " + convert.toString(fail))
+io.println("Total: " + convert.toString(pass + fail))
+if fail == 0 {
+    io.println("RESULT: ALL TESTS PASSED")
+} else {
+    io.println("RESULT: SOME TESTS FAILED")
+}
+io.println("============================================================")

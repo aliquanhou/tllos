@@ -1760,6 +1760,15 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
         if fnName == "needsRehash" { return 183 }
         if fnName == "hashInfo" { return 184 }
     }
+    if modName == "hmac" {
+        if fnName == "sha256" { return 190 }
+        if fnName == "sha256Raw" { return 191 }
+        if fnName == "verify" { return 194 }
+    }
+    if modName == "sha256" {
+        if fnName == "hash" { return 192 }
+        if fnName == "hashRaw" { return 193 }
+    }
     return -1
 }
 

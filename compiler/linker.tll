@@ -143,7 +143,7 @@ fn extractImportsFromSource(source: string) -> list {
 
 // Check if a module path is a built-in stdlib module (io, math, etc.)
 fn isStdlibModule(modPath: string) -> bool {
-    let stdlibs: list = ["io", "math", "strings", "arrays", "convert", "fs", "json", "range", "process", "sqlite", "crypto", "password"]
+    let stdlibs: list = ["io", "math", "strings", "arrays", "convert", "fs", "json", "range", "process", "sqlite", "crypto", "password", "hmac", "sha256"]
     let i = 0
     while i < arrays.length(stdlibs) {
         if arrays.get(stdlibs, i) == modPath {
