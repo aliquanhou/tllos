@@ -42,19 +42,25 @@ jobs:
           gcc --version
           echo "=== Memory before build ==="
           free -h
-          echo "=== Starting build ==="
-          gcc -O2 -Wall -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c sqlite3.c -lm -lpthread -ldl > build_output.txt 2>&1
-          BUILD_EXIT=$?
-          echo "=== Build exit code: $BUILD_EXIT ==="
-          echo "=== Build output (last 100 lines) ==="
-          tail -100 build_output.txt
-          echo "=== Memory after build ==="
-          free -h
+          echo "=== Compiling each file separately ==="
+          for f in main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c; do
+            echo "--- Compiling $f ---"
+            gcc -O0 -w -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -c $f -o ${f%.c}.o 2>&1
+            echo "  Exit: $?"
+          done
+          echo "--- Compiling sqlite3.c (this may take a while) ---"
+          gcc -O0 -w -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -DSQLITE_THREADSAFE=1 -c sqlite3.c -o sqlite3.o 2>&1
+          echo "  sqlite3.c Exit: $?"
+          echo "=== Linking ==="
+          gcc -O0 -o tllvm main.o vm.o value.o json.o builtin.o sqlite_builtin.o crypto_builtin.o sqlite3.o -lm -lpthread -ldl 2>&1
+          LINK_EXIT=$?
+          echo "=== Link exit code: $LINK_EXIT ==="
           echo "=== Binary check ==="
           ls -la tllvm 2>&1 || echo "tllvm binary not found"
-          if [ $BUILD_EXIT -ne 0 ]; then
-            echo "=== BUILD FAILED - full error output ==="
-            cat build_output.txt
+          echo "=== Memory after build ==="
+          free -h
+          if [ $LINK_EXIT -ne 0 ]; then
+            echo "=== BUILD FAILED ==="
             exit 1
           fi
 
