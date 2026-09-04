@@ -66,12 +66,12 @@ fn admin_registerRoutes(router, db) {
         let authResult = admin_checkAuth(req)
         if (authResult != null) { return authResult }
 
-        let totalProducts = db_queryOne(db, "SELECT COUNT(*) as cnt FROM products")
-        let totalOrders = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders")
-        let totalUsers = db_queryOne(db, "SELECT COUNT(*) as cnt FROM users")
-        let totalSales = db_queryOne(db, "SELECT COALESCE(SUM(total_amount),0) as total FROM orders WHERE status != 'cancelled'")
+        let totalProducts = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM products")
+        let totalOrders = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM orders")
+        let totalUsers = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM users")
+        let totalSales = db_queryOne(req.db, "SELECT COALESCE(SUM(total_amount),0) as total FROM orders WHERE status != 'cancelled'")
 
-        let recentOrders = db_query(db, "SELECT * FROM orders ORDER BY id DESC LIMIT 5")
+        let recentOrders = db_query(req.db, "SELECT * FROM orders ORDER BY id DESC LIMIT 5")
         let ordersHtml = ""
         let i = 0
         while (i < arrays.length(recentOrders)) {
@@ -99,7 +99,7 @@ fn admin_registerRoutes(router, db) {
         let authResult = admin_checkAuth(req)
         if (authResult != null) { return authResult }
 
-        let products = db_query(db, "SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id ORDER BY p.id DESC")
+        let products = db_query(req.db, "SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id=c.id ORDER BY p.id DESC")
         let productsHtml = ""
         let i = 0
         while (i < arrays.length(products)) {
@@ -126,7 +126,7 @@ fn admin_registerRoutes(router, db) {
         let authResult = admin_checkAuth(req)
         if (authResult != null) { return authResult }
 
-        let categories = db_query(db, "SELECT * FROM categories ORDER BY sort_order")
+        let categories = db_query(req.db, "SELECT * FROM categories ORDER BY sort_order")
         let catOptions = ""
         let i = 0
         while (i < arrays.length(categories)) {
@@ -164,7 +164,7 @@ fn admin_registerRoutes(router, db) {
         let authResult = admin_checkAuth(req)
         if (authResult != null) { return authResult }
 
-        let orders = db_query(db, "SELECT o.*, u.username FROM orders o LEFT JOIN users u ON o.user_id=u.id ORDER BY o.id DESC LIMIT 50")
+        let orders = db_query(req.db, "SELECT o.*, u.username FROM orders o LEFT JOIN users u ON o.user_id=u.id ORDER BY o.id DESC LIMIT 50")
         let ordersHtml = ""
         let i = 0
         while (i < arrays.length(orders)) {
@@ -200,10 +200,10 @@ fn admin_registerRoutes(router, db) {
         if (authResult != null) { return authResult }
 
         let orderId = convert.toInt(req.params.id)
-        let order = db_queryOne(db, "SELECT o.*, u.username FROM orders o LEFT JOIN users u ON o.user_id=u.id WHERE o.id=" + convert.toString(orderId))
+        let order = db_queryOne(req.db, "SELECT o.*, u.username FROM orders o LEFT JOIN users u ON o.user_id=u.id WHERE o.id=" + convert.toString(orderId))
         if (order == null) { return res_notFound("订单不存在") }
 
-        let items = db_query(db, "SELECT * FROM order_items WHERE order_id=" + convert.toString(orderId))
+        let items = db_query(req.db, "SELECT * FROM order_items WHERE order_id=" + convert.toString(orderId))
         let itemsHtml = ""
         let i = 0
         while (i < arrays.length(items)) {
@@ -231,7 +231,7 @@ fn admin_registerRoutes(router, db) {
         let authResult = admin_checkAuth(req)
         if (authResult != null) { return authResult }
         let orderId = convert.toInt(req.params.id)
-        db_exec(db, "UPDATE orders SET status='shipped', shipping_status='shipped', shipped_at=datetime('now') WHERE id=" + convert.toString(orderId))
+        db_exec(req.db, "UPDATE orders SET status='shipped', shipping_status='shipped', shipped_at=datetime('now') WHERE id=" + convert.toString(orderId))
         return res_redirect("/admin/orders")
     })
 
@@ -240,7 +240,7 @@ fn admin_registerRoutes(router, db) {
         let authResult = admin_checkAuth(req)
         if (authResult != null) { return authResult }
 
-        let users = db_query(db, "SELECT * FROM users ORDER BY id DESC LIMIT 50")
+        let users = db_query(req.db, "SELECT * FROM users ORDER BY id DESC LIMIT 50")
         let usersHtml = ""
         let i = 0
         while (i < arrays.length(users)) {
@@ -269,7 +269,7 @@ fn admin_registerRoutes(router, db) {
         let authResult = admin_checkAuth(req)
         if (authResult != null) { return authResult }
 
-        let categories = db_query(db, "SELECT * FROM categories ORDER BY sort_order")
+        let categories = db_query(req.db, "SELECT * FROM categories ORDER BY sort_order")
         let catHtml = ""
         let i = 0
         while (i < arrays.length(categories)) {

@@ -1,0 +1,24 @@
+// Debug HTTP POST body - return body info in response
+fn debugHandler(req) {
+    let bodyInfo = "NULL"
+    let bodyLen = -1
+    if (req.body != null) {
+        bodyLen = strings.length(req.body)
+        bodyInfo = req.body
+    }
+
+    let ct = "none"
+    let cl = "none"
+    if (req.headers != null) {
+        if (req.headers["content-type"] != null) { ct = req.headers["content-type"] }
+        if (req.headers["content-length"] != null) { cl = req.headers["content-length"] }
+    }
+
+    return {
+        status: 200,
+        contentType: "application/json",
+        body: "{\"method\":\"" + req.method + "\",\"path\":\"" + req.path + "\",\"contentType\":\"" + ct + "\",\"contentLength\":\"" + cl + "\",\"bodyLen\":" + convert.toString(bodyLen) + ",\"body\":\"" + bodyInfo + "\"}"
+    }
+}
+
+http.serve("0.0.0.0:8091", debugHandler)

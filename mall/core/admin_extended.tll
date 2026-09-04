@@ -65,11 +65,11 @@ fn adminx_registerProductRoutes(router, db) {
         let authResult = adminx_checkAuth(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        let product = db_queryOne(db, "SELECT * FROM products WHERE id=" + convert.toString(id))
+        let product = db_queryOne(req.db, "SELECT * FROM products WHERE id=" + convert.toString(id))
         if (product == null) { return res_notFound("Product not found") }
 
-        let categories = db_query(db, "SELECT * FROM categories ORDER BY sort_order")
-        let brands = db_query(db, "SELECT * FROM brands ORDER BY id")
+        let categories = db_query(req.db, "SELECT * FROM categories ORDER BY sort_order")
+        let brands = db_query(req.db, "SELECT * FROM brands ORDER BY id")
         let catOptions = ""
         let i = 0
         while (i < arrays.length(categories)) {
@@ -125,7 +125,7 @@ fn adminx_registerProductRoutes(router, db) {
         let desc = ""
         if (data.description != null) { desc = db_escape(data.description) }
 
-        db_exec(db, "UPDATE products SET name='" + name + "', price=" + price + ", stock=" + stock + ", status='" + status + "', category_id=" + categoryId + ", brand_id=" + brandId + ", description='" + desc + "' WHERE id=" + convert.toString(id))
+        db_exec(req.db, "UPDATE products SET name='" + name + "', price=" + price + ", stock=" + stock + ", status='" + status + "', category_id=" + categoryId + ", brand_id=" + brandId + ", description='" + desc + "' WHERE id=" + convert.toString(id))
         return res_redirect("/admin/products")
     })
 
@@ -134,7 +134,7 @@ fn adminx_registerProductRoutes(router, db) {
         let authResult = adminx_checkAuth(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        db_exec(db, "UPDATE products SET status='deleted' WHERE id=" + convert.toString(id))
+        db_exec(req.db, "UPDATE products SET status='deleted' WHERE id=" + convert.toString(id))
         return res_redirect("/admin/products")
     })
 
@@ -143,11 +143,11 @@ fn adminx_registerProductRoutes(router, db) {
         let authResult = adminx_checkAuth(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        let product = db_queryOne(db, "SELECT status FROM products WHERE id=" + convert.toString(id))
+        let product = db_queryOne(req.db, "SELECT status FROM products WHERE id=" + convert.toString(id))
         if (product != null) {
             let newStatus = "off"
             if (product.status == "off") { newStatus = "on" }
-            db_exec(db, "UPDATE products SET status='" + newStatus + "' WHERE id=" + convert.toString(id))
+            db_exec(req.db, "UPDATE products SET status='" + newStatus + "' WHERE id=" + convert.toString(id))
         }
         return res_redirect("/admin/products")
     })
@@ -161,22 +161,22 @@ fn adminx_registerOrderRoutes(router, db) {
         let authResult = adminx_checkAuth(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        let order = db_queryOne(db, "SELECT * FROM orders WHERE id=" + convert.toString(id))
+        let order = db_queryOne(req.db, "SELECT * FROM orders WHERE id=" + convert.toString(id))
         if (order != null) {
             if (order.status == "pending" || order.status == "paid") {
                 // Restore stock
-                let items = db_query(db, "SELECT * FROM order_items WHERE order_id=" + convert.toString(id))
+                let items = db_query(req.db, "SELECT * FROM order_items WHERE order_id=" + convert.toString(id))
                 let i = 0
                 while (i < arrays.length(items)) {
                     let skuId = items[i].sku_id
                     let qty = items[i].quantity
                     if (skuId != null && skuId > 0) {
-                        db_exec(db, "UPDATE product_skus SET stock=stock+" + convert.toString(qty) + " WHERE id=" + convert.toString(skuId))
+                        db_exec(req.db, "UPDATE product_skus SET stock=stock+" + convert.toString(qty) + " WHERE id=" + convert.toString(skuId))
                     }
-                    db_exec(db, "UPDATE products SET stock=stock+" + convert.toString(qty) + " WHERE id=" + convert.toString(items[i].product_id))
+                    db_exec(req.db, "UPDATE products SET stock=stock+" + convert.toString(qty) + " WHERE id=" + convert.toString(items[i].product_id))
                     i = i + 1
                 }
-                db_exec(db, "UPDATE orders SET status='cancelled', cancelled_at=datetime('now') WHERE id=" + convert.toString(id))
+                db_exec(req.db, "UPDATE orders SET status='cancelled', cancelled_at=datetime('now') WHERE id=" + convert.toString(id))
             }
         }
         return res_redirect("/admin/orders")
@@ -187,7 +187,7 @@ fn adminx_registerOrderRoutes(router, db) {
         let authResult = adminx_checkAuth(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        db_exec(db, "UPDATE orders SET status='completed', completed_at=datetime('now') WHERE id=" + convert.toString(id) + " AND status='shipped'")
+        db_exec(req.db, "UPDATE orders SET status='completed', completed_at=datetime('now') WHERE id=" + convert.toString(id) + " AND status='shipped'")
         return res_redirect("/admin/orders")
     })
 
@@ -195,12 +195,12 @@ fn adminx_registerOrderRoutes(router, db) {
     router_get(router, "/admin/orders/stats", fn(req) {
         let authResult = adminx_checkAuth(req)
         if (authResult != null) { return authResult }
-        let total = db_queryOne(db, "SELECT COUNT(*) as cnt, COALESCE(SUM(total_amount),0) as amount FROM orders")
-        let pending = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE status='pending'")
-        let paid = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE status='paid'")
-        let shipped = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE status='shipped'")
-        let completed = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE status='completed'")
-        let cancelled = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE status='cancelled'")
+        let total = db_queryOne(req.db, "SELECT COUNT(*) as cnt, COALESCE(SUM(total_amount),0) as amount FROM orders")
+        let pending = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM orders WHERE status='pending'")
+        let paid = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM orders WHERE status='paid'")
+        let shipped = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM orders WHERE status='shipped'")
+        let completed = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM orders WHERE status='completed'")
+        let cancelled = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM orders WHERE status='cancelled'")
 
         return res_json({
             total_orders: total.cnt,
@@ -222,13 +222,13 @@ fn adminx_registerUserRoutes(router, db) {
         let authResult = adminx_checkAuth(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        let user = db_queryOne(db, "SELECT * FROM users WHERE id=" + convert.toString(id))
+        let user = db_queryOne(req.db, "SELECT * FROM users WHERE id=" + convert.toString(id))
         if (user == null) { return res_notFound("User not found") }
 
-        let addresses = db_query(db, "SELECT * FROM user_addresses WHERE user_id=" + convert.toString(id))
-        let orders = db_query(db, "SELECT * FROM orders WHERE user_id=" + convert.toString(id) + " ORDER BY id DESC LIMIT 10")
-        let orderCount = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE user_id=" + convert.toString(id))
-        let totalSpent = db_queryOne(db, "SELECT COALESCE(SUM(total_amount),0) as total FROM orders WHERE user_id=" + convert.toString(id) + " AND status != 'cancelled'")
+        let addresses = db_query(req.db, "SELECT * FROM user_addresses WHERE user_id=" + convert.toString(id))
+        let orders = db_query(req.db, "SELECT * FROM orders WHERE user_id=" + convert.toString(id) + " ORDER BY id DESC LIMIT 10")
+        let orderCount = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM orders WHERE user_id=" + convert.toString(id))
+        let totalSpent = db_queryOne(req.db, "SELECT COALESCE(SUM(total_amount),0) as total FROM orders WHERE user_id=" + convert.toString(id) + " AND status != 'cancelled'")
 
         let addrHtml = ""
         let i = 0
@@ -265,11 +265,11 @@ fn adminx_registerUserRoutes(router, db) {
         let authResult = adminx_checkAuth(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        let user = db_queryOne(db, "SELECT status FROM users WHERE id=" + convert.toString(id))
+        let user = db_queryOne(req.db, "SELECT status FROM users WHERE id=" + convert.toString(id))
         if (user != null) {
             let newStatus = "banned"
             if (user.status == "banned") { newStatus = "active" }
-            db_exec(db, "UPDATE users SET status='" + newStatus + "' WHERE id=" + convert.toString(id))
+            db_exec(req.db, "UPDATE users SET status='" + newStatus + "' WHERE id=" + convert.toString(id))
         }
         return res_redirect("/admin/user/" + convert.toString(id))
     })
@@ -279,11 +279,11 @@ fn adminx_registerUserRoutes(router, db) {
         let authResult = adminx_checkAuth(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        let user = db_queryOne(db, "SELECT role FROM users WHERE id=" + convert.toString(id))
+        let user = db_queryOne(req.db, "SELECT role FROM users WHERE id=" + convert.toString(id))
         if (user != null) {
             let newRole = "admin"
             if (user.role == "admin") { newRole = "user" }
-            db_exec(db, "UPDATE users SET role='" + newRole + "' WHERE id=" + convert.toString(id))
+            db_exec(req.db, "UPDATE users SET role='" + newRole + "' WHERE id=" + convert.toString(id))
         }
         return res_redirect("/admin/user/" + convert.toString(id))
     })
@@ -296,7 +296,7 @@ fn adminx_registerCatalogRoutes(router, db) {
     router_get(router, "/admin/brands", fn(req) {
         let authResult = adminx_checkAuth(req)
         if (authResult != null) { return authResult }
-        let brands = db_query(db, "SELECT * FROM brands ORDER BY id")
+        let brands = db_query(req.db, "SELECT * FROM brands ORDER BY id")
         let brandHtml = ""
         let i = 0
         while (i < arrays.length(brands)) {
@@ -320,7 +320,7 @@ fn adminx_registerCatalogRoutes(router, db) {
         let name = db_escape(data.name)
         let desc = ""
         if (data.description != null) { desc = db_escape(data.description) }
-        db_exec(db, "INSERT INTO brands (name, description, created_at) VALUES ('" + name + "', '" + desc + "', datetime('now'))")
+        db_exec(req.db, "INSERT INTO brands (name, description, created_at) VALUES ('" + name + "', '" + desc + "', datetime('now'))")
         return res_redirect("/admin/brands")
     })
 
@@ -328,7 +328,7 @@ fn adminx_registerCatalogRoutes(router, db) {
         let authResult = adminx_checkAuth(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        db_exec(db, "DELETE FROM brands WHERE id=" + convert.toString(id))
+        db_exec(req.db, "DELETE FROM brands WHERE id=" + convert.toString(id))
         return res_redirect("/admin/brands")
     })
 
@@ -342,7 +342,7 @@ fn adminx_registerCatalogRoutes(router, db) {
         if (data.parent_id != null) { parentId = convert.toString(data.parent_id) }
         let sortOrder = "0"
         if (data.sort_order != null) { sortOrder = convert.toString(data.sort_order) }
-        db_exec(db, "INSERT INTO categories (name, parent_id, sort_order, status, created_at) VALUES ('" + name + "', " + parentId + ", " + sortOrder + ", 'on', datetime('now'))")
+        db_exec(req.db, "INSERT INTO categories (name, parent_id, sort_order, status, created_at) VALUES ('" + name + "', " + parentId + ", " + sortOrder + ", 'on', datetime('now'))")
         return res_redirect("/admin/categories")
     })
 
@@ -351,7 +351,7 @@ fn adminx_registerCatalogRoutes(router, db) {
         let authResult = adminx_checkAuth(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        db_exec(db, "DELETE FROM categories WHERE id=" + convert.toString(id))
+        db_exec(req.db, "DELETE FROM categories WHERE id=" + convert.toString(id))
         return res_redirect("/admin/categories")
     })
 }

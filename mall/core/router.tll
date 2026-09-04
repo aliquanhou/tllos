@@ -1,6 +1,8 @@
 // TLL Mall - Web Router
 // Provides routing, middleware, path parameters, and response helpers
 
+from "./database" import db_get, db_release
+
 // === Response Helpers ===
 
 fn res_json(data, status) {
@@ -161,6 +163,10 @@ fn router_handle(router, req) {
     let path = req.path
     let routeCount = arrays.length(router.routes)
 
+    // Inject database connection into req (workaround for TLL closure capture bug)
+    // Route handlers should use req.db instead of captured db variable
+    req.db = db_get()
+
     let j = 0
     while (j < routeCount) {
         let route = router.routes[j]
@@ -168,12 +174,17 @@ fn router_handle(router, req) {
             let params = router_matchPath(route.pattern, path)
             if (params != null) {
                 req.params = params
-                return route.handler(req)
+                let result = route.handler(req)
+                // Release database connection
+                db_release(req.db)
+                return result
             }
         }
         j = j + 1
     }
 
+    // Release database connection for 404
+    db_release(req.db)
     return res_notFound("No route matched " + method + " " + path)
 }
 

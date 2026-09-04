@@ -1,0 +1,27 @@
+// Debug HTTP POST body with http.serve API
+fn debugHandler(req) {
+    io.println("=== Request ===")
+    io.println("Method: " + req.method)
+    io.println("Path: " + req.path)
+    if (req.headers != null) {
+        io.println("Content-Type: " + req.headers["content-type"])
+        io.println("Content-Length: " + req.headers["content-length"])
+    }
+    if (req.body == null) {
+        io.println("Body: NULL")
+    } else {
+        let bodyLen = strings.length(req.body)
+        io.println("Body length: " + convert.toString(bodyLen))
+        io.println("Body: " + req.body)
+    }
+    io.println("")
+
+    return {
+        status: 200,
+        contentType: "application/json",
+        body: "{\"method\":\"" + req.method + "\",\"path\":\"" + req.path + "\"}"
+    }
+}
+
+io.println("Debug server starting on port 8091...")
+http.serve("0.0.0.0:8091", debugHandler)

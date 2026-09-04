@@ -19,6 +19,25 @@ fn db_close(handle) {
     sqlite.close(handle.raw)
 }
 
+// === Global Connection Manager ===
+// Workaround for TLL closure capture bug in multi-threaded Worker Pool:
+// Captured variables (like `db`) become null inside route handler closures.
+// Solution: use a global function to get a fresh connection per request.
+
+let GLOBAL_DB_PATH = "mall/data/mall.db"
+
+// Get a fresh database connection (call at start of each route handler)
+fn db_get() {
+    return db_open(GLOBAL_DB_PATH)
+}
+
+// Release database connection (call at end of each route handler)
+fn db_release(handle) {
+    if (handle != null) {
+        db_close(handle)
+    }
+}
+
 // === SQL Parameter Escaping (prevents SQL injection) ===
 
 fn db_escapeString(s) {

@@ -48,7 +48,7 @@ fn mkt_registerCouponRoutes(router, db) {
     router_get(router, "/admin/coupons", fn(req) {
         let authResult = mkt_checkAdmin(req)
         if (authResult != null) { return authResult }
-        let coupons = db_query(db, "SELECT * FROM coupons ORDER BY id DESC")
+        let coupons = db_query(req.db, "SELECT * FROM coupons ORDER BY id DESC")
         let html = ""
         let i = 0
         while (i < arrays.length(coupons)) {
@@ -91,7 +91,7 @@ fn mkt_registerCouponRoutes(router, db) {
         if (data.start_at != null) { startDate = data.start_at }
         let endDate = ""
         if (data.end_at != null) { endDate = data.end_at }
-        db_exec(db, "INSERT INTO coupons (name, type, value, min_amount, total_count, used_count, status, start_at, end_at, created_at) VALUES ('" + name + "', '" + ctype + "', " + value + ", " + minAmount + ", " + totalCount + ", 0, 'active', '" + startDate + "', '" + endDate + "', datetime('now'))")
+        db_exec(req.db, "INSERT INTO coupons (name, type, value, min_amount, total_count, used_count, status, start_at, end_at, created_at) VALUES ('" + name + "', '" + ctype + "', " + value + ", " + minAmount + ", " + totalCount + ", 0, 'active', '" + startDate + "', '" + endDate + "', datetime('now'))")
         return res_redirect("/admin/coupons")
     })
 
@@ -100,8 +100,8 @@ fn mkt_registerCouponRoutes(router, db) {
         let authResult = mkt_checkUser(req)
         if (authResult != null) { return authResult }
         let userId = req.currentUser.id
-        let coupons = db_query(db, "SELECT * FROM coupons WHERE status='active' AND used_count < total_count ORDER BY id DESC")
-        let userCoupons = db_query(db, "SELECT coupon_id FROM user_coupons WHERE user_id=" + convert.toString(userId))
+        let coupons = db_query(req.db, "SELECT * FROM coupons WHERE status='active' AND used_count < total_count ORDER BY id DESC")
+        let userCoupons = db_query(req.db, "SELECT coupon_id FROM user_coupons WHERE user_id=" + convert.toString(userId))
         let claimedIds = {}
         let i = 0
         while (i < arrays.length(userCoupons)) {
@@ -130,13 +130,13 @@ fn mkt_registerCouponRoutes(router, db) {
         if (authResult != null) { return authResult }
         let couponId = convert.toInt(req.params.id)
         let userId = req.currentUser.id
-        let coupon = db_queryOne(db, "SELECT * FROM coupons WHERE id=" + convert.toString(couponId))
+        let coupon = db_queryOne(req.db, "SELECT * FROM coupons WHERE id=" + convert.toString(couponId))
         if (coupon == null) { return res_json({success: false, error: "Coupon not found"}) }
         if (coupon.used_count >= coupon.total_count) { return res_json({success: false, error: "Coupon exhausted"}) }
-        let existing = db_queryOne(db, "SELECT * FROM user_coupons WHERE user_id=" + convert.toString(userId) + " AND coupon_id=" + convert.toString(couponId))
+        let existing = db_queryOne(req.db, "SELECT * FROM user_coupons WHERE user_id=" + convert.toString(userId) + " AND coupon_id=" + convert.toString(couponId))
         if (existing != null) { return res_json({success: false, error: "Already claimed"}) }
-        db_exec(db, "INSERT INTO user_coupons (user_id, coupon_id, status, created_at) VALUES (" + convert.toString(userId) + ", " + convert.toString(couponId) + ", 'unused', datetime('now'))")
-        db_exec(db, "UPDATE coupons SET used_count=used_count+1 WHERE id=" + convert.toString(couponId))
+        db_exec(req.db, "INSERT INTO user_coupons (user_id, coupon_id, status, created_at) VALUES (" + convert.toString(userId) + ", " + convert.toString(couponId) + ", 'unused', datetime('now'))")
+        db_exec(req.db, "UPDATE coupons SET used_count=used_count+1 WHERE id=" + convert.toString(couponId))
         return res_redirect("/coupons")
     })
 
@@ -145,7 +145,7 @@ fn mkt_registerCouponRoutes(router, db) {
         let authResult = mkt_checkUser(req)
         if (authResult != null) { return authResult }
         let userId = req.currentUser.id
-        let myCoupons = db_query(db, "SELECT uc.*, c.name, c.type, c.value, c.min_amount, c.start_at, c.end_at FROM user_coupons uc LEFT JOIN coupons c ON uc.coupon_id=c.id WHERE uc.user_id=" + convert.toString(userId) + " ORDER BY uc.id DESC")
+        let myCoupons = db_query(req.db, "SELECT uc.*, c.name, c.type, c.value, c.min_amount, c.start_at, c.end_at FROM user_coupons uc LEFT JOIN coupons c ON uc.coupon_id=c.id WHERE uc.user_id=" + convert.toString(userId) + " ORDER BY uc.id DESC")
         let html = ""
         let i = 0
         while (i < arrays.length(myCoupons)) {
@@ -170,7 +170,7 @@ fn mkt_registerAfterSaleRoutes(router, db) {
     router_get(router, "/admin/aftersales", fn(req) {
         let authResult = mkt_checkAdmin(req)
         if (authResult != null) { return authResult }
-        let list = db_query(db, "SELECT a.*, u.username, o.order_no FROM after_sales a LEFT JOIN users u ON a.user_id=u.id LEFT JOIN orders o ON a.order_id=o.id ORDER BY a.id DESC")
+        let list = db_query(req.db, "SELECT a.*, u.username, o.order_no FROM after_sales a LEFT JOIN users u ON a.user_id=u.id LEFT JOIN orders o ON a.order_id=o.id ORDER BY a.id DESC")
         let html = ""
         let i = 0
         while (i < arrays.length(list)) {
@@ -202,7 +202,7 @@ fn mkt_registerAfterSaleRoutes(router, db) {
         let authResult = mkt_checkAdmin(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        db_exec(db, "UPDATE after_sales SET status='approved', approved_at=datetime('now') WHERE id=" + convert.toString(id))
+        db_exec(req.db, "UPDATE after_sales SET status='approved', approved_at=datetime('now') WHERE id=" + convert.toString(id))
         return res_redirect("/admin/aftersales")
     })
 
@@ -211,7 +211,7 @@ fn mkt_registerAfterSaleRoutes(router, db) {
         let authResult = mkt_checkAdmin(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        db_exec(db, "UPDATE after_sales SET status='rejected', rejected_at=datetime('now') WHERE id=" + convert.toString(id))
+        db_exec(req.db, "UPDATE after_sales SET status='rejected', rejected_at=datetime('now') WHERE id=" + convert.toString(id))
         return res_redirect("/admin/aftersales")
     })
 
@@ -227,7 +227,7 @@ fn mkt_registerAfterSaleRoutes(router, db) {
         let atype = data.type
         let amount = convert.toString(data.amount)
         let reason = db_esc(data.reason)
-        db_exec(db, "INSERT INTO after_sales (user_id, order_id, order_item_id, type, amount, reason, status, created_at) VALUES (" + convert.toString(userId) + ", " + orderId + ", " + orderItemId + ", '" + atype + "', " + amount + ", '" + reason + "', 'pending', datetime('now'))")
+        db_exec(req.db, "INSERT INTO after_sales (user_id, order_id, order_item_id, type, amount, reason, status, created_at) VALUES (" + convert.toString(userId) + ", " + orderId + ", " + orderItemId + ", '" + atype + "', " + amount + ", '" + reason + "', 'pending', datetime('now'))")
         return res_json({success: true})
     })
 
@@ -236,7 +236,7 @@ fn mkt_registerAfterSaleRoutes(router, db) {
         let authResult = mkt_checkUser(req)
         if (authResult != null) { return authResult }
         let userId = req.currentUser.id
-        let list = db_query(db, "SELECT a.*, o.order_no FROM after_sales a LEFT JOIN orders o ON a.order_id=o.id WHERE a.user_id=" + convert.toString(userId) + " ORDER BY a.id DESC")
+        let list = db_query(req.db, "SELECT a.*, o.order_no FROM after_sales a LEFT JOIN orders o ON a.order_id=o.id WHERE a.user_id=" + convert.toString(userId) + " ORDER BY a.id DESC")
         let html = ""
         let i = 0
         while (i < arrays.length(list)) {
@@ -261,7 +261,7 @@ fn mkt_registerReviewRoutes(router, db) {
     router_get(router, "/admin/reviews", fn(req) {
         let authResult = mkt_checkAdmin(req)
         if (authResult != null) { return authResult }
-        let reviews = db_query(db, "SELECT r.*, u.username, p.name as product_name FROM reviews r LEFT JOIN users u ON r.user_id=u.id LEFT JOIN products p ON r.product_id=p.id ORDER BY r.id DESC")
+        let reviews = db_query(req.db, "SELECT r.*, u.username, p.name as product_name FROM reviews r LEFT JOIN users u ON r.user_id=u.id LEFT JOIN products p ON r.product_id=p.id ORDER BY r.id DESC")
         let html = ""
         let i = 0
         while (i < arrays.length(reviews)) {
@@ -292,7 +292,7 @@ fn mkt_registerReviewRoutes(router, db) {
         let authResult = mkt_checkAdmin(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        db_exec(db, "UPDATE reviews SET status='approved' WHERE id=" + convert.toString(id))
+        db_exec(req.db, "UPDATE reviews SET status='approved' WHERE id=" + convert.toString(id))
         return res_redirect("/admin/reviews")
     })
 
@@ -301,7 +301,7 @@ fn mkt_registerReviewRoutes(router, db) {
         let authResult = mkt_checkAdmin(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        db_exec(db, "UPDATE reviews SET status='rejected' WHERE id=" + convert.toString(id))
+        db_exec(req.db, "UPDATE reviews SET status='rejected' WHERE id=" + convert.toString(id))
         return res_redirect("/admin/reviews")
     })
 
@@ -316,14 +316,14 @@ fn mkt_registerReviewRoutes(router, db) {
         if (data.order_id != null) { orderId = convert.toString(data.order_id) }
         let rating = convert.toString(data.rating)
         let content = db_esc(data.content)
-        db_exec(db, "INSERT INTO reviews (user_id, product_id, order_id, rating, content, status, created_at) VALUES (" + convert.toString(userId) + ", " + productId + ", " + orderId + ", " + rating + ", '" + content + "', 'pending', datetime('now'))")
+        db_exec(req.db, "INSERT INTO reviews (user_id, product_id, order_id, rating, content, status, created_at) VALUES (" + convert.toString(userId) + ", " + productId + ", " + orderId + ", " + rating + ", '" + content + "', 'pending', datetime('now'))")
         return res_json({success: true})
     })
 
     // Product reviews (public) - use different path to avoid conflict with /product/:id
     router_get(router, "/reviews/product/:id", fn(req) {
         let productId = convert.toInt(req.params.id)
-        let reviews = db_query(db, "SELECT r.*, u.username FROM reviews r LEFT JOIN users u ON r.user_id=u.id WHERE r.product_id=" + convert.toString(productId) + " AND r.status='approved' ORDER BY r.id DESC")
+        let reviews = db_query(req.db, "SELECT r.*, u.username FROM reviews r LEFT JOIN users u ON r.user_id=u.id WHERE r.product_id=" + convert.toString(productId) + " AND r.status='approved' ORDER BY r.id DESC")
         let html = ""
         let i = 0
         while (i < arrays.length(reviews)) {

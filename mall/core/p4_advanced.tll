@@ -40,7 +40,7 @@ fn p4_registerMemberRoutes(router, db) {
     router_get(router, "/admin/member/levels", fn(req) {
         let authResult = p4_checkAdmin(req)
         if (authResult != null) { return authResult }
-        let levels = db_query(db, "SELECT * FROM member_levels ORDER BY level ASC")
+        let levels = db_query(req.db, "SELECT * FROM member_levels ORDER BY level ASC")
         let html = ""
         let i = 0
         while (i < arrays.length(levels)) {
@@ -64,7 +64,7 @@ fn p4_registerMemberRoutes(router, db) {
         let level = convert.toString(data.level)
         let discount = convert.toString(data.discount)
         let minPoints = convert.toString(data.min_points)
-        db_exec(db, "INSERT INTO member_levels (name, level, discount, min_points, created_at) VALUES ('" + name + "', " + level + ", " + discount + ", " + minPoints + ", datetime('now'))")
+        db_exec(req.db, "INSERT INTO member_levels (name, level, discount, min_points, created_at) VALUES ('" + name + "', " + level + ", " + discount + ", " + minPoints + ", datetime('now'))")
         return res_redirect("/admin/member/levels")
     })
 
@@ -72,7 +72,7 @@ fn p4_registerMemberRoutes(router, db) {
     router_get(router, "/admin/points/log", fn(req) {
         let authResult = p4_checkAdmin(req)
         if (authResult != null) { return authResult }
-        let logs = db_query(db, "SELECT p.*, u.username FROM point_logs p LEFT JOIN users u ON p.user_id=u.id ORDER BY p.id DESC LIMIT 50")
+        let logs = db_query(req.db, "SELECT p.*, u.username FROM point_logs p LEFT JOIN users u ON p.user_id=u.id ORDER BY p.id DESC LIMIT 50")
         let html = ""
         let i = 0
         while (i < arrays.length(logs)) {
@@ -91,7 +91,7 @@ fn p4_registerMemberRoutes(router, db) {
     router_get(router, "/admin/balance/log", fn(req) {
         let authResult = p4_checkAdmin(req)
         if (authResult != null) { return authResult }
-        let logs = db_query(db, "SELECT a.*, u.username FROM account_logs a LEFT JOIN users u ON a.user_id=u.id ORDER BY a.id DESC LIMIT 50")
+        let logs = db_query(req.db, "SELECT a.*, u.username FROM account_logs a LEFT JOIN users u ON a.user_id=u.id ORDER BY a.id DESC LIMIT 50")
         let html = ""
         let i = 0
         while (i < arrays.length(logs)) {
@@ -112,10 +112,10 @@ fn p4_registerMemberRoutes(router, db) {
         let authResult = p4_checkUser(req)
         if (authResult != null) { return authResult }
         let userId = req.currentUser.id
-        let totalEarn = db_queryOne(db, "SELECT COALESCE(SUM(points),0) as total FROM point_logs WHERE user_id=" + convert.toString(userId) + " AND type='earn'")
-        let totalSpend = db_queryOne(db, "SELECT COALESCE(SUM(points),0) as total FROM point_logs WHERE user_id=" + convert.toString(userId) + " AND type='spend'")
+        let totalEarn = db_queryOne(req.db, "SELECT COALESCE(SUM(points),0) as total FROM point_logs WHERE user_id=" + convert.toString(userId) + " AND type='earn'")
+        let totalSpend = db_queryOne(req.db, "SELECT COALESCE(SUM(points),0) as total FROM point_logs WHERE user_id=" + convert.toString(userId) + " AND type='spend'")
         let balance = totalEarn.total - totalSpend.total
-        let logs = db_query(db, "SELECT * FROM point_logs WHERE user_id=" + convert.toString(userId) + " ORDER BY id DESC LIMIT 20")
+        let logs = db_query(req.db, "SELECT * FROM point_logs WHERE user_id=" + convert.toString(userId) + " ORDER BY id DESC LIMIT 20")
         let logHtml = ""
         let i = 0
         while (i < arrays.length(logs)) {
@@ -132,10 +132,10 @@ fn p4_registerMemberRoutes(router, db) {
         let authResult = p4_checkUser(req)
         if (authResult != null) { return authResult }
         let userId = req.currentUser.id
-        let user = db_queryOne(db, "SELECT balance FROM users WHERE id=" + convert.toString(userId))
+        let user = db_queryOne(req.db, "SELECT balance FROM users WHERE id=" + convert.toString(userId))
         let balance = 0
         if (user != null && user.balance != null) { balance = user.balance }
-        let logs = db_query(db, "SELECT * FROM account_logs WHERE user_id=" + convert.toString(userId) + " ORDER BY id DESC LIMIT 20")
+        let logs = db_query(req.db, "SELECT * FROM account_logs WHERE user_id=" + convert.toString(userId) + " ORDER BY id DESC LIMIT 20")
         let logHtml = ""
         let i = 0
         while (i < arrays.length(logs)) {
@@ -155,12 +155,12 @@ fn p4_registerMemberRoutes(router, db) {
         let userId = req.currentUser.id
         let data = json.parse(req.body)
         let amount = convert.toString(data.amount)
-        let user = db_queryOne(db, "SELECT balance FROM users WHERE id=" + convert.toString(userId))
+        let user = db_queryOne(req.db, "SELECT balance FROM users WHERE id=" + convert.toString(userId))
         let oldBalance = 0
         if (user != null && user.balance != null) { oldBalance = user.balance }
         let newBalance = oldBalance + convert.toFloat(amount)
-        db_exec(db, "UPDATE users SET balance=" + convert.toString(newBalance) + " WHERE id=" + convert.toString(userId))
-        db_exec(db, "INSERT INTO account_logs (user_id, type, amount, balance_before, balance_after, description, created_at) VALUES (" + convert.toString(userId) + ", 'income', " + amount + ", " + convert.toString(oldBalance) + ", " + convert.toString(newBalance) + ", 'Account recharge', datetime('now'))")
+        db_exec(req.db, "UPDATE users SET balance=" + convert.toString(newBalance) + " WHERE id=" + convert.toString(userId))
+        db_exec(req.db, "INSERT INTO account_logs (user_id, type, amount, balance_before, balance_after, description, created_at) VALUES (" + convert.toString(userId) + ", 'income', " + amount + ", " + convert.toString(oldBalance) + ", " + convert.toString(newBalance) + ", 'Account recharge', datetime('now'))")
         return res_redirect("/my/balance")
     })
 }
@@ -172,7 +172,7 @@ fn p4_registerContentRoutes(router, db) {
     router_get(router, "/admin/sensitive", fn(req) {
         let authResult = p4_checkAdmin(req)
         if (authResult != null) { return authResult }
-        let words = db_query(db, "SELECT * FROM sensitive_words ORDER BY id DESC")
+        let words = db_query(req.db, "SELECT * FROM sensitive_words ORDER BY id DESC")
         let html = ""
         let i = 0
         while (i < arrays.length(words)) {
@@ -190,7 +190,7 @@ fn p4_registerContentRoutes(router, db) {
         let data = json.parse(req.body)
         let word = p4_esc(data.word)
         let category = data.category
-        db_exec(db, "INSERT INTO sensitive_words (word, category, status, created_at) VALUES ('" + word + "', '" + category + "', 'active', datetime('now'))")
+        db_exec(req.db, "INSERT INTO sensitive_words (word, category, status, created_at) VALUES ('" + word + "', '" + category + "', 'active', datetime('now'))")
         return res_redirect("/admin/sensitive")
     })
 
@@ -198,7 +198,7 @@ fn p4_registerContentRoutes(router, db) {
         let authResult = p4_checkAdmin(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        db_exec(db, "DELETE FROM sensitive_words WHERE id=" + convert.toString(id))
+        db_exec(req.db, "DELETE FROM sensitive_words WHERE id=" + convert.toString(id))
         return res_redirect("/admin/sensitive")
     })
 
@@ -216,7 +216,7 @@ fn p4_registerContentRoutes(router, db) {
 
     // Articles list
     router_get(router, "/articles", fn(req) {
-        let articles = db_query(db, "SELECT * FROM articles WHERE status='published' ORDER BY sort_order, id DESC")
+        let articles = db_query(req.db, "SELECT * FROM articles WHERE status='published' ORDER BY sort_order, id DESC")
         let html = ""
         let i = 0
         while (i < arrays.length(articles)) {
@@ -230,9 +230,9 @@ fn p4_registerContentRoutes(router, db) {
     // Article detail
     router_get(router, "/article/:id", fn(req) {
         let id = convert.toInt(req.params.id)
-        let article = db_queryOne(db, "SELECT * FROM articles WHERE id=" + convert.toString(id))
+        let article = db_queryOne(req.db, "SELECT * FROM articles WHERE id=" + convert.toString(id))
         if (article == null) { return res_notFound("Article not found") }
-        db_exec(db, "UPDATE articles SET view_count=view_count+1 WHERE id=" + convert.toString(id))
+        db_exec(req.db, "UPDATE articles SET view_count=view_count+1 WHERE id=" + convert.toString(id))
         let aContent = ""
         if (article.content != null) { aContent = article.content }
         let body = "<h1>" + article.title + "</h1><div class='card'><p style='color:#999;font-size:12px'>" + article.created_at + " | Views: " + convert.toString(article.view_count) + "</p><hr><div>" + aContent + "</div></div><a href='/articles' class='btn'>Back to Articles</a>"
@@ -243,7 +243,7 @@ fn p4_registerContentRoutes(router, db) {
     router_get(router, "/admin/articles", fn(req) {
         let authResult = p4_checkAdmin(req)
         if (authResult != null) { return authResult }
-        let articles = db_query(db, "SELECT * FROM articles ORDER BY id DESC")
+        let articles = db_query(req.db, "SELECT * FROM articles ORDER BY id DESC")
         let html = ""
         let i = 0
         while (i < arrays.length(articles)) {
@@ -261,7 +261,7 @@ fn p4_registerContentRoutes(router, db) {
         let title = p4_esc(data.title)
         let content = p4_esc(data.content)
         let category = data.category
-        db_exec(db, "INSERT INTO articles (title, content, category, status, created_at) VALUES ('" + title + "', '" + content + "', '" + category + "', 'published', datetime('now'))")
+        db_exec(req.db, "INSERT INTO articles (title, content, category, status, created_at) VALUES ('" + title + "', '" + content + "', '" + category + "', 'published', datetime('now'))")
         return res_redirect("/admin/articles")
     })
 
@@ -269,7 +269,7 @@ fn p4_registerContentRoutes(router, db) {
         let authResult = p4_checkAdmin(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        db_exec(db, "DELETE FROM articles WHERE id=" + convert.toString(id))
+        db_exec(req.db, "DELETE FROM articles WHERE id=" + convert.toString(id))
         return res_redirect("/admin/articles")
     })
 
@@ -277,7 +277,7 @@ fn p4_registerContentRoutes(router, db) {
     router_get(router, "/admin/announcements", fn(req) {
         let authResult = p4_checkAdmin(req)
         if (authResult != null) { return authResult }
-        let list = db_query(db, "SELECT * FROM announcements ORDER BY id DESC")
+        let list = db_query(req.db, "SELECT * FROM announcements ORDER BY id DESC")
         let html = ""
         let i = 0
         while (i < arrays.length(list)) {
@@ -296,7 +296,7 @@ fn p4_registerContentRoutes(router, db) {
         let title = p4_esc(data.title)
         let content = p4_esc(data.content)
         let annType = data.type
-        db_exec(db, "INSERT INTO announcements (title, content, type, status, created_at) VALUES ('" + title + "', '" + content + "', '" + annType + "', 'active', datetime('now'))")
+        db_exec(req.db, "INSERT INTO announcements (title, content, type, status, created_at) VALUES ('" + title + "', '" + content + "', '" + annType + "', 'active', datetime('now'))")
         return res_redirect("/admin/announcements")
     })
 
@@ -304,7 +304,7 @@ fn p4_registerContentRoutes(router, db) {
         let authResult = p4_checkAdmin(req)
         if (authResult != null) { return authResult }
         let id = convert.toInt(req.params.id)
-        db_exec(db, "DELETE FROM announcements WHERE id=" + convert.toString(id))
+        db_exec(req.db, "DELETE FROM announcements WHERE id=" + convert.toString(id))
         return res_redirect("/admin/announcements")
     })
 }
@@ -316,14 +316,14 @@ fn p4_registerSystemRoutes(router, db) {
     router_get(router, "/admin/system/config", fn(req) {
         let authResult = p4_checkAdmin(req)
         if (authResult != null) { return authResult }
-        let configs = db_query(db, "SELECT * FROM system_config ORDER BY id")
+        let configs = db_query(req.db, "SELECT * FROM system_config ORDER BY id")
         let html = ""
         let i = 0
         while (i < arrays.length(configs)) {
             html = html + "<tr><td>" + configs[i].key + "</td><td>" + configs[i].value + "</td><td>" + configs[i].description + "</td></tr>"
             i = i + 1
         }
-        let logistics = db_query(db, "SELECT * FROM logistics ORDER BY sort_order")
+        let logistics = db_query(req.db, "SELECT * FROM logistics ORDER BY sort_order")
         let logHtml = ""
         i = 0
         while (i < arrays.length(logistics)) {
@@ -346,7 +346,7 @@ fn p4_registerSystemRoutes(router, db) {
         let data = json.parse(req.body)
         let name = p4_esc(data.name)
         let code = p4_esc(data.code)
-        db_exec(db, "INSERT INTO logistics (name, code, status, created_at) VALUES ('" + name + "', '" + code + "', 'active', datetime('now'))")
+        db_exec(req.db, "INSERT INTO logistics (name, code, status, created_at) VALUES ('" + name + "', '" + code + "', 'active', datetime('now'))")
         return res_redirect("/admin/system/config")
     })
 
@@ -354,7 +354,7 @@ fn p4_registerSystemRoutes(router, db) {
     router_get(router, "/admin/stock/alert", fn(req) {
         let authResult = p4_checkAdmin(req)
         if (authResult != null) { return authResult }
-        let lowStock = db_query(db, "SELECT * FROM products WHERE stock < 10 AND status='on' ORDER BY stock ASC")
+        let lowStock = db_query(req.db, "SELECT * FROM products WHERE stock < 10 AND status='on' ORDER BY stock ASC")
         let html = ""
         let i = 0
         while (i < arrays.length(lowStock)) {
@@ -371,16 +371,16 @@ fn p4_registerSystemRoutes(router, db) {
     router_get(router, "/admin/dashboard/advanced", fn(req) {
         let authResult = p4_checkAdmin(req)
         if (authResult != null) { return authResult }
-        let totalProducts = db_queryOne(db, "SELECT COUNT(*) as cnt FROM products")
-        let totalOrders = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders")
-        let totalUsers = db_queryOne(db, "SELECT COUNT(*) as cnt FROM users")
-        let totalSales = db_queryOne(db, "SELECT COALESCE(SUM(total_amount),0) as total FROM orders WHERE status != 'cancelled'")
-        let todayOrders = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE date(created_at) = date('now')")
-        let todaySales = db_queryOne(db, "SELECT COALESCE(SUM(total_amount),0) as total FROM orders WHERE date(created_at) = date('now') AND status != 'cancelled'")
-        let lowStock = db_queryOne(db, "SELECT COUNT(*) as cnt FROM products WHERE stock < 10 AND status='on'")
-        let pendingOrders = db_queryOne(db, "SELECT COUNT(*) as cnt FROM orders WHERE status='pending'")
-        let topProducts = db_query(db, "SELECT name, sales FROM products ORDER BY sales DESC LIMIT 5")
-        let recentOrders = db_query(db, "SELECT order_no, total_amount, status, created_at FROM orders ORDER BY id DESC LIMIT 5")
+        let totalProducts = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM products")
+        let totalOrders = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM orders")
+        let totalUsers = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM users")
+        let totalSales = db_queryOne(req.db, "SELECT COALESCE(SUM(total_amount),0) as total FROM orders WHERE status != 'cancelled'")
+        let todayOrders = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM orders WHERE date(created_at) = date('now')")
+        let todaySales = db_queryOne(req.db, "SELECT COALESCE(SUM(total_amount),0) as total FROM orders WHERE date(created_at) = date('now') AND status != 'cancelled'")
+        let lowStock = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM products WHERE stock < 10 AND status='on'")
+        let pendingOrders = db_queryOne(req.db, "SELECT COUNT(*) as cnt FROM orders WHERE status='pending'")
+        let topProducts = db_query(req.db, "SELECT name, sales FROM products ORDER BY sales DESC LIMIT 5")
+        let recentOrders = db_query(req.db, "SELECT order_no, total_amount, status, created_at FROM orders ORDER BY id DESC LIMIT 5")
 
         let topHtml = ""
         let i = 0

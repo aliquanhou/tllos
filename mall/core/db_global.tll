@@ -1,0 +1,21 @@
+// TLL Mall - Global Database Connection Manager
+// Workaround for TLL closure capture bug in multi-threaded Worker Pool:
+// Captured variables (like `db`) become null inside route handler closures.
+// Solution: reopen connection per request, or use a global accessor function.
+
+from "./database" import db_open, db_close
+
+// Global database path - stored as constant to avoid closure capture issues
+let DB_PATH = "mall/data/mall.db"
+
+// Get a fresh database connection (call at start of each route handler)
+fn db_get() {
+    return db_open(DB_PATH)
+}
+
+// Release database connection (call at end of each route handler)
+fn db_release(handle) {
+    if (handle != null) {
+        db_close(handle)
+    }
+}

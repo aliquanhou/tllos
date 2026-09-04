@@ -1,0 +1,63 @@
+// Debug auth_login step by step
+from "./mall/core/database" import db_open, db_queryOne
+from "./mall/core/session" import session_create, session_set, hash_password, verify_password
+
+fn main() {
+    let db = db_open("mall/data/mall.db")
+    io.println("Step 1: DB opened")
+
+    let username = "admin"
+    let password = "admin123"
+
+    io.println("Step 2: Query user")
+    let user = db_queryOne(db, "SELECT * FROM users WHERE username = '" + username + "'")
+    if (user == null) {
+        io.println("  ERROR: user not found!")
+        return
+    }
+    io.println("  User found: id=" + convert.toString(user.id) + ", username=" + user.username)
+    io.println("  status=" + user.status + ", role=" + user.role)
+    io.println("  password_hash=" + user.password_hash)
+    io.println("  email=" + convert.toString(user.email))
+
+    io.println("Step 3: Verify password")
+    let vresult = verify_password(password, user.password_hash)
+    io.println("  verify result: " + convert.toString(vresult))
+
+    io.println("Step 4: Create session")
+    let sessionId = session_create()
+    io.println("  sessionId: " + sessionId)
+
+    io.println("Step 5: Set session values")
+    session_set(sessionId, "userId", user.id)
+    io.println("  userId set")
+    session_set(sessionId, "username", user.username)
+    io.println("  username set")
+    session_set(sessionId, "role", user.role)
+    io.println("  role set")
+
+    io.println("Step 6: Build return map")
+    let result = {
+        success: true,
+        sessionId: sessionId,
+        user: {
+            id: user.id,
+            username: user.username,
+            role: user.role,
+            email: user.email
+        }
+    }
+    io.println("  result built")
+    io.println("  result.success: " + convert.toString(result.success))
+    io.println("  result.sessionId: " + result.sessionId)
+    io.println("  result.user.username: " + result.user.username)
+
+    io.println("Step 7: Stringify result")
+    let jsonStr = json.stringify(result)
+    io.println("  JSON: " + jsonStr)
+
+    io.println("")
+    io.println("All steps completed successfully!")
+}
+
+main()

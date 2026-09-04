@@ -1,0 +1,40 @@
+// Test auth_login directly
+from "./mall/core/database" import db_open, db_queryOne, db_query
+from "./mall/core/auth" import auth_login, auth_createAdmin
+
+fn main() {
+    let db = db_open("mall/data/mall.db")
+    io.println("Database opened")
+
+    // Query user directly
+    let user = db_queryOne(db, "SELECT * FROM users WHERE username = 'admin'")
+    if (user == null) {
+        io.println("ERROR: user not found!")
+    } else {
+        io.println("User found:")
+        io.println("  id: " + convert.toString(user.id))
+        io.println("  username: " + user.username)
+        io.println("  role: " + user.role)
+        io.println("  status: " + user.status)
+        io.println("  password_hash: " + user.password_hash)
+        io.println("  password_hash length: " + convert.toString(strings.length(user.password_hash)))
+    }
+
+    // Test auth_login
+    io.println("")
+    io.println("Testing auth_login...")
+    let result = auth_login(db, "admin", "admin123")
+    io.println("Result: " + json.stringify(result))
+
+    // Test all users
+    io.println("")
+    io.println("All users:")
+    let users = db_query(db, "SELECT id, username, role, status FROM users")
+    let i = 0
+    while (i < arrays.length(users)) {
+        io.println("  " + convert.toString(users[i].id) + ": " + users[i].username + " (" + users[i].role + ", " + users[i].status + ")")
+        i = i + 1
+    }
+}
+
+main()

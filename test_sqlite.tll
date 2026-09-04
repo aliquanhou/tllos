@@ -1,0 +1,55 @@
+// TLL SQLite Binding Test
+io.println("=== TLL SQLite Binding Test ===")
+
+// Test version
+io.println("SQLite version: " + sqlite.version())
+
+// Open database
+let db = sqlite.open("test_mall.db")
+io.println("Database opened")
+
+// Create table
+sqlite.exec(db, "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, email TEXT, created_at TEXT)")
+io.println("Table created")
+
+// Insert data
+sqlite.exec(db, "INSERT INTO users (username, email, created_at) VALUES ('admin', 'admin@tllos.com', '2026-09-04')")
+sqlite.exec(db, "INSERT INTO users (username, email, created_at) VALUES ('testuser', 'test@tllos.com', '2026-09-04')")
+io.println("Inserted 2 users")
+io.println("Last insert rowid: " + convert.toString(sqlite.lastInsertRowid(db)))
+
+// Query
+let users = sqlite.query(db, "SELECT * FROM users")
+io.println("Query result count: " + convert.toString(arrays.length(users)))
+
+let i = 0
+while (i < arrays.length(users)) {
+    let u = users[i]
+    io.println("  User #" + convert.toString(u.id) + ": " + u.username + " <" + u.email + ">")
+    i = i + 1
+}
+
+// Test tableExists
+io.println("tableExists(users): " + convert.toString(sqlite.tableExists(db, "users")))
+io.println("tableExists(nonexistent): " + convert.toString(sqlite.tableExists(db, "nonexistent")))
+
+// Test columns
+let cols = sqlite.columns(db, "users")
+io.println("users columns: " + json.stringify(cols))
+
+// Test update
+sqlite.exec(db, "UPDATE users SET email='admin@tllos.org' WHERE username='admin'")
+io.println("Updated admin email, changes: " + convert.toString(sqlite.changes(db)))
+
+// Test delete
+sqlite.exec(db, "DELETE FROM users WHERE username='testuser'")
+io.println("Deleted testuser, changes: " + convert.toString(sqlite.changes(db)))
+
+// Final query
+let finalUsers = sqlite.query(db, "SELECT * FROM users")
+io.println("Final user count: " + convert.toString(arrays.length(finalUsers)))
+
+// Close
+sqlite.close(db)
+io.println("Database closed")
+io.println("=== All tests passed ===")

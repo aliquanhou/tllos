@@ -1,0 +1,28 @@
+// Test json.parse
+fn main() {
+    let jsonStr = "{\"username\": \"admin\", \"password\": \"admin123\"}"
+    io.println("JSON string: " + jsonStr)
+
+    let parsed = json.parse(jsonStr)
+    io.println("Parsed type: " + convert.typeOf(parsed))
+
+    if (parsed == null) {
+        io.println("Parsed is NULL!")
+    } else {
+        io.println("username: " + parsed.username)
+        io.println("password: " + parsed.password)
+        io.println("username type: " + convert.typeOf(parsed.username))
+        io.println("password type: " + convert.typeOf(parsed.password))
+
+        // Test auth_login with parsed values
+        io.println("")
+        io.println("Testing auth_login with parsed values...")
+        from "./mall/core/database" import db_open
+        from "./mall/core/auth" import auth_login
+        let db = db_open("mall/data/mall.db")
+        let result = auth_login(db, parsed.username, parsed.password)
+        io.println("Result: " + json.stringify(result))
+    }
+}
+
+main()

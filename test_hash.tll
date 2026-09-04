@@ -1,0 +1,28 @@
+// Test password hash
+from "./mall/core/session" import hash_password, verify_password
+
+fn main() {
+    let pw = "admin123"
+    let hash = hash_password(pw)
+    io.println("Password: " + pw)
+    io.println("Hash: " + hash)
+    io.println("Hash length: " + convert.toString(strings.length(hash)))
+    io.println("Expected: tll$8$321nimda")
+    io.println("Match: " + convert.toString(hash == "tll$8$321nimda"))
+
+    // Test verify
+    let result = verify_password("admin123", "tll$8$321nimda")
+    io.println("Verify result: " + convert.toString(result))
+
+    // Test char by char
+    io.println("")
+    io.println("Char codes of generated hash:")
+    let i = 0
+    while (i < strings.length(hash)) {
+        let c = strings.charAt(hash, i)
+        io.println("  [" + convert.toString(i) + "] '" + c + "'")
+        i = i + 1
+    }
+}
+
+main()
