@@ -1,0 +1,28 @@
+// P1-04 macOS Test 14 Only - 10 sequential requests
+// Isolates the most likely source of timing-related failure
+io.println("=== P1-04 macOS Test 14 Only - 10 Sequential Requests ===")
+io.println("")
+
+let base = "http://127.0.0.1:18080"
+
+// Test 14: Multiple sequential requests (resource leak test)
+io.println("--- Test 14: Multiple sequential requests (10x) ---")
+let allOk = true
+let failedAt = -1
+for i in 1..11 {
+    let r = httpc.get(base + "/status")
+    io.println("  req " + i + ": status=" + r.status + " ok=" + r.ok + " body_len=" + strings.length(r.body))
+    if r.status != 200 {
+        allOk = false
+        failedAt = i
+        io.println("  *** FAILED at req " + i + " ***")
+    }
+}
+io.println("")
+io.println("Result: allOk=" + allOk + " failedAt=" + failedAt)
+io.println("")
+if allOk {
+    io.println("TEST 14 PASSED")
+} else {
+    io.println("TEST 14 FAILED at request " + failedAt)
+}
