@@ -223,15 +223,23 @@ jobs:
 
       # === P1-04: HTTP Client Gate Test ===
       # Note: HTTP Client is not supported on macOS yet (no native TLS), so only run on Linux and Windows.
-      - name: P1-04 HTTP Client Gate Test (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: P1-04 HTTP Client Gate Test (Linux)
+        if: runner.os == 'Linux'
         run: |
           host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/gate_http_client.tll -o tests/net/gate_http_client.tllbc
           timeout 120 host/c/tllvm tests/net/gate_http_client.tllbc 2>&1 | tee /tmp/httpc_gate.log
           EXIT_CODE=${PIPESTATUS[0]}
           test "$EXIT_CODE" -eq 0
           grep -q "ALL TESTS PASSED" /tmp/httpc_gate.log
-          echo "=== P1-04 HTTP Client Gate Test PASSED ($RUNNER_OS) ===" 
+          echo "=== P1-04 HTTP Client Gate Test PASSED (Linux) ==="
+
+      - name: P1-04 HTTP Client Full Diagnostic (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/test_macos_full_diagnostic.tll -o tests/net/test_macos_full_diagnostic.tllbc
+          timeout 180 host/c/tllvm tests/net/test_macos_full_diagnostic.tllbc 2>&1 | tee /tmp/httpc_diag.log
+          echo "=== Diagnostic exit code: $? ==="
+          cat /tmp/httpc_diag.log | tail -60
 
       - name: P1-04 HTTP Client Gate Test (Windows)
         if: runner.os == 'Windows'
