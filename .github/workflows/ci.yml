@@ -233,7 +233,7 @@ jobs:
           grep -q "ALL TESTS PASSED" /tmp/httpc_gate.log
           echo "=== P1-04 HTTP Client Gate Test PASSED (Linux) ==="
 
-      - name: P1-04 macOS Precise Failure Diagnostic
+      - name: P1-04 HTTP Client Gate Test with Local Server (macOS)
         if: runner.os == 'macOS'
         run: |
           # Start deterministic test server in background
@@ -242,16 +242,15 @@ jobs:
           sleep 2
           # Verify server is running
           curl -s http://127.0.0.1:18080/status || echo "Server not ready"
-          # Compile and run precise failure diagnostic
-          # Test 1-13 run FAST (no output) to accumulate pollution
-          # Test 14 prints DETAILED output for every request
-          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/diag_precise_failure.tll -o tests/net/diag_precise_failure.tllbc
-          timeout 120 host/c/tllvm tests/net/diag_precise_failure.tllbc 2>&1 | tee /tmp/httpc_precise.log
+          # Compile and run Gate Test
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/gate_http_client_local.tll -o tests/net/gate_http_client_local.tllbc
+          timeout 120 host/c/tllvm tests/net/gate_http_client_local.tllbc 2>&1 | tee /tmp/httpc_gate_local.log
           EXIT_CODE=${PIPESTATUS[0]}
-          echo "=== Precise diagnostic exit code: $EXIT_CODE ==="
           # Kill test server
           kill $SERVER_PID 2>/dev/null || true
-          echo "=== Precise diagnostic complete ===" 
+          test "$EXIT_CODE" -eq 0
+          grep -q "ALL TESTS PASSED" /tmp/httpc_gate_local.log
+          echo "=== P1-04 HTTP Client Local Gate Test PASSED (macOS) ===" 
 
       - name: P1-04 HTTP Client Gate Test (Windows)
         if: runner.os == 'Windows'
