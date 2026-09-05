@@ -30,11 +30,13 @@ jobs:
           if [ "$RUNNER_OS" = "macOS" ]; then
             EXTRA_FLAGS="-D_DARWIN_C_SOURCE"
             SSL_LIBS=""
+            HTTPC_SRC=""
           else
             EXTRA_FLAGS="-D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE"
             SSL_LIBS="-lssl -lcrypto"
+            HTTPC_SRC="http_client_builtin.c"
           fi
-          gcc -O2 -std=gnu99 $EXTRA_FLAGS -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread -ldl $SSL_LIBS
+          gcc -O2 -std=gnu99 $EXTRA_FLAGS -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c $HTTPC_SRC sqlite3.c -lm -lpthread -ldl $SSL_LIBS
           ./tllvm --version 2>/dev/null || true
 
       - name: Setup MSVC (Windows)
