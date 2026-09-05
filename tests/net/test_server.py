@@ -6,7 +6,7 @@ Usage: python3 test_server.py [port]
 """
 import sys
 import json
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, BaseHTTPRequestHandler, ThreadingHTTPServer
 
 class DeterministicHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
@@ -103,7 +103,7 @@ class DeterministicHandler(BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 18080
-    server = HTTPServer(('127.0.0.1', port), DeterministicHandler)
+    server = ThreadingHTTPServer(('127.0.0.1', port), DeterministicHandler)
     print(f"Deterministic HTTP Test Server running on http://127.0.0.1:{port}")
     print("Endpoints: /status, /headers, /json, /body, /echo, /status/{code}")
     sys.stdout.flush()
