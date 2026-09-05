@@ -1,0 +1,114 @@
+// P1-04-R2-DIAG-2: Single-assertion diagnostic for remaining 8 differences
+// Each test prints actual response body to identify exact failure
+io.println("=== P1-04-R2-DIAG-2: Single-Assertion Diagnostic ===")
+io.println("")
+
+let diagPassed = 0
+let diagFailed = 0
+
+fn diag(name, cond, detail) {
+    if cond {
+        io.println("  PASS: " + name)
+        diagPassed = diagPassed + 1
+    } else {
+        io.println("  FAIL: " + name + " | " + detail)
+        diagFailed = diagFailed + 1
+    }
+}
+
+// D01: get body contains url (httpbin echoes URL in response)
+io.println("--- D01: get body contains url ---")
+let d01 = httpc.get("http://httpbin.org/get")
+io.println("  status=" + d01.status + " ok=" + d01.ok)
+io.println("  body first 200 chars: " + strings.substring(d01.body, 0, 200))
+diag("get body contains httpbin.org", strings.contains(d01.body, "httpbin.org"), "body len=" + strings.length(d01.body))
+io.println("")
+
+// D02: get with custom headers - body contains X-Test-Header
+io.println("--- D02: get with headers - body contains X-Test-Header ---")
+let d02h = {}
+d02h["X-Test-Header"] = "TLL-HTTP-Client-DIAG2"
+d02h["Accept"] = "application/json"
+let d02 = httpc.get("http://httpbin.org/get", d02h)
+io.println("  status=" + d02.status + " ok=" + d02.ok)
+io.println("  body first 300 chars: " + strings.substring(d02.body, 0, 300))
+diag("get with headers body contains X-Test-Header", strings.contains(d02.body, "X-Test-Header"), "checking header echo")
+diag("get with headers body contains TLL-HTTP-Client-DIAG2", strings.contains(d02.body, "TLL-HTTP-Client-DIAG2"), "checking header value echo")
+io.println("")
+
+// D03: post body contains TLL
+io.println("--- D03: post body contains TLL ---")
+let d03body = "{\"name\":\"TLL_DIAG2\",\"version\":\"2.0\"}"
+let d03 = httpc.post("http://httpbin.org/post", d03body)
+io.println("  status=" + d03.status + " ok=" + d03.ok)
+io.println("  body first 300 chars: " + strings.substring(d03.body, 0, 300))
+diag("post body contains TLL_DIAG2", strings.contains(d03.body, "TLL_DIAG2"), "checking post body echo")
+diag("post body contains 2.0", strings.contains(d03.body, "2.0"), "checking version echo")
+io.println("")
+
+// D04: httpc.request GET - ok true and body not empty
+io.println("--- D04: httpc.request GET - ok true and body ---")
+let d04req = {}
+d04req["method"] = "GET"
+d04req["url"] = "http://httpbin.org/get"
+d04req["timeout"] = 10000
+let d04 = httpc.request(d04req)
+io.println("  status=" + d04.status + " ok=" + d04.ok + " body len=" + strings.length(d04.body))
+io.println("  body first 200 chars: " + strings.substring(d04.body, 0, 200))
+diag("request GET ok true", d04.ok == true, "ok=" + d04.ok)
+diag("request GET body not empty", strings.length(d04.body) > 0, "body len=" + strings.length(d04.body))
+io.println("")
+
+// D05: httpc.request POST - body contains test
+io.println("--- D05: httpc.request POST - body contains test ---")
+let d05req = {}
+d05req["method"] = "POST"
+d05req["url"] = "http://httpbin.org/post"
+d05req["body"] = "{\"test\":\"DIAG2_REQUEST_POST\"}"
+let d05 = httpc.request(d05req)
+io.println("  status=" + d05.status + " ok=" + d05.ok)
+io.println("  body first 300 chars: " + strings.substring(d05.body, 0, 300))
+diag("request POST body contains DIAG2_REQUEST_POST", strings.contains(d05.body, "DIAG2_REQUEST_POST"), "checking request body echo")
+io.println("")
+
+// D06: put body contains key
+io.println("--- D06: put body contains key ---")
+let d06 = httpc.put("http://httpbin.org/put", "{\"key\":\"DIAG2_PUT_VALUE\"}")
+io.println("  status=" + d06.status + " ok=" + d06.ok)
+io.println("  body first 300 chars: " + strings.substring(d06.body, 0, 300))
+diag("put body contains DIAG2_PUT_VALUE", strings.contains(d06.body, "DIAG2_PUT_VALUE"), "checking put body echo")
+io.println("")
+
+// D07: content-type contains json
+io.println("--- D07: content-type contains json ---")
+let d07 = httpc.get("http://httpbin.org/get")
+let d07ct = d07.headers["content-type"]
+io.println("  status=" + d07.status)
+io.println("  content-type=[" + d07ct + "]")
+io.println("  all headers keys:")
+// Try to enumerate headers
+let d07keys = d07.headers
+io.println("  headers object type check")
+diag("content-type exists", strings.length(d07ct) > 0, "ct=[" + d07ct + "]")
+diag("content-type contains json", strings.contains(d07ct, "json"), "ct=[" + d07ct + "]")
+io.println("")
+
+// D08: HTTPS body not empty (already in v1, but re-verify with detailed output)
+io.println("--- D08: HTTPS body ---")
+let d08 = httpc.get("https://httpbin.org/get")
+io.println("  status=" + d08.status + " ok=" + d08.ok + " body len=" + strings.length(d08.body))
+io.println("  body first 200 chars: " + strings.substring(d08.body, 0, 200))
+diag("https status 200", d08.status == 200, "status=" + d08.status)
+diag("https ok true", d08.ok == true, "ok=" + d08.ok)
+diag("https body not empty", strings.length(d08.body) > 0, "body len=" + strings.length(d08.body))
+io.println("")
+
+io.println("=== DIAG-2 Results ===")
+io.println("Passed: " + diagPassed)
+io.println("Failed: " + diagFailed)
+io.println("")
+if diagFailed == 0 {
+    io.println("ALL DIAG-2 TESTS PASSED")
+} else {
+    io.println("SOME DIAG-2 TESTS FAILED - see details above")
+}
