@@ -1,0 +1,56 @@
+// P1-04 macOS Minimal Diagnostic - test only the most likely failing assertions
+io.println("=== P1-04 macOS Minimal Diagnostic ===")
+io.println("")
+
+// Test 1: statusText
+io.println("--- Test 1: statusText ---")
+let resp1 = httpc.get("http://httpbin.org/get")
+io.println("  status=" + resp1.status)
+io.println("  statusText=[" + resp1.statusText + "]")
+io.println("  statusText length=" + strings.length(resp1.statusText))
+if strings.length(resp1.statusText) > 0 {
+    io.println("  PASS: statusText not empty")
+} else {
+    io.println("  FAIL: statusText is empty")
+}
+io.println("")
+
+// Test 2: invalid URL error
+io.println("--- Test 2: invalid URL error ---")
+let resp2 = httpc.get("http://test.invalid/")
+io.println("  status=" + resp2.status)
+io.println("  ok=" + resp2.ok)
+io.println("  error=[" + resp2.error + "]")
+io.println("  error length=" + strings.length(resp2.error))
+if strings.length(resp2.error) > 0 {
+    io.println("  PASS: error not empty")
+} else {
+    io.println("  FAIL: error is empty")
+}
+io.println("")
+
+// Test 3: body contains url
+io.println("--- Test 3: body contains url ---")
+let resp3 = httpc.get("http://httpbin.org/get")
+io.println("  body contains httpbin.org: " + strings.contains(resp3.body, "httpbin.org"))
+if strings.contains(resp3.body, "httpbin.org") {
+    io.println("  PASS: body contains url")
+} else {
+    io.println("  FAIL: body does not contain url")
+}
+io.println("")
+
+// Test 4: content-type contains json
+io.println("--- Test 4: content-type contains json ---")
+let resp4 = httpc.get("http://httpbin.org/get")
+let ct = resp4.headers["content-type"]
+io.println("  content-type=[" + ct + "]")
+io.println("  contains json: " + strings.contains(ct, "json"))
+if strings.contains(ct, "json") {
+    io.println("  PASS: content-type contains json")
+} else {
+    io.println("  FAIL: content-type does not contain json")
+}
+io.println("")
+
+io.println("=== Done ===")
