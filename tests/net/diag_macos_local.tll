@@ -1,0 +1,78 @@
+// P1-04 macOS Local Server Diagnostic - with detailed debug output
+io.println("=== P1-04 macOS Local Server Diagnostic ===")
+io.println("")
+
+// Test 1: Basic GET /status
+io.println("--- Test 1: Basic GET /status ---")
+let resp1 = httpc.get("http://127.0.0.1:18080/status")
+io.println("  status=" + resp1.status)
+io.println("  ok=" + resp1.ok)
+io.println("  error=[" + resp1.error + "]")
+io.println("  body_len=" + strings.length(resp1.body))
+io.println("  body=[" + resp1.body + "]")
+io.println("")
+
+// Test 2: GET /json
+io.println("--- Test 2: GET /json ---")
+let resp2 = httpc.get("http://127.0.0.1:18080/json")
+io.println("  status=" + resp2.status)
+io.println("  body_len=" + strings.length(resp2.body))
+io.println("  body=[" + resp2.body + "]")
+io.println("")
+
+// Test 3: GET with custom headers /headers
+io.println("--- Test 3: GET with custom headers ---")
+let headers3 = {}
+headers3["X-Test-Header"] = "TLL-HTTP-Client"
+let resp3 = httpc.get("http://127.0.0.1:18080/headers", headers3)
+io.println("  status=" + resp3.status)
+io.println("  body_len=" + strings.length(resp3.body))
+io.println("  body=[" + resp3.body + "]")
+io.println("")
+
+// Test 4: POST with body /echo
+io.println("--- Test 4: POST with body ---")
+let resp4 = httpc.post("http://127.0.0.1:18080/echo", "{\"name\":\"TLL\"}")
+io.println("  status=" + resp4.status)
+io.println("  body_len=" + strings.length(resp4.body))
+io.println("  body=[" + resp4.body + "]")
+io.println("")
+
+// Test 5: PUT /echo
+io.println("--- Test 5: PUT ---")
+let resp5 = httpc.put("http://127.0.0.1:18080/echo", "{\"key\":\"value\"}")
+io.println("  status=" + resp5.status)
+io.println("  body_len=" + strings.length(resp5.body))
+io.println("  body=[" + resp5.body + "]")
+io.println("")
+
+// Test 6: httpc.request GET
+io.println("--- Test 6: httpc.request GET ---")
+let req6 = {}
+req6["method"] = "GET"
+req6["url"] = "http://127.0.0.1:18080/status"
+let resp6 = httpc.request(req6)
+io.println("  status=" + resp6.status)
+io.println("  ok=" + resp6.ok)
+io.println("  body_len=" + strings.length(resp6.body))
+io.println("")
+
+// Test 7: Response headers
+io.println("--- Test 7: Response headers ---")
+let resp7 = httpc.get("http://127.0.0.1:18080/json")
+let ct = resp7.headers["content-type"]
+io.println("  content-type=[" + ct + "]")
+io.println("")
+
+// Test 8: 5 sequential requests
+io.println("--- Test 8: 5 sequential requests ---")
+let allOk = true
+for i in 1..6 {
+    let r = httpc.get("http://127.0.0.1:18080/status")
+    io.println("  req " + i + ": status=" + r.status + " ok=" + r.ok)
+    if r.status != 200 { allOk = false }
+}
+io.println("  allOk=" + allOk)
+io.println("")
+
+io.println("=== Diagnostic Complete ===")
