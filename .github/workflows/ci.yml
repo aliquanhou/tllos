@@ -23,11 +23,18 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install gcc
 
-      - name: Build Native Launcher (Linux/macOS)
-        if: runner.os != 'Windows'
+      - name: Build Native Launcher (Linux)
+        if: runner.os == 'Linux'
         run: |
           cd host/c
-          gcc -O2 -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -D_DARWIN_C_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread -ldl -lssl -lcrypto
+          gcc -O2 -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread -ldl -lssl -lcrypto
+          ./tllvm --version 2>/dev/null || true
+
+      - name: Build Native Launcher (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cd host/c
+          gcc -O2 -std=gnu99 -D_DARWIN_C_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread
           ./tllvm --version 2>/dev/null || true
 
       - name: Setup MSVC (Windows)

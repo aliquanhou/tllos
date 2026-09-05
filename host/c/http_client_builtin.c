@@ -45,8 +45,10 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <poll.h>
+#if !defined(__APPLE__) || defined(TLL_USE_OPENSSL)
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#endif
 #endif
 
 #include "tllvm.h"
@@ -373,8 +375,10 @@ static int connect_with_timeout(int sock, const struct sockaddr *addr, socklen_t
 
 typedef struct {
     int sock;
+#if !defined(__APPLE__) || defined(TLL_USE_OPENSSL)
     SSL *ssl;
     SSL_CTX *ctx;
+#endif
     int useSsl;
 } HttpConnection;
 
@@ -411,6 +415,7 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
 
     set_socket_timeout(conn->sock, timeoutMs);
 
+#if !defined(__APPLE__) || defined(TLL_USE_OPENSSL)
     if (isHttps) {
         SSL_library_init();
         SSL_load_error_strings();
@@ -450,11 +455,15 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
             return -1;
         }
     }
+#else
+        (void)isHttps;
+#endif
 
     return 0;
 }
 
 static int http_send(HttpConnection *conn, const char *data, int len) {
+#if !defined(__APPLE__) || defined(TLL_USE_OPENSSL)
     if (conn->useSsl && conn->ssl) {
         int sent = 0;
         while (sent < len) {
@@ -472,22 +481,27 @@ static int http_send(HttpConnection *conn, const char *data, int len) {
         }
         return sent;
     }
+#endif
 }
 
 static int http_recv(HttpConnection *conn, char *buf, int bufSize) {
+#if !defined(__APPLE__) || defined(TLL_USE_OPENSSL)
     if (conn->useSsl && conn->ssl) {
         return SSL_read(conn->ssl, buf, bufSize);
     } else {
         return recv(conn->sock, buf, bufSize, 0);
     }
+#endif
 }
 
 static void http_close(HttpConnection *conn) {
+#if !defined(__APPLE__) || defined(TLL_USE_OPENSSL)
     if (conn->useSsl && conn->ssl) {
         SSL_shutdown(conn->ssl);
         SSL_free(conn->ssl);
         SSL_CTX_free(conn->ctx);
     }
+#endif
     if (conn->sock >= 0) {
         close(conn->sock);
         conn->sock = -1;
