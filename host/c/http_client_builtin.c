@@ -81,11 +81,11 @@ static int wait_for_write(int sock, int timeoutMs) {
 
 static OSStatus st_read_func(SSLConnectionRef connection, void *data, size_t *dataLength) {
     int sock = *(const int*)connection;
-    /* Wait for data to be available (up to 30 seconds) */
-    int ready = wait_for_read(sock, 30000);
+    /* Wait for data to be available (up to 10 seconds) */
+    int ready = wait_for_read(sock, 10000);
     if (ready <= 0) {
         *dataLength = 0;
-        return (ready == 0) ? errSSLWouldBlock : errSSLInternal;
+        return errSSLInternal;  /* Timeout or error - don't return WouldBlock to avoid infinite retry */
     }
     ssize_t n = recv(sock, data, *dataLength, 0);
     if (n < 0) {
@@ -106,11 +106,11 @@ static OSStatus st_read_func(SSLConnectionRef connection, void *data, size_t *da
 
 static OSStatus st_write_func(SSLConnectionRef connection, const void *data, size_t *dataLength) {
     int sock = *(const int*)connection;
-    /* Wait for socket to be writable (up to 30 seconds) */
-    int ready = wait_for_write(sock, 30000);
+    /* Wait for socket to be writable (up to 10 seconds) */
+    int ready = wait_for_write(sock, 10000);
     if (ready <= 0) {
         *dataLength = 0;
-        return (ready == 0) ? errSSLWouldBlock : errSSLInternal;
+        return errSSLInternal;  /* Timeout or error - don't return WouldBlock to avoid infinite retry */
     }
     ssize_t n = send(sock, data, *dataLength, 0);
     if (n < 0) {
@@ -511,7 +511,7 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
             status = SSLHandshake(conn->ssl);
             if (status == errSSLWouldBlock) {
                 handshake_retries++;
-                if (handshake_retries > 200) break;
+                if (handshake_retries > 50) break;
                 usleep(10000);
             }
         } while (status == errSSLWouldBlock);
