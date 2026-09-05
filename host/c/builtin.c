@@ -487,12 +487,6 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
     if (idx >= 190 && idx < 200) {
         return hmac_builtin_invoke(vm, idx, args, argCount);
     }
-    /* HTTP Client builtin binding (index 200-209) */
-#if !defined(__APPLE__)
-    if (idx >= 200 && idx < 210) {
-        return httpc_builtin_invoke(vm, idx, args, argCount);
-    }
-#endif
     /* io (0-2) */
     if (idx == 0) { /* println */
         if (argCount > 0) { char *s = tll_to_string(args[0]); puts(s); free(s); }

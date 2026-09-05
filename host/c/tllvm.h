@@ -289,11 +289,6 @@ TLLValue password_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCoun
 /* HMAC-SHA256 builtin binding (hmac_builtin.c) - index range 190-199 */
 TLLValue hmac_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount);
 
-/* HTTP Client builtin binding (http_client_builtin.c) - index range 200-209 */
-#if !defined(__APPLE__)
-TLLValue httpc_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount);
-#endif
-
 /* P0-15.16 IO-aware scheduler: wake all coroutines waiting on a specific channel.
  * Called from builtin coroutine.wakeChannel(channelMap). Returns number woken. */
 int coroutine_wake_channel(TLLVM *vm, void *channelPtr);
