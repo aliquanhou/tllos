@@ -59,8 +59,34 @@
 
 /* ===== macOS Secure Transport IO callbacks ===== */
 #if defined(__APPLE__)
+static int wait_for_read(int sock, int timeoutMs) {
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(sock, &fds);
+    struct timeval tv;
+    tv.tv_sec = timeoutMs / 1000;
+    tv.tv_usec = (timeoutMs % 1000) * 1000;
+    return select(sock + 1, &fds, NULL, NULL, &tv);
+}
+
+static int wait_for_write(int sock, int timeoutMs) {
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(sock, &fds);
+    struct timeval tv;
+    tv.tv_sec = timeoutMs / 1000;
+    tv.tv_usec = (timeoutMs % 1000) * 1000;
+    return select(sock + 1, NULL, &fds, NULL, &tv);
+}
+
 static OSStatus st_read_func(SSLConnectionRef connection, void *data, size_t *dataLength) {
     int sock = *(const int*)connection;
+    /* Wait for data to be available (up to 30 seconds) */
+    int ready = wait_for_read(sock, 30000);
+    if (ready <= 0) {
+        *dataLength = 0;
+        return (ready == 0) ? errSSLWouldBlock : errSSLInternal;
+    }
     ssize_t n = recv(sock, data, *dataLength, 0);
     if (n < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -80,6 +106,12 @@ static OSStatus st_read_func(SSLConnectionRef connection, void *data, size_t *da
 
 static OSStatus st_write_func(SSLConnectionRef connection, const void *data, size_t *dataLength) {
     int sock = *(const int*)connection;
+    /* Wait for socket to be writable (up to 30 seconds) */
+    int ready = wait_for_write(sock, 30000);
+    if (ready <= 0) {
+        *dataLength = 0;
+        return (ready == 0) ? errSSLWouldBlock : errSSLInternal;
+    }
     ssize_t n = send(sock, data, *dataLength, 0);
     if (n < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -407,8 +439,10 @@ static int connect_with_timeout(int sock, const struct sockaddr *addr, socklen_t
         return -1;
     }
 
-    /* Restore blocking */
+    /* Restore blocking only for plain HTTP; Secure Transport handles non-blocking */
+#if !defined(__APPLE__)
     fcntl(sock, F_SETFL, flags);
+#endif
     return 0;
 }
 

@@ -223,14 +223,14 @@ jobs:
 
       # === P1-04: HTTP Client Gate Test ===
       # Note: HTTP Client is not supported on macOS yet (no native TLS), so only run on Linux and Windows.
-      - name: P1-04 HTTP Client Minimal Test (macOS debug)
+      - name: P1-04 HTTP Client HTTPS Test (macOS debug)
         if: runner.os == 'macOS'
         run: |
-          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/test_macos_minimal.tll -o tests/net/test_macos_minimal.tllbc
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/test_macos_https.tll -o tests/net/test_macos_https.tllbc
           echo "=== Compile OK ==="
-          timeout 60 host/c/tllvm tests/net/test_macos_minimal.tllbc 2>&1 | tee /tmp/httpc_minimal.log
+          timeout 60 host/c/tllvm tests/net/test_macos_https.tllbc 2>&1 | tee /tmp/httpc_https.log
           echo "=== Exit code: $? ==="
-          cat /tmp/httpc_minimal.log
+          cat /tmp/httpc_https.log
 
       - name: P1-04 HTTP Client Gate Test (Linux)
         if: runner.os == 'Linux'
