@@ -34,7 +34,14 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           cd host/c
-          gcc -O2 -std=gnu99 -D_DARWIN_C_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread
+          gcc -O2 -std=gnu99 -D_DARWIN_C_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread 2> build_errors.log || true
+          if [ -f build_errors.log ] && [ -s build_errors.log ]; then
+            echo "## macOS Build Errors" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat build_errors.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
           ./tllvm --version 2>/dev/null || true
 
       - name: Setup MSVC (Windows)
