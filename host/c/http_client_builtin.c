@@ -821,14 +821,14 @@ static TLLValue posix_request(const char *method, const char *url,
     }
 
     /* Headers */
-    const char *headerEnd = strstr(p, "\r\n\r\n");
+    const char *headerEndPtr = strstr(p, "\r\n\r\n");
     char *headerText = NULL;
-    if (headerEnd) {
-        int hLen = (int)(headerEnd - p);
+    if (headerEndPtr) {
+        int hLen = (int)(headerEndPtr - p);
         headerText = (char*)malloc(hLen + 1);
         memcpy(headerText, p, hLen);
         headerText[hLen] = '\0';
-        p = headerEnd + 4;
+        p = headerEndPtr + 4;
     }
 
     /* Body */
