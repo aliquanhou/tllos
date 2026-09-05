@@ -1,0 +1,49 @@
+// Minimal macOS HTTP Client Test - only basic HTTP GET (no HTTPS)
+// Used to isolate whether the issue is in POSIX socket or Secure Transport
+
+io.println("=== Minimal macOS HTTP Client Test ===")
+io.println("")
+
+let passed = 0
+let failed = 0
+
+fn test(name, cond) {
+    if cond {
+        io.println("  PASS: " + name)
+        passed = passed + 1
+    } else {
+        io.println("  FAIL: " + name)
+        failed = failed + 1
+    }
+}
+
+// Test 1: Basic HTTP GET to example.com
+io.println("--- Test 1: Basic HTTP GET ---")
+let resp1 = httpc.get("http://example.com/")
+io.println("  status: " + resp1.status)
+io.println("  ok: " + resp1.ok)
+io.println("  body length: " + strings.length(resp1.body))
+io.println("  error: " + resp1.error)
+test("HTTP GET status is 200", resp1.status == 200)
+test("HTTP GET ok is true", resp1.ok == true)
+test("HTTP GET body not empty", strings.length(resp1.body) > 0)
+
+// Test 2: HTTP GET to httpbin.org
+io.println("")
+io.println("--- Test 2: HTTP GET to httpbin.org ---")
+let resp2 = httpc.get("http://httpbin.org/get")
+io.println("  status: " + resp2.status)
+io.println("  ok: " + resp2.ok)
+io.println("  body length: " + strings.length(resp2.body))
+io.println("  error: " + resp2.error)
+test("httpbin GET status is 200", resp2.status == 200)
+test("httpbin GET body contains url", strings.contains(resp2.body, "httpbin.org"))
+
+io.println("")
+io.println("=== Results: " + passed + " passed, " + failed + " failed ===")
+
+if failed > 0 {
+    io.println("SOME TESTS FAILED")
+} else {
+    io.println("ALL TESTS PASSED")
+}

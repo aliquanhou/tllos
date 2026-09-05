@@ -471,7 +471,6 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
         SSLSetIOFuncs(conn->ssl, st_read_func, st_write_func);
         SSLSetConnection(conn->ssl, &conn->sock);
         SSLSetPeerDomainName(conn->ssl, host, strlen(host));
-        SSLSetProtocolVersionMin(conn->ssl, kTLSProtocol12);
         OSStatus status;
         int handshake_retries = 0;
         do {
