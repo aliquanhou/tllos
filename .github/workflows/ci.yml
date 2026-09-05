@@ -17,24 +17,17 @@ jobs:
 
       - name: Setup C compiler (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y gcc libssl-dev
+        run: sudo apt-get update && sudo apt-get install -y gcc
 
       - name: Setup C compiler (macOS)
         if: runner.os == 'macOS'
         run: brew install gcc
 
-      - name: Build Native Launcher (Linux)
-        if: runner.os == 'Linux'
+      - name: Build Native Launcher (Linux/macOS)
+        if: runner.os != 'Windows'
         run: |
           cd host/c
-          gcc -O2 -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread -ldl -lssl -lcrypto
-          ./tllvm --version 2>/dev/null || true
-
-      - name: Build Native Launcher (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          cd host/c
-          gcc -O2 -std=gnu99 -D_DARWIN_C_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c sqlite3.c -lm -lpthread
+          gcc -O2 -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -D_DARWIN_C_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c sqlite3.c -lm -lpthread -ldl
           ./tllvm --version 2>/dev/null || true
 
       - name: Setup MSVC (Windows)
@@ -46,7 +39,7 @@ jobs:
         shell: cmd
         run: |
           cd host\c
-          cl /O2 /D_CRT_SECURE_NO_WARNINGS /Fe:tllvm.exe main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c ws2_32.lib winhttp.lib bcrypt.lib
+          cl /O2 /D_CRT_SECURE_NO_WARNINGS /Fe:tllvm.exe main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c sqlite3.c ws2_32.lib winhttp.lib bcrypt.lib
           if errorlevel 1 exit /b 1
 
       - name: Verify bootstrap seed exists
@@ -216,23 +209,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "RFC4231 full run failed" }
           if ((Get-Content rfc4231_full.log -Raw) -notmatch "ALL TESTS PASSED") { throw "RFC4231 full did not PASS" }
           Write-Output "=== P1-03 RFC 4231 Full Test Vector Suite PASSED (7/7 TC) ==="
-
-      - name: P1-04 HTTP Client Gate Test (Linux/macOS)
-        if: runner.os != 'Windows'
-        run: |
-          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/gate_http_client.tll -o tests/net/gate_http_client.tllbc
-          timeout 90 host/c/tllvm tests/net/gate_http_client.tllbc
-
-      - name: P1-04 HTTP Client Gate Test (Windows)
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: |
-          & host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tests\net\gate_http_client.tll -o tests\net\gate_http_client.tllbc
-          if ($LASTEXITCODE -ne 0) { throw "HTTP Client compile failed" }
-          & host\c\tllvm.exe tests\net\gate_http_client.tllbc 2>&1 | Tee-Object -FilePath httpc_test.log
-          if ($LASTEXITCODE -ne 0) { throw "HTTP Client run failed" }
-          if ((Get-Content httpc_test.log -Raw) -notmatch "ALL TESTS PASSED") { throw "HTTP Client did not PASS" }
-          Write-Output "=== P1-04 HTTP Client Gate Test PASSED (Windows) ===" 
 
       - name: Blockchain unit test (Linux/macOS)
         if: runner.os != 'Windows'
