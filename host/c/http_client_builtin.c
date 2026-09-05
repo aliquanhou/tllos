@@ -472,7 +472,16 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
         SSLSetConnection(conn->ssl, &conn->sock);
         SSLSetPeerDomainName(conn->ssl, host, strlen(host));
         SSLSetProtocolVersionMin(conn->ssl, kTLSProtocol12);
-        OSStatus status = SSLHandshake(conn->ssl);
+        OSStatus status;
+        int handshake_retries = 0;
+        do {
+            status = SSLHandshake(conn->ssl);
+            if (status == errSSLWouldBlock) {
+                handshake_retries++;
+                if (handshake_retries > 200) break;
+                usleep(10000);
+            }
+        } while (status == errSSLWouldBlock);
         if (status != noErr) {
             CFRelease(conn->ssl);
             conn->ssl = NULL;
@@ -534,7 +543,7 @@ static int http_send(HttpConnection *conn, const char *data, int len) {
             OSStatus status = SSLWrite(conn->ssl, data + sent, len - sent, &n);
             if (status == errSSLWouldBlock) {
                 if (n > 0) { sent += n; retries = 0; }
-                else { retries++; usleep(1000); }
+                else { retries++; usleep(10000); }
                 continue;
             }
             if (status != noErr || n == 0) return -1;
@@ -574,7 +583,7 @@ static int http_recv(HttpConnection *conn, char *buf, int bufSize) {
                 if (n > 0) break;
                 retries++;
                 if (retries > 100) return -1;
-                usleep(1000);
+                usleep(10000);
             }
         } while (status == errSSLWouldBlock);
         if (status == errSSLClosedGraceful) return 0;
