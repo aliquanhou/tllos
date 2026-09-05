@@ -1,0 +1,151 @@
+// P1-04 macOS Full Diagnostic v2 - all 29 test cases with detailed output
+io.println("=== P1-04 macOS Full Diagnostic v2 (29 tests) ===")
+io.println("")
+
+let passed = 0
+let failed = 0
+
+fn test(name, cond) {
+    if cond {
+        io.println("  PASS: " + name)
+        passed = passed + 1
+    } else {
+        io.println("  FAIL: " + name)
+        failed = failed + 1
+    }
+}
+
+// Test 1: httpc.get to httpbin.org (HTTP) - 5 tests
+io.println("--- Test 1: httpc.get (HTTP) ---")
+let resp1 = httpc.get("http://httpbin.org/get")
+io.println("  status=" + resp1.status + " ok=" + resp1.ok + " statusText=[" + resp1.statusText + "]")
+io.println("  body len=" + strings.length(resp1.body))
+io.println("  body contains httpbin.org: " + strings.contains(resp1.body, "httpbin.org"))
+test("get status is 200", resp1.status == 200)
+test("get ok is true", resp1.ok == true)
+test("get body not empty", strings.length(resp1.body) > 0)
+test("get body contains url", strings.contains(resp1.body, "httpbin.org"))
+test("get statusText not empty", strings.length(resp1.statusText) > 0)
+io.println("")
+
+// Test 2: httpc.get with custom headers - 3 tests
+io.println("--- Test 2: httpc.get with custom headers ---")
+let headers2 = {}
+headers2["X-Test-Header"] = "TLL-HTTP-Client"
+headers2["Accept"] = "application/json"
+let resp2 = httpc.get("http://httpbin.org/get", headers2)
+io.println("  status=" + resp2.status)
+io.println("  body contains X-Test-Header: " + strings.contains(resp2.body, "X-Test-Header"))
+io.println("  body contains TLL-HTTP-Client: " + strings.contains(resp2.body, "TLL-HTTP-Client"))
+test("get with headers status 200", resp2.status == 200)
+test("get with headers body contains X-Test-Header", strings.contains(resp2.body, "X-Test-Header"))
+test("get with headers body contains TLL-HTTP-Client", strings.contains(resp2.body, "TLL-HTTP-Client"))
+io.println("")
+
+// Test 3: httpc.post with body - 3 tests
+io.println("--- Test 3: httpc.post with body ---")
+let postBody = "{\"name\":\"TLL\",\"version\":\"1.0\"}"
+let resp3 = httpc.post("http://httpbin.org/post", postBody)
+io.println("  status=" + resp3.status)
+io.println("  body contains TLL: " + strings.contains(resp3.body, "TLL"))
+io.println("  body contains 1.0: " + strings.contains(resp3.body, "1.0"))
+test("post status 200", resp3.status == 200)
+test("post body contains TLL", strings.contains(resp3.body, "TLL"))
+test("post body contains version", strings.contains(resp3.body, "1.0"))
+io.println("")
+
+// Test 4: httpc.post with Content-Type header - 1 test
+io.println("--- Test 4: httpc.post with Content-Type header ---")
+let headers4 = {}
+headers4["Content-Type"] = "application/json"
+let resp4 = httpc.post("http://httpbin.org/post", postBody, headers4)
+io.println("  status=" + resp4.status)
+test("post with headers status 200", resp4.status == 200)
+io.println("")
+
+// Test 5: httpc.request GET - 3 tests
+io.println("--- Test 5: httpc.request GET (full control) ---")
+let req5 = {}
+req5["method"] = "GET"
+req5["url"] = "http://httpbin.org/get"
+req5["timeout"] = 10000
+let resp5 = httpc.request(req5)
+io.println("  status=" + resp5.status + " ok=" + resp5.ok + " body len=" + strings.length(resp5.body))
+test("request GET status 200", resp5.status == 200)
+test("request GET ok true", resp5.ok == true)
+test("request GET body not empty", strings.length(resp5.body) > 0)
+io.println("")
+
+// Test 6: httpc.request POST - 2 tests
+io.println("--- Test 6: httpc.request with POST ---")
+let req6 = {}
+req6["method"] = "POST"
+req6["url"] = "http://httpbin.org/post"
+req6["body"] = "{\"test\":\"request\"}"
+let resp6 = httpc.request(req6)
+io.println("  status=" + resp6.status)
+io.println("  body contains request: " + strings.contains(resp6.body, "request"))
+test("request POST status 200", resp6.status == 200)
+test("request POST body contains test", strings.contains(resp6.body, "request"))
+io.println("")
+
+// Test 7: Response headers parsing - 2 tests
+io.println("--- Test 7: Response headers parsing ---")
+let resp7 = httpc.get("http://httpbin.org/get")
+let ct = resp7.headers["content-type"]
+io.println("  content-type=[" + ct + "]")
+io.println("  contains json: " + strings.contains(ct, "json"))
+test("response content-type header exists", strings.length(ct) > 0)
+test("content-type contains json", strings.contains(ct, "json"))
+io.println("")
+
+// Test 8: Error handling - invalid URL - 3 tests
+io.println("--- Test 8: Error handling - invalid URL ---")
+let resp8 = httpc.get("http://test.invalid/")
+io.println("  status=" + resp8.status + " ok=" + resp8.ok + " error=[" + resp8.error + "]")
+test("invalid URL returns ok=false", resp8.ok == false)
+test("invalid URL status is 0", resp8.status == 0)
+test("invalid URL error not empty", strings.length(resp8.error) > 0)
+io.println("")
+
+// Test 9: httpc.put - 2 tests
+io.println("--- Test 9: httpc.put ---")
+let resp9 = httpc.put("http://httpbin.org/put", "{\"key\":\"value\"}")
+io.println("  status=" + resp9.status)
+io.println("  body contains key: " + strings.contains(resp9.body, "key"))
+test("put status 200", resp9.status == 200)
+test("put body contains key", strings.contains(resp9.body, "key"))
+io.println("")
+
+// Test 10: httpc.delete - 1 test
+io.println("--- Test 10: httpc.delete ---")
+let resp10 = httpc.delete("http://httpbin.org/delete")
+io.println("  status=" + resp10.status)
+test("delete status 200", resp10.status == 200)
+io.println("")
+
+// Test 11: url field - 1 test
+io.println("--- Test 11: url field in response ---")
+let resp11 = httpc.get("http://httpbin.org/get")
+io.println("  url=[" + resp11.url + "]")
+test("url field matches request", strings.contains(resp11.url, "httpbin.org"))
+io.println("")
+
+// Test 12: HTTPS request - 3 tests
+io.println("--- Test 12: HTTPS request ---")
+let resp12 = httpc.get("https://httpbin.org/get")
+io.println("  status=" + resp12.status + " ok=" + resp12.ok + " body len=" + strings.length(resp12.body))
+test("https status 200", resp12.status == 200)
+test("https ok true", resp12.ok == true)
+test("https body not empty", strings.length(resp12.body) > 0)
+io.println("")
+
+io.println("=== Results ===")
+io.println("Passed: " + passed)
+io.println("Failed: " + failed)
+io.println("")
+if failed == 0 {
+    io.println("ALL TESTS PASSED")
+} else {
+    io.println("SOME TESTS FAILED")
+}
