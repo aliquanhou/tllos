@@ -14,7 +14,7 @@ else
     EXE = tllvm
 endif
 
-SRCS = main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c
+SRCS = main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c
 OBJS = $(SRCS:.c=.o)
 
 all: $(EXE)

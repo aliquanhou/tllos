@@ -1769,6 +1769,18 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
         if fnName == "hash" { return 192 }
         if fnName == "hashRaw" { return 193 }
     }
+    if modName == "httpc" {
+        if fnName == "get" { return 200 }
+        if fnName == "post" { return 201 }
+        if fnName == "put" { return 202 }
+        if fnName == "delete" { return 203 }
+        if fnName == "head" { return 204 }
+        if fnName == "patch" { return 205 }
+        if fnName == "request" { return 206 }
+        if fnName == "getJson" { return 207 }
+        if fnName == "postJson" { return 208 }
+        if fnName == "options" { return 209 }
+    }
     return -1
 }
 
