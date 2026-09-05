@@ -233,7 +233,7 @@ jobs:
           grep -q "ALL TESTS PASSED" /tmp/httpc_gate.log
           echo "=== P1-04 HTTP Client Gate Test PASSED (Linux) ==="
 
-      - name: P1-04 macOS Test 14 Only (10 sequential requests)
+      - name: P1-04 macOS Test 8+14 Pollution Diagnostic
         if: runner.os == 'macOS'
         run: |
           # Start deterministic test server in background
@@ -242,14 +242,14 @@ jobs:
           sleep 2
           # Verify server is running
           curl -s http://127.0.0.1:18080/status || echo "Server not ready"
-          # Compile and run Test 14 only (10 sequential requests)
-          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/diag_test14_only.tll -o tests/net/diag_test14_only.tllbc
-          timeout 60 host/c/tllvm tests/net/diag_test14_only.tllbc 2>&1 | tee /tmp/httpc_test14.log
+          # Compile and run Test 8 + Test 14 pollution diagnostic
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/diag_pollution_8_14.tll -o tests/net/diag_pollution_8_14.tllbc
+          timeout 60 host/c/tllvm tests/net/diag_pollution_8_14.tllbc 2>&1 | tee /tmp/httpc_pollution.log
           EXIT_CODE=${PIPESTATUS[0]}
-          echo "=== Test 14 exit code: $EXIT_CODE ==="
+          echo "=== Pollution diagnostic exit code: $EXIT_CODE ==="
           # Kill test server
           kill $SERVER_PID 2>/dev/null || true
-          echo "=== Test 14 complete ===" 
+          echo "=== Pollution diagnostic complete ===" 
 
       - name: P1-04 HTTP Client Gate Test (Windows)
         if: runner.os == 'Windows'

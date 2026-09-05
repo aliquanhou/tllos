@@ -1,0 +1,33 @@
+// P1-04 macOS Test 8 + Test 14 Pollution Diagnostic
+// Tests if connection refused (Test 8) pollutes state for later requests
+io.println("=== P1-04 macOS Test 8 + Test 14 Pollution Diagnostic ===")
+io.println("")
+
+let base = "http://127.0.0.1:18080"
+
+// Test 8: Error handling - connection refused (invalid port)
+io.println("--- Test 8: Error handling - connection refused ---")
+let resp8 = httpc.get("http://127.0.0.1:19999/")
+io.println("  status=" + resp8.status + " ok=" + resp8.ok + " error=[" + resp8.error + "]")
+io.println("")
+
+// Immediately run Test 14 after Test 8 (no delay, no debug output between)
+io.println("--- Test 14: Multiple sequential requests (10x, after Test 8) ---")
+let allOk = true
+let failedAt = -1
+for i in 1..11 {
+    let r = httpc.get(base + "/status")
+    if r.status != 200 {
+        allOk = false
+        failedAt = i
+        io.println("  req " + i + ": FAILED status=" + r.status + " ok=" + r.ok + " error=[" + r.error + "]")
+    }
+}
+io.println("")
+io.println("Result: allOk=" + allOk + " failedAt=" + failedAt)
+io.println("")
+if allOk {
+    io.println("TEST 8+14 PASSED - no pollution detected")
+} else {
+    io.println("TEST 8+14 FAILED at request " + failedAt + " - pollution detected!")
+}
