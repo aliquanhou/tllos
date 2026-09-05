@@ -1,0 +1,65 @@
+// P1-04 macOS Diagnostic Test - run each test separately to find failures
+io.println("=== P1-04 macOS Diagnostic Test ===")
+io.println("")
+
+let passed = 0
+let failed = 0
+
+fn test(name, cond) {
+    if cond {
+        io.println("  PASS: " + name)
+        passed = passed + 1
+    } else {
+        io.println("  FAIL: " + name)
+        failed = failed + 1
+    }
+}
+
+// Test 1: HTTP GET
+io.println("--- Test 1: HTTP GET ---")
+let resp1 = httpc.get("http://httpbin.org/get")
+test("http get status 200", resp1.status == 200)
+test("http get ok true", resp1.ok == true)
+io.println("  status: " + resp1.status + " ok: " + resp1.ok + " error: " + resp1.error)
+io.println("")
+
+// Test 2: HTTPS GET
+io.println("--- Test 2: HTTPS GET ---")
+let resp2 = httpc.get("https://httpbin.org/get")
+test("https get status 200", resp2.status == 200)
+test("https get ok true", resp2.ok == true)
+io.println("  status: " + resp2.status + " ok: " + resp2.ok + " error: " + resp2.error)
+io.println("")
+
+// Test 3: HTTP POST
+io.println("--- Test 3: HTTP POST ---")
+let resp3 = httpc.post("http://httpbin.org/post", "{\"test\":\"data\"}")
+test("http post status 200", resp3.status == 200)
+io.println("  status: " + resp3.status + " ok: " + resp3.ok + " error: " + resp3.error)
+io.println("")
+
+// Test 4: Invalid URL
+io.println("--- Test 4: Invalid URL ---")
+let resp4 = httpc.get("http://test.invalid/")
+test("invalid url ok false", resp4.ok == false)
+test("invalid url status 0", resp4.status == 0)
+io.println("  status: " + resp4.status + " ok: " + resp4.ok + " error: " + resp4.error)
+io.println("")
+
+// Test 5: HTTP PUT
+io.println("--- Test 5: HTTP PUT ---")
+let resp5 = httpc.put("http://httpbin.org/put", "{\"key\":\"value\"}")
+test("http put status 200", resp5.status == 200)
+io.println("  status: " + resp5.status + " ok: " + resp5.ok + " error: " + resp5.error)
+io.println("")
+
+// Test 6: HTTP DELETE
+io.println("--- Test 6: HTTP DELETE ---")
+let resp6 = httpc.delete("http://httpbin.org/delete")
+test("http delete status 200", resp6.status == 200)
+io.println("  status: " + resp6.status + " ok: " + resp6.ok + " error: " + resp6.error)
+io.println("")
+
+io.println("=== Results ===")
+io.println("Passed: " + passed)
+io.println("Failed: " + failed)
