@@ -1,0 +1,76 @@
+// P1-04 macOS Gate Test Failure Diagnostic - targeted tests
+io.println("=== P1-04 macOS Gate Test Failure Diagnostic ===")
+io.println("")
+
+let base = "http://127.0.0.1:18080"
+
+// D1: statusText
+io.println("--- D1: statusText ---")
+let r1 = httpc.get(base + "/status")
+io.println("  status=[" + r1.status + "]")
+io.println("  statusText=[" + r1.statusText + "]")
+io.println("  statusText_len=" + strings.length(r1.statusText))
+io.println("")
+
+// D2: connection refused error handling
+io.println("--- D2: connection refused ---")
+let r2 = httpc.get("http://127.0.0.1:19999/")
+io.println("  ok=" + r2.ok)
+io.println("  status=" + r2.status)
+io.println("  error=[" + r2.error + "]")
+io.println("  error_len=" + strings.length(r2.error))
+io.println("")
+
+// D3: custom 404 status
+io.println("--- D3: custom 404 status ---")
+let r3 = httpc.get(base + "/status/404")
+io.println("  status=[" + r3.status + "]")
+io.println("  ok=" + r3.ok)
+io.println("  body_len=" + strings.length(r3.body))
+io.println("  body=[" + r3.body + "]")
+io.println("")
+
+// D4: custom 500 status
+io.println("--- D4: custom 500 status ---")
+let r4 = httpc.get(base + "/status/500")
+io.println("  status=[" + r4.status + "]")
+io.println("  ok=" + r4.ok)
+io.println("  body_len=" + strings.length(r4.body))
+io.println("  body=[" + r4.body + "]")
+io.println("")
+
+// D5: httpc.delete
+io.println("--- D5: httpc.delete ---")
+let r5 = httpc.delete(base + "/echo")
+io.println("  status=[" + r5.status + "]")
+io.println("  body_len=" + strings.length(r5.body))
+io.println("")
+
+// D6: url field
+io.println("--- D6: url field ---")
+let r6 = httpc.get(base + "/status")
+io.println("  url=[" + r6.url + "]")
+io.println("")
+
+// D7: httpc.request POST
+io.println("--- D7: httpc.request POST ---")
+let req7 = {}
+req7["method"] = "POST"
+req7["url"] = base + "/echo"
+req7["body"] = "{\"test\":\"request\"}"
+let r7 = httpc.request(req7)
+io.println("  status=[" + r7.status + "]")
+io.println("  body_len=" + strings.length(r7.body))
+io.println("  body=[" + r7.body + "]")
+io.println("")
+
+// D8: post with Content-Type header
+io.println("--- D8: post with Content-Type header ---")
+let h8 = {}
+h8["Content-Type"] = "application/json"
+let r8 = httpc.post(base + "/echo", "{\"name\":\"TLL\"}", h8)
+io.println("  status=[" + r8.status + "]")
+io.println("  body_len=" + strings.length(r8.body))
+io.println("")
+
+io.println("=== Diagnostic Complete ===")
