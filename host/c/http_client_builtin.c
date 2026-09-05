@@ -495,6 +495,14 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
     set_socket_timeout(conn->sock, timeoutMs);
 
 #if defined(__APPLE__)
+    /* For plain HTTP (non-SSL), restore blocking mode since send/recv
+       don't handle EAGAIN. For HTTPS, keep non-blocking for Secure Transport. */
+    if (!isHttps) {
+        int flags = fcntl(conn->sock, F_GETFL, 0);
+        if (flags >= 0) {
+            fcntl(conn->sock, F_SETFL, flags & ~O_NONBLOCK);
+        }
+    }
     if (isHttps) {
         conn->ssl = SSLCreateContext(kCFAllocatorDefault, kSSLClientSide, kSSLStreamType);
         if (!conn->ssl) {
