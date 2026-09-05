@@ -221,6 +221,29 @@ jobs:
           if ((Get-Content rfc4231_full.log -Raw) -notmatch "ALL TESTS PASSED") { throw "RFC4231 full did not PASS" }
           Write-Output "=== P1-03 RFC 4231 Full Test Vector Suite PASSED (7/7 TC) ==="
 
+      # === P1-04: HTTP Client Gate Test ===
+      # Note: HTTP Client is not supported on macOS yet (no native TLS), so only run on Linux and Windows.
+      - name: P1-04 HTTP Client Gate Test (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/gate_http_client.tll -o tests/net/gate_http_client.tllbc
+          timeout 90 host/c/tllvm tests/net/gate_http_client.tllbc 2>&1 | tee /tmp/httpc_gate.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          test "$EXIT_CODE" -eq 0
+          grep -q "ALL TESTS PASSED" /tmp/httpc_gate.log
+          echo "=== P1-04 HTTP Client Gate Test PASSED (Linux) ==="
+
+      - name: P1-04 HTTP Client Gate Test (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          & host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tests\net\gate_http_client.tll -o tests\net\gate_http_client.tllbc
+          if ($LASTEXITCODE -ne 0) { throw "HTTP Client compile failed" }
+          & host\c\tllvm.exe tests\net\gate_http_client.tllbc 2>&1 | Tee-Object -FilePath httpc_test.log
+          if ($LASTEXITCODE -ne 0) { throw "HTTP Client run failed" }
+          if ((Get-Content httpc_test.log -Raw) -notmatch "ALL TESTS PASSED") { throw "HTTP Client did not PASS" }
+          Write-Output "=== P1-04 HTTP Client Gate Test PASSED (Windows) ==="
+
       - name: Blockchain unit test (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
