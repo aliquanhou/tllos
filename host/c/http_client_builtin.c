@@ -730,21 +730,14 @@ static TLLValue posix_request(const char *method, const char *url,
         return make_error_response("Failed to send request");
     }
 
-    /* Shutdown write side to signal server that request is complete.
-       This prevents recv from blocking when server waits for more data.
-       Only for plain HTTP; SSL uses SSL_shutdown in http_close. */
-    if (!conn.useSsl) {
-#if defined(_WIN32)
-        shutdown(conn.sock, SD_SEND);
-#else
-        shutdown(conn.sock, SHUT_WR);
-#endif
-    }
-
-    /* Read response */
+    /* Read response - use Content-Length when available to avoid blocking
+       on connection close (some servers wait for client to close first). */
     char *respBuf = (char*)malloc(65536);
     int respLen = 0;
     int respCap = 65536;
+    int headerEnd = -1;
+    int contentLength = -1;
+    int isChunked = 0;
 
     while (1) {
         if (respLen >= respCap - 1) {
@@ -756,8 +749,46 @@ static TLLValue posix_request(const char *method, const char *url,
         respLen += n;
         respBuf[respLen] = '\0';
 
-        /* Check if we have full response (Content-Length or chunked done) */
-        /* Simple approach: read until connection close */
+        /* Check if we have full headers */
+        if (headerEnd < 0) {
+            const char *he = strstr(respBuf, "\r\n\r\n");
+            if (he) {
+                headerEnd = (int)(he - respBuf) + 4;
+                /* Parse Content-Length and Transfer-Encoding */
+                char headerLine[4096];
+                const char *hp = respBuf;
+                while (hp < he) {
+                    const char *lineEnd = strstr(hp, "\r\n");
+                    if (!lineEnd || lineEnd > he) break;
+                    int lineLen = (int)(lineEnd - hp);
+                    if (lineLen > 0 && lineLen < (int)sizeof(headerLine)) {
+                        memcpy(headerLine, hp, lineLen);
+                        headerLine[lineLen] = '\0';
+                        if (strncasecmp(headerLine, "Content-Length:", 15) == 0) {
+                            contentLength = atoi(headerLine + 15);
+                        }
+                        if (strncasecmp(headerLine, "Transfer-Encoding:", 19) == 0) {
+                            if (strstr(headerLine, "chunked")) isChunked = 1;
+                        }
+                    }
+                    hp = lineEnd + 2;
+                }
+            }
+        }
+
+        /* If we have headers and Content-Length, check if body is complete */
+        if (headerEnd >= 0 && contentLength >= 0) {
+            int bodyLen = respLen - headerEnd;
+            if (bodyLen >= contentLength) break;
+        }
+
+        /* If chunked, check if we have the final 0 chunk */
+        if (headerEnd >= 0 && isChunked) {
+            if (strstr(respBuf + headerEnd, "\r\n0\r\n")) break;
+        }
+
+        /* Safety: don't read more than 16MB */
+        if (respLen > 16 * 1024 * 1024) break;
     }
     http_close(&conn);
 
