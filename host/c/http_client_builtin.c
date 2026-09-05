@@ -81,12 +81,7 @@ static int wait_for_write(int sock, int timeoutMs) {
 
 static OSStatus st_read_func(SSLConnectionRef connection, void *data, size_t *dataLength) {
     int sock = *(const int*)connection;
-    /* Wait for data to be available (up to 10 seconds) */
-    int ready = wait_for_read(sock, 10000);
-    if (ready <= 0) {
-        *dataLength = 0;
-        return errSSLInternal;  /* Timeout or error - don't return WouldBlock to avoid infinite retry */
-    }
+    /* Non-blocking per Apple docs: return errSSLWouldBlock on EAGAIN, caller retries with select */
     ssize_t n = recv(sock, data, *dataLength, 0);
     if (n < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -106,12 +101,7 @@ static OSStatus st_read_func(SSLConnectionRef connection, void *data, size_t *da
 
 static OSStatus st_write_func(SSLConnectionRef connection, const void *data, size_t *dataLength) {
     int sock = *(const int*)connection;
-    /* Wait for socket to be writable (up to 10 seconds) */
-    int ready = wait_for_write(sock, 10000);
-    if (ready <= 0) {
-        *dataLength = 0;
-        return errSSLInternal;  /* Timeout or error - don't return WouldBlock to avoid infinite retry */
-    }
+    /* Non-blocking per Apple docs: return errSSLWouldBlock on EAGAIN, caller retries with select */
     ssize_t n = send(sock, data, *dataLength, 0);
     if (n < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -519,8 +509,13 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
             status = SSLHandshake(conn->ssl);
             if (status == errSSLWouldBlock) {
                 handshake_retries++;
-                if (handshake_retries > 50) break;
-                usleep(10000);
+                if (handshake_retries > 200) break;
+                /* Wait for either read or write readiness before retry */
+                int r = wait_for_read(conn->sock, 1000);
+                if (r <= 0) {
+                    int w = wait_for_write(conn->sock, 1000);
+                    if (w <= 0) { usleep(10000); }
+                }
             }
         } while (status == errSSLWouldBlock);
         if (status != noErr) {
@@ -579,14 +574,18 @@ static int http_send(HttpConnection *conn, const char *data, int len) {
 #if defined(__APPLE__)
         size_t sent = 0;
         int retries = 0;
-        while (sent < (size_t)len && retries < 100) {
+        while (sent < (size_t)len && retries < 200) {
             size_t n = 0;
             OSStatus status = SSLWrite(conn->ssl, data + sent, len - sent, &n);
             if (status == errSSLWouldBlock) {
-                if (n > 0) { sent += n; retries = 0; }
-                else { retries++; usleep(10000); }
+                if (n > 0) { sent += n; retries = 0; continue; }
+                retries++;
+                /* Wait for socket writability before retry */
+                int w = wait_for_write(conn->sock, 1000);
+                if (w <= 0) { usleep(10000); }
                 continue;
             }
+            if (status == errSSLClosedGraceful) return (int)sent;
             if (status != noErr || n == 0) return -1;
             sent += n;
             retries = 0;
@@ -623,11 +622,14 @@ static int http_recv(HttpConnection *conn, char *buf, int bufSize) {
             if (status == errSSLWouldBlock) {
                 if (n > 0) break;
                 retries++;
-                if (retries > 100) return -1;
-                usleep(10000);
+                if (retries > 200) return -1;
+                /* Wait for socket readability before retry */
+                int r = wait_for_read(conn->sock, 1000);
+                if (r <= 0) { usleep(10000); }
             }
         } while (status == errSSLWouldBlock);
         if (status == errSSLClosedGraceful) return 0;
+        if (status == errSSLClosedNoNotify) return 0;
         if (status != noErr) return -1;
         return (int)n;
 #else
