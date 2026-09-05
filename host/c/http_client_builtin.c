@@ -658,23 +658,7 @@ static void http_close(HttpConnection *conn) {
 #endif
     }
     if (conn->sock >= 0) {
-        /* Graceful shutdown sequence for rapid sequential requests:
-           1. shutdown(SHUT_WR) - tell server we're done sending
-           2. Drain remaining data until EOF - let server finish and close
-           3. close() - release socket
-           This ensures clean connection teardown and prevents issues
-           when making many rapid sequential requests. */
-        shutdown(conn->sock, SHUT_WR);
-
-        /* Drain remaining data with short timeout to avoid blocking */
-        char drainBuf[4096];
-        int drainCount = 0;
-        while (drainCount < 10) { /* max 10 reads = ~40KB */
-            int n = recv(conn->sock, drainBuf, sizeof(drainBuf), 0);
-            if (n <= 0) break;
-            drainCount++;
-        }
-
+        /* Simple close - no shutdown, no drain */
         close(conn->sock);
         conn->sock = -1;
     }
