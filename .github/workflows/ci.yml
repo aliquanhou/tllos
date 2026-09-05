@@ -233,7 +233,7 @@ jobs:
           grep -q "ALL TESTS PASSED" /tmp/httpc_gate.log
           echo "=== P1-04 HTTP Client Gate Test PASSED (Linux) ==="
 
-      - name: P1-04 macOS Gate Failure Diagnostic
+      - name: P1-04 macOS Full Sequential Diagnostic
         if: runner.os == 'macOS'
         run: |
           # Start deterministic test server in background
@@ -242,9 +242,9 @@ jobs:
           sleep 2
           # Verify server is running
           curl -s http://127.0.0.1:18080/status || echo "Server not ready"
-          # Compile and run targeted diagnostic
-          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/diag_gate_failure.tll -o tests/net/diag_gate_failure.tllbc
-          timeout 60 host/c/tllvm tests/net/diag_gate_failure.tllbc 2>&1 | tee /tmp/httpc_diag.log
+          # Compile and run full sequential diagnostic (same order as Gate Test)
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/diag_full_sequential.tll -o tests/net/diag_full_sequential.tllbc
+          timeout 120 host/c/tllvm tests/net/diag_full_sequential.tllbc 2>&1 | tee /tmp/httpc_diag.log
           EXIT_CODE=${PIPESTATUS[0]}
           echo "=== Diagnostic exit code: $EXIT_CODE ==="
           # Kill test server
