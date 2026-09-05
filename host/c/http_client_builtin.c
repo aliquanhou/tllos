@@ -474,6 +474,12 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
         return -1;
     }
 
+    /* Enable SO_REUSEADDR to allow rapid reconnection without TIME_WAIT issues */
+    {
+        int optval = 1;
+        setsockopt(conn->sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+    }
+
     if (connect_with_timeout(conn->sock, res->ai_addr, res->ai_addrlen, timeoutMs) != 0) {
         close(conn->sock);
         conn->sock = -1;
@@ -652,6 +658,10 @@ static void http_close(HttpConnection *conn) {
 #endif
     }
     if (conn->sock >= 0) {
+        /* Graceful shutdown: close write side first, then read remaining data,
+           then close. This prevents TIME_WAIT issues and ensures clean connection
+           teardown for rapid sequential requests. */
+        shutdown(conn->sock, SHUT_RDWR);
         close(conn->sock);
         conn->sock = -1;
     }
