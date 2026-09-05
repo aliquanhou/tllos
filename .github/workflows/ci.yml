@@ -21,18 +21,18 @@ jobs:
 
       - name: Setup C compiler (macOS)
         if: runner.os == 'macOS'
-        run: brew install gcc openssl
+        run: brew install gcc openssl@3
 
       - name: Build Native Launcher (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
           cd host/c
           if [ "$RUNNER_OS" = "macOS" ]; then
-            export OPENSSL_PREFIX=$(brew --prefix openssl)
+            export OPENSSL_PREFIX=$(brew --prefix openssl@3)
             export CFLAGS="-I$OPENSSL_PREFIX/include"
             export LDFLAGS="-L$OPENSSL_PREFIX/lib"
           fi
-          gcc -O2 -std=gnu99 $CFLAGS -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -D_DARWIN_C_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread -ldl -lssl -lcrypto
+          gcc -O2 -std=gnu99 $CFLAGS -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -D_DARWIN_C_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c $LDFLAGS -lm -lpthread -ldl -lssl -lcrypto
           ./tllvm --version 2>/dev/null || true
 
       - name: Setup MSVC (Windows)
