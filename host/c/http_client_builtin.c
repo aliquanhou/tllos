@@ -330,6 +330,7 @@ static TLLValue winhttp_request(const char *method, const char *url,
 }
 
 #else /* Linux/macOS POSIX + OpenSSL backend */
+#if !defined(__APPLE__)
 
 /* ===== POSIX socket helpers ===== */
 
@@ -690,6 +691,22 @@ static TLLValue posix_request(const char *method, const char *url,
     free(respBuf);
     return result;
 }
+
+#else /* macOS stub - HTTP Client not yet supported on macOS */
+static TLLValue posix_request(const char *method, const char *url,
+                                const char *body, TLLValue headersMap, int timeoutMs) {
+    (void)method; (void)body; (void)headersMap; (void)timeoutMs;
+    TLLValue result = tll_map();
+    map_set(result.as.map, "ok", tll_bool(0));
+    map_set(result.as.map, "status", tll_int(0));
+    map_set(result.as.map, "statusText", tll_string(""));
+    map_set(result.as.map, "headers", tll_map());
+    map_set(result.as.map, "body", tll_string(""));
+    map_set(result.as.map, "error", tll_string("HTTP Client not supported on macOS yet"));
+    map_set(result.as.map, "url", tll_string(url));
+    return result;
+}
+#endif /* !__APPLE__ */
 
 #endif /* platform */
 
