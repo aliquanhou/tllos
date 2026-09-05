@@ -177,7 +177,7 @@ jobs:
         run: |
           cd host/c
           echo "=== Compiling each file separately ===" > build_log.txt
-          for f in main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c; do
+          for f in main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c; do
             echo "--- Compiling $f ---" >> build_log.txt
             clang -O0 -w -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -D_DARWIN_C_SOURCE -c $f -o ${f%.c}.o >> build_log.txt 2>&1
             echo "  Exit: $?" >> build_log.txt
@@ -186,7 +186,7 @@ jobs:
           clang -O0 -w -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -D_DARWIN_C_SOURCE -DSQLITE_THREADSAFE=1 -c sqlite3.c -o sqlite3.o >> build_log.txt 2>&1
           echo "  sqlite3.c Exit: $?" >> build_log.txt
           echo "=== Linking ===" >> build_log.txt
-          clang -O0 -o tllvm main.o vm.o value.o json.o builtin.o sqlite_builtin.o crypto_builtin.o password_builtin.o hmac_builtin.o sqlite3.o -lm -lpthread >> build_log.txt 2>&1
+          clang -O0 -o tllvm main.o vm.o value.o json.o builtin.o sqlite_builtin.o crypto_builtin.o password_builtin.o hmac_builtin.o http_client_builtin.o sqlite3.o -lm -lpthread -framework Security -framework CoreFoundation >> build_log.txt 2>&1
           LINK_EXIT=$?
           echo "=== Link exit code: $LINK_EXIT ===" >> build_log.txt
           cat build_log.txt

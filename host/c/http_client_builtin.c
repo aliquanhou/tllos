@@ -3,7 +3,8 @@
  * Module: httpc (idx 200-209)
  *
  * Windows: WinHTTP (system native)
- * Linux/macOS: POSIX socket + OpenSSL for HTTPS
+ * Linux: POSIX socket + OpenSSL for HTTPS
+ * macOS: POSIX socket + Secure Transport (system native TLS)
  *
  * API:
  *   httpc.get(url, headers?)          -> Response map
@@ -45,16 +46,55 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <poll.h>
-#if !defined(__APPLE__) || defined(TLL_USE_OPENSSL)
+#if defined(__APPLE__)
+#include <Security/SecureTransport.h>
+#include <CoreFoundation/CoreFoundation.h>
+typedef SSLContextRef SSL;
+typedef void SSL_CTX;
+#else
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-#else
-typedef void SSL;
-typedef void SSL_CTX;
 #endif
 #endif
 
 #include "tllvm.h"
+
+/* ===== macOS Secure Transport IO callbacks ===== */
+#if defined(__APPLE__)
+static OSStatus st_read_func(SSLConnectionRef connection, void *data, size_t *dataLength) {
+    int sock = *(const int*)connection;
+    ssize_t n = recv(sock, data, *dataLength, 0);
+    if (n < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            *dataLength = 0;
+            return errSSLWouldBlock;
+        }
+        *dataLength = 0;
+        return errSSLInternal;
+    }
+    if (n == 0) {
+        *dataLength = 0;
+        return errSSLClosedGraceful;
+    }
+    *dataLength = (size_t)n;
+    return noErr;
+}
+
+static OSStatus st_write_func(SSLConnectionRef connection, const void *data, size_t *dataLength) {
+    int sock = *(const int*)connection;
+    ssize_t n = send(sock, data, *dataLength, 0);
+    if (n < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            *dataLength = 0;
+            return errSSLWouldBlock;
+        }
+        *dataLength = 0;
+        return errSSLInternal;
+    }
+    *dataLength = (size_t)n;
+    return noErr;
+}
+#endif
 
 /* ===== URL Parsing ===== */
 
@@ -329,8 +369,7 @@ static TLLValue winhttp_request(const char *method, const char *url,
     return result;
 }
 
-#else /* Linux/macOS POSIX + OpenSSL backend */
-#if !defined(__APPLE__)
+#else /* Linux/macOS POSIX backend */
 
 /* ===== POSIX socket helpers ===== */
 
@@ -379,15 +418,19 @@ static int connect_with_timeout(int sock, const struct sockaddr *addr, socklen_t
 
 typedef struct {
     int sock;
-    SSL *ssl;
+    SSL *ssl;  /* Linux: OpenSSL SSL*, macOS: SSLContextRef */
+#if !defined(__APPLE__)
     SSL_CTX *ctx;
+#endif
     int useSsl;
 } HttpConnection;
 
 static int http_connect(HttpConnection *conn, const char *host, int port, int isHttps, int timeoutMs) {
     conn->sock = -1;
     conn->ssl = NULL;
+#if !defined(__APPLE__)
     conn->ctx = NULL;
+#endif
     conn->useSsl = isHttps;
 
     /* Resolve hostname */
@@ -417,7 +460,27 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
 
     set_socket_timeout(conn->sock, timeoutMs);
 
-#if !defined(__APPLE__) || defined(TLL_USE_OPENSSL)
+#if defined(__APPLE__)
+    if (isHttps) {
+        conn->ssl = SSLCreateContext(kCFAllocatorDefault, kSSLClientSide, kSSLStreamType);
+        if (!conn->ssl) {
+            close(conn->sock);
+            conn->sock = -1;
+            return -1;
+        }
+        SSLSetIOFuncs(conn->ssl, st_read_func, st_write_func);
+        SSLSetConnection(conn->ssl, &conn->sock);
+        SSLSetPeerDomainName(conn->ssl, host, strlen(host));
+        OSStatus status = SSLHandshake(conn->ssl);
+        if (status != noErr) {
+            CFRelease(conn->ssl);
+            conn->ssl = NULL;
+            close(conn->sock);
+            conn->sock = -1;
+            return -1;
+        }
+    }
+#else
     if (isHttps) {
         SSL_library_init();
         SSL_load_error_strings();
@@ -430,12 +493,10 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
             return -1;
         }
 
-        /* Set TLS version min to 1.2 (OpenSSL 1.1.0+ only) */
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
         SSL_CTX_set_min_proto_version(conn->ctx, TLS1_2_VERSION);
 #endif
 
-        /* Enable certificate verification (optional for now) */
         SSL_CTX_set_verify(conn->ctx, SSL_VERIFY_NONE, NULL);
 
         conn->ssl = SSL_new(conn->ctx);
@@ -457,8 +518,6 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
             return -1;
         }
     }
-#else
-        (void)isHttps;
 #endif
 
     return 0;
@@ -466,7 +525,16 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
 
 static int http_send(HttpConnection *conn, const char *data, int len) {
     if (conn->useSsl && conn->ssl) {
-#if !defined(__APPLE__) || defined(TLL_USE_OPENSSL)
+#if defined(__APPLE__)
+        size_t sent = 0;
+        while (sent < (size_t)len) {
+            size_t n = 0;
+            OSStatus status = SSLWrite(conn->ssl, data + sent, len - sent, &n);
+            if (status != noErr || n == 0) return -1;
+            sent += n;
+        }
+        return (int)sent;
+#else
         int sent = 0;
         while (sent < len) {
             int n = SSL_write(conn->ssl, data + sent, len - sent);
@@ -474,8 +542,6 @@ static int http_send(HttpConnection *conn, const char *data, int len) {
             sent += n;
         }
         return sent;
-#else
-        return -1;
 #endif
     } else {
         int sent = 0;
@@ -490,10 +556,14 @@ static int http_send(HttpConnection *conn, const char *data, int len) {
 
 static int http_recv(HttpConnection *conn, char *buf, int bufSize) {
     if (conn->useSsl && conn->ssl) {
-#if !defined(__APPLE__) || defined(TLL_USE_OPENSSL)
-        return SSL_read(conn->ssl, buf, bufSize);
+#if defined(__APPLE__)
+        size_t n = 0;
+        OSStatus status = SSLRead(conn->ssl, buf, bufSize, &n);
+        if (status == errSSLClosedGraceful || status == errSSLClosedNoNotify) return 0;
+        if (status != noErr) return -1;
+        return (int)n;
 #else
-        return -1;
+        return SSL_read(conn->ssl, buf, bufSize);
 #endif
     } else {
         return recv(conn->sock, buf, bufSize, 0);
@@ -502,7 +572,10 @@ static int http_recv(HttpConnection *conn, char *buf, int bufSize) {
 
 static void http_close(HttpConnection *conn) {
     if (conn->useSsl && conn->ssl) {
-#if !defined(__APPLE__) || defined(TLL_USE_OPENSSL)
+#if defined(__APPLE__)
+        SSLClose(conn->ssl);
+        CFRelease(conn->ssl);
+#else
         SSL_shutdown(conn->ssl);
         SSL_free(conn->ssl);
         SSL_CTX_free(conn->ctx);
@@ -691,22 +764,6 @@ static TLLValue posix_request(const char *method, const char *url,
     free(respBuf);
     return result;
 }
-
-#else /* macOS stub - HTTP Client not yet supported on macOS */
-static TLLValue posix_request(const char *method, const char *url,
-                                const char *body, TLLValue headersMap, int timeoutMs) {
-    (void)method; (void)body; (void)headersMap; (void)timeoutMs;
-    TLLValue result = tll_map();
-    map_set(result.as.map, "ok", tll_bool(0));
-    map_set(result.as.map, "status", tll_int(0));
-    map_set(result.as.map, "statusText", tll_string(""));
-    map_set(result.as.map, "headers", tll_map());
-    map_set(result.as.map, "body", tll_string(""));
-    map_set(result.as.map, "error", tll_string("HTTP Client not supported on macOS yet"));
-    map_set(result.as.map, "url", tll_string(url));
-    return result;
-}
-#endif /* !__APPLE__ */
 
 #endif /* platform */
 
