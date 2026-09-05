@@ -1,0 +1,134 @@
+// P1-04 macOS Full Gate Test with delay before Test 14
+// Tests if adding a small delay before 10 sequential requests fixes the failure
+io.println("=== P1-04 macOS Full Gate Test with Delay before Test 14 ===")
+io.println("")
+
+let passed = 0
+let failed = 0
+
+fn test(name, cond) {
+    if cond {
+        passed = passed + 1
+    } else {
+        io.println("  FAIL: " + name)
+        failed = failed + 1
+    }
+}
+
+let base = "http://127.0.0.1:18080"
+
+// Test 1: httpc.get /status
+let resp1 = httpc.get(base + "/status")
+test("get status is 200", resp1.status == 200)
+test("get ok is true", resp1.ok == true)
+test("get body not empty", strings.length(resp1.body) > 0)
+test("get body contains status", strings.contains(resp1.body, "status"))
+test("get statusText not empty", strings.length(resp1.statusText) > 0)
+
+// Test 2: httpc.get with custom headers /headers
+let headers2 = {}
+headers2["X-Test-Header"] = "TLL-HTTP-Client"
+headers2["Accept"] = "application/json"
+let resp2 = httpc.get(base + "/headers", headers2)
+test("get with headers status 200", resp2.status == 200)
+test("get with headers body contains X-Test-Header", strings.contains(resp2.body, "X-Test-Header"))
+test("get with headers body contains TLL-HTTP-Client", strings.contains(resp2.body, "TLL-HTTP-Client"))
+
+// Test 3: httpc.post with body /echo
+let postBody = "{\"name\":\"TLL\",\"version\":\"1.0\"}"
+let resp3 = httpc.post(base + "/echo", postBody)
+test("post status 200", resp3.status == 200)
+test("post body contains TLL", strings.contains(resp3.body, "TLL"))
+test("post body contains version", strings.contains(resp3.body, "1.0"))
+
+// Test 4: httpc.post with Content-Type header
+let headers4 = {}
+headers4["Content-Type"] = "application/json"
+let resp4 = httpc.post(base + "/echo", postBody, headers4)
+test("post with headers status 200", resp4.status == 200)
+
+// Test 5: httpc.request with full control (GET)
+let req5 = {}
+req5["method"] = "GET"
+req5["url"] = base + "/status"
+req5["timeout"] = 10000
+let resp5 = httpc.request(req5)
+test("request GET status 200", resp5.status == 200)
+test("request GET ok true", resp5.ok == true)
+test("request GET body not empty", strings.length(resp5.body) > 0)
+
+// Test 6: httpc.request with POST
+let req6 = {}
+req6["method"] = "POST"
+req6["url"] = base + "/echo"
+req6["body"] = "{\"test\":\"request\"}"
+let resp6 = httpc.request(req6)
+test("request POST status 200", resp6.status == 200)
+test("request POST body contains test", strings.contains(resp6.body, "request"))
+
+// Test 7: Response headers parsing
+let resp7 = httpc.get(base + "/json")
+let ct = resp7.headers["content-type"]
+test("response content-type header exists", strings.length(ct) > 0)
+test("content-type contains json", strings.contains(ct, "json"))
+
+// Test 8: Error handling - connection refused (invalid port)
+let resp8 = httpc.get("http://127.0.0.1:19999/")
+test("connection refused returns ok=false", resp8.ok == false)
+test("connection refused status is 0", resp8.status == 0)
+test("connection refused error not empty", strings.length(resp8.error) > 0)
+
+// Test 9: httpc.put
+let resp9 = httpc.put(base + "/echo", "{\"key\":\"value\"}")
+test("put status 200", resp9.status == 200)
+test("put body contains key", strings.contains(resp9.body, "key"))
+
+// Test 10: httpc.delete
+let resp10 = httpc.delete(base + "/echo")
+test("delete status 200", resp10.status == 200)
+
+// Test 11: url field in response
+let resp11 = httpc.get(base + "/status")
+test("url field matches request", strings.contains(resp11.url, "127.0.0.1"))
+
+// Test 12: Custom status code 404
+let resp12 = httpc.get(base + "/status/404")
+test("custom 404 status", resp12.status == 404)
+
+// Test 13: Custom status code 500
+let resp13 = httpc.get(base + "/status/500")
+test("custom 500 status", resp13.status == 500)
+
+// KEY DIFFERENCE: Add 100ms delay before Test 14
+io.println("--- Adding 100ms delay before Test 14 ---")
+// TLL may not have usleep, use a simple loop to waste time
+let delayCount = 0
+for i in 1..100000 {
+    delayCount = delayCount + 1
+}
+io.println("Delay complete, delayCount=" + delayCount)
+
+// Test 14: Multiple sequential requests (resource leak test)
+io.println("--- Test 14: Multiple sequential requests (10x) ---")
+let allOk = true
+let failedAt = -1
+for i in 1..11 {
+    let r = httpc.get(base + "/status")
+    if r.status != 200 {
+        allOk = false
+        failedAt = i
+        io.println("  req " + i + ": FAILED status=" + r.status)
+    }
+}
+test("10 sequential requests all 200", allOk)
+
+io.println("")
+io.println("=== Results ===")
+io.println("Passed: " + passed)
+io.println("Failed: " + failed)
+io.println("")
+if failed == 0 {
+    io.println("ALL TESTS PASSED")
+} else {
+    io.println("SOME TESTS FAILED")
+}
