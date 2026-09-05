@@ -49,8 +49,6 @@
 #if defined(__APPLE__)
 #include <Security/SecureTransport.h>
 #include <CoreFoundation/CoreFoundation.h>
-typedef SSLContextRef SSL;
-typedef void SSL_CTX;
 #else
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -418,8 +416,10 @@ static int connect_with_timeout(int sock, const struct sockaddr *addr, socklen_t
 
 typedef struct {
     int sock;
-    SSL *ssl;  /* Linux: OpenSSL SSL*, macOS: SSLContextRef */
-#if !defined(__APPLE__)
+#if defined(__APPLE__)
+    SSLContextRef ssl;  /* macOS: Secure Transport context */
+#else
+    SSL *ssl;  /* Linux: OpenSSL SSL* */
     SSL_CTX *ctx;
 #endif
     int useSsl;
