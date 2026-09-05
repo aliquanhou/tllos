@@ -1,0 +1,80 @@
+// P1-04 macOS Precise Failure Diagnostic
+// Test 1-13 run FAST (no output) to accumulate pollution
+// Test 14 prints DETAILED output for every request to find exact failure
+io.println("=== P1-04 macOS Precise Failure Diagnostic ===")
+io.println("")
+
+let base = "http://127.0.0.1:18080"
+
+// Test 1-13: run FAST with minimal output (to accumulate pollution)
+io.println("--- Running Test 1-13 (fast, minimal output) ---")
+
+// Test 1
+let r1 = httpc.get(base + "/status")
+// Test 2
+let h2 = {}
+h2["X-Test-Header"] = "TLL-HTTP-Client"
+let r2 = httpc.get(base + "/headers", h2)
+// Test 3
+let r3 = httpc.post(base + "/echo", "{\"name\":\"TLL\"}")
+// Test 4
+let h4 = {}
+h4["Content-Type"] = "application/json"
+let r4 = httpc.post(base + "/echo", "{\"name\":\"TLL\"}", h4)
+// Test 5
+let req5 = {}
+req5["method"] = "GET"
+req5["url"] = base + "/status"
+let r5 = httpc.request(req5)
+// Test 6
+let req6 = {}
+req6["method"] = "POST"
+req6["url"] = base + "/echo"
+req6["body"] = "{\"test\":\"request\"}"
+let r6 = httpc.request(req6)
+// Test 7
+let r7 = httpc.get(base + "/json")
+// Test 8
+let r8 = httpc.get("http://127.0.0.1:19999/")
+// Test 9
+let r9 = httpc.put(base + "/echo", "{\"key\":\"value\"}")
+// Test 10
+let r10 = httpc.delete(base + "/echo")
+// Test 11
+let r11 = httpc.get(base + "/status")
+// Test 12
+let r12 = httpc.get(base + "/status/404")
+// Test 13
+let r13 = httpc.get(base + "/status/500")
+
+io.println("Test 1-13 complete. Results:")
+io.println("  T1 status=" + r1.status)
+io.println("  T2 status=" + r2.status)
+io.println("  T3 status=" + r3.status)
+io.println("  T4 status=" + r4.status)
+io.println("  T5 status=" + r5.status)
+io.println("  T6 status=" + r6.status)
+io.println("  T7 status=" + r7.status)
+io.println("  T8 ok=" + r8.ok + " error=[" + r8.error + "]")
+io.println("  T9 status=" + r9.status)
+io.println("  T10 status=" + r10.status)
+io.println("  T11 status=" + r11.status)
+io.println("  T12 status=" + r12.status)
+io.println("  T13 status=" + r13.status)
+io.println("")
+
+// Test 14: DETAILED output for every request
+io.println("--- Test 14: 10 sequential requests (DETAILED) ---")
+let allOk = true
+let failedAt = -1
+for i in 1..11 {
+    let r = httpc.get(base + "/status")
+    io.println("  req " + i + ": status=" + r.status + " ok=" + r.ok + " body_len=" + strings.length(r.body) + " error=[" + r.error + "]")
+    if r.status != 200 {
+        allOk = false
+        failedAt = i
+        io.println("  *** FAILED at req " + i + " ***")
+    }
+}
+io.println("")
+io.println("Result: allOk=" + allOk + " failedAt=" + failedAt)
