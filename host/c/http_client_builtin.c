@@ -730,6 +730,17 @@ static TLLValue posix_request(const char *method, const char *url,
         return make_error_response("Failed to send request");
     }
 
+    /* Shutdown write side to signal server that request is complete.
+       This prevents recv from blocking when server waits for more data.
+       Only for plain HTTP; SSL uses SSL_shutdown in http_close. */
+    if (!conn.useSsl) {
+#if defined(_WIN32)
+        shutdown(conn.sock, SD_SEND);
+#else
+        shutdown(conn.sock, SHUT_WR);
+#endif
+    }
+
     /* Read response */
     char *respBuf = (char*)malloc(65536);
     int respLen = 0;
