@@ -233,13 +233,24 @@ jobs:
           grep -q "ALL TESTS PASSED" /tmp/httpc_gate.log
           echo "=== P1-04 HTTP Client Gate Test PASSED (Linux) ==="
 
-      - name: P1-04-R2 DIAG-2 Single-Assertion Diagnostic (macOS)
+      - name: P1-04 HTTP Client Gate Test with Local Server (macOS)
         if: runner.os == 'macOS'
         run: |
-          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/diag2_single_assertion.tll -o tests/net/diag2_single_assertion.tllbc
-          timeout 180 host/c/tllvm tests/net/diag2_single_assertion.tllbc 2>&1 | tee /tmp/httpc_diag2.log
-          echo "=== DIAG-2 exit code: $? ==="
-          cat /tmp/httpc_diag2.log
+          # Start deterministic test server in background
+          python3 tests/net/test_server.py 18080 &
+          SERVER_PID=$!
+          sleep 2
+          # Verify server is running
+          curl -s http://127.0.0.1:18080/status || echo "Server not ready"
+          # Compile and run Gate Test
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/gate_http_client_local.tll -o tests/net/gate_http_client_local.tllbc
+          timeout 120 host/c/tllvm tests/net/gate_http_client_local.tllbc 2>&1 | tee /tmp/httpc_gate_local.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          # Kill test server
+          kill $SERVER_PID 2>/dev/null || true
+          test "$EXIT_CODE" -eq 0
+          grep -q "ALL TESTS PASSED" /tmp/httpc_gate_local.log
+          echo "=== P1-04 HTTP Client Local Gate Test PASSED (macOS) ===" 
 
       - name: P1-04 HTTP Client Gate Test (Windows)
         if: runner.os == 'Windows'
