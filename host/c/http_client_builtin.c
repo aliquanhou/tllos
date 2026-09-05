@@ -471,6 +471,7 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
         SSLSetIOFuncs(conn->ssl, st_read_func, st_write_func);
         SSLSetConnection(conn->ssl, &conn->sock);
         SSLSetPeerDomainName(conn->ssl, host, strlen(host));
+        SSLSetProtocolVersionMin(conn->ssl, kTLSProtocol12);
         OSStatus status = SSLHandshake(conn->ssl);
         if (status != noErr) {
             CFRelease(conn->ssl);
@@ -527,11 +528,18 @@ static int http_send(HttpConnection *conn, const char *data, int len) {
     if (conn->useSsl && conn->ssl) {
 #if defined(__APPLE__)
         size_t sent = 0;
-        while (sent < (size_t)len) {
+        int retries = 0;
+        while (sent < (size_t)len && retries < 100) {
             size_t n = 0;
             OSStatus status = SSLWrite(conn->ssl, data + sent, len - sent, &n);
+            if (status == errSSLWouldBlock) {
+                if (n > 0) { sent += n; retries = 0; }
+                else { retries++; usleep(1000); }
+                continue;
+            }
             if (status != noErr || n == 0) return -1;
             sent += n;
+            retries = 0;
         }
         return (int)sent;
 #else
@@ -558,8 +566,18 @@ static int http_recv(HttpConnection *conn, char *buf, int bufSize) {
     if (conn->useSsl && conn->ssl) {
 #if defined(__APPLE__)
         size_t n = 0;
-        OSStatus status = SSLRead(conn->ssl, buf, bufSize, &n);
-        if (status == errSSLClosedGraceful || status == errSSLClosedNoNotify) return 0;
+        int retries = 0;
+        OSStatus status;
+        do {
+            status = SSLRead(conn->ssl, buf, bufSize, &n);
+            if (status == errSSLWouldBlock) {
+                if (n > 0) break;
+                retries++;
+                if (retries > 100) return -1;
+                usleep(1000);
+            }
+        } while (status == errSSLWouldBlock);
+        if (status == errSSLClosedGraceful) return 0;
         if (status != noErr) return -1;
         return (int)n;
 #else
