@@ -220,8 +220,8 @@ jobs:
       - name: P1-04 HTTP Client Gate Test (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
-          ./tllvm tools/TLLC/tllc.tllbc compile tests/net/gate_http_client.tll -o tests/net/gate_http_client.tllbc
-          timeout 90 ./tllvm tests/net/gate_http_client.tllbc
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/gate_http_client.tll -o tests/net/gate_http_client.tllbc
+          timeout 90 host/c/tllvm tests/net/gate_http_client.tllbc
 
       - name: P1-04 HTTP Client Gate Test (Windows)
         if: runner.os == 'Windows'
