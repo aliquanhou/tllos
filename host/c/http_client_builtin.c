@@ -45,13 +45,8 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <poll.h>
-#ifdef __APPLE__
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-#else
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#endif
 #endif
 
 #include "tllvm.h"
@@ -428,8 +423,10 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
             return -1;
         }
 
-        /* Set TLS version min to 1.2 */
+        /* Set TLS version min to 1.2 (OpenSSL 1.1.0+ only) */
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
         SSL_CTX_set_min_proto_version(conn->ctx, TLS1_2_VERSION);
+#endif
 
         /* Enable certificate verification (optional for now) */
         SSL_CTX_set_verify(conn->ctx, SSL_VERIFY_NONE, NULL);
