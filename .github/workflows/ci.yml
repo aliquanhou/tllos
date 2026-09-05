@@ -34,12 +34,18 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           cd host/c
-          gcc -O2 -std=gnu99 -D_DARWIN_C_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread 2> build_errors.log || true
-          if [ -f build_errors.log ] && [ -s build_errors.log ]; then
+          set +e
+          gcc -O2 -std=gnu99 -D_DARWIN_C_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread 2>&1 | tee build_output.log
+          GCC_EXIT=${PIPESTATUS[0]}
+          set -e
+          if [ $GCC_EXIT -ne 0 ]; then
             echo "## macOS Build Errors" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
-            cat build_errors.log >> $GITHUB_STEP_SUMMARY
+            cat build_output.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
+            while IFS= read -r line; do
+              echo "::error::$line"
+            done < build_output.log
             exit 1
           fi
           ./tllvm --version 2>/dev/null || true
