@@ -849,7 +849,9 @@ static TLLValue posix_request(const char *method, const char *url,
     }
 
     /* Send request - if cached connection fails, reconnect and retry once (idempotent only) */
-    int sendOk = (http_send(&conn, reqBuf, reqLen) == reqLen);
+    int sendOk;
+retry_request:
+    sendOk = (http_send(&conn, reqBuf, reqLen) == reqLen);
     if (!sendOk && fromCache && isIdempotent) {
         /* Cached connection may have been closed by server - reconnect and retry */
         http_close(&conn);
@@ -955,6 +957,18 @@ static TLLValue posix_request(const char *method, const char *url,
         conn_cache_put(pu.host, pu.port, pu.isHttps, insecure, &conn);
     } else {
         http_close(&conn);
+    }
+
+    /* If cached connection returned empty response (server closed connection
+       while we were waiting), reconnect and retry once for idempotent requests. */
+    if (respLen == 0 && fromCache && isIdempotent) {
+        http_close(&conn);
+        free(respBuf);
+        fromCache = 0;
+        if (http_connect(&conn, pu.host, pu.port, pu.isHttps, timeoutMs, insecure) != 0) {
+            return make_error_response(conn.tlsError ? conn.tlsError : "Connection failed after reconnect");
+        }
+        goto retry_request;
     }
 
     if (respLen == 0) {
