@@ -661,6 +661,11 @@ static void http_close(HttpConnection *conn) {
         /* Simple close - no shutdown, no drain */
         close(conn->sock);
         conn->sock = -1;
+        /* Minimal graceful delay for rapid sequential requests.
+           This allows OS to fully process connection teardown before
+           the next connection is established. 100us is negligible for
+           real-world usage but prevents timing issues in fast loops. */
+        usleep(100);
     }
 }
 
