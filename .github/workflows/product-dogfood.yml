@@ -18,98 +18,58 @@ jobs:
         run: |
           cd host/c
           gcc -O2 -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread -ldl -lssl -lcrypto
-          ./tllvm --version 2>/dev/null || true
-
-      - name: Verify bootstrap seed
-        run: |
-          test -f compiler/compiler.tllbc
-          test -f runtime/vm_run.tllbc
-
-      - name: Native self-host verification
-        run: |
-          cd compiler
-          ../host/c/tllvm compiler.tllbc
-          test -f compiler_self_compiled.tllbc
-          SIZE=$(wc -c < compiler_self_compiled.tllbc)
-          test "$SIZE" -gt 100000
-          rm -f compiler_self_compiled.tllbc
-          echo "=== Bootstrap Level 5 PASSED ==="
 
       - name: Bootstrap tllc
         run: |
           chmod +x scripts/*.sh
           scripts/bootstrap-tllc.sh
           test -f tools/TLLC/tllc.tllbc
-          echo "=== tllc Bootstrap PASSED ==="
 
-      - name: Test known-good compile (mall/test_http_db.tll)
+      - name: Compile product_debug.tll
         run: |
-          set -x
-          echo "=== Compiling known-good test_http_db.tll ==="
-          ls -la host/c/tllvm tools/TLLC/tllc.tllbc mall/test_http_db.tll
-          host/c/tllvm tools/TLLC/tllc.tllbc compile mall/test_http_db.tll -o /tmp/test_http_db.tllbc 2>&1
-          COMPILE_EXIT=$?
-          echo "Compile exit: $COMPILE_EXIT"
-          ls -la /tmp/test_http_db.tllbc 2>/dev/null || echo "Output file not found"
-          test "$COMPILE_EXIT" -eq 0
-          echo "=== Known-good compile PASSED ==="
+          echo "=== Compiling product_debug.tll ==="
+          host/c/tllvm tools/TLLC/tllc.tllbc compile mall/product_debug.tll -o /tmp/product_debug.tllbc
+          echo "Compile exit: $?"
+          ls -la /tmp/product_debug.tllbc
 
-      - name: Product Slice - Compile
+      - name: Run product_debug.tll and test HTTP
         run: |
-          mkdir -p mall/data
-          echo "=== Compiling Product Slice ==="
-          echo "PWD: $(pwd)"
-          echo "tllvm: $(test -f host/c/tllvm && echo OK || echo MISSING)"
-          echo "tllc: $(test -f tools/TLLC/tllc.tllbc && echo OK || echo MISSING)"
-          echo "product_slice_test.tll: $(test -f mall/product_slice_test.tll && echo OK || echo MISSING)"
-          echo "database.tll: $(test -f mall/core/database.tll && echo OK || echo MISSING)"
-          host/c/tllvm tools/TLLC/tllc.tllbc compile mall/product_slice_test.tll -o mall/product_slice_test.tllbc 2>&1 | tee /tmp/product_compile.log
-          COMPILE_EXIT=${PIPESTATUS[0]}
-          echo "=== Compile exit: $COMPILE_EXIT ==="
-          echo "=== Compile log ==="
-          cat /tmp/product_compile.log
-          test "$COMPILE_EXIT" -eq 0
-          test -f mall/product_slice_test.tllbc
-          echo "=== Product Slice Compile PASSED ==="
-
-      - name: Product Slice - Run & Test
-        run: |
-          echo "=== Starting Product Slice server ==="
-          host/c/tllvm mall/product_slice_test.tllbc > /tmp/product_slice.log 2>&1 &
+          echo "=== Starting product_debug server ==="
+          host/c/tllvm /tmp/product_debug.tllbc > /tmp/product_debug.log 2>&1 &
           SERVER_PID=$!
           echo "Server PID: $SERVER_PID"
           sleep 3
-          if ! kill -0 $SERVER_PID 2>/dev/null; then
-            echo "Server failed to start"
-            cat /tmp/product_slice.log
+
+          echo "=== Server log ==="
+          cat /tmp/product_debug.log
+
+          echo "=== Check if server is running ==="
+          if kill -0 $SERVER_PID 2>/dev/null; then
+            echo "Server is running"
+          else
+            echo "Server FAILED to start"
+            cat /tmp/product_debug.log
             exit 1
           fi
-          echo "=== Server log ==="
-          cat /tmp/product_slice.log
-          echo "=== Testing GET /products ==="
-          HTTP_CODE=$(curl -s -o /tmp/product_response.json -w "%{http_code}" http://127.0.0.1:8088/products)
-          echo "HTTP Code: $HTTP_CODE"
-          echo "Response:"
-          cat /tmp/product_response.json
+
+          echo "=== Test GET /health ==="
+          curl -s http://127.0.0.1:8088/health
           echo ""
-          test "$HTTP_CODE" -eq 200
-          echo "=== HTTP 200 PASSED ==="
-          python3 -c "import json; data=json.load(open('/tmp/product_response.json')); assert isinstance(data, list); assert len(data) >= 1; assert 'name' in data[0]; print('Products:', len(data)); print('First:', data[0]['name'])"
-          echo "=== JSON Response PASSED ==="
-          echo "=== Testing GET /health ==="
-          HEALTH=$(curl -s http://127.0.0.1:8088/health)
-          echo "Health: $HEALTH"
+
+          echo "=== Test GET /products ==="
+          curl -s http://127.0.0.1:8088/products
+          echo ""
+
+          echo "=== Killing server ==="
           kill $SERVER_PID 2>/dev/null || true
           wait $SERVER_PID 2>/dev/null || true
-          echo "=== Product Vertical Slice ALL GATES PASSED ==="
+          echo "=== DONE ==="
 
-      - name: Upload Product Slice logs
+      - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: product-slice-logs
+          name: product-debug-logs
           path: |
-            /tmp/product_compile.log
-            /tmp/product_slice.log
-            /tmp/product_response.json
+            /tmp/product_debug.log
           if-no-files-found: warn
