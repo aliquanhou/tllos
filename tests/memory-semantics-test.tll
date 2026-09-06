@@ -1,0 +1,133 @@
+// TLL Memory Semantics Behavior Test
+// Tests: array aliasing, map aliasing, struct aliasing, parameter passing, return value, closure capture
+// Phase 4 FINAL BEHAVIOR EVIDENCE CLOSURE
+
+import "io"
+import "arrays"
+
+fn testArrayAliasing() -> bool {
+    io.println("=== Test: Array Aliasing ===")
+    let a = [1, 2, 3]
+    let b = a
+    arrays.set(b, 0, 99)
+    let result = arrays.get(a, 0) == 99
+    if result {
+        io.println("PASS: array aliasing - b[0]=99 affects a[0]")
+    } else {
+        io.println("FAIL: array aliasing - expected a[0]=99, got " + arrays.get(a, 0))
+    }
+    return result
+}
+
+fn testMapAliasing() -> bool {
+    io.println("=== Test: Map Aliasing ===")
+    let a = {"x": 1, "y": 2}
+    let b = a
+    b["x"] = 99
+    let result = a["x"] == 99
+    if result {
+        io.println("PASS: map aliasing - b.x=99 affects a.x")
+    } else {
+        io.println("FAIL: map aliasing - expected a.x=99, got " + a["x"])
+    }
+    return result
+}
+
+struct Person {
+    name: string
+    age: int
+}
+
+fn testStructAliasing() -> bool {
+    io.println("=== Test: Struct Aliasing ===")
+    let a = Person { name: "Alice", age: 30 }
+    let b = a
+    b.age = 99
+    let result = a.age == 99
+    if result {
+        io.println("PASS: struct aliasing - b.age=99 affects a.age")
+    } else {
+        io.println("FAIL: struct aliasing - expected a.age=99, got " + a.age)
+    }
+    return result
+}
+
+fn modifyArray(arr: list) -> void {
+    arrays.set(arr, 0, 100)
+}
+
+fn testParameterPassing() -> bool {
+    io.println("=== Test: Parameter Passing ===")
+    let a = [1, 2, 3]
+    modifyArray(a)
+    let result = arrays.get(a, 0) == 100
+    if result {
+        io.println("PASS: parameter passing - function modifies caller's array")
+    } else {
+        io.println("FAIL: parameter passing - expected a[0]=100, got " + arrays.get(a, 0))
+    }
+    return result
+}
+
+fn createArray() -> list {
+    return [10, 20, 30]
+}
+
+fn testReturnValue() -> bool {
+    io.println("=== Test: Return Value ===")
+    let a = createArray()
+    let b = a
+    arrays.set(b, 0, 999)
+    let result = arrays.get(a, 0) == 999
+    if result {
+        io.println("PASS: return value - returned array is reference, aliasing works")
+    } else {
+        io.println("FAIL: return value - expected a[0]=999, got " + arrays.get(a, 0))
+    }
+    return result
+}
+
+fn testClosureCapture() -> bool {
+    io.println("=== Test: Closure Capture ===")
+    let counter = [0]
+    let increment = fn() -> void {
+        arrays.set(counter, 0, arrays.get(counter, 0) + 1)
+    }
+    increment()
+    increment()
+    increment()
+    let result = arrays.get(counter, 0) == 3
+    if result {
+        io.println("PASS: closure capture - counter=3 after 3 increments")
+    } else {
+        io.println("FAIL: closure capture - expected counter=3, got " + arrays.get(counter, 0))
+    }
+    return result
+}
+
+fn main() -> int {
+    io.println("========================================")
+    io.println("TLL Memory Semantics Behavior Test")
+    io.println("Phase 4 FINAL BEHAVIOR EVIDENCE CLOSURE")
+    io.println("========================================")
+
+    let passed = 0
+    let failed = 0
+
+    if testArrayAliasing() { passed = passed + 1 } else { failed = failed + 1 }
+    if testMapAliasing() { passed = passed + 1 } else { failed = failed + 1 }
+    if testStructAliasing() { passed = passed + 1 } else { failed = failed + 1 }
+    if testParameterPassing() { passed = passed + 1 } else { failed = failed + 1 }
+    if testReturnValue() { passed = passed + 1 } else { failed = failed + 1 }
+    if testClosureCapture() { passed = passed + 1 } else { failed = failed + 1 }
+
+    io.println("========================================")
+    io.println("Results: Passed=" + passed + " Failed=" + failed)
+    if failed == 0 {
+        io.println("ALL TESTS PASSED")
+        return 0
+    } else {
+        io.println("SOME TESTS FAILED")
+        return 1
+    }
+}
