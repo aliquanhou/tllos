@@ -165,12 +165,18 @@ jobs:
           if errorlevel 1 exit /b 1
 
       - name: Start test server
-        shell: cmd
+        shell: powershell
         run: |
-          start /B python tests\net\test_server.py 18080
-          timeout /t 3 /nobreak >nul
-          curl -s http://127.0.0.1:18080/status
-          echo.
+          $proc = Start-Process -FilePath "python" -ArgumentList "tests\net\test_server.py","18080" -PassThru -WindowStyle Hidden
+          Write-Host "Server PID: $($proc.Id)"
+          Start-Sleep -Seconds 3
+          try {
+            $r = Invoke-WebRequest -Uri "http://127.0.0.1:18080/status" -UseBasicParsing -TimeoutSec 5
+            Write-Host "Server OK: status=$($r.StatusCode)"
+          } catch {
+            Write-Host "::error::Server failed to start: $_"
+            exit 1
+          }
 
       - name: Compile minimal HTTP GET test
         shell: cmd
