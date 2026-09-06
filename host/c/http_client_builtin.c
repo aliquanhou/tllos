@@ -658,14 +658,25 @@ static void http_close(HttpConnection *conn) {
 #endif
     }
     if (conn->sock >= 0) {
-        /* Simple close - no shutdown, no drain */
+#if defined(__APPLE__)
+        /* macOS: use SO_LINGER to force immediate connection reset.
+           This prevents TIME_WAIT accumulation and socket exhaustion
+           under rapid sequential requests. macOS TCP stack handles
+           this differently than Linux. */
+        struct linger sl;
+        sl.l_onoff = 1;
+        sl.l_linger = 0;
+        setsockopt(conn->sock, SOL_SOCKET, SO_LINGER, &sl, sizeof(sl));
+#endif
         close(conn->sock);
         conn->sock = -1;
-        /* Minimal graceful delay for rapid sequential requests.
-           This allows OS to fully process connection teardown before
-           the next connection is established. 100us is negligible for
-           real-world usage but prevents timing issues in fast loops. */
-        usleep(100);
+#if defined(__APPLE__)
+        /* macOS: 1ms delay after close to allow kernel to fully
+           release socket resources before next connection.
+           This is negligible for real-world usage (human requests
+           have >>1ms intervals) but prevents rapid-loop issues. */
+        usleep(1000);
+#endif
     }
 }
 
