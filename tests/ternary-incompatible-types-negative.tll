@@ -1,0 +1,21 @@
+// TLL Ternary Incompatible Types NEGATIVE TEST
+// Phase 4 FINAL BEHAVIOR EVIDENCE CLOSURE
+//
+// PURPOSE: This file is EXPECTED TO FAIL COMPILATION.
+// It tests that TLL TypeChecker rejects incompatible branch types in ternary.
+//
+// Expected error: ternary operator type mismatch: 'int' vs 'str'
+//
+// This file should NOT be compiled as part of normal test suite.
+// It is run separately to verify that the compiler correctly rejects bad code.
+
+import "io"
+
+fn main() -> int {
+    // This line SHOULD cause a TypeChecker error:
+    // ternary operator type mismatch: 'int' vs 'str'
+    let x = true ? 10 : "hello"
+
+    io.println("This line should never be reached - compilation should fail")
+    return 0
+}
