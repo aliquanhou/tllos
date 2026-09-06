@@ -122,6 +122,41 @@ jobs:
         shell: cmd
         run: scripts\run-tests.bat
 
+      # === P0-TLL-LANGUAGE-FUNDAMENTAL Phase 4: Behavior Evidence Closure ===
+      - name: Phase 4 - Memory Behavior Test (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/memory-semantics-test.tll -o tests/memory-semantics-test.tllbc
+          host/c/tllvm tests/memory-semantics-test.tllbc 2>&1 | tee /tmp/phase4_memory.log || true
+
+      - name: Phase 4 - Evaluation Behavior Test (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/evaluation-semantics-test.tll -o tests/evaluation-semantics-test.tllbc
+          host/c/tllvm tests/evaluation-semantics-test.tllbc 2>&1 | tee /tmp/phase4_evaluation.log || true
+
+      - name: Phase 4 - Ternary Acceptance Test (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/ternary-acceptance-test.tll -o tests/ternary-acceptance-test.tllbc
+          host/c/tllvm tests/ternary-acceptance-test.tllbc 2>&1 | tee /tmp/phase4_ternary.log || true
+
+      - name: Phase 4 - Capture TypeChecker Warnings (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          cd compiler
+          ../host/c/tllvm compiler.tllbc 2>&1 | tee /tmp/typechecker_raw.log || true
+          cd ..
+
+      - name: Phase 4 - Upload Evidence Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-evidence-${{ matrix.os }}
+          path: |
+            /tmp/phase4_*.log
+            /tmp/typechecker_raw.log
+          if-no-files-found: warn
+
       # === P0-16.1: TLL Engineering Enforcement Layer ===
       # Validates .tll-engine/ structure, schema, Claim-Evidence matching.
       # This ensures the engineering cognition layer remains consistent with code.
