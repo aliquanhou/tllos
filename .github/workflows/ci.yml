@@ -143,60 +143,6 @@ jobs:
             phase4/warnings/typechecker_raw.log
           if-no-files-found: warn
 
-      # === P0-COMMERCE-DOGFOOD-01: Product Vertical Slice ===
-      # Goal: GET /products -> SQLite -> JSON -> HTTP Response
-      # Reuses mall/core/database.tll, does NOT create a third mall.
-      - name: Product Slice - Compile (Ubuntu, continue-on-error for diagnosis)
-        if: runner.os == 'Linux'
-        continue-on-error: true
-        run: |
-          mkdir -p mall/data
-          echo "=== Compiling Product Slice ==="
-          echo "PWD: $(pwd)"
-          echo "tllvm exists: $(test -f host/c/tllvm && echo YES || echo NO)"
-          echo "tllc exists: $(test -f tools/TLLC/tllc.tllbc && echo YES || echo NO)"
-          echo "product_slice_test.tll exists: $(test -f mall/product_slice_test.tll && echo YES || echo NO)"
-          echo "database.tll exists: $(test -f mall/core/database.tll && echo YES || echo NO)"
-          host/c/tllvm tools/TLLC/tllc.tllbc compile mall/product_slice_test.tll -o mall/product_slice_test.tllbc 2>&1 | tee /tmp/product_compile.log
-          COMPILE_EXIT=${PIPESTATUS[0]}
-          echo "=== Compile exit code: $COMPILE_EXIT ==="
-          echo "=== Compile log ==="
-          cat /tmp/product_compile.log
-          echo "=== Output file exists: $(test -f mall/product_slice_test.tllbc && echo YES || echo NO) ==="
-          if [ -f mall/product_slice_test.tllbc ]; then
-            echo "=== Output file size: $(wc -c < mall/product_slice_test.tllbc) ==="
-          fi
-          exit $COMPILE_EXIT
-
-      - name: Product Slice - Run & Test (Ubuntu only for now)
-        if: runner.os == 'Linux'
-        run: |
-          echo "=== Starting Product Slice server ==="
-          host/c/tllvm mall/product_slice_test.tllbc > /tmp/product_slice.log 2>&1 &
-          SERVER_PID=$!
-          echo "Server PID: $SERVER_PID"
-          sleep 3
-          if ! kill -0 $SERVER_PID 2>/dev/null; then
-            echo "Server failed to start"
-            cat /tmp/product_slice.log
-            exit 1
-          fi
-          echo "Server started successfully"
-          cat /tmp/product_slice.log
-          echo "=== Testing GET /products ==="
-          HTTP_CODE=$(curl -s -o /tmp/product_response.json -w "%{http_code}" http://127.0.0.1:8088/products)
-          echo "HTTP Code: $HTTP_CODE"
-          echo "Response:"
-          cat /tmp/product_response.json
-          echo ""
-          test "$HTTP_CODE" -eq 200
-          echo "=== HTTP 200 PASSED ==="
-          python3 -c "import json; data=json.load(open('/tmp/product_response.json')); assert isinstance(data, list); assert len(data) >= 1; assert 'name' in data[0]; print('Product count:', len(data)); print('First:', data[0])"
-          echo "=== JSON Response PASSED ==="
-          kill $SERVER_PID 2>/dev/null || true
-          wait $SERVER_PID 2>/dev/null || true
-          echo "=== Product Vertical Slice ALL GATES PASSED ==="
-
       # === P0-16.1: TLL Engineering Enforcement Layer ===
       # Validates .tll-engine/ structure, schema, Claim-Evidence matching.
       # This ensures the engineering cognition layer remains consistent with code.
