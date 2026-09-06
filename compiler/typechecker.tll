@@ -319,7 +319,17 @@ fn tc_checkExpression(expr: map) -> map {
     if kind == "Ternary" {
         tc_checkExpression(expr["condition"])
         let consType = tc_checkExpression(expr["consequent"])
-        tc_checkExpression(expr["alternate"])
+        let altType = tc_checkExpression(expr["alternate"])
+        if consType["name"] == altType["name"] {
+            return consType
+        }
+        if isNumeric(consType) and isNumeric(altType) {
+            if consType["name"] == "float" or altType["name"] == "float" {
+                return typeFloat()
+            }
+            return typeInt()
+        }
+        tc_error(expr["line"], "ternary operator type mismatch: '" + consType["name"] + "' vs '" + altType["name"] + "'")
         return consType
     }
 
