@@ -1,0 +1,87 @@
+// P1-NEXT L2: HTTP Server Gate Test - Server side
+// Defines handler with test endpoints. Started by test_http_server.py.
+
+fn handler(req) {
+    let path = req.path
+    let method = req.method
+
+    // Gate 1: Basic GET / returns 200 + body
+    if (path == "/" && method == "GET") {
+        return {
+            status: 200,
+            contentType: "text/plain",
+            body: "Hello TLL HTTP Server"
+        }
+    }
+
+    // Gate 2: Query parsing /search?q=test&page=2
+    if (path == "/search") {
+        let q = req.queryMap["q"]
+        let page = req.queryMap["page"]
+        return {
+            status: 200,
+            contentType: "application/json",
+            body: "{\"q\":\"" + q + "\",\"page\":\"" + page + "\"}"
+        }
+    }
+
+    // Gate 3: Headers echo /headers returns User-Agent
+    if (path == "/headers") {
+        let ua = req.headers["User-Agent"]
+        return {
+            status: 200,
+            contentType: "text/plain",
+            body: "UA: " + ua
+        }
+    }
+
+    // Gate 4: Custom response headers + 201 status
+    if (path == "/create") {
+        return {
+            status: 201,
+            contentType: "application/json",
+            headers: {
+                "X-Custom-Header": "TLL-OS",
+                "X-Request-Method": method
+            },
+            body: "{\"created\":true}"
+        }
+    }
+
+    // Gate 5: 404 status
+    if (path == "/notfound") {
+        return {
+            status: 404,
+            contentType: "text/plain",
+            body: "Not Found"
+        }
+    }
+
+    // Gate 6: POST body echo
+    if (path == "/echo" && method == "POST") {
+        return {
+            status: 200,
+            contentType: "text/plain",
+            body: "Echo: " + req.body
+        }
+    }
+
+    // Gate 7: 500 error status
+    if (path == "/error") {
+        return {
+            status: 500,
+            contentType: "text/plain",
+            body: "Internal Error"
+        }
+    }
+
+    // Default 404
+    return {
+        status: 404,
+        contentType: "text/plain",
+        body: "Unknown path: " + path
+    }
+}
+
+io.println("HTTP Server Gate Test starting on :18091")
+http.serve("0.0.0.0:18091", handler)
