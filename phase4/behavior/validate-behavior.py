@@ -172,6 +172,9 @@ def validate_behavior(result):
         print(f"\n=== VALIDATION FAILED: {len(errors)} error(s) ===")
         for e in errors[:20]:
             print(f"  - {e}")
+        # Output all errors as GitHub Actions annotations
+        for e in errors[:20]:
+            print(f"::error::VALIDATOR [{meta['test_name']}]: {e}", file=sys.stderr)
         return 1, errors
     else:
         print(f"\n=== VALIDATION PASSED ===")
