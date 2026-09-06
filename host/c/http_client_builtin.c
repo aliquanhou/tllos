@@ -949,8 +949,9 @@ static TLLValue posix_request(const char *method, const char *url,
     }
 
     /* Decide: cache connection for reuse, or close it */
-    if (respLen > 0 && !serverWantsClose && (contentLength >= 0 || isChunked)) {
-        /* Response was fully framed (Content-Length or chunked) and server allows keep-alive */
+    /* HTTPS reuse temporarily disabled: SSL session state needs more careful handling.
+       HTTP connections are cached; HTTPS creates new connection per request (pre-Level4 behavior). */
+    if (respLen > 0 && !serverWantsClose && (contentLength >= 0 || isChunked) && !pu.isHttps) {
         conn_cache_put(pu.host, pu.port, pu.isHttps, insecure, &conn);
     } else {
         http_close(&conn);
