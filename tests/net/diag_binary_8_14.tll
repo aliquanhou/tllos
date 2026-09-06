@@ -1,0 +1,32 @@
+// P1-04 macOS Binary Search - Test 8 (connection refused) + Test 14
+// Isolate if Test 8 (connection refused) causes pollution for Test 14
+io.println("=== P1-04 macOS Binary Search: Test 8 + Test 14 ===")
+io.println("")
+
+let base = "http://127.0.0.1:18080"
+
+// Test 8: Error handling - connection refused (invalid port)
+io.println("--- Test 8: Error handling - connection refused ---")
+let resp8 = httpc.get("http://127.0.0.1:19999/")
+io.println("  status=" + resp8.status + " ok=" + resp8.ok + " error=[" + resp8.error + "]")
+io.println("")
+
+// Test 14: 10 sequential requests (NO output per request to keep fast)
+io.println("--- Test 14: 10 sequential requests ---")
+let allOk = true
+let failedAt = -1
+for i in 1..11 {
+    let r = httpc.get(base + "/status")
+    if r.status != 200 {
+        allOk = false
+        failedAt = i
+        io.println("  req " + i + ": FAILED status=" + r.status + " error=[" + r.error + "]")
+    }
+}
+io.println("")
+io.println("Result: allOk=" + allOk + " failedAt=" + failedAt)
+if allOk {
+    io.println("TEST 8+14 PASSED - pollution NOT from Test 8")
+} else {
+    io.println("TEST 8+14 FAILED at req " + failedAt + " - pollution IS from Test 8!")
+}
