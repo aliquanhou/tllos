@@ -93,6 +93,16 @@ jobs:
             exit 1
           fi
           echo "::notice::HTTP Server Gate test PASSED (19/19)"
+      - name: Database Abstraction Gate Test (P1-NEXT L3)
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/db/gate_database.tll -o tests/db/gate_database.tllbc
+          ./host/c/tllvm tests/db/gate_database.tllbc | tee test_output_db.txt
+          if grep -q "ALL DATABASE GATES PASSED" test_output_db.txt; then
+            echo "::notice::Database Gate test PASSED (20/20)"
+          else
+            echo "::error::Database Gate test FAILED"
+            exit 1
+          fi
 
 
       - name: Start test server
@@ -249,6 +259,14 @@ jobs:
           python tests\http\test_http_server.py
           if errorlevel 1 exit /b 1
           echo HTTP Server Gate test PASSED
+      - name: Database Abstraction Gate Test (P1-NEXT L3)
+        shell: cmd
+        run: |
+          .\host\c\tllvm.exe tools\TLLC\tllc_new.tllbc compile tests\db\gate_database.tll -o tests\db\gate_database.tllbc
+          .\host\c\tllvm.exe tests\db\gate_database.tllbc > test_output_db.txt
+          type test_output_db.txt
+          findstr /C:"ALL DATABASE GATES PASSED" test_output_db.txt
+          if errorlevel 1 exit /b 1
 
           if errorlevel 1 exit /b 1
 
@@ -417,6 +435,16 @@ jobs:
             exit 1
           fi
           echo "::notice::HTTP Server Gate test PASSED (19/19)"
+      - name: Database Abstraction Gate Test (P1-NEXT L3)
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/db/gate_database.tll -o tests/db/gate_database.tllbc
+          ./host/c/tllvm tests/db/gate_database.tllbc | tee test_output_db.txt
+          if grep -q "ALL DATABASE GATES PASSED" test_output_db.txt; then
+            echo "::notice::Database Gate test PASSED (20/20)"
+          else
+            echo "::error::Database Gate test FAILED"
+            exit 1
+          fi
 
 
       - name: Start test server

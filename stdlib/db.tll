@@ -1,4 +1,5 @@
-// TLL Mall - Database Core
+// TLL Standard Library - Database Abstraction
+// Extracted from mall/core/database.tll (P1-NEXT L3)
 // Wraps sqlite builtin with higher-level API: connection, query, exec, transaction, migration
 
 // === Connection Management ===
@@ -19,31 +20,11 @@ fn db_close(handle) {
     sqlite.close(handle.raw)
 }
 
-// === Global Connection Manager ===
-// Workaround for TLL closure capture bug in multi-threaded Worker Pool:
-// Captured variables (like `db`) become null inside route handler closures.
-// Solution: use a global function to get a fresh connection per request.
-
-let GLOBAL_DB_PATH = "mall/data/mall.db"
-
-// Get a fresh database connection (call at start of each route handler)
-fn db_get() {
-    return db_open(GLOBAL_DB_PATH)
-}
-
-// Release database connection (call at end of each route handler)
-fn db_release(handle) {
-    if (handle != null) {
-        db_close(handle)
-    }
-}
-
 // === SQL Parameter Escaping (prevents SQL injection) ===
 
 fn db_escapeString(s) {
     if (s == null) { return "NULL" }
     let str = convert.toString(s)
-    // Escape single quotes by doubling them
     let result = ""
     let i = 0
     let len = strings.length(str)
@@ -70,7 +51,7 @@ fn db_escapeValue(v) {
     return db_escapeString(v)
 }
 
-// Build SQL with parameters replaced
+// Build SQL with ? placeholders replaced by escaped parameters
 fn db_buildSQL(sql, params) {
     if (params == null) { return sql }
     if (convert.typeOf(params) != "array") { return sql }
@@ -105,15 +86,6 @@ fn db_queryOne(handle, sql, params) {
     let rows = db_query(handle, sql, params)
     if (arrays.length(rows) == 0) { return null }
     return rows[0]
-}
-
-// Query single value, returns null if no result
-fn db_queryValue(handle, sql, params) {
-    let row = db_queryOne(handle, sql, params)
-    if (row == null) { return null }
-    // Return first value in row
-    let cols = sqlite.columns(handle.raw, "") // not useful, iterate map instead
-    return row
 }
 
 // === Exec (INSERT/UPDATE/DELETE/DDL) ===
@@ -156,10 +128,7 @@ fn db_rollback(handle) {
 // Execute a function within a transaction, auto-commit on success, rollback on error
 fn db_transaction(handle, callback) {
     db_begin(handle)
-    let result = null
-    // Note: TLL doesn't have try/catch that works reliably across builtins,
-    // so we rely on the caller to return an error marker
-    result = callback(handle)
+    let result = callback(handle)
     if (result == null || (convert.typeOf(result) == "map" && result.error != null)) {
         db_rollback(handle)
         return result
@@ -170,12 +139,10 @@ fn db_transaction(handle, callback) {
 
 // === Migration Support ===
 
-// Check if migrations table exists, create if not
 fn db_ensureMigrationsTable(handle) {
     sqlite.exec(handle.raw, "CREATE TABLE IF NOT EXISTS _migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TEXT)")
 }
 
-// Get list of applied migrations
 fn db_getAppliedMigrations(handle) {
     db_ensureMigrationsTable(handle)
     let rows = sqlite.query(handle.raw, "SELECT name FROM _migrations ORDER BY id")
@@ -188,7 +155,6 @@ fn db_getAppliedMigrations(handle) {
     return names
 }
 
-// Check if a migration has been applied
 fn db_migrationApplied(handle, name) {
     let applied = db_getAppliedMigrations(handle)
     let i = 0
@@ -199,7 +165,6 @@ fn db_migrationApplied(handle, name) {
     return false
 }
 
-// Apply a single migration
 fn db_applyMigration(handle, name, sql) {
     if (db_migrationApplied(handle, name)) {
         return {skipped: true, name: name}
