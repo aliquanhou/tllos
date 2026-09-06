@@ -459,6 +459,57 @@ typedef struct {
     const char *tlsError;
 } HttpConnection;
 
+/* ===== Connection Reuse Cache (Level 4) =====
+   Caches the most recent idle connection for same host:port:https.
+   Only one entry: "last idle connection" strategy, not a full pool. */
+typedef struct {
+    char host[256];
+    int port;
+    int isHttps;
+    int insecure;
+    HttpConnection conn;
+    int valid;
+} ConnCacheEntry;
+
+static ConnCacheEntry g_conn_cache = {0};
+
+/* Global SSL_CTX for Linux - reused across all HTTPS connections */
+#if !defined(__APPLE__) && !defined(_WIN32)
+static SSL_CTX *g_ssl_ctx = NULL;
+static int g_ssl_ctx_insecure = -1; /* -1 = uninitialized, 0/1 = current setting */
+#endif
+
+static void conn_cache_clear(void) {
+    if (g_conn_cache.valid) {
+        http_close(&g_conn_cache.conn);
+        g_conn_cache.valid = 0;
+    }
+}
+
+static int conn_cache_try_get(const char *host, int port, int isHttps, int insecure, HttpConnection *out) {
+    if (!g_conn_cache.valid) return 0;
+    if (g_conn_cache.port != port) return 0;
+    if (g_conn_cache.isHttps != isHttps) return 0;
+    if (g_conn_cache.insecure != insecure) return 0;
+    if (strncmp(g_conn_cache.host, host, sizeof(g_conn_cache.host)) != 0) return 0;
+    *out = g_conn_cache.conn;
+    g_conn_cache.valid = 0; /* take ownership out of cache */
+    return 1;
+}
+
+static void conn_cache_put(const char *host, int port, int isHttps, int insecure, HttpConnection *conn) {
+    if (g_conn_cache.valid) {
+        http_close(&g_conn_cache.conn);
+    }
+    g_conn_cache.conn = *conn;
+    strncpy(g_conn_cache.host, host, sizeof(g_conn_cache.host) - 1);
+    g_conn_cache.host[sizeof(g_conn_cache.host) - 1] = '\0';
+    g_conn_cache.port = port;
+    g_conn_cache.isHttps = isHttps;
+    g_conn_cache.insecure = insecure;
+    g_conn_cache.valid = 1;
+}
+
 static int http_connect(HttpConnection *conn, const char *host, int port, int isHttps, int timeoutMs, int insecure) {
     conn->sock = -1;
     conn->ssl = NULL;
@@ -554,31 +605,37 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
     }
 #else
     if (isHttps) {
-        SSL_library_init();
-        SSL_load_error_strings();
-        OpenSSL_add_all_algorithms();
+        /* Global SSL_CTX reuse: reinitialize only when insecure setting changes */
+        if (g_ssl_ctx == NULL || g_ssl_ctx_insecure != insecure) {
+            if (g_ssl_ctx != NULL) SSL_CTX_free(g_ssl_ctx);
+            SSL_library_init();
+            SSL_load_error_strings();
+            OpenSSL_add_all_algorithms();
 
-        conn->ctx = SSL_CTX_new(SSLv23_client_method());
-        if (!conn->ctx) {
-            close(conn->sock);
-            conn->sock = -1;
-            return -1;
-        }
+            g_ssl_ctx = SSL_CTX_new(SSLv23_client_method());
+            if (!g_ssl_ctx) {
+                close(conn->sock);
+                conn->sock = -1;
+                return -1;
+            }
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000L
-        SSL_CTX_set_min_proto_version(conn->ctx, TLS1_2_VERSION);
+            SSL_CTX_set_min_proto_version(g_ssl_ctx, TLS1_2_VERSION);
 #endif
 
-        if (insecure) {
-            SSL_CTX_set_verify(conn->ctx, SSL_VERIFY_NONE, NULL);
-        } else {
-            SSL_CTX_set_verify(conn->ctx, SSL_VERIFY_PEER, NULL);
-            SSL_CTX_set_default_verify_paths(conn->ctx);
+            if (insecure) {
+                SSL_CTX_set_verify(g_ssl_ctx, SSL_VERIFY_NONE, NULL);
+            } else {
+                SSL_CTX_set_verify(g_ssl_ctx, SSL_VERIFY_PEER, NULL);
+                SSL_CTX_set_default_verify_paths(g_ssl_ctx);
+            }
+            g_ssl_ctx_insecure = insecure;
         }
+        conn->ctx = g_ssl_ctx;
 
         conn->ssl = SSL_new(conn->ctx);
         if (!conn->ssl) {
-            SSL_CTX_free(conn->ctx);
+            /* SSL_CTX is global, do not free */
             close(conn->sock);
             conn->sock = -1;
             return -1;
@@ -597,7 +654,7 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
                 conn->tlsError = "TLS handshake failed";
             }
             SSL_free(conn->ssl);
-            SSL_CTX_free(conn->ctx);
+            /* SSL_CTX is global, do not free */
             close(conn->sock);
             conn->sock = -1;
             return -1;
@@ -687,7 +744,7 @@ static void http_close(HttpConnection *conn) {
 #else
         SSL_shutdown(conn->ssl);
         SSL_free(conn->ssl);
-        SSL_CTX_free(conn->ctx);
+        /* SSL_CTX is global (g_ssl_ctx), do NOT free per-connection */
 #endif
     }
     if (conn->sock >= 0) {
@@ -724,9 +781,16 @@ static TLLValue posix_request(const char *method, const char *url,
 
     if (timeoutMs <= 0) timeoutMs = 30000;
 
+    /* Determine if method is idempotent (safe for automatic reconnect retry) */
+    int isIdempotent = (strcasecmp(method, "GET") == 0 || strcasecmp(method, "HEAD") == 0 ||
+                        strcasecmp(method, "DELETE") == 0 || strcasecmp(method, "PUT") == 0);
+
     HttpConnection conn;
-    if (http_connect(&conn, pu.host, pu.port, pu.isHttps, timeoutMs, insecure) != 0) {
-        return make_error_response(conn.tlsError ? conn.tlsError : "Connection failed");
+    int fromCache = conn_cache_try_get(pu.host, pu.port, pu.isHttps, insecure, &conn);
+    if (!fromCache) {
+        if (http_connect(&conn, pu.host, pu.port, pu.isHttps, timeoutMs, insecure) != 0) {
+            return make_error_response(conn.tlsError ? conn.tlsError : "Connection failed");
+        }
     }
 
     /* Build request */
@@ -749,9 +813,9 @@ static TLLValue posix_request(const char *method, const char *url,
     reqLen += snprintf(reqBuf + reqLen, sizeof(reqBuf) - reqLen,
         "Accept: */*\r\n");
 
-    /* Connection: close (simpler) */
+    /* Connection: keep-alive for connection reuse (Level 4) */
     reqLen += snprintf(reqBuf + reqLen, sizeof(reqBuf) - reqLen,
-        "Connection: close\r\n");
+        "Connection: keep-alive\r\n");
 
     /* Custom headers */
     char headerBuf[8192];
@@ -780,8 +844,18 @@ static TLLValue posix_request(const char *method, const char *url,
         reqLen += bodyLen;
     }
 
-    /* Send request */
-    if (http_send(&conn, reqBuf, reqLen) != reqLen) {
+    /* Send request - if cached connection fails, reconnect and retry once (idempotent only) */
+    int sendOk = (http_send(&conn, reqBuf, reqLen) == reqLen);
+    if (!sendOk && fromCache && isIdempotent) {
+        /* Cached connection may have been closed by server - reconnect and retry */
+        http_close(&conn);
+        fromCache = 0;
+        if (http_connect(&conn, pu.host, pu.port, pu.isHttps, timeoutMs, insecure) != 0) {
+            return make_error_response(conn.tlsError ? conn.tlsError : "Connection failed after reconnect");
+        }
+        sendOk = (http_send(&conn, reqBuf, reqLen) == reqLen);
+    }
+    if (!sendOk) {
         http_close(&conn);
         return make_error_response("Failed to send request");
     }
@@ -846,7 +920,37 @@ static TLLValue posix_request(const char *method, const char *url,
         /* Safety: don't read more than 16MB */
         if (respLen > 16 * 1024 * 1024) break;
     }
-    http_close(&conn);
+
+    /* Check if server requested Connection: close */
+    int serverWantsClose = 0;
+    if (headerEnd >= 0) {
+        char headerLine[4096];
+        const char *hp = respBuf;
+        const char *he = strstr(respBuf, "\r\n\r\n");
+        if (he) {
+            while (hp < he) {
+                const char *lineEnd = strstr(hp, "\r\n");
+                if (!lineEnd || lineEnd > he) break;
+                int lineLen = (int)(lineEnd - hp);
+                if (lineLen > 0 && lineLen < (int)sizeof(headerLine)) {
+                    memcpy(headerLine, hp, lineLen);
+                    headerLine[lineLen] = '\0';
+                    if (strncasecmp(headerLine, "Connection:", 11) == 0) {
+                        if (strstr(headerLine, "close")) serverWantsClose = 1;
+                    }
+                }
+                hp = lineEnd + 2;
+            }
+        }
+    }
+
+    /* Decide: cache connection for reuse, or close it */
+    if (respLen > 0 && !serverWantsClose && (contentLength >= 0 || isChunked)) {
+        /* Response was fully framed (Content-Length or chunked) and server allows keep-alive */
+        conn_cache_put(pu.host, pu.port, pu.isHttps, insecure, &conn);
+    } else {
+        http_close(&conn);
+    }
 
     if (respLen == 0) {
         free(respBuf);

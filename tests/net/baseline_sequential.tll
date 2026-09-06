@@ -1,0 +1,51 @@
+// P1-04 Level 4 Baseline Diagnostic
+// Tests rapid sequential requests with the OLD implementation (no connection reuse)
+
+io.println("=== P1-04 Level 4 Baseline Diagnostic ===")
+io.println("Implementation: OLD (no connection reuse, Connection: close)")
+io.println("")
+
+let base = "http://127.0.0.1:18080"
+
+fn run_gradient(name, count) {
+    io.println("--- " + name + ": " + count + " rapid sequential requests ---")
+
+    // Reset server stats
+    httpc.get(base + "/reset-stats")
+
+    let success = 0
+    let failed = 0
+    let firstFail = 0
+    let i = 1
+
+    while i <= count {
+        let r = httpc.get(base + "/status")
+        if r.status == 200 {
+            success = success + 1
+        } else {
+            failed = failed + 1
+            if firstFail == 0 {
+                firstFail = i
+                io.println("  First failure at req " + i + ": status=" + r.status + " error=[" + r.error + "]")
+            }
+        }
+        i = i + 1
+    }
+
+    // Query server stats
+    let stats = httpc.get(base + "/stats")
+    io.println("  Result: " + success + "/" + count + " success, " + failed + " failed")
+    if firstFail > 0 {
+        io.println("  First failure at request: " + firstFail)
+    }
+    io.println("  Server stats: " + stats.body)
+    io.println("")
+}
+
+// Test gradients
+run_gradient("Baseline 20", 20)
+run_gradient("Baseline 50", 50)
+run_gradient("Baseline 100", 100)
+
+io.println("=== Baseline Complete ===")
+io.println("NOTE: With Connection: close, server connections should ~= requests")
