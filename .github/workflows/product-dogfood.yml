@@ -25,30 +25,30 @@ jobs:
           scripts/bootstrap-tllc.sh
           test -f tools/TLLC/tllc.tllbc
 
-      - name: Compile product_debug3.tll
+      - name: Compile product_debug4.tll
         run: |
-          echo "=== Compiling product_debug3.tll ==="
-          host/c/tllvm tools/TLLC/tllc.tllbc compile mall/product_debug3.tll -o /tmp/product_debug3.tllbc
+          echo "=== Compiling product_debug4.tll ==="
+          host/c/tllvm tools/TLLC/tllc.tllbc compile mall/product_debug4.tll -o /tmp/product_debug4.tllbc
           echo "Compile exit: $?"
-          ls -la /tmp/product_debug3.tllbc
+          ls -la /tmp/product_debug4.tllbc
 
-      - name: Run product_debug3.tll and test HTTP
+      - name: Run product_debug4.tll and test HTTP
         run: |
-          echo "=== Starting product_debug3 server ==="
-          host/c/tllvm /tmp/product_debug3.tllbc > /tmp/product_debug3.log 2>&1 &
+          echo "=== Starting product_debug4 server ==="
+          host/c/tllvm /tmp/product_debug4.tllbc > /tmp/product_debug4.log 2>&1 &
           SERVER_PID=$!
           echo "Server PID: $SERVER_PID"
           sleep 3
 
           echo "=== Server log ==="
-          cat /tmp/product_debug3.log
+          cat /tmp/product_debug4.log
 
           echo "=== Check if server is running ==="
           if kill -0 $SERVER_PID 2>/dev/null; then
             echo "Server is running"
           else
             echo "Server FAILED to start"
-            cat /tmp/product_debug3.log
+            cat /tmp/product_debug4.log
             exit 1
           fi
 
@@ -61,7 +61,7 @@ jobs:
           echo ""
 
           echo "=== Server log after requests ==="
-          cat /tmp/product_debug3.log
+          cat /tmp/product_debug4.log
 
           echo "=== Killing server ==="
           kill $SERVER_PID 2>/dev/null || true
@@ -74,5 +74,5 @@ jobs:
         with:
           name: product-debug-logs
           path: |
-            /tmp/product_debug3.log
+            /tmp/product_debug4.log
           if-no-files-found: warn
