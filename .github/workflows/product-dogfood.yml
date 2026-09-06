@@ -25,30 +25,30 @@ jobs:
           scripts/bootstrap-tllc.sh
           test -f tools/TLLC/tllc.tllbc
 
-      - name: Compile product_debug.tll
+      - name: Compile product_debug2.tll
         run: |
-          echo "=== Compiling product_debug.tll ==="
-          host/c/tllvm tools/TLLC/tllc.tllbc compile mall/product_debug.tll -o /tmp/product_debug.tllbc
+          echo "=== Compiling product_debug2.tll ==="
+          host/c/tllvm tools/TLLC/tllc.tllbc compile mall/product_debug2.tll -o /tmp/product_debug2.tllbc
           echo "Compile exit: $?"
-          ls -la /tmp/product_debug.tllbc
+          ls -la /tmp/product_debug2.tllbc
 
-      - name: Run product_debug.tll and test HTTP
+      - name: Run product_debug2.tll and test HTTP
         run: |
-          echo "=== Starting product_debug server ==="
-          host/c/tllvm /tmp/product_debug.tllbc > /tmp/product_debug.log 2>&1 &
+          echo "=== Starting product_debug2 server ==="
+          host/c/tllvm /tmp/product_debug2.tllbc > /tmp/product_debug2.log 2>&1 &
           SERVER_PID=$!
           echo "Server PID: $SERVER_PID"
           sleep 3
 
           echo "=== Server log ==="
-          cat /tmp/product_debug.log
+          cat /tmp/product_debug2.log
 
           echo "=== Check if server is running ==="
           if kill -0 $SERVER_PID 2>/dev/null; then
             echo "Server is running"
           else
             echo "Server FAILED to start"
-            cat /tmp/product_debug.log
+            cat /tmp/product_debug2.log
             exit 1
           fi
 
@@ -56,9 +56,12 @@ jobs:
           curl -s http://127.0.0.1:8088/health
           echo ""
 
-          echo "=== Test GET /products ==="
+          echo "=== Test GET /products (JSON) ==="
           curl -s http://127.0.0.1:8088/products
           echo ""
+
+          echo "=== Server log after requests ==="
+          cat /tmp/product_debug2.log
 
           echo "=== Killing server ==="
           kill $SERVER_PID 2>/dev/null || true
@@ -71,5 +74,5 @@ jobs:
         with:
           name: product-debug-logs
           path: |
-            /tmp/product_debug.log
+            /tmp/product_debug2.log
           if-no-files-found: warn
