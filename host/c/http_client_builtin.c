@@ -929,7 +929,10 @@ retry_request:
 
     /* Debug: show raw response info */
     if (respLen > 0) {
-        fprintf(stderr, "[DEBUG] respLen=%d, first 120 bytes: %.120s\n", respLen, respBuf);
+        const char *he = strstr(respBuf, "\r\n\r\n");
+        int hdrLen = he ? (int)(he - respBuf) + 4 : respLen;
+        if (hdrLen > 512) hdrLen = 512;
+        fprintf(stderr, "[DEBUG] respLen=%d, headers (%d bytes):\n%.*s\n---END HEADERS---\n", respLen, hdrLen, hdrLen, respBuf);
     } else {
         fprintf(stderr, "[DEBUG] respLen=0 (empty response)\n");
     }
