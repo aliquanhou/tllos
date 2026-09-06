@@ -121,9 +121,16 @@ jobs:
           python3 tests/net/test_https_server.py 18443 &
           HTTPS_PID=$!
           echo $HTTPS_PID > /tmp/https_server.pid
-          sleep 2
-          curl -k -s https://127.0.0.1:18443/status
-          echo ""
+          sleep 3
+          for i in 1 2 3 4 5; do
+            if curl -k -s --max-time 5 https://127.0.0.1:18443/status; then
+              echo ""
+              echo "HTTPS server ready after attempt $i"
+              break
+            fi
+            echo "Attempt $i failed, retrying..."
+            sleep 2
+          done
 
       - name: Compile Level 3 test
         run: |
@@ -404,9 +411,16 @@ jobs:
           python3 tests/net/test_https_server.py 18443 &
           HTTPS_PID=$!
           echo $HTTPS_PID > /tmp/https_server.pid
-          sleep 2
-          curl -k -s https://127.0.0.1:18443/status
-          echo ""
+          sleep 3
+          for i in 1 2 3 4 5; do
+            if curl -k -s --max-time 5 https://127.0.0.1:18443/status; then
+              echo ""
+              echo "HTTPS server ready after attempt $i"
+              break
+            fi
+            echo "Attempt $i failed, retrying..."
+            sleep 2
+          done
 
       - name: Compile Level 3 test
         run: |
