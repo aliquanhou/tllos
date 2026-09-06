@@ -41,10 +41,15 @@ FAILED_STEPS=()
 run_with_tee() {
     local log_file="$1"
     shift
+    local exit_code
     set +e
-    "$@" 2>&1 | tee "$log_file"
-    local exit_code=${PIPESTATUS[0]}
+    # Direct redirection instead of tee to avoid pipe buffering timing issues
+    "$@" > "$log_file" 2>&1
+    exit_code=$?
     set -e
+    # Sync to ensure all data is flushed to disk before reading
+    sync "$log_file" 2>/dev/null || true
+    cat "$log_file"
     RUN_EXIT_CODE=$exit_code
 }
 
@@ -76,6 +81,14 @@ else
         OVERALL_STATUS=1
         FAILED_STEPS+=("memory_runtime")
     fi
+
+    # DEBUG: Dump log file content before validation
+    echo "::error::DEBUG memory_run.log exists: $(test -f "$LOG_DIR/memory_run.log" && echo YES || echo NO), size: $(stat -f%z "$LOG_DIR/memory_run.log" 2>/dev/null || stat -c%s "$LOG_DIR/memory_run.log" 2>/dev/null || echo unknown)" >&2
+    echo "::error::DEBUG memory_run.log first 5 lines:" >&2
+    head -5 "$LOG_DIR/memory_run.log" 2>/dev/null | while IFS= read -r line; do echo "::error::  $line" >&2; done
+    echo "::error::DEBUG memory_run.log last 5 lines:" >&2
+    tail -5 "$LOG_DIR/memory_run.log" 2>/dev/null | while IFS= read -r line; do echo "::error::  $line" >&2; done
+    echo "::error::DEBUG memory_run.log EVIDENCE count: $(grep -c '^EVIDENCE:' "$LOG_DIR/memory_run.log" 2>/dev/null || echo 0)" >&2
 
     set +e
     $PYTHON "$BEHAVIOR_DIR/validate-behavior.py" \
