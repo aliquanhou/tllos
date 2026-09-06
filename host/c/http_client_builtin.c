@@ -250,7 +250,7 @@ static TLLValue make_error_response(const char *errorMsg) {
 #ifdef _WIN32
 
 static TLLValue winhttp_request(const char *method, const char *url,
-                                  const char *body, TLLValue headersMap, int timeoutMs) {
+                                  const char *body, TLLValue headersMap, int timeoutMs, int insecure) {
     ParsedUrl pu;
     if (parse_url(url, &pu) != 0) {
         return make_error_response("Invalid URL");
@@ -287,6 +287,15 @@ static TLLValue winhttp_request(const char *method, const char *url,
         WinHttpCloseHandle(hConnect);
         WinHttpCloseHandle(hSession);
         return make_error_response("WinHttpOpenRequest failed");
+    }
+
+    /* Insecure mode: skip certificate validation (TEST ONLY, never default) */
+    if (insecure && pu.isHttps) {
+        DWORD secFlags = SECURITY_FLAG_IGNORE_UNKNOWN_CA
+                       | SECURITY_FLAG_IGNORE_CERT_DATE_INVALID
+                       | SECURITY_FLAG_IGNORE_CERT_CN_INVALID
+                       | SECURITY_FLAG_IGNORE_CERT_WRONG_USAGE;
+        WinHttpSetOption(hRequest, WINHTTP_OPTION_SECURITY_FLAGS, &secFlags, sizeof(secFlags));
     }
 
     /* Build custom headers */
@@ -447,15 +456,17 @@ typedef struct {
     SSL_CTX *ctx;
 #endif
     int useSsl;
+    const char *tlsError;
 } HttpConnection;
 
-static int http_connect(HttpConnection *conn, const char *host, int port, int isHttps, int timeoutMs) {
+static int http_connect(HttpConnection *conn, const char *host, int port, int isHttps, int timeoutMs, int insecure) {
     conn->sock = -1;
     conn->ssl = NULL;
 #if !defined(__APPLE__)
     conn->ctx = NULL;
 #endif
     conn->useSsl = isHttps;
+    conn->tlsError = NULL;
 
     /* Resolve hostname */
     struct addrinfo hints, *res;
@@ -509,6 +520,10 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
         SSLSetIOFuncs(conn->ssl, st_read_func, st_write_func);
         SSLSetConnection(conn->ssl, &conn->sock);
         SSLSetPeerDomainName(conn->ssl, host, strlen(host));
+        /* Insecure mode: break on server auth and always continue (TEST ONLY) */
+        if (insecure) {
+            SSLSetSessionOption(conn->ssl, kSSLSessionOptionBreakOnServerAuth, true);
+        }
         OSStatus status;
         int handshake_retries = 0;
         do {
@@ -523,8 +538,13 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
                     if (w <= 0) { usleep(10000); }
                 }
             }
+            /* Insecure mode: continue past server auth trust evaluation */
+            if (insecure && status == errSSLServerAuthCompleted) {
+                status = errSSLWouldBlock;
+            }
         } while (status == errSSLWouldBlock);
         if (status != noErr) {
+            conn->tlsError = "TLS handshake failed";
             CFRelease(conn->ssl);
             conn->ssl = NULL;
             close(conn->sock);
@@ -549,7 +569,12 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
         SSL_CTX_set_min_proto_version(conn->ctx, TLS1_2_VERSION);
 #endif
 
-        SSL_CTX_set_verify(conn->ctx, SSL_VERIFY_NONE, NULL);
+        if (insecure) {
+            SSL_CTX_set_verify(conn->ctx, SSL_VERIFY_NONE, NULL);
+        } else {
+            SSL_CTX_set_verify(conn->ctx, SSL_VERIFY_PEER, NULL);
+            SSL_CTX_set_default_verify_paths(conn->ctx);
+        }
 
         conn->ssl = SSL_new(conn->ctx);
         if (!conn->ssl) {
@@ -563,6 +588,14 @@ static int http_connect(HttpConnection *conn, const char *host, int port, int is
         SSL_set_tlsext_host_name(conn->ssl, host);
 
         if (SSL_connect(conn->ssl) != 1) {
+            unsigned long err = ERR_get_error();
+            if (err) {
+                static char errBuf[256];
+                ERR_error_string_n(err, errBuf, sizeof(errBuf));
+                conn->tlsError = errBuf;
+            } else {
+                conn->tlsError = "TLS handshake failed";
+            }
             SSL_free(conn->ssl);
             SSL_CTX_free(conn->ctx);
             close(conn->sock);
@@ -683,7 +716,7 @@ static void http_close(HttpConnection *conn) {
 /* ===== POSIX HTTP request ===== */
 
 static TLLValue posix_request(const char *method, const char *url,
-                                const char *body, TLLValue headersMap, int timeoutMs) {
+                                const char *body, TLLValue headersMap, int timeoutMs, int insecure) {
     ParsedUrl pu;
     if (parse_url(url, &pu) != 0) {
         return make_error_response("Invalid URL");
@@ -692,8 +725,8 @@ static TLLValue posix_request(const char *method, const char *url,
     if (timeoutMs <= 0) timeoutMs = 30000;
 
     HttpConnection conn;
-    if (http_connect(&conn, pu.host, pu.port, pu.isHttps, timeoutMs) != 0) {
-        return make_error_response("Connection failed");
+    if (http_connect(&conn, pu.host, pu.port, pu.isHttps, timeoutMs, insecure) != 0) {
+        return make_error_response(conn.tlsError ? conn.tlsError : "Connection failed");
     }
 
     /* Build request */
@@ -905,11 +938,11 @@ static TLLValue posix_request(const char *method, const char *url,
 /* ===== Unified dispatch ===== */
 
 static TLLValue httpc_do_request(const char *method, const char *url,
-                                   const char *body, TLLValue headersMap, int timeoutMs) {
+                                   const char *body, TLLValue headersMap, int timeoutMs, int insecure) {
 #ifdef _WIN32
-    return winhttp_request(method, url, body, headersMap, timeoutMs);
+    return winhttp_request(method, url, body, headersMap, timeoutMs, insecure);
 #else
-    return posix_request(method, url, body, headersMap, timeoutMs);
+    return posix_request(method, url, body, headersMap, timeoutMs, insecure);
 #endif
 }
 
@@ -923,40 +956,40 @@ TLLValue httpc_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount) 
     if (idx == 200) { /* httpc.get(url, headers?) */
         const char *url = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
         TLLValue headers = (argCount > 1) ? args[1] : tll_null();
-        return httpc_do_request("GET", url, NULL, headers, 30000);
+        return httpc_do_request("GET", url, NULL, headers, 30000, 0);
     }
 
     if (idx == 201) { /* httpc.post(url, body, headers?) */
         const char *url = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
         const char *body = (argCount > 1 && args[1].type == TLL_STRING) ? args[1].as.string : "";
         TLLValue headers = (argCount > 2) ? args[2] : tll_null();
-        return httpc_do_request("POST", url, body, headers, 30000);
+        return httpc_do_request("POST", url, body, headers, 30000, 0);
     }
 
     if (idx == 202) { /* httpc.put(url, body, headers?) */
         const char *url = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
         const char *body = (argCount > 1 && args[1].type == TLL_STRING) ? args[1].as.string : "";
         TLLValue headers = (argCount > 2) ? args[2] : tll_null();
-        return httpc_do_request("PUT", url, body, headers, 30000);
+        return httpc_do_request("PUT", url, body, headers, 30000, 0);
     }
 
     if (idx == 203) { /* httpc.delete(url, headers?) */
         const char *url = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
         TLLValue headers = (argCount > 1) ? args[1] : tll_null();
-        return httpc_do_request("DELETE", url, NULL, headers, 30000);
+        return httpc_do_request("DELETE", url, NULL, headers, 30000, 0);
     }
 
     if (idx == 204) { /* httpc.head(url, headers?) */
         const char *url = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
         TLLValue headers = (argCount > 1) ? args[1] : tll_null();
-        return httpc_do_request("HEAD", url, NULL, headers, 30000);
+        return httpc_do_request("HEAD", url, NULL, headers, 30000, 0);
     }
 
     if (idx == 205) { /* httpc.patch(url, body, headers?) */
         const char *url = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
         const char *body = (argCount > 1 && args[1].type == TLL_STRING) ? args[1].as.string : "";
         TLLValue headers = (argCount > 2) ? args[2] : tll_null();
-        return httpc_do_request("PATCH", url, body, headers, 30000);
+        return httpc_do_request("PATCH", url, body, headers, 30000, 0);
     }
 
     if (idx == 206) { /* httpc.request(map) - full control */
@@ -984,13 +1017,17 @@ TLLValue httpc_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount) 
         TLLValue tv = map_get(req.as.map, "timeout");
         if (tv.type == TLL_INT) timeout = (int)tv.as.integer;
 
-        return httpc_do_request(method, url, body, headers, timeout);
+        int insecure = 0;
+        TLLValue iv = map_get(req.as.map, "insecure");
+        if (iv.type == TLL_BOOL) insecure = iv.as.boolean ? 1 : 0;
+
+        return httpc_do_request(method, url, body, headers, timeout, insecure);
     }
 
     if (idx == 207) { /* httpc.getJson(url, headers?) - returns parsed JSON */
         const char *url = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
         TLLValue headers = (argCount > 1) ? args[1] : tll_null();
-        TLLValue resp = httpc_do_request("GET", url, NULL, headers, 30000);
+        TLLValue resp = httpc_do_request("GET", url, NULL, headers, 30000, 0);
         TLLValue bodyVal = map_get(resp.as.map, "body");
         if (bodyVal.type == TLL_STRING) {
             /* Try to parse JSON */
@@ -1012,7 +1049,7 @@ TLLValue httpc_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount) 
             map_set(headers.as.map, "Content-Type", tll_string("application/json"));
         }
 
-        TLLValue resp = httpc_do_request("POST", url, body, headers, 30000);
+        TLLValue resp = httpc_do_request("POST", url, body, headers, 30000, 0);
         TLLValue bodyVal = map_get(resp.as.map, "body");
         if (bodyVal.type == TLL_STRING) {
             const char *jsonPtr = bodyVal.as.string;
@@ -1025,7 +1062,7 @@ TLLValue httpc_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount) 
     if (idx == 209) { /* httpc.options(url, headers?) */
         const char *url = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "";
         TLLValue headers = (argCount > 1) ? args[1] : tll_null();
-        return httpc_do_request("OPTIONS", url, NULL, headers, 30000);
+        return httpc_do_request("OPTIONS", url, NULL, headers, 30000, 0);
     }
 
     return make_error_response("Unknown httpc function index");

@@ -14,6 +14,10 @@ on:
       - 'compiler/linker.tll'
       - 'tests/net/gate_http_client_minimal.tll'
       - 'tests/net/gate_http_client_level2.tll'
+      - 'tests/net/gate_http_client_level3.tll'
+      - 'tests/net/test_https_server.py'
+      - 'tests/net/test_cert.pem'
+      - 'tests/net/test_key.pem'
       - 'tests/net/test_server.py'
       - '.github/workflows/p1-04-http-client.yml'
   pull_request:
@@ -111,11 +115,38 @@ jobs:
             exit 1
           fi
 
-      - name: Stop test server
+      - name: Start HTTPS test server
+        run: |
+          python3 tests/net/test_https_server.py 18443 &
+          HTTPS_PID=$!
+          echo $HTTPS_PID > /tmp/https_server.pid
+          sleep 2
+          curl -k -s https://127.0.0.1:18443/status
+          echo ""
+
+      - name: Compile Level 3 test
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/net/gate_http_client_level3.tll -o tests/net/gate_http_client_level3.tllbc
+          ls -la tests/net/gate_http_client_level3.tllbc
+
+      - name: Run Level 3 test (HTTPS/TLS)
+        run: |
+          ./host/c/tllvm tests/net/gate_http_client_level3.tllbc | tee test_output_l3.txt
+          if grep -q "ALL TESTS PASSED" test_output_l3.txt; then
+            echo "::notice::Level 3 HTTPS/TLS test PASSED"
+          else
+            echo "::error::Level 3 test FAILED - ALL TESTS PASSED not found"
+            exit 1
+          fi
+
+      - name: Stop test servers
         if: always()
         run: |
           if [ -f /tmp/test_server.pid ]; then
             kill $(cat /tmp/test_server.pid) 2>/dev/null || true
+          fi
+          if [ -f /tmp/https_server.pid ]; then
+            kill $(cat /tmp/https_server.pid) 2>/dev/null || true
           fi
 
   test-windows:
@@ -216,6 +247,38 @@ jobs:
             echo ::notice::Level 2 POST+Headers+Timeout+Error test PASSED
           )
 
+      - name: Start HTTPS test server
+        shell: powershell
+        run: |
+          $proc = Start-Process -FilePath "python" -ArgumentList "tests\net\test_https_server.py","18443" -PassThru -WindowStyle Hidden
+          Write-Host "HTTPS Server PID: $($proc.Id)"
+          Start-Sleep -Seconds 3
+          try {
+            $r = Invoke-WebRequest -Uri "https://127.0.0.1:18443/status" -SkipCertificateCheck -UseBasicParsing -TimeoutSec 5
+            Write-Host "HTTPS Server OK: $($r.StatusCode)"
+          } catch {
+            curl.exe -k -s https://127.0.0.1:18443/status
+          }
+
+      - name: Compile Level 3 test
+        shell: cmd
+        run: |
+          .\host\c\tllvm.exe tools\TLLC\tllc_new.tllbc compile tests\net\gate_http_client_level3.tll -o tests\net\gate_http_client_level3.tllbc
+          if errorlevel 1 exit /b 1
+
+      - name: Run Level 3 test (HTTPS/TLS)
+        shell: cmd
+        run: |
+          .\host\c\tllvm.exe tests\net\gate_http_client_level3.tllbc > test_output_l3.txt 2>&1
+          type test_output_l3.txt
+          findstr /C:"ALL TESTS PASSED" test_output_l3.txt >nul
+          if errorlevel 1 (
+            echo ::error::Level 3 test FAILED - ALL TESTS PASSED not found
+            exit /b 1
+          ) else (
+            echo ::notice::Level 3 HTTPS/TLS test PASSED
+          )
+
   test-macos:
     name: macOS (Apple Silicon / Intel)
     runs-on: macos-latest
@@ -301,9 +364,36 @@ jobs:
             exit 1
           fi
 
-      - name: Stop test server
+      - name: Start HTTPS test server
+        run: |
+          python3 tests/net/test_https_server.py 18443 &
+          HTTPS_PID=$!
+          echo $HTTPS_PID > /tmp/https_server.pid
+          sleep 2
+          curl -k -s https://127.0.0.1:18443/status
+          echo ""
+
+      - name: Compile Level 3 test
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/net/gate_http_client_level3.tll -o tests/net/gate_http_client_level3.tllbc
+          ls -la tests/net/gate_http_client_level3.tllbc
+
+      - name: Run Level 3 test (HTTPS/TLS)
+        run: |
+          ./host/c/tllvm tests/net/gate_http_client_level3.tllbc | tee test_output_l3.txt
+          if grep -q "ALL TESTS PASSED" test_output_l3.txt; then
+            echo "::notice::Level 3 HTTPS/TLS test PASSED"
+          else
+            echo "::error::Level 3 test FAILED - ALL TESTS PASSED not found"
+            exit 1
+          fi
+
+      - name: Stop test servers
         if: always()
         run: |
           if [ -f /tmp/test_server.pid ]; then
             kill $(cat /tmp/test_server.pid) 2>/dev/null || true
+          fi
+          if [ -f /tmp/https_server.pid ]; then
+            kill $(cat /tmp/https_server.pid) 2>/dev/null || true
           fi
