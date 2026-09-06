@@ -75,6 +75,17 @@ jobs:
         run: |
           ./host/c/tllvm tools/TLLC/tllc.tllbc compile tools/TLLC/main.tll -o tools/TLLC/tllc_new.tllbc
           ls -la tools/TLLC/tllc_new.tllbc
+      - name: File System Gate Test (P1-NEXT L1)
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/fs/gate_file_system.tll -o tests/fs/gate_file_system.tllbc
+          ./host/c/tllvm tests/fs/gate_file_system.tllbc | tee test_output_fs.txt
+          if grep -q "ALL FILE SYSTEM GATES PASSED" test_output_fs.txt; then
+            echo "::notice::File System Gate test PASSED (25/25)"
+          else
+            echo "::error::File System Gate test FAILED"
+            exit 1
+          fi
+
 
       - name: Start test server
         run: |
@@ -216,6 +227,15 @@ jobs:
         shell: cmd
         run: |
           .\host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tools\TLLC\main.tll -o tools\TLLC\tllc_new.tllbc
+      - name: File System Gate Test (P1-NEXT L1)
+        shell: cmd
+        run: |
+          .\host\c\tllvm.exe tools\TLLC\tllc_new.tllbc compile tests\fs\gate_file_system.tll -o tests\fs\gate_file_system.tllbc
+          .\host\c\tllvm.exe tests\fs\gate_file_system.tllbc > test_output_fs.txt
+          type test_output_fs.txt
+          findstr /C:"ALL FILE SYSTEM GATES PASSED" test_output_fs.txt
+          if errorlevel 1 exit /b 1
+
           if errorlevel 1 exit /b 1
 
       - name: Start test server
@@ -365,6 +385,17 @@ jobs:
         run: |
           ./host/c/tllvm tools/TLLC/tllc.tllbc compile tools/TLLC/main.tll -o tools/TLLC/tllc_new.tllbc
           ls -la tools/TLLC/tllc_new.tllbc
+      - name: File System Gate Test (P1-NEXT L1)
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/fs/gate_file_system.tll -o tests/fs/gate_file_system.tllbc
+          ./host/c/tllvm tests/fs/gate_file_system.tllbc | tee test_output_fs.txt
+          if grep -q "ALL FILE SYSTEM GATES PASSED" test_output_fs.txt; then
+            echo "::notice::File System Gate test PASSED (25/25)"
+          else
+            echo "::error::File System Gate test FAILED"
+            exit 1
+          fi
+
 
       - name: Start test server
         run: |

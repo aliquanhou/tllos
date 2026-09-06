@@ -1,0 +1,286 @@
+// P1-NEXT L1: File System Gate Test
+// Tests all 12 fs builtin functions (idx 79-90) with real assertions.
+// Uses temp directory to avoid polluting repo root.
+
+fn main() -> void {
+    let passed = 0
+    let failed = 0
+    let testDir = "fs_gate_test_dir"
+
+    io.println("=== P1-NEXT L1: File System Gate Test ===")
+
+    // Setup: create test directory
+    fs.mkdir(testDir)
+
+    // --- Gate 1: writeFile + readFile roundtrip ---
+    io.println("--- Gate 1: writeFile + readFile ---")
+    let f1 = testDir + "/test1.txt"
+    let content1 = "Hello TLL FS! Line 1"
+    let w1 = fs.writeFile(f1, content1)
+    if w1 == true {
+        io.println("PASS: writeFile returns true")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: writeFile returns true")
+        failed = failed + 1
+    }
+
+    let r1 = fs.readFile(f1)
+    if r1 == content1 {
+        io.println("PASS: readFile returns exact content")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: readFile returns exact content (got: " + r1 + ")")
+        failed = failed + 1
+    }
+
+    // --- Gate 2: exists ---
+    io.println("--- Gate 2: exists ---")
+    if fs.exists(f1) == true {
+        io.println("PASS: exists returns true for created file")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: exists returns true for created file")
+        failed = failed + 1
+    }
+
+    let nonexistent = testDir + "/does_not_exist.txt"
+    if fs.exists(nonexistent) == false {
+        io.println("PASS: exists returns false for nonexistent file")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: exists returns false for nonexistent file")
+        failed = failed + 1
+    }
+
+    // --- Gate 3: appendFile ---
+    io.println("--- Gate 3: appendFile ---")
+    let appendText = " appended content"
+    let a1 = fs.appendFile(f1, appendText)
+    if a1 == true {
+        io.println("PASS: appendFile returns true")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: appendFile returns true")
+        failed = failed + 1
+    }
+
+    let r2 = fs.readFile(f1)
+    let expected2 = content1 + appendText
+    if r2 == expected2 {
+        io.println("PASS: appendFile content matches")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: appendFile content matches (got: " + r2 + ")")
+        failed = failed + 1
+    }
+
+    // --- Gate 4: fileSize ---
+    io.println("--- Gate 4: fileSize ---")
+    let sz = fs.fileSize(f1)
+    let expectedSize = convert.toString(strings.length(expected2))
+    let szStr = convert.toString(sz)
+    if szStr == expectedSize {
+        io.println("PASS: fileSize correct (" + szStr + ")")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: fileSize correct (got: " + szStr + ", expected: " + expectedSize + ")")
+        failed = failed + 1
+    }
+
+    // --- Gate 5: isFile ---
+    io.println("--- Gate 5: isFile ---")
+    if fs.isFile(f1) == true {
+        io.println("PASS: isFile returns true for file")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: isFile returns true for file")
+        failed = failed + 1
+    }
+
+    if fs.isFile(testDir) == false {
+        io.println("PASS: isFile returns false for directory")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: isFile returns false for directory")
+        failed = failed + 1
+    }
+
+    // --- Gate 6: isDir ---
+    io.println("--- Gate 6: isDir ---")
+    if fs.isDir(testDir) == true {
+        io.println("PASS: isDir returns true for directory")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: isDir returns true for directory")
+        failed = failed + 1
+    }
+
+    if fs.isDir(f1) == false {
+        io.println("PASS: isDir returns false for file")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: isDir returns false for file")
+        failed = failed + 1
+    }
+
+    // --- Gate 7: mkdir + listDir ---
+    io.println("--- Gate 7: mkdir + listDir ---")
+    let subDir = testDir + "/subdir"
+    let m1 = fs.mkdir(subDir)
+    if m1 == true {
+        io.println("PASS: mkdir returns true")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: mkdir returns true")
+        failed = failed + 1
+    }
+
+    if fs.isDir(subDir) == true {
+        io.println("PASS: created directory exists")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: created directory exists")
+        failed = failed + 1
+    }
+
+    // Create a second file for listDir test
+    let f2 = testDir + "/test2.txt"
+    fs.writeFile(f2, "second file")
+
+    let entries = fs.listDir(testDir)
+    let entryCount = arrays.length(entries)
+    if entryCount >= 2 {
+        io.println("PASS: listDir returns entries (count: " + convert.toString(entryCount) + ")")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: listDir returns entries (count: " + convert.toString(entryCount) + ")")
+        failed = failed + 1
+    }
+
+    // --- Gate 8: copyFile ---
+    io.println("--- Gate 8: copyFile ---")
+    let copyDest = testDir + "/copied.txt"
+    let c1 = fs.copyFile(f1, copyDest)
+    if c1 == true {
+        io.println("PASS: copyFile returns true")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: copyFile returns true")
+        failed = failed + 1
+    }
+
+    let copyContent = fs.readFile(copyDest)
+    if copyContent == expected2 {
+        io.println("PASS: copied file content matches")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: copied file content matches (got: " + copyContent + ")")
+        failed = failed + 1
+    }
+
+    // --- Gate 9: rename ---
+    io.println("--- Gate 9: rename ---")
+    let renameDest = testDir + "/renamed.txt"
+    let rn1 = fs.rename(f1, renameDest)
+    if rn1 == true {
+        io.println("PASS: rename returns true")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: rename returns true")
+        failed = failed + 1
+    }
+
+    if fs.exists(f1) == false {
+        io.println("PASS: original file gone after rename")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: original file gone after rename")
+        failed = failed + 1
+    }
+
+    if fs.exists(renameDest) == true {
+        io.println("PASS: renamed file exists")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: renamed file exists")
+        failed = failed + 1
+    }
+
+    let renamedContent = fs.readFile(renameDest)
+    if renamedContent == expected2 {
+        io.println("PASS: renamed file content preserved")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: renamed file content preserved")
+        failed = failed + 1
+    }
+
+    // --- Gate 10: remove ---
+    io.println("--- Gate 10: remove ---")
+    let rm1 = fs.remove(renameDest)
+    if rm1 == true {
+        io.println("PASS: remove returns true")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: remove returns true")
+        failed = failed + 1
+    }
+
+    if fs.exists(renameDest) == false {
+        io.println("PASS: file gone after remove")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: file gone after remove")
+        failed = failed + 1
+    }
+
+    // --- Gate 11: error paths ---
+    io.println("--- Gate 11: error paths ---")
+    let readMissing = fs.readFile(testDir + "/no_such_file.txt")
+    if readMissing == "" {
+        io.println("PASS: readFile on missing file returns empty string")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: readFile on missing file returns empty string")
+        failed = failed + 1
+    }
+
+    let removeMissing = fs.remove(testDir + "/no_such_file.txt")
+    if removeMissing == false {
+        io.println("PASS: remove on missing file returns false")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: remove on missing file returns false")
+        failed = failed + 1
+    }
+
+    let sizeMissing = fs.fileSize(testDir + "/no_such_file.txt")
+    if sizeMissing == 0 {
+        io.println("PASS: fileSize on missing file returns 0")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: fileSize on missing file returns 0 (got: " + convert.toString(sizeMissing) + ")")
+        failed = failed + 1
+    }
+
+    // Cleanup
+    fs.remove(copyDest)
+    fs.remove(f2)
+    fs.remove(subDir)
+    fs.remove(testDir)
+
+    // --- Results ---
+    io.println("")
+    io.println("=== Results ===")
+    io.println("Passed: " + convert.toString(passed))
+    io.println("Failed: " + convert.toString(failed))
+
+    if failed == 0 {
+        io.println("ALL FILE SYSTEM GATES PASSED")
+    } else {
+        io.println("SOME GATES FAILED")
+    }
+}
+
+main()
