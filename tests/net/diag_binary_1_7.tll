@@ -1,0 +1,62 @@
+// P1-04 macOS Binary Search Diagnostic - Test 1-7 + Test 14
+// Isolate which test in 1-13 causes pollution for Test 14
+io.println("=== P1-04 macOS Binary Search: Test 1-7 + Test 14 ===")
+io.println("")
+
+let base = "http://127.0.0.1:18080"
+
+// Test 1: httpc.get /status
+let r1 = httpc.get(base + "/status")
+// Test 2: httpc.get with custom headers /headers
+let h2 = {}
+h2["X-Test-Header"] = "TLL-HTTP-Client"
+let r2 = httpc.get(base + "/headers", h2)
+// Test 3: httpc.post with body /echo
+let r3 = httpc.post(base + "/echo", "{\"name\":\"TLL\"}")
+// Test 4: httpc.post with Content-Type header
+let h4 = {}
+h4["Content-Type"] = "application/json"
+let r4 = httpc.post(base + "/echo", "{\"name\":\"TLL\"}", h4)
+// Test 5: httpc.request GET
+let req5 = {}
+req5["method"] = "GET"
+req5["url"] = base + "/status"
+let r5 = httpc.request(req5)
+// Test 6: httpc.request POST
+let req6 = {}
+req6["method"] = "POST"
+req6["url"] = base + "/echo"
+req6["body"] = "{\"test\":\"request\"}"
+let r6 = httpc.request(req6)
+// Test 7: Response headers parsing
+let r7 = httpc.get(base + "/json")
+
+io.println("Test 1-7 complete. Results:")
+io.println("  T1 status=" + r1.status)
+io.println("  T2 status=" + r2.status)
+io.println("  T3 status=" + r3.status)
+io.println("  T4 status=" + r4.status)
+io.println("  T5 status=" + r5.status)
+io.println("  T6 status=" + r6.status)
+io.println("  T7 status=" + r7.status)
+io.println("")
+
+// Test 14: 10 sequential requests (NO output per request to keep fast)
+io.println("--- Test 14: 10 sequential requests ---")
+let allOk = true
+let failedAt = -1
+for i in 1..11 {
+    let r = httpc.get(base + "/status")
+    if r.status != 200 {
+        allOk = false
+        failedAt = i
+        io.println("  req " + i + ": FAILED status=" + r.status + " error=[" + r.error + "]")
+    }
+}
+io.println("")
+io.println("Result: allOk=" + allOk + " failedAt=" + failedAt)
+if allOk {
+    io.println("TEST 1-7+14 PASSED - pollution NOT in Test 1-7")
+} else {
+    io.println("TEST 1-7+14 FAILED at req " + failedAt + " - pollution IS in Test 1-7")
+}
