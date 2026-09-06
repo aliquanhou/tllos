@@ -23,6 +23,10 @@ mkdir -p "$LOG_DIR"
 mkdir -p "$BEHAVIOR_DIR"
 mkdir -p "$WARNINGS_DIR"
 
+# Detect Python command (python3 on Linux, python on macOS)
+PYTHON=$(command -v python3 2>/dev/null || command -v python 2>/dev/null || echo "python3")
+echo "Using Python: $PYTHON ($($PYTHON --version 2>&1))"
+
 echo "========================================"
 echo "Phase 4 - Evidence Validator v3"
 echo "Reality-Aligned: EVIDENCE format + Warning semantics"
@@ -71,7 +75,7 @@ else
     fi
 
     set +e
-    python3 "$BEHAVIOR_DIR/validate-behavior.py" \
+    $PYTHON "$BEHAVIOR_DIR/validate-behavior.py" \
         "$LOG_DIR/memory_run.log" "memory" "$BEHAVIOR_DIR/memory.json" \
         --runtime-exit "$RUN_STATUS"
     VALIDATE_STATUS=$?
@@ -116,7 +120,7 @@ else
     fi
 
     set +e
-    python3 "$BEHAVIOR_DIR/validate-behavior.py" \
+    $PYTHON "$BEHAVIOR_DIR/validate-behavior.py" \
         "$LOG_DIR/evaluation_run.log" "evaluation" "$BEHAVIOR_DIR/evaluation.json" \
         --runtime-exit "$RUN_STATUS"
     VALIDATE_STATUS=$?
@@ -161,7 +165,7 @@ else
     fi
 
     set +e
-    python3 "$BEHAVIOR_DIR/validate-behavior.py" \
+    $PYTHON "$BEHAVIOR_DIR/validate-behavior.py" \
         "$LOG_DIR/ternary_run.log" "ternary" "$BEHAVIOR_DIR/ternary.json" \
         --runtime-exit "$RUN_STATUS"
     VALIDATE_STATUS=$?
@@ -229,7 +233,7 @@ echo "Raw TypeChecker warning count: $WARNING_COUNT"
 
 # Parse warnings
 set +e
-python3 "$WARNINGS_DIR/parse-warnings.py" "$LOG_DIR/typechecker_raw.log" "$WARNINGS_DIR/warnings.json"
+$PYTHON "$WARNINGS_DIR/parse-warnings.py" "$LOG_DIR/typechecker_raw.log" "$WARNINGS_DIR/warnings.json"
 PARSE_STATUS=$?
 set -e
 
@@ -241,7 +245,7 @@ else
     echo "PASS: Warning parsing completed"
 
     set +e
-    python3 "$WARNINGS_DIR/validate-warnings.py" "$WARNINGS_DIR/warnings.json"
+    $PYTHON "$WARNINGS_DIR/validate-warnings.py" "$WARNINGS_DIR/warnings.json"
     VALIDATE_STATUS=$?
     set -e
 
