@@ -25,57 +25,79 @@ jobs:
           scripts/bootstrap-tllc.sh
           test -f tools/TLLC/tllc.tllbc
 
-      - name: Compile product_debug7.tll
+      - name: Product Slice - Compile
         run: |
-          echo "=== Compiling product_debug7.tll ==="
+          echo "=== Compiling Product Slice ==="
           mkdir -p mall/data
-          host/c/tllvm tools/TLLC/tllc.tllbc compile mall/product_debug7.tll -o /tmp/product_debug7.tllbc
+          host/c/tllvm tools/TLLC/tllc.tllbc compile mall/product_slice_test.tll -o /tmp/product_slice.tllbc
           echo "Compile exit: $?"
-          ls -la /tmp/product_debug7.tllbc
+          ls -la /tmp/product_slice.tllbc
 
-      - name: Run product_debug7.tll and test HTTP
+      - name: Product Slice - Run & Test
         run: |
-          echo "=== Starting product_debug7 server ==="
+          echo "=== Starting Product Slice server ==="
           mkdir -p mall/data
           rm -f mall/data/mall.db
-          host/c/tllvm /tmp/product_debug7.tllbc > /tmp/product_debug7.log 2>&1 &
+          host/c/tllvm /tmp/product_slice.tllbc > /tmp/product_slice.log 2>&1 &
           SERVER_PID=$!
           echo "Server PID: $SERVER_PID"
           sleep 3
 
           echo "=== Server log ==="
-          cat /tmp/product_debug7.log
+          cat /tmp/product_slice.log
 
-          echo "=== Check if server is running ==="
+          echo "=== G1: Server starts ==="
           if kill -0 $SERVER_PID 2>/dev/null; then
-            echo "Server is running"
+            echo "PASS: Server is running"
           else
-            echo "Server FAILED to start"
-            cat /tmp/product_debug7.log
+            echo "FAIL: Server failed to start"
+            cat /tmp/product_slice.log
             exit 1
           fi
 
-          echo "=== Test GET /health ==="
-          curl -s http://127.0.0.1:8088/health
-          echo ""
+          echo "=== G2: GET /health ==="
+          HEALTH_RESPONSE=$(curl -s http://127.0.0.1:8088/health)
+          echo "Response: $HEALTH_RESPONSE"
+          echo "$HEALTH_RESPONSE" | grep -q '"status":"ok"' && echo "PASS: Health check OK" || { echo "FAIL: Health check failed"; exit 1; }
 
-          echo "=== Test GET /products (JSON) ==="
-          curl -s http://127.0.0.1:8088/products
-          echo ""
+          echo "=== G3: GET /products returns 200 ==="
+          PRODUCTS_RESPONSE=$(curl -s -w "\n%{http_code}" http://127.0.0.1:8088/products)
+          HTTP_CODE=$(echo "$PRODUCTS_RESPONSE" | tail -1)
+          PRODUCTS_BODY=$(echo "$PRODUCTS_RESPONSE" | sed '$d')
+          echo "HTTP Code: $HTTP_CODE"
+          echo "Body: $PRODUCTS_BODY"
+          test "$HTTP_CODE" = "200" && echo "PASS: HTTP 200" || { echo "FAIL: Expected 200, got $HTTP_CODE"; exit 1; }
 
-          echo "=== Server log after requests ==="
-          cat /tmp/product_debug7.log
+          echo "=== G4: JSON contains products ==="
+          echo "$PRODUCTS_BODY" | grep -q 'Widget Pro' && echo "PASS: Found Widget Pro" || { echo "FAIL: Widget Pro not found"; exit 1; }
+          echo "$PRODUCTS_BODY" | grep -q 'Gadget Plus' && echo "PASS: Found Gadget Plus" || { echo "FAIL: Gadget Plus not found"; exit 1; }
+          echo "$PRODUCTS_BODY" | grep -q 'Thingamajig' && echo "PASS: Found Thingamajig" || { echo "FAIL: Thingamajig not found"; exit 1; }
+
+          echo "=== G5: POST /products/seed ==="
+          SEED_RESPONSE=$(curl -s -X POST http://127.0.0.1:8088/products/seed)
+          echo "Response: $SEED_RESPONSE"
+          echo "$SEED_RESPONSE" | grep -q '"ok":true' && echo "PASS: Seed OK" || { echo "FAIL: Seed failed"; exit 1; }
+
+          echo "=== G6: 404 for unknown route ==="
+          NOTFOUND_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8088/nonexistent)
+          echo "HTTP Code: $NOTFOUND_CODE"
+          test "$NOTFOUND_CODE" = "404" && echo "PASS: 404 OK" || { echo "FAIL: Expected 404, got $NOTFOUND_CODE"; exit 1; }
+
+          echo "=== Server log after tests ==="
+          cat /tmp/product_slice.log
 
           echo "=== Killing server ==="
           kill $SERVER_PID 2>/dev/null || true
           wait $SERVER_PID 2>/dev/null || true
-          echo "=== DONE ==="
+
+          echo "=== ALL GATES PASSED ==="
+          echo "Product Vertical Slice: READY"
 
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: product-debug-logs
+          name: product-slice-logs
           path: |
-            /tmp/product_debug7.log
+            /tmp/product_slice.log
           if-no-files-found: warn

@@ -26,6 +26,7 @@ fn seedProducts(db) {
 // === HTTP Handler ===
 
 fn productHandler(req) {
+    // Get fresh DB connection per request (worker pool closure workaround)
     let db = db_get()
 
     if req.path == "/products" && req.method == "GET" {
@@ -57,6 +58,7 @@ let db = db_open(GLOBAL_DB_PATH)
 ensureProductsTable(db)
 seedProducts(db)
 
+// Verify seed
 let rows = db_query(db, "SELECT COUNT(*) as cnt FROM products")
 if arrays.length(rows) > 0 {
     io.println("Product count: " + convert.toString(rows[0].cnt))
