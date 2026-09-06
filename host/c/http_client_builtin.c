@@ -460,6 +460,9 @@ typedef struct {
     const char *tlsError;
 } HttpConnection;
 
+/* Forward declaration for connection cache */
+static void http_close(HttpConnection *conn);
+
 /* ===== Connection Reuse Cache (Level 4) =====
    Caches the most recent idle connection for same host:port:https.
    Only one entry: "last idle connection" strategy, not a full pool. */
