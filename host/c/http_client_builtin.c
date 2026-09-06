@@ -932,9 +932,9 @@ retry_request:
         const char *he = strstr(respBuf, "\r\n\r\n");
         int hdrLen = he ? (int)(he - respBuf) + 4 : respLen;
         if (hdrLen > 512) hdrLen = 512;
-        fprintf(stderr, "[DEBUG] respLen=%d, headers (%d bytes):\n%.*s\n---END HEADERS---\n", respLen, hdrLen, hdrLen, respBuf);
+        printf("[DEBUG] respLen=%d, headers (%d bytes):\n%.*s\n---END HEADERS---\n", respLen, hdrLen, hdrLen, respBuf);
     } else {
-        fprintf(stderr, "[DEBUG] respLen=0 (empty response)\n");
+        printf("[DEBUG] respLen=0 (empty response)\n");
     }
 
     /* Check if server requested Connection: close */
@@ -964,7 +964,7 @@ retry_request:
        while we were waiting), reconnect and retry once for idempotent requests.
        Must check BEFORE connection cache/close to avoid double-close. */
     if (respLen == 0 && fromCache && isIdempotent) {
-        fprintf(stderr, "[DEBUG] Empty response from cached connection, reconnecting...\n");
+        printf("[DEBUG] Empty response from cached connection, reconnecting...\n");
         http_close(&conn);
         free(respBuf);
         fromCache = 0;
