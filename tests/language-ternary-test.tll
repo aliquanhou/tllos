@@ -1,0 +1,90 @@
+// TLL Language Fundamental Test: Ternary Operator
+// Verifies conditional expression `condition ? consequent : alternate`
+// including short-circuit evaluation and type compatibility.
+
+fn test_basic_ternary() {
+    io.println("=== Test 1: Basic ternary ===")
+    let age = 20
+    let status = age >= 18 ? "adult" : "minor"
+    io.println("  age=20, status=" + status)
+    if status == "adult" { io.println("  PASS") } else { io.println("  FAIL: expected 'adult', got '" + status + "'") }
+}
+
+fn test_false_branch() {
+    io.println("")
+    io.println("=== Test 2: False branch ===")
+    let age = 15
+    let status = age >= 18 ? "adult" : "minor"
+    io.println("  age=15, status=" + status)
+    if status == "minor" { io.println("  PASS") } else { io.println("  FAIL: expected 'minor', got '" + status + "'") }
+}
+
+fn test_numeric_result() {
+    io.println("")
+    io.println("=== Test 3: Numeric result ===")
+    let x = 10
+    let y = 20
+    let max = x > y ? x : y
+    io.println("  x=10, y=20, max=" + convert.toString(max))
+    if max == 20 { io.println("  PASS") } else { io.println("  FAIL: expected 20, got " + convert.toString(max)) }
+}
+
+fn test_nested_ternary() {
+    io.println("")
+    io.println("=== Test 4: Nested ternary ===")
+    let score = 85
+    let grade = score >= 90 ? "A" : (score >= 80 ? "B" : "C")
+    io.println("  score=85, grade=" + grade)
+    if grade == "B" { io.println("  PASS") } else { io.println("  FAIL: expected 'B', got '" + grade + "'") }
+}
+
+fn test_ternary_in_expression() {
+    io.println("")
+    io.println("=== Test 5: Ternary in arithmetic expression ===")
+    let isPremium = true
+    let base = 100
+    let total = base + (isPremium ? 50 : 0)
+    io.println("  base=100, isPremium=true, total=" + convert.toString(total))
+    if total == 150 { io.println("  PASS") } else { io.println("  FAIL: expected 150, got " + convert.toString(total)) }
+}
+
+fn test_ternary_assignment() {
+    io.println("")
+    io.println("=== Test 6: Ternary with compound assignment ===")
+    let count = 5
+    let limit = 10
+    let result = count < limit ? count : limit
+    io.println("  count=5, limit=10, result=" + convert.toString(result))
+    if result == 5 { io.println("  PASS") } else { io.println("  FAIL: expected 5, got " + convert.toString(result)) }
+}
+
+fn test_boolean_condition() {
+    io.println("")
+    io.println("=== Test 7: Boolean condition variable ===")
+    let isActive = false
+    let label = isActive ? "active" : "inactive"
+    io.println("  isActive=false, label=" + label)
+    if label == "inactive" { io.println("  PASS") } else { io.println("  FAIL: expected 'inactive', got '" + label + "'") }
+}
+
+fn main() {
+    io.println("========================================")
+    io.println("TLL Ternary Operator Test")
+    io.println("========================================")
+    io.println("")
+
+    test_basic_ternary()
+    test_false_branch()
+    test_numeric_result()
+    test_nested_ternary()
+    test_ternary_in_expression()
+    test_ternary_assignment()
+    test_boolean_condition()
+
+    io.println("")
+    io.println("========================================")
+    io.println("All ternary tests completed")
+    io.println("========================================")
+}
+
+main()

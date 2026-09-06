@@ -316,6 +316,23 @@ fn tc_checkExpression(expr: map) -> map {
         return sym["type"]
     }
 
+    if kind == "Ternary" {
+        tc_checkExpression(expr["condition"])
+        let consType = tc_checkExpression(expr["consequent"])
+        let altType = tc_checkExpression(expr["alternate"])
+        if consType["name"] == altType["name"] {
+            return consType
+        }
+        if isNumeric(consType) && isNumeric(altType) {
+            if consType["name"] == "float" || altType["name"] == "float" {
+                return typeFloat()
+            }
+            return typeInt()
+        }
+        tc_error(expr["line"], "ternary operator type mismatch: '" + consType["name"] + "' vs '" + altType["name"] + "'")
+        return consType
+    }
+
     if kind == "Binary" {
         let left = tc_checkExpression(expr["left"])
         let right = tc_checkExpression(expr["right"])

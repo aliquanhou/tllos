@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # ============================================================
 # TLL OS - Builtin ABI Consistency Check
 # Verifies spec/BUILTINS.json matches host/c/builtin.c
@@ -56,9 +56,13 @@ for range in "idx >= 5 && idx <= 23" "idx >= 24 && idx <= 48" "idx >= 49 && idx 
 done
 
 # 5. Verify no unregistered builtin indices in implementation (beyond 122)
+# Use POSIX-compatible grep (no -P flag, which is GNU-only and fails on macOS)
 echo "Checking for unregistered builtin indices..."
-MAX_IDX=$(grep -oP 'idx == \K[0-9]+' "$IMPL" | sort -n | tail -1 || echo "0")
-if [ "$MAX_IDX" -gt 200 ]; then
+MAX_IDX=$(grep -oE 'idx == [0-9]+' "$IMPL" 2>/dev/null | awk '{print $3}' | sort -n | tail -1)
+if [ -z "$MAX_IDX" ]; then
+    MAX_IDX=0
+fi
+if [ "$MAX_IDX" -gt 200 ] 2>/dev/null; then
     echo "  FAIL: builtin.c contains idx $MAX_IDX beyond expected max (200)"
     ERRORS=$((ERRORS + 1))
 fi
@@ -66,7 +70,7 @@ fi
 # 6. Verify spec version
 echo "Checking spec version..."
 if ! grep -q '"version": "1.3"' "$SPEC"; then
-    echo "  WARN: BUILTINS.json version is not 1.2 (current)"
+    echo "  WARN: BUILTINS.json version is not 1.3 (current)"
 fi
 
 echo ""

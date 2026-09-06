@@ -479,8 +479,24 @@ fn parsePipe() -> map {
     return left
 }
 
+fn parseTernary() -> map {
+    let cond = parseOr()
+    if parse_match("QUESTION") {
+        let t = parse_previous()
+        let consequent = parseAssignment()
+        parse_expect("COLON", "':'")
+        let alternate = parseAssignment()
+        let node = makeNode("Ternary", t.line, t.column)
+        node.condition = cond
+        node.consequent = consequent
+        node.alternate = alternate
+        return node
+    }
+    return cond
+}
+
 fn parseAssignment() -> map {
-    let left = parseOr()
+    let left = parseTernary()
     if parse_match("EQ") || parse_match("PLUSEQ") || parse_match("MINUSEQ") || parse_match("STAREQ") || parse_match("SLASHEQ") || parse_match("PERCENTEQ") {
         let t = parse_previous()
         let op = t.tkValue

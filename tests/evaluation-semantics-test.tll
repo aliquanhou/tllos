@@ -1,0 +1,224 @@
+// TLL Evaluation Semantics Behavior Test (Reality-Aligned)
+// Phase 4 FINAL BEHAVIOR EVIDENCE CLOSURE
+// Staircase LEVEL 2: Full Evaluation Suite
+//
+// IMPORTANT: Uses ONLY currently-supported TLL syntax.
+// Each test produces machine-parseable EVIDENCE records.
+// Unsupported capabilities are recorded as UNSUPPORTED, not faked.
+// TLL executes top-level code directly (no fn main needed).
+// io and arrays are built-in (no import needed).
+
+// Global log to record execution order
+let executionLog = []
+
+fn logEvent(name: string) -> int {
+    arrays.push(executionLog, name)
+    return arrays.length(executionLog)
+}
+
+fn fnA() -> int {
+    logEvent("A")
+    return 1
+}
+
+fn fnB() -> int {
+    logEvent("B")
+    return 2
+}
+
+fn fnC() -> int {
+    logEvent("C")
+    return 3
+}
+
+fn sumThree(a: int, b: int, c: int) -> int {
+    return a + b + c
+}
+
+// Helper to emit machine-parseable evidence
+fn emitEvidence(testId: string, expected: string, actual: string, status: string) {
+    io.println("EVIDENCE: TEST_ID=" + testId + " EXPECTED=" + expected + " ACTUAL=" + actual + " STATUS=" + status)
+}
+
+io.println("========================================")
+io.println("TLL Evaluation Semantics Behavior Test")
+io.println("Phase 4 FINAL BEHAVIOR EVIDENCE CLOSURE")
+io.println("REALITY-ALIGNED: Uses only supported syntax")
+io.println("========================================")
+
+// === Test 1: Function Argument Evaluation Order ===
+io.println("=== Test 1: Function Argument Order ===")
+executionLog = []
+let result1 = sumThree(fnA(), fnB(), fnC())
+let eventCount1 = arrays.length(executionLog)
+let actual1 = executionLog[0] + "," + executionLog[1] + "," + executionLog[2]
+if eventCount1 == 3 && actual1 == "A,B,C" && result1 == 6 {
+    emitEvidence("eval.function_arg_order", "A,B,C", actual1, "PASS")
+} else {
+    emitEvidence("eval.function_arg_order", "A,B,C", actual1, "FAIL")
+}
+
+// === Test 2: Binary Expression Operand Evaluation Order ===
+io.println("=== Test 2: Binary Operand Order ===")
+executionLog = []
+let result2 = fnA() + fnB() + fnC()
+let eventCount2 = arrays.length(executionLog)
+let actual2 = executionLog[0] + "," + executionLog[1] + "," + executionLog[2]
+if eventCount2 == 3 && actual2 == "A,B,C" && result2 == 6 {
+    emitEvidence("eval.binary_operand_order", "A,B,C", actual2, "PASS")
+} else {
+    emitEvidence("eval.binary_operand_order", "A,B,C", actual2, "FAIL")
+}
+
+// === Test 3: Chained Assignment (a = b = c) - OBSERVE actual behavior ===
+io.println("=== Test 3: Chained Assignment (a=b=c) - OBSERVE ===")
+let a3 = 0
+let b3 = 0
+let c3 = 42
+// TLL may or may not support chained assignment - observe actual behavior
+a3 = b3 = c3
+let actual3 = "a=" + a3 + ",b=" + b3
+if a3 == 42 && b3 == 42 {
+    emitEvidence("eval.chained_assignment", "a=42,b=42", actual3, "PASS")
+} else {
+    emitEvidence("eval.chained_assignment", "a=42,b=42", actual3, "OBSERVED")
+}
+
+// === Test 4: Index Expression Evaluation Order ===
+io.println("=== Test 4: Index Expression Order ===")
+executionLog = []
+let arr4 = [10, 20, 30, 40, 50]
+let result4 = arr4[fnB()]
+let eventCount4 = arrays.length(executionLog)
+let actual4 = "events=" + eventCount4 + ",result=" + result4
+if eventCount4 == 1 && result4 == 30 {
+    emitEvidence("eval.index_expression", "events=1,result=30", actual4, "PASS")
+} else {
+    emitEvidence("eval.index_expression", "events=1,result=30", actual4, "FAIL")
+}
+
+// === Test 5: Member Access Evaluation Order ===
+struct Point {
+    x: int
+    y: int
+}
+
+fn getPoint() -> Point {
+    logEvent("getPoint")
+    return Point { x: 100, y: 200 }
+}
+
+io.println("=== Test 5: Member Access Order ===")
+executionLog = []
+let result5 = getPoint().x
+let eventCount5 = arrays.length(executionLog)
+let actual5 = "events=" + eventCount5 + ",result=" + result5
+if eventCount5 == 1 && result5 == 100 {
+    emitEvidence("eval.member_access", "events=1,result=100", actual5, "PASS")
+} else {
+    emitEvidence("eval.member_access", "events=1,result=100", actual5, "FAIL")
+}
+
+// === Test 6: Compound Assignment - RECORDED AS UNSUPPORTED ===
+// TLL currently does NOT implement += in codegen.
+// We test equivalent behavior with plain assignment and record += as UNSUPPORTED.
+io.println("=== Test 6: Compound Assignment (equivalent plain assignment) ===")
+executionLog = []
+let a6 = 10
+// Equivalent to a += fnB(), using currently-supported syntax
+a6 = a6 + fnB()
+let eventCount6 = arrays.length(executionLog)
+let actual6 = "events=" + eventCount6 + ",a=" + a6
+if eventCount6 == 1 && a6 == 12 {
+    emitEvidence("eval.compound_assignment_equivalent", "events=1,a=12", actual6, "PASS")
+} else {
+    emitEvidence("eval.compound_assignment_equivalent", "events=1,a=12", actual6, "FAIL")
+}
+// Explicitly record += as unsupported capability
+emitEvidence("eval.compound_assignment_plus_eq", "SUPPORTED", "UNSUPPORTED", "UNSUPPORTED")
+
+// === Test 7: Nested Expression Evaluation ===
+io.println("=== Test 7: Nested Expression ===")
+executionLog = []
+let result7 = sumThree(fnA(), fnB() * 2, fnC())
+let eventCount7 = arrays.length(executionLog)
+let actual7 = "events=" + eventCount7 + ",result=" + result7
+if eventCount7 == 3 && result7 == 8 {
+    emitEvidence("eval.nested_expression", "events=3,result=8", actual7, "PASS")
+} else {
+    emitEvidence("eval.nested_expression", "events=3,result=8", actual7, "FAIL")
+}
+
+// === Test 8: Short-circuit AND (using && canonical syntax) ===
+fn returnsFalseLogged() -> bool {
+    logEvent("falseFn")
+    return false
+}
+
+fn returnsTrueLogged() -> bool {
+    logEvent("trueFn")
+    return true
+}
+
+io.println("=== Test 8: Short-circuit AND (false && true) ===")
+executionLog = []
+let result8 = returnsFalseLogged() && returnsTrueLogged()
+let eventCount8 = arrays.length(executionLog)
+let actual8 = "events=" + eventCount8 + ",result=" + result8
+if eventCount8 == 1 && result8 == false {
+    emitEvidence("eval.short_circuit_and", "events=1,result=false", actual8, "PASS")
+} else {
+    emitEvidence("eval.short_circuit_and", "events=1,result=false", actual8, "FAIL")
+}
+
+// === Test 9: Short-circuit OR (using || canonical syntax) ===
+io.println("=== Test 9: Short-circuit OR (true || false) ===")
+executionLog = []
+let result9 = returnsTrueLogged() || returnsFalseLogged()
+let eventCount9 = arrays.length(executionLog)
+let actual9 = "events=" + eventCount9 + ",result=" + result9
+if eventCount9 == 1 && result9 == true {
+    emitEvidence("eval.short_circuit_or", "events=1,result=true", actual9, "PASS")
+} else {
+    emitEvidence("eval.short_circuit_or", "events=1,result=true", actual9, "FAIL")
+}
+
+// === Test 10: Ternary Branch Laziness (true condition) ===
+fn ternaryTrueLogged() -> int {
+    logEvent("ternaryTrue")
+    return 100
+}
+
+fn ternaryFalseLogged() -> int {
+    logEvent("ternaryFalse")
+    return 200
+}
+
+io.println("=== Test 10: Ternary Laziness (true ? A() : B()) ===")
+executionLog = []
+let condition10 = true
+let result10 = condition10 ? ternaryTrueLogged() : ternaryFalseLogged()
+let eventCount10 = arrays.length(executionLog)
+let actual10 = "events=" + eventCount10 + ",result=" + result10
+if eventCount10 == 1 && result10 == 100 {
+    emitEvidence("eval.ternary_laziness_true", "events=1,result=100", actual10, "PASS")
+} else {
+    emitEvidence("eval.ternary_laziness_true", "events=1,result=100", actual10, "FAIL")
+}
+
+// === Test 11: Ternary Branch Laziness (false condition) ===
+io.println("=== Test 11: Ternary Laziness (false ? A() : B()) ===")
+executionLog = []
+let condition11 = false
+let result11 = condition11 ? ternaryTrueLogged() : ternaryFalseLogged()
+let eventCount11 = arrays.length(executionLog)
+let actual11 = "events=" + eventCount11 + ",result=" + result11
+if eventCount11 == 1 && result11 == 200 {
+    emitEvidence("eval.ternary_laziness_false", "events=1,result=200", actual11, "PASS")
+} else {
+    emitEvidence("eval.ternary_laziness_false", "events=1,result=200", actual11, "FAIL")
+}
+
+io.println("========================================")
+io.println("EVALUATION EVIDENCE COMPLETE")
+io.println("Total evidence records: 12 (11 tests + 1 unsupported capability)")

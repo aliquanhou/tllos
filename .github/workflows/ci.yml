@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop, feature/*]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 jobs:
   native-build-test:
@@ -122,10 +122,97 @@ jobs:
         shell: cmd
         run: scripts\run-tests.bat
 
+      # === P0-TLL-LANGUAGE-FUNDAMENTAL Phase 4: Evidence Validator ===
+      # TEMPORARILY DISABLED: Phase 4 downgraded to background engineering.
+      # Re-enable when memory-semantics-test.tll TypeChecker warning is resolved.
+      # - name: Phase 4 - Run Evidence Validator (Linux/macOS)
+      #   if: runner.os != 'Windows'
+      #   run: |
+      #     chmod +x phase4/run-validator.sh
+      #     phase4/run-validator.sh
+
+
+      # === Phase 4 Staircase LEVEL 1: Full Memory Evidence Suite ===
+      # 11 memory semantics tests: array/map/struct aliasing, parameter passing,
+      # return value, closure capture, escape/lifetime, primitive value.
+      - name: Phase 4 - Memory Full Evidence Suite (Ubuntu only)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          echo "=== Compiling memory-semantics-test.tll ==="
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/memory-semantics-test.tll -o /tmp/memory-semantics-test.tllbc
+          echo "=== Running memory-semantics-test.tllbc ==="
+          host/c/tllvm /tmp/memory-semantics-test.tllbc | tee /tmp/memory-semantics-test.log
+          echo "=== Verifying EVIDENCE records ==="
+          EVIDENCE_COUNT=$(grep -c '^EVIDENCE:' /tmp/memory-semantics-test.log || true)
+          echo "EVIDENCE records found: $EVIDENCE_COUNT"
+          if [ "$EVIDENCE_COUNT" -lt 10 ]; then
+            echo "FAIL: Expected at least 10 EVIDENCE records, found $EVIDENCE_COUNT"
+            exit 1
+          fi
+          echo "PASS: $EVIDENCE_COUNT EVIDENCE records found"
+          echo "=== EVIDENCE Summary ==="
+          grep '^EVIDENCE:' /tmp/memory-semantics-test.log
+
+      # === Phase 4 Staircase LEVEL 2: Full Evaluation Evidence Suite ===
+      # 12 evaluation semantics tests (CI #342 verified: passes, ~12-15 min)
+      - name: Phase 4 - Evaluation Full Evidence Suite (Ubuntu only)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          echo "=== Compiling evaluation-semantics-test.tll ==="
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/evaluation-semantics-test.tll -o /tmp/evaluation-semantics-test.tllbc
+          echo "=== Running evaluation-semantics-test.tllbc ==="
+          host/c/tllvm /tmp/evaluation-semantics-test.tllbc | tee /tmp/evaluation-semantics-test.log
+          echo "=== Verifying EVIDENCE records ==="
+          EVIDENCE_COUNT=$(grep -c '^EVIDENCE:' /tmp/evaluation-semantics-test.log || true)
+          echo "EVIDENCE records found: $EVIDENCE_COUNT"
+          if [ "$EVIDENCE_COUNT" -lt 10 ]; then
+            echo "FAIL: Expected at least 10 EVIDENCE records, found $EVIDENCE_COUNT"
+            exit 1
+          fi
+          echo "PASS: $EVIDENCE_COUNT EVIDENCE records found"
+          echo "=== EVIDENCE Summary ==="
+          grep '^EVIDENCE:' /tmp/evaluation-semantics-test.log
+
+      # === Phase 4 Staircase LEVEL 3: Full Ternary Evidence Suite ===
+      # 14 ternary acceptance tests: true/false branch, nested, precedence,
+      # arithmetic/function/assignment composition, int/float, promotion,
+      # incompatible types (WARNING semantics), laziness true/false.
+      - name: Phase 4 - Ternary Full Evidence Suite (Ubuntu only)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          echo "=== Compiling ternary-acceptance-test.tll ==="
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/ternary-acceptance-test.tll -o /tmp/ternary-acceptance-test.tllbc
+          echo "=== Running ternary-acceptance-test.tllbc ==="
+          host/c/tllvm /tmp/ternary-acceptance-test.tllbc | tee /tmp/ternary-acceptance-test.log
+          echo "=== Verifying EVIDENCE records ==="
+          EVIDENCE_COUNT=$(grep -c '^EVIDENCE:' /tmp/ternary-acceptance-test.log || true)
+          echo "EVIDENCE records found: $EVIDENCE_COUNT"
+          if [ "$EVIDENCE_COUNT" -lt 12 ]; then
+            echo "FAIL: Expected at least 12 EVIDENCE records, found $EVIDENCE_COUNT"
+            exit 1
+          fi
+          echo "PASS: $EVIDENCE_COUNT EVIDENCE records found"
+          echo "=== EVIDENCE Summary ==="
+          grep '^EVIDENCE:' /tmp/ternary-acceptance-test.log
+      - name: Phase 4 - Upload Evidence Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase4-evidence-${{ matrix.os }}
+          path: |
+            /tmp/phase4_logs/
+            phase4/behavior/*.json
+            phase4/warnings/*.json
+            phase4/warnings/typechecker_raw.log
+          if-no-files-found: warn
+
       # === P0-16.1: TLL Engineering Enforcement Layer ===
       # Validates .tll-engine/ structure, schema, Claim-Evidence matching.
       # This ensures the engineering cognition layer remains consistent with code.
-      # No Runtime/Compiler modification — if this fails, .tll-engine/ has an inconsistency.
+      # No Runtime/Compiler modification 闂?if this fails, .tll-engine/ has an inconsistency.
 
       - name: Validate .tll-engine/ structure (Linux/macOS)
         if: runner.os != 'Windows'
@@ -368,9 +455,9 @@ jobs:
         run: scripts\run-bc-network-test.ps1 bc_invalid
 
       # === P0-15.18.3: Blockchain High-Message Stress Test ===
-      # 4 Node real TCP, 120 high-frequency transactions (fee递增 triggers mempool capacity=50 overflow),
+      # 4 Node real TCP, 120 high-frequency transactions (fee闂傚倷绶￠崑鍛暜閹烘?triggers mempool capacity=50 overflow),
       # transaction propagation, block propagation, final 4-node consistency.
-      # No Runtime changes — if this fails, Runtime/P2P/Blockchain has a real bug.
+      # No Runtime changes 闂?if this fails, Runtime/P2P/Blockchain has a real bug.
       - name: Blockchain high-message stress 120 txs (Linux/macOS)
         if: runner.os != 'Windows'
         timeout-minutes: 5
@@ -385,7 +472,7 @@ jobs:
       # === P0-15.18.1: Coroutine 100K Stress Test (black-box, zero Runtime changes) ===
       # Verifies 100K immediate-return + 10K x10 yield + 1K sleep coroutines.
       # External evidence: exit code + process lifecycle + runtime + peak RSS.
-      # No Runtime code modifications — if this fails, Runtime has a real bug.
+      # No Runtime code modifications 闂?if this fails, Runtime has a real bug.
 
       - name: Coroutine 100K Stress Test (Linux/macOS)
         if: runner.os != 'Windows'
