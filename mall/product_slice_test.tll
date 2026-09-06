@@ -53,10 +53,14 @@ fn productHandler(req) {
 
 // === Main (top-level execution, matching test_http_db.tll pattern) ===
 
+io.println("Product Slice: initializing...")
 io.println("Using database: " + GLOBAL_DB_PATH)
 let db = db_open(GLOBAL_DB_PATH)
+io.println("Database opened")
 ensureProductsTable(db)
+io.println("Table ensured")
 seedProducts(db)
+io.println("Seed complete")
 
 // Verify seed
 let rows = db_query(db, "SELECT COUNT(*) as cnt FROM products")
@@ -64,9 +68,11 @@ if arrays.length(rows) > 0 {
     io.println("Product count: " + convert.toString(rows[0].cnt))
 }
 db_release(db)
+io.println("Database released")
 
 io.println("=== Product Vertical Slice starting on :8088 ===")
 io.println("GET /products    - List all products")
 io.println("GET /health      - Health check")
 io.println("POST /products/seed - Re-seed products")
+io.println("Server ready")
 http.serve("0.0.0.0:8088", productHandler)
