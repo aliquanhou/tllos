@@ -35,9 +35,9 @@ def parse_evidence_log(log_path, test_name, runtime_exit=None):
     tests = []
 
     # Parse EVIDENCE: TEST_ID=... EXPECTED=... ACTUAL=... STATUS=...
-    # Format: EVIDENCE: TEST_ID=eval.function_arg_order EXPECTED=A,B,C ACTUAL=A,B,C STATUS=PASS
+    # Values do not contain spaces (comma-separated values like A,B,C are fine)
     evidence_pattern = re.compile(
-        r'^EVIDENCE:\s+TEST_ID=([^\s]+)\s+EXPECTED=([^\s]+(?:\s+[^\s]+)*?)\s+ACTUAL=([^\s]+(?:\s+[^\s]+)*?)\s+STATUS=(\w+)',
+        r'^EVIDENCE:\s+TEST_ID=(\S+)\s+EXPECTED=(\S+)\s+ACTUAL=(\S+)\s+STATUS=(\w+)',
         re.MULTILINE
     )
 
