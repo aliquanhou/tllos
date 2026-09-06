@@ -1,44 +1,43 @@
-// TLL Memory Semantics Behavior Test (Corrected for Test Validity)
+// TLL Memory Semantics Behavior Test (Reality-Aligned with Machine Evidence)
 // Phase 4 FINAL BEHAVIOR EVIDENCE CLOSURE
 //
-// IMPORTANT: Do NOT presuppose answers. Each test MUST actually observe behavior.
-// Struct value vs reference must be PROVEN by test, not assumed.
+// IMPORTANT: Do NOT presuppose answers. Each test OBSERVES actual behavior.
+// Each test emits machine-parseable EVIDENCE record with EXPECTED=OBSERVE.
 
 import "io"
 import "arrays"
 
+fn emitEvidence(testId: string, expected: string, actual: string, status: string) {
+    io.println("EVIDENCE: TEST_ID=" + testId + " EXPECTED=" + expected + " ACTUAL=" + actual + " STATUS=" + status)
+}
+
 // === Test 1: Array Aliasing ===
-// PROVE: If a = b and b[0] = x, does a[0] change?
-fn testArrayAliasing() -> bool {
+fn testArrayAliasing() {
     io.println("=== Test 1: Array Aliasing ===")
     let a = [1, 2, 3]
     let b = a
     arrays.set(b, 0, 99)
     let a0 = arrays.get(a, 0)
-    let isReference = a0 == 99
-    if isReference {
-        io.println("OBSERVED: array is REFERENCE - b[0]=99 caused a[0]=99")
+    let actual = "a[0]=" + a0
+    if a0 == 99 {
+        emitEvidence("memory.array.aliasing", "OBSERVE", "REFERENCE", "OBSERVED")
     } else {
-        io.println("OBSERVED: array is VALUE - b[0]=99 did NOT affect a[0] (a[0]=" + a0 + ")")
+        emitEvidence("memory.array.aliasing", "OBSERVE", "VALUE", "OBSERVED")
     }
-    // Record actual behavior for evidence
-    return true // Test always passes - we are OBSERVING behavior
 }
 
 // === Test 2: Map Aliasing ===
-fn testMapAliasing() -> bool {
+fn testMapAliasing() {
     io.println("=== Test 2: Map Aliasing ===")
     let a = {"x": 1, "y": 2}
     let b = a
     b["x"] = 99
     let ax = a["x"]
-    let isReference = ax == 99
-    if isReference {
-        io.println("OBSERVED: map is REFERENCE - b.x=99 caused a.x=99")
+    if ax == 99 {
+        emitEvidence("memory.map.aliasing", "OBSERVE", "REFERENCE", "OBSERVED")
     } else {
-        io.println("OBSERVED: map is VALUE - b.x=99 did NOT affect a.x (a.x=" + ax + ")")
+        emitEvidence("memory.map.aliasing", "OBSERVE", "VALUE", "OBSERVED")
     }
-    return true
 }
 
 // === Test 3: Struct Aliasing - CRITICAL: Do NOT presuppose ===
@@ -47,20 +46,17 @@ struct Person {
     age: int
 }
 
-fn testStructAliasing() -> bool {
+fn testStructAliasing() {
     io.println("=== Test 3: Struct Aliasing (DO NOT PRESUPPOSE) ===")
     let a = Person { name: "Alice", age: 30 }
     let b = a
     b.age = 99
     let aAge = a.age
-    let isReference = aAge == 99
-    if isReference {
-        io.println("OBSERVED: struct is REFERENCE - b.age=99 caused a.age=99")
+    if aAge == 99 {
+        emitEvidence("memory.struct.aliasing", "OBSERVE", "REFERENCE", "OBSERVED")
     } else {
-        io.println("OBSERVED: struct is VALUE - b.age=99 did NOT affect a.age (a.age=" + aAge + ")")
+        emitEvidence("memory.struct.aliasing", "OBSERVE", "VALUE", "OBSERVED")
     }
-    // This is the KEY test - struct value vs reference must be PROVEN
-    return true
 }
 
 // === Test 4: Parameter Passing - Array ===
@@ -68,18 +64,16 @@ fn modifyArrayParam(arr: list) -> void {
     arrays.set(arr, 0, 100)
 }
 
-fn testParameterPassingArray() -> bool {
+fn testParameterPassingArray() {
     io.println("=== Test 4: Parameter Passing (Array) ===")
     let a = [1, 2, 3]
     modifyArrayParam(a)
     let a0 = arrays.get(a, 0)
-    let isReference = a0 == 100
-    if isReference {
-        io.println("OBSERVED: array parameter is REFERENCE - function modified caller's array")
+    if a0 == 100 {
+        emitEvidence("memory.param.array", "OBSERVE", "REFERENCE", "OBSERVED")
     } else {
-        io.println("OBSERVED: array parameter is VALUE - function did NOT affect caller's array (a[0]=" + a0 + ")")
+        emitEvidence("memory.param.array", "OBSERVE", "VALUE", "OBSERVED")
     }
-    return true
 }
 
 // === Test 5: Parameter Passing - Struct ===
@@ -87,18 +81,16 @@ fn modifyStructParam(p: Person) -> void {
     p.age = 200
 }
 
-fn testParameterPassingStruct() -> bool {
+fn testParameterPassingStruct() {
     io.println("=== Test 5: Parameter Passing (Struct) ===")
     let a = Person { name: "Bob", age: 25 }
     modifyStructParam(a)
     let aAge = a.age
-    let isReference = aAge == 200
-    if isReference {
-        io.println("OBSERVED: struct parameter is REFERENCE - function modified caller's struct")
+    if aAge == 200 {
+        emitEvidence("memory.param.struct", "OBSERVE", "REFERENCE", "OBSERVED")
     } else {
-        io.println("OBSERVED: struct parameter is VALUE - function did NOT affect caller's struct (a.age=" + aAge + ")")
+        emitEvidence("memory.param.struct", "OBSERVE", "VALUE", "OBSERVED")
     }
-    return true
 }
 
 // === Test 6: Return Value - Array ===
@@ -106,19 +98,17 @@ fn createArray() -> list {
     return [10, 20, 30]
 }
 
-fn testReturnValueArray() -> bool {
+fn testReturnValueArray() {
     io.println("=== Test 6: Return Value (Array) ===")
     let a = createArray()
     let b = a
     arrays.set(b, 0, 999)
     let a0 = arrays.get(a, 0)
-    let isReference = a0 == 999
-    if isReference {
-        io.println("OBSERVED: returned array is REFERENCE - aliasing works after return")
+    if a0 == 999 {
+        emitEvidence("memory.return.array", "OBSERVE", "REFERENCE", "OBSERVED")
     } else {
-        io.println("OBSERVED: returned array is VALUE - aliasing does NOT work after return (a[0]=" + a0 + ")")
+        emitEvidence("memory.return.array", "OBSERVE", "VALUE", "OBSERVED")
     }
-    return true
 }
 
 // === Test 7: Return Value - Struct ===
@@ -126,23 +116,21 @@ fn createPerson() -> Person {
     return Person { name: "Charlie", age: 35 }
 }
 
-fn testReturnValueStruct() -> bool {
+fn testReturnValueStruct() {
     io.println("=== Test 7: Return Value (Struct) ===")
     let a = createPerson()
     let b = a
     b.age = 888
     let aAge = a.age
-    let isReference = aAge == 888
-    if isReference {
-        io.println("OBSERVED: returned struct is REFERENCE - aliasing works after return")
+    if aAge == 888 {
+        emitEvidence("memory.return.struct", "OBSERVE", "REFERENCE", "OBSERVED")
     } else {
-        io.println("OBSERVED: returned struct is VALUE - aliasing does NOT work after return (a.age=" + aAge + ")")
+        emitEvidence("memory.return.struct", "OBSERVE", "VALUE", "OBSERVED")
     }
-    return true
 }
 
 // === Test 8: Closure Capture - Mutation ===
-fn testClosureCaptureMutation() -> bool {
+fn testClosureCaptureMutation() {
     io.println("=== Test 8: Closure Capture (Mutation) ===")
     let counter = [0]
     let increment = fn() -> void {
@@ -152,17 +140,15 @@ fn testClosureCaptureMutation() -> bool {
     increment()
     increment()
     let count = arrays.get(counter, 0)
-    let isCapture = count == 3
-    if isCapture {
-        io.println("OBSERVED: closure captures by REFERENCE - counter=3 after 3 increments")
+    if count == 3 {
+        emitEvidence("memory.closure.capture", "OBSERVE", "REFERENCE", "OBSERVED")
     } else {
-        io.println("OBSERVED: closure captures by VALUE - counter=" + count + " (expected 3)")
+        emitEvidence("memory.closure.capture", "OBSERVE", "VALUE", "OBSERVED")
     }
-    return true
 }
 
-// === Test 9: Closure Capture - Independent Instances ===
-fn testClosureIndependentInstances() -> bool {
+// === Test 9: Closure Independent Instances ===
+fn testClosureIndependentInstances() {
     io.println("=== Test 9: Closure Independent Instances ===")
     let makeCounter = fn() -> map {
         let state = [0]
@@ -179,82 +165,64 @@ fn testClosureIndependentInstances() -> bool {
     c2["inc"]()
     let v1 = c1["get"]()
     let v2 = c2["get"]()
-    let independent = v1 == 2 && v2 == 1
-    if independent {
-        io.println("OBSERVED: closure instances are INDEPENDENT - c1=2, c2=1")
+    if v1 == 2 && v2 == 1 {
+        emitEvidence("memory.closure.independent", "OBSERVE", "INDEPENDENT", "OBSERVED")
     } else {
-        io.println("OBSERVED: closure instances are SHARED - c1=" + v1 + ", c2=" + v2)
+        emitEvidence("memory.closure.independent", "OBSERVE", "SHARED", "OBSERVED")
     }
-    return true
 }
 
 // === Test 10: Escape / Lifetime ===
-fn testEscapeLifetime() -> bool {
+fn testEscapeLifetime() {
     io.println("=== Test 10: Escape / Lifetime ===")
     let getEscaped = fn() -> list {
         let local = [1, 2, 3]
-        return local // local escapes the function
+        return local
     }
     let escaped = getEscaped()
     let len = arrays.length(escaped)
     let first = arrays.get(escaped, 0)
-    let alive = len == 3 && first == 1
-    if alive {
-        io.println("OBSERVED: escaped value remains ALIVE after function return - len=3, first=1")
+    if len == 3 && first == 1 {
+        emitEvidence("memory.escape.lifetime", "OBSERVE", "ALIVE", "OBSERVED")
     } else {
-        io.println("OBSERVED: escaped value is DEAD after return - len=" + len + ", first=" + first)
+        emitEvidence("memory.escape.lifetime", "OBSERVE", "DEAD", "OBSERVED")
     }
-    return true
 }
 
 // === Test 11: Primitive Value Semantics (Control Group) ===
-fn testPrimitiveValueSemantics() -> bool {
+fn testPrimitiveValueSemantics() {
     io.println("=== Test 11: Primitive Value Semantics (Control Group) ===")
     let a = 10
     let b = a
     b = 20
-    let unchanged = a == 10
-    if unchanged {
-        io.println("OBSERVED: int is VALUE - b=20 did NOT affect a (a=10)")
+    if a == 10 {
+        emitEvidence("memory.primitive.value", "OBSERVE", "VALUE", "OBSERVED")
     } else {
-        io.println("OBSERVED: int is REFERENCE - b=20 affected a (a=" + a + ")")
+        emitEvidence("memory.primitive.value", "OBSERVE", "REFERENCE", "OBSERVED")
     }
-    return true
 }
 
 fn main() -> int {
     io.println("========================================")
     io.println("TLL Memory Semantics Behavior Test")
     io.println("Phase 4 FINAL BEHAVIOR EVIDENCE CLOSURE")
-    io.println("CORRECTED: No presupposed answers - all behavior OBSERVED")
+    io.println("REALITY-ALIGNED: Machine-parseable EVIDENCE records")
     io.println("========================================")
 
-    let passed = 0
-    let failed = 0
-
-    // All tests "pass" because we are OBSERVING behavior, not asserting expected behavior
-    // The EVIDENCE is the observed output, which will be analyzed after CI run
-    if testArrayAliasing() { passed = passed + 1 } else { failed = failed + 1 }
-    if testMapAliasing() { passed = passed + 1 } else { failed = failed + 1 }
-    if testStructAliasing() { passed = passed + 1 } else { failed = failed + 1 }
-    if testParameterPassingArray() { passed = passed + 1 } else { failed = failed + 1 }
-    if testParameterPassingStruct() { passed = passed + 1 } else { failed = failed + 1 }
-    if testReturnValueArray() { passed = passed + 1 } else { failed = failed + 1 }
-    if testReturnValueStruct() { passed = passed + 1 } else { failed = failed + 1 }
-    if testClosureCaptureMutation() { passed = passed + 1 } else { failed = failed + 1 }
-    if testClosureIndependentInstances() { passed = passed + 1 } else { failed = failed + 1 }
-    if testEscapeLifetime() { passed = passed + 1 } else { failed = failed + 1 }
-    if testPrimitiveValueSemantics() { passed = passed + 1 } else { failed = failed + 1 }
+    testArrayAliasing()
+    testMapAliasing()
+    testStructAliasing()
+    testParameterPassingArray()
+    testParameterPassingStruct()
+    testReturnValueArray()
+    testReturnValueStruct()
+    testClosureCaptureMutation()
+    testClosureIndependentInstances()
+    testEscapeLifetime()
+    testPrimitiveValueSemantics()
 
     io.println("========================================")
-    io.println("Results: Passed=" + passed + " Failed=" + failed + " Total=11")
-    io.println("NOTE: All tests OBSERVE behavior. Actual REFERENCE vs VALUE determination")
-    io.println("will be made from CI output analysis, not from test pass/fail.")
-    if failed == 0 {
-        io.println("ALL MEMORY TESTS RAN SUCCESSFULLY")
-        return 0
-    } else {
-        io.println("SOME MEMORY TESTS FAILED TO RUN")
-        return 1
-    }
+    io.println("MEMORY EVIDENCE COMPLETE")
+    io.println("Total evidence records: 11")
+    return 0
 }
