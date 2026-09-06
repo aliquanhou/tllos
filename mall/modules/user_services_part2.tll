@@ -1,0 +1,218 @@
+// TLLOS Mall - User Services Part 2 (7 more features)
+// All implemented in TLL high-frame-rate language
+
+from "../core/database" import db_query, db_queryOne, db_exec
+from "../core/router" import router_get, router_post, res_html, res_json, res_redirect, req_getQuery, req_getJsonBody
+from "../core/session" import cookie_getSessionId
+from "../core/auth" import auth_currentUser
+from "./user_services_base" import us_ensureTables, us_page, us_requireLogin, us_tabClass, us_ifStr
+
+// === 7. Messages ===
+fn us_messagesPage(req) {
+    let currentUser = us_requireLogin(req)
+    if (currentUser == null) { return res_redirect("/login") }
+    let db = req.db
+    us_ensureTables(db)
+    let messages = db_query(db, "SELECT * FROM user_messages WHERE user_id=" + convert.toString(currentUser.id) + " ORDER BY created_at DESC LIMIT 50")
+    let unreadCount = db_queryOne(db, "SELECT COUNT(*) as cnt FROM user_messages WHERE user_id=" + convert.toString(currentUser.id) + " AND is_read=0")
+    let html = "<div class='us-card' style='margin:12px;padding:12px;text-align:center;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff'><div style='font-size:24px;font-weight:bold'>" + convert.toString(unreadCount.cnt) + "</div><div style='font-size:12px;opacity:0.8'>未读消息</div></div>"
+    if (arrays.length(messages) == 0) {
+        html = html + "<div class='us-empty'><div class='us-empty-icon'>🔔</div><div class='us-empty-text'>暂无消息</div></div>"
+    } else {
+        html = html + "<div class='us-card' style='margin:12px;padding:0'>"
+        let i = 0
+        while (i < arrays.length(messages)) {
+            let m = messages[i]
+            let typeIcon = "📢"
+            if (m.type == "order") { typeIcon = "📦" }
+            if (m.type == "promotion") { typeIcon = "🎁" }
+            if (m.type == "system") { typeIcon = "⚙️" }
+            let readStyle = ""
+            if (m.is_read == 0) { readStyle = "background:#fff8f0" }
+            html = html + "<div class='us-list-item' style='" + readStyle + "' onclick=\"location.href='/user/messages/" + convert.toString(m.id) + "'\"><div class='us-list-icon'>" + typeIcon + "</div><div class='us-list-content'><div class='us-list-title'>" + m.title + us_ifStr(m.is_read == 0, " <span class='us-badge us-badge-danger'>新</span>", "") + "</div><div class='us-list-desc'>" + m.content + "</div><div class='us-list-desc' style='margin-top:2px'>" + m.created_at + "</div></div><div class='us-list-arrow'>›</div></div>"
+            i = i + 1
+        }
+        html = html + "</div>"
+    }
+    return res_html(us_page("消息通知", html, currentUser))
+}
+
+fn us_messageDetail(req, messageId) {
+    let currentUser = us_requireLogin(req)
+    if (currentUser == null) { return res_redirect("/login") }
+    let db = req.db
+    us_ensureTables(db)
+    db_exec(db, "UPDATE user_messages SET is_read=1 WHERE id=" + convert.toString(messageId) + " AND user_id=" + convert.toString(currentUser.id))
+    let m = db_queryOne(db, "SELECT * FROM user_messages WHERE id=" + convert.toString(messageId) + " AND user_id=" + convert.toString(currentUser.id))
+    let html = ""
+    if (m == null) {
+        html = "<div class='us-empty'><div class='us-empty-icon'>❓</div><div class='us-empty-text'>消息不存在</div></div>"
+    } else {
+        html = "<div class='us-card'><div class='us-article'><h3>" + m.title + "</h3><div style='font-size:12px;color:#999;margin-bottom:16px'>" + m.created_at + "</div><p>" + m.content + "</p></div></div>"
+    }
+    return res_html(us_page("消息详情", html, currentUser))
+}
+
+// === 8. Customer Service ===
+fn us_servicePage(req) {
+    let currentUser = us_requireLogin(req)
+    if (currentUser == null) { return res_redirect("/login") }
+    let db = req.db
+    us_ensureTables(db)
+    let messages = db_query(db, "SELECT * FROM cs_messages WHERE user_id=" + convert.toString(currentUser.id) + " ORDER BY created_at ASC LIMIT 100")
+    let html = "<div style='padding:12px;height:calc(100vh - 120px);overflow-y:auto' id='chatArea'>"
+    if (arrays.length(messages) == 0) {
+        html = html + "<div class='us-empty'><div class='us-empty-icon'>💬</div><div class='us-empty-text'>暂无对话，开始咨询吧</div></div>"
+    } else {
+        let i = 0
+        while (i < arrays.length(messages)) {
+            let m = messages[i]
+            if (m.sender_type == "user") {
+                html = html + "<div style='display:flex;justify-content:flex-end;margin-bottom:12px'><div style='background:#ff6a00;color:#fff;padding:10px 14px;border-radius:12px 12px 0 12px;max-width:70%;word-break:break-all'>" + m.content + "</div></div>"
+            } else {
+                html = html + "<div style='display:flex;justify-content:flex-start;margin-bottom:12px'><div style='background:#fff;padding:10px 14px;border-radius:12px 12px 12px 0;max-width:70%;word-break:break-all;box-shadow:0 1px 4px rgba(0,0,0,0.04)'>" + m.content + "</div></div>"
+            }
+            i = i + 1
+        }
+    }
+    html = html + "</div>" +
+        "<div style='position:fixed;bottom:0;left:0;right:0;background:#fff;padding:10px 12px;border-top:1px solid #eee;display:flex;gap:8px'>" +
+        "<input class='us-form-input' id='msgInput' placeholder='请输入消息...' style='flex:1' onkeypress='if(event.key==\"Enter\")sendMsg()'>" +
+        "<button class='us-btn' style='padding:10px 20px' onclick='sendMsg()'>发送</button>" +
+        "</div>" +
+        "<script>function sendMsg(){let input=document.getElementById('msgInput');let msg=input.value.trim();if(!msg)return;input.value='';fetch('/user/service/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:msg})}).then(r=>r.json()).then(d=>{if(d.success){location.reload();}else{alert(d.error);}});}window.onload=function(){let area=document.getElementById('chatArea');if(area)area.scrollTop=area.scrollHeight;}</script>"
+    return res_html(us_page("联系客服", html, currentUser))
+}
+
+fn us_serviceSend(req) {
+    let currentUser = us_requireLogin(req)
+    if (currentUser == null) { return res_json({success: false, error: "请先登录"}, 401) }
+    let body = req_getJsonBody(req)
+    let db = req.db
+    us_ensureTables(db)
+    db_exec(db, "INSERT INTO cs_messages (user_id, sender_type, content, session_id) VALUES (" + convert.toString(currentUser.id) + ", 'user', '" + body.content + "', 'sess-" + convert.toString(currentUser.id) + "')")
+    // Auto reply
+    let reply = "您好，感谢您的咨询！客服人员会尽快回复您。常见问题可查看帮助中心。"
+    db_exec(db, "INSERT INTO cs_messages (user_id, sender_type, content, session_id) VALUES (" + convert.toString(currentUser.id) + ", 'agent', '" + reply + "', 'sess-" + convert.toString(currentUser.id) + "')")
+    return res_json({success: true})
+}
+
+// === 9. Help Center ===
+fn us_helpPage(req) {
+    let currentUser = us_requireLogin(req)
+    if (currentUser == null) { return res_redirect("/login") }
+    let db = req.db
+    us_ensureTables(db)
+    let category = req_getQuery(req, "category", "all")
+    let cond = "status='published'"
+    if (category != "all") { cond = cond + " AND category='" + category + "'" }
+    let articles = db_query(db, "SELECT * FROM help_articles WHERE " + cond + " ORDER BY sort_order ASC, created_at DESC LIMIT 50")
+    let html = "<div class='us-tabs'>" +
+        "<div class='us-tab " + us_tabClass(category, "all") + "' onclick=\"location.href='/user/help'\">全部</div>" +
+        "<div class='us-tab " + us_tabClass(category, "common") + "' onclick=\"location.href='/user/help?category=common'\">常见问题</div>" +
+        "<div class='us-tab " + us_tabClass(category, "order") + "' onclick=\"location.href='/user/help?category=order'\">订单相关</div>" +
+        "<div class='us-tab " + us_tabClass(category, "payment") + "' onclick=\"location.href='/user/help?category=payment'\">支付相关</div>" +
+        "<div class='us-tab " + us_tabClass(category, "account") + "' onclick=\"location.href='/user/help?category=account'\">账户相关</div>" +
+        "</div>"
+    if (arrays.length(articles) == 0) {
+        html = html + "<div class='us-empty'><div class='us-empty-icon'>❓</div><div class='us-empty-text'>暂无帮助文章</div></div>"
+    } else {
+        html = html + "<div class='us-card' style='margin:12px;padding:0'>"
+        let i = 0
+        while (i < arrays.length(articles)) {
+            let a = articles[i]
+            let catName = "常见问题"
+            if (a.category == "order") { catName = "订单" }
+            if (a.category == "payment") { catName = "支付" }
+            if (a.category == "account") { catName = "账户" }
+            html = html + "<div class='us-list-item' onclick=\"location.href='/user/help/" + convert.toString(a.id) + "'\"><div class='us-list-icon'>📖</div><div class='us-list-content'><div class='us-list-title'>" + a.title + "</div><div class='us-list-desc'><span class='us-badge us-badge-info'>" + catName + "</span></div></div><div class='us-list-arrow'>›</div></div>"
+            i = i + 1
+        }
+        html = html + "</div>"
+    }
+    html = html + "<div class='us-card' style='margin:12px;padding:16px;text-align:center'><div style='font-size:14px;color:#666;margin-bottom:12px'>没有找到答案？</div><a href='/user/service' class='us-btn us-btn-outline'>联系在线客服</a></div>"
+    return res_html(us_page("帮助中心", html, currentUser))
+}
+
+fn us_helpDetail(req, articleId) {
+    let currentUser = us_requireLogin(req)
+    if (currentUser == null) { return res_redirect("/login") }
+    let db = req.db
+    us_ensureTables(db)
+    let a = db_queryOne(db, "SELECT * FROM help_articles WHERE id=" + convert.toString(articleId))
+    let html = ""
+    if (a == null) {
+        html = "<div class='us-empty'><div class='us-empty-icon'>❓</div><div class='us-empty-text'>文章不存在</div></div>"
+    } else {
+        html = "<div class='us-card'><div class='us-article'><h3>" + a.title + "</h3><div style='font-size:12px;color:#999;margin-bottom:16px'>发布于 " + a.created_at + "</div><p>" + a.content + "</p></div></div>" +
+            "<div class='us-card' style='margin:12px;padding:16px;text-align:center'><div style='font-size:14px;color:#666;margin-bottom:12px'>这篇文章对您有帮助吗？</div><button class='us-btn us-btn-outline' style='margin-right:8px' onclick='alert(\"感谢您的反馈！\")'>👍 有帮助</button><button class='us-btn us-btn-outline' onclick='location.href=\"/user/service\"'>👎 没帮助，找客服</button></div>"
+    }
+    return res_html(us_page("帮助详情", html, currentUser))
+}
+
+// === 10. Settings ===
+fn us_settingsPage(req) {
+    let currentUser = us_requireLogin(req)
+    if (currentUser == null) { return res_redirect("/login") }
+    let db = req.db
+    us_ensureTables(db)
+    let userInfo = db_queryOne(db, "SELECT nickname, phone, email FROM users WHERE id=" + convert.toString(currentUser.id))
+    let nickname = currentUser.username
+    let phone = "未设置"
+    let email = "未设置"
+    if (userInfo != null) {
+        if (userInfo.nickname != null && userInfo.nickname != "") { nickname = userInfo.nickname }
+        if (userInfo.phone != null && userInfo.phone != "") { phone = userInfo.phone }
+        if (userInfo.email != null && userInfo.email != "") { email = userInfo.email }
+    }
+    let html = "<div class='us-card' style='padding:0'>" +
+        "<div class='us-list-item' onclick=\"location.href='/user/settings/profile'\"><div class='us-list-icon'>👤</div><div class='us-list-content'><div class='us-list-title'>个人资料</div><div class='us-list-desc'>昵称: " + nickname + "</div></div><div class='us-list-arrow'>›</div></div>" +
+        "<div class='us-list-item'><div class='us-list-icon'>📱</div><div class='us-list-content'><div class='us-list-title'>手机号</div><div class='us-list-desc'>" + phone + "</div></div><div class='us-list-arrow'>›</div></div>" +
+        "<div class='us-list-item'><div class='us-list-icon'>📧</div><div class='us-list-content'><div class='us-list-title'>邮箱</div><div class='us-list-desc'>" + email + "</div></div><div class='us-list-arrow'>›</div></div>" +
+        "</div>" +
+        "<div class='us-card' style='padding:0'>" +
+        "<div class='us-list-item'><div class='us-list-icon'>🔔</div><div class='us-list-content'><div class='us-list-title'>消息通知</div><div class='us-list-desc'>订单通知、促销通知</div></div><div class='us-list-arrow'>›</div></div>" +
+        "<div class='us-list-item'><div class='us-list-icon'>🌙</div><div class='us-list-content'><div class='us-list-title'>深色模式</div><div class='us-list-desc'>跟随系统</div></div><div class='us-list-arrow'>›</div></div>" +
+        "<div class='us-list-item'><div class='us-list-icon'>🌐</div><div class='us-list-content'><div class='us-list-title'>语言</div><div class='us-list-desc'>简体中文</div></div><div class='us-list-arrow'>›</div></div>" +
+        "</div>" +
+        "<div class='us-card' style='padding:0'>" +
+        "<div class='us-list-item' onclick=\"location.href='/user/security'\"><div class='us-list-icon'>🔒</div><div class='us-list-content'><div class='us-list-title'>账户安全</div><div class='us-list-desc'>密码、实名认证</div></div><div class='us-list-arrow'>›</div></div>" +
+        "<div class='us-list-item' onclick=\"location.href='/user/help'\"><div class='us-list-icon'>❓</div><div class='us-list-content'><div class='us-list-title'>帮助中心</div><div class='us-list-desc'>常见问题解答</div></div><div class='us-list-arrow'>›</div></div>" +
+        "<div class='us-list-item' onclick=\"location.href='/user/service'\"><div class='us-list-icon'>💬</div><div class='us-list-content'><div class='us-list-title'>联系客服</div><div class='us-list-desc'>在线客服咨询</div></div><div class='us-list-arrow'>›</div></div>" +
+        "</div>" +
+        "<div class='us-card' style='padding:16px;text-align:center'><div style='font-size:12px;color:#999'>TLL Mall v1.0.0</div><div style='font-size:11px;color:#ccc;margin-top:4px'>Powered by TLL High Performance Language</div></div>"
+    return res_html(us_page("设置", html, currentUser))
+}
+
+fn us_profilePage(req) {
+    let currentUser = us_requireLogin(req)
+    if (currentUser == null) { return res_redirect("/login") }
+    let db = req.db
+    us_ensureTables(db)
+    let userInfo = db_queryOne(db, "SELECT nickname, phone, email FROM users WHERE id=" + convert.toString(currentUser.id))
+    let nickname = currentUser.username
+    let phone = ""
+    let email = ""
+    if (userInfo != null) {
+        if (userInfo.nickname != null) { nickname = userInfo.nickname }
+        if (userInfo.phone != null) { phone = userInfo.phone }
+        if (userInfo.email != null) { email = userInfo.email }
+    }
+    let html = "<div class='us-card'><div class='us-form'>" +
+        "<div class='us-form-group'><label class='us-form-label'>昵称</label><input class='us-form-input' id='nickname' placeholder='请输入昵称' value='" + nickname + "'></div>" +
+        "<div class='us-form-group'><label class='us-form-label'>手机号</label><input class='us-form-input' id='phone' placeholder='请输入手机号' value='" + phone + "'></div>" +
+        "<div class='us-form-group'><label class='us-form-label'>邮箱</label><input class='us-form-input' id='email' placeholder='请输入邮箱' value='" + email + "'></div>" +
+        "<button class='us-btn' style='width:100%' onclick='saveProfile()'>保存修改</button>" +
+        "</div></div>" +
+        "<script>function saveProfile(){let n=document.getElementById('nickname').value;let p=document.getElementById('phone').value;let e=document.getElementById('email').value;if(!n){alert('请输入昵称');return;}fetch('/user/settings/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nickname:n,phone:p,email:e})}).then(r=>r.json()).then(d=>{if(d.success){alert('保存成功');location.href='/user/settings';}else{alert(d.error);}});}</script>"
+    return res_html(us_page("个人资料", html, currentUser))
+}
+
+fn us_profileSubmit(req) {
+    let currentUser = us_requireLogin(req)
+    if (currentUser == null) { return res_json({success: false, error: "请先登录"}, 401) }
+    let body = req_getJsonBody(req)
+    let db = req.db
+    db_exec(db, "UPDATE users SET nickname='" + body.nickname + "', phone='" + body.phone + "', email='" + body.email + "' WHERE id=" + convert.toString(currentUser.id))
+    return res_json({success: true})
+}

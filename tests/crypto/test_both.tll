@@ -1,0 +1,9 @@
+let a = crypto.secureRandomBytes(32)
+io.println("secureRandomBytes length: " + convert.toString(arrays.length(a)))
+let b = crypto.randomBytes(32)
+io.println("randomBytes length: " + convert.toString(arrays.length(b)))
+let i = 0
+while (i < arrays.length(a)) {
+    io.println("  a[" + convert.toString(i) + "] = " + convert.toString(a[i]))
+    i = i + 1
+}
