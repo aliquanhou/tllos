@@ -1,0 +1,81 @@
+// TLL Evaluation Semantics - Minimal Test (Staircase LEVEL 2 Step 1)
+// Only 3 most basic tests to verify the evaluation pipeline works.
+// TLL executes top-level code directly (no fn main needed).
+
+let executionLog = []
+
+fn logEvent(name: string) -> int {
+    arrays.push(executionLog, name)
+    return arrays.length(executionLog)
+}
+
+fn fnA() -> int {
+    logEvent("A")
+    return 1
+}
+
+fn fnB() -> int {
+    logEvent("B")
+    return 2
+}
+
+fn fnC() -> int {
+    logEvent("C")
+    return 3
+}
+
+fn sumThree(a: int, b: int, c: int) -> int {
+    return a + b + c
+}
+
+fn emitEvidence(testId: string, expected: string, actual: string, status: string) {
+    io.println("EVIDENCE: TEST_ID=" + testId + " EXPECTED=" + expected + " ACTUAL=" + actual + " STATUS=" + status)
+}
+
+io.println("=== TLL Evaluation Minimal Test ===")
+
+// Test 1: Function Argument Evaluation Order
+io.println("=== Test 1: Function Argument Order ===")
+executionLog = []
+let result1 = sumThree(fnA(), fnB(), fnC())
+let actual1 = executionLog[0] + "," + executionLog[1] + "," + executionLog[2]
+if actual1 == "A,B,C" && result1 == 6 {
+    emitEvidence("eval.function_arg_order", "A,B,C", actual1, "PASS")
+} else {
+    emitEvidence("eval.function_arg_order", "A,B,C", actual1, "FAIL")
+}
+
+// Test 2: Binary Expression Operand Order
+io.println("=== Test 2: Binary Operand Order ===")
+executionLog = []
+let result2 = fnA() + fnB() + fnC()
+let actual2 = executionLog[0] + "," + executionLog[1] + "," + executionLog[2]
+if actual2 == "A,B,C" && result2 == 6 {
+    emitEvidence("eval.binary_operand_order", "A,B,C", actual2, "PASS")
+} else {
+    emitEvidence("eval.binary_operand_order", "A,B,C", actual2, "FAIL")
+}
+
+// Test 3: Short-circuit AND
+fn returnsFalseLogged() -> bool {
+    logEvent("falseFn")
+    return false
+}
+
+fn returnsTrueLogged() -> bool {
+    logEvent("trueFn")
+    return true
+}
+
+io.println("=== Test 3: Short-circuit AND ===")
+executionLog = []
+let result3 = returnsFalseLogged() && returnsTrueLogged()
+let eventCount3 = arrays.length(executionLog)
+let actual3 = "events=" + eventCount3 + ",result=" + result3
+if eventCount3 == 1 && result3 == false {
+    emitEvidence("eval.short_circuit_and", "events=1,result=false", actual3, "PASS")
+} else {
+    emitEvidence("eval.short_circuit_and", "events=1,result=false", actual3, "FAIL")
+}
+
+io.println("=== EVALUATION MINIMAL TEST COMPLETE ===")
