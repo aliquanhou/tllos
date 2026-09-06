@@ -1,0 +1,42 @@
+// P1-04 macOS Binary Search - Test 9-11 (put/delete/url) + Test 14
+// Isolate if pollution source is in Test 9-11
+io.println("=== P1-04 macOS Binary Search: Test 9-11 + Test 14 ===")
+io.println("")
+
+let base = "http://127.0.0.1:18080"
+
+// Test 9: httpc.put
+io.println("--- Test 9: httpc.put ---")
+let resp9 = httpc.put(base + "/echo", "{\"key\":\"value\"}")
+io.println("  status=" + resp9.status)
+
+// Test 10: httpc.delete
+io.println("--- Test 10: httpc.delete ---")
+let resp10 = httpc.delete(base + "/echo")
+io.println("  status=" + resp10.status)
+
+// Test 11: url field in response
+io.println("--- Test 11: url field in response ---")
+let resp11 = httpc.get(base + "/status")
+io.println("  url=[" + resp11.url + "]")
+io.println("")
+
+// Test 14: 10 sequential requests (NO output per request to keep fast)
+io.println("--- Test 14: 10 sequential requests ---")
+let allOk = true
+let failedAt = -1
+for i in 1..11 {
+    let r = httpc.get(base + "/status")
+    if r.status != 200 {
+        allOk = false
+        failedAt = i
+        io.println("  req " + i + ": FAILED status=" + r.status + " error=[" + r.error + "]")
+    }
+}
+io.println("")
+io.println("Result: allOk=" + allOk + " failedAt=" + failedAt)
+if allOk {
+    io.println("TEST 9-11+14 PASSED - pollution NOT in Test 9-11, must be in Test 12-13")
+} else {
+    io.println("TEST 9-11+14 FAILED at req " + failedAt + " - pollution IS in Test 9-11")
+}
