@@ -25,33 +25,33 @@ jobs:
           scripts/bootstrap-tllc.sh
           test -f tools/TLLC/tllc.tllbc
 
-      - name: Compile product_debug6.tll
+      - name: Compile product_debug7.tll
         run: |
-          echo "=== Compiling product_debug6.tll ==="
+          echo "=== Compiling product_debug7.tll ==="
           mkdir -p mall/data
-          host/c/tllvm tools/TLLC/tllc.tllbc compile mall/product_debug6.tll -o /tmp/product_debug6.tllbc
+          host/c/tllvm tools/TLLC/tllc.tllbc compile mall/product_debug7.tll -o /tmp/product_debug7.tllbc
           echo "Compile exit: $?"
-          ls -la /tmp/product_debug6.tllbc
+          ls -la /tmp/product_debug7.tllbc
 
-      - name: Run product_debug6.tll and test HTTP
+      - name: Run product_debug7.tll and test HTTP
         run: |
-          echo "=== Starting product_debug6 server ==="
+          echo "=== Starting product_debug7 server ==="
           mkdir -p mall/data
           rm -f mall/data/mall.db
-          host/c/tllvm /tmp/product_debug6.tllbc > /tmp/product_debug6.log 2>&1 &
+          host/c/tllvm /tmp/product_debug7.tllbc > /tmp/product_debug7.log 2>&1 &
           SERVER_PID=$!
           echo "Server PID: $SERVER_PID"
           sleep 3
 
           echo "=== Server log ==="
-          cat /tmp/product_debug6.log
+          cat /tmp/product_debug7.log
 
           echo "=== Check if server is running ==="
           if kill -0 $SERVER_PID 2>/dev/null; then
             echo "Server is running"
           else
             echo "Server FAILED to start"
-            cat /tmp/product_debug6.log
+            cat /tmp/product_debug7.log
             exit 1
           fi
 
@@ -64,7 +64,7 @@ jobs:
           echo ""
 
           echo "=== Server log after requests ==="
-          cat /tmp/product_debug6.log
+          cat /tmp/product_debug7.log
 
           echo "=== Killing server ==="
           kill $SERVER_PID 2>/dev/null || true
@@ -77,5 +77,5 @@ jobs:
         with:
           name: product-debug-logs
           path: |
-            /tmp/product_debug6.log
+            /tmp/product_debug7.log
           if-no-files-found: warn
