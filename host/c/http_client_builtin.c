@@ -950,17 +950,9 @@ retry_request:
         }
     }
 
-    /* Decide: cache connection for reuse, or close it */
-    /* HTTPS reuse temporarily disabled: SSL session state needs more careful handling.
-       HTTP connections are cached; HTTPS creates new connection per request (pre-Level4 behavior). */
-    if (respLen > 0 && !serverWantsClose && (contentLength >= 0 || isChunked) && !pu.isHttps) {
-        conn_cache_put(pu.host, pu.port, pu.isHttps, insecure, &conn);
-    } else {
-        http_close(&conn);
-    }
-
     /* If cached connection returned empty response (server closed connection
-       while we were waiting), reconnect and retry once for idempotent requests. */
+       while we were waiting), reconnect and retry once for idempotent requests.
+       Must check BEFORE connection cache/close to avoid double-close. */
     if (respLen == 0 && fromCache && isIdempotent) {
         http_close(&conn);
         free(respBuf);
@@ -969,6 +961,15 @@ retry_request:
             return make_error_response(conn.tlsError ? conn.tlsError : "Connection failed after reconnect");
         }
         goto retry_request;
+    }
+
+    /* Decide: cache connection for reuse, or close it */
+    /* HTTPS reuse temporarily disabled: SSL session state needs more careful handling.
+       HTTP connections are cached; HTTPS creates new connection per request (pre-Level4 behavior). */
+    if (respLen > 0 && !serverWantsClose && (contentLength >= 0 || isChunked) && !pu.isHttps) {
+        conn_cache_put(pu.host, pu.port, pu.isHttps, insecure, &conn);
+    } else {
+        http_close(&conn);
     }
 
     if (respLen == 0) {
