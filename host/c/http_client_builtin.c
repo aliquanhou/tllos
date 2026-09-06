@@ -927,6 +927,13 @@ retry_request:
         if (respLen > 16 * 1024 * 1024) break;
     }
 
+    /* Debug: show raw response info */
+    if (respLen > 0) {
+        fprintf(stderr, "[DEBUG] respLen=%d, first 120 bytes: %.120s\n", respLen, respBuf);
+    } else {
+        fprintf(stderr, "[DEBUG] respLen=0 (empty response)\n");
+    }
+
     /* Check if server requested Connection: close */
     int serverWantsClose = 0;
     if (headerEnd >= 0) {
@@ -954,6 +961,7 @@ retry_request:
        while we were waiting), reconnect and retry once for idempotent requests.
        Must check BEFORE connection cache/close to avoid double-close. */
     if (respLen == 0 && fromCache && isIdempotent) {
+        fprintf(stderr, "[DEBUG] Empty response from cached connection, reconnecting...\n");
         http_close(&conn);
         free(respBuf);
         fromCache = 0;
