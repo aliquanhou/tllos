@@ -1,6 +1,6 @@
 # P1-04 HTTP Client Level 4 — Connection Reuse & Stability Evidence
 
-**Status**: PENDING SEAL
+**Status**: READY FOR SEAL
 **Date**: 2026-09-07
 **Branch**: p1-04-http-client
 
@@ -45,6 +45,18 @@ Pre-Level 4 code used `Connection: close` and created a new socket per request. 
 ---
 
 ## 3. Implementation Changes
+
+### Critical Bug Fixes During CI Iteration
+
+1. **Response header parsing bug (root cause of Linux conn_id empty)**:
+   - `parse_response_headers()` skipped the last header line because `headerText` (extracted before `\r\n\r\n`) has no trailing `\r\n` on the last line.
+   - `strstr(p, "\r\n")` returned NULL and broke the loop, so `X-Connection-ID` (the last header) was never parsed.
+   - Fix: refactored to `parse_one_header_line()` helper; when no `\r\n` found, treat remaining text as the last header line.
+   - This bug existed since Level 1 but was masked because Level 1/2 tests only checked `content-type` (not the last header).
+
+2. **Stale cached connection reconnect**: When a cached connection was closed by server idle timeout, `http_send` succeeded (data entered kernel buffer) but `http_recv` returned 0. Previously no reconnect was triggered. Fix: when `respLen==0 && fromCache && isIdempotent`, close stale connection, reconnect, and retry once.
+
+3. **macOS HTTPS server startup timing**: Added retry logic (5 attempts with 2s backoff) and `curl --max-time 5` to handle slow Python SSL server startup on macOS.
 
 ### Modified Files
 
@@ -220,7 +232,7 @@ If server responds with `Connection: close` header, the connection is NOT cached
 3. **No concurrent access**: Cache is not thread-safe. TLL runtime is currently single-threaded for builtin calls; this is acceptable for now.
 4. **POST not retried**: Non-idempotent methods don't get automatic reconnect retry. This is intentional (safety).
 5. **macOS SO_LINGER workaround retained**: Still used for explicit connection close. Connection reuse reduces its invocation frequency.
-6. **Linux/macOS CI verification pending**: Local Windows testing passed. Full 3-platform CI results will confirm Linux/macOS behavior.
+6. **HTTPS connection reuse temporarily disabled**: Only HTTP connections are cached. HTTPS creates new connection per request (same as Level 3 sealed behavior). HTTPS reuse requires careful SSL session state management, deferred to a future level.
 
 ---
 
@@ -229,15 +241,17 @@ If server responds with `Connection: close` header, the connection is NOT cached
 - Workflow: `.github/workflows/p1-04-http-client.yml`
 - Level 4 test added to all 3 platforms (Ubuntu, Windows, macOS)
 - No `|| true`, no `continue-on-error`, no timeout-as-pass
-- CI Run ID: pending (after push)
+- CI Run ID: 34066092429
+- CI Result: 3/3 PASS (Ubuntu, Windows, macOS)
+- Commit: 9206d4f
 
 ---
 
 ## 9. Commit
 
-- Commit SHA: pending (after submission)
-- Working tree: will be CLEAN after commit
-- Files changed: 4 (http_client_builtin.c, test_server.py, gate_http_client_level4.tll, workflow)
+- Commit SHA: 9206d4f
+- Working tree: CLEAN
+- Files changed: http_client_builtin.c, test_server.py, gate_http_client_level4.tll, p1-04-http-client.yml, baseline_sequential.tll, conn_id_test.tll, Evidence doc
 
 ---
 
