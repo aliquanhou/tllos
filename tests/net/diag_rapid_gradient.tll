@@ -1,0 +1,56 @@
+// P1-04 macOS Rapid Request Gradient Test
+// Test 20 and 30 rapid sequential requests to find exact failure threshold
+io.println("=== P1-04 macOS Rapid Request Gradient Test ===")
+io.println("")
+
+let base = "http://127.0.0.1:18080"
+
+// Test 1: 20 rapid sequential requests
+io.println("--- Test 1: 20 rapid sequential requests ---")
+let ok20 = true
+let fail20 = -1
+for i in 1..21 {
+    let r = httpc.get(base + "/status")
+    if r.status != 200 {
+        ok20 = false
+        fail20 = i
+        io.println("  req " + i + ": FAILED status=" + r.status + " error=[" + r.error + "]")
+    }
+}
+io.println("20 requests: allOk=" + ok20 + " failedAt=" + fail20)
+io.println("")
+
+// Test 2: 30 rapid sequential requests
+io.println("--- Test 2: 30 rapid sequential requests ---")
+let ok30 = true
+let fail30 = -1
+for i in 1..31 {
+    let r = httpc.get(base + "/status")
+    if r.status != 200 {
+        ok30 = false
+        fail30 = i
+        io.println("  req " + i + ": FAILED status=" + r.status + " error=[" + r.error + "]")
+    }
+}
+io.println("30 requests: allOk=" + ok30 + " failedAt=" + fail30)
+io.println("")
+
+// Summary
+io.println("=== Summary ===")
+if ok20 {
+    io.println("20 requests: PASSED")
+} else {
+    io.println("20 requests: FAILED at req " + fail20)
+}
+if ok30 {
+    io.println("30 requests: PASSED")
+} else {
+    io.println("30 requests: FAILED at req " + fail30)
+}
+if ok20 && ok30 {
+    io.println("Conclusion: 30 rapid requests all pass - issue may need more requests or specific test pattern")
+} else if !ok20 {
+    io.println("Conclusion: Failure threshold is at or below 20 requests")
+} else {
+    io.println("Conclusion: Failure threshold is between 20 and 30 requests")
+}

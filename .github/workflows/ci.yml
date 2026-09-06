@@ -233,7 +233,7 @@ jobs:
           grep -q "ALL TESTS PASSED" /tmp/httpc_gate.log
           echo "=== P1-04 HTTP Client Gate Test PASSED (Linux) ==="
 
-      - name: P1-04 macOS Binary Search Diagnostic (Test 12-13 + Test 14)
+      - name: P1-04 macOS Rapid Request Gradient Test (20/30 requests)
         if: runner.os == 'macOS'
         run: |
           # Start deterministic test server in background
@@ -242,14 +242,17 @@ jobs:
           sleep 2
           # Verify server is running
           curl -s http://127.0.0.1:18080/status || echo "Server not ready"
-          # Compile and run binary search diagnostic (Test 12-13 + Test 14)
-          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/diag_binary_12_13.tll -o tests/net/diag_binary_12_13.tllbc
-          timeout 120 host/c/tllvm tests/net/diag_binary_12_13.tllbc 2>&1 | tee /tmp/httpc_binary_12_13.log
+          # Check file descriptor limit
+          echo "=== ulimit -n: $(ulimit -n) ==="
+          echo "=== sysctl maxfiles: $(sysctl -n kern.maxfiles 2>/dev/null || echo 'N/A') ==="
+          # Compile and run rapid request gradient test (20/30 requests)
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/net/diag_rapid_gradient.tll -o tests/net/diag_rapid_gradient.tllbc
+          timeout 180 host/c/tllvm tests/net/diag_rapid_gradient.tllbc 2>&1 | tee /tmp/httpc_rapid_gradient.log
           EXIT_CODE=${PIPESTATUS[0]}
-          echo "=== Binary diagnostic exit code: $EXIT_CODE ==="
+          echo "=== Gradient test exit code: $EXIT_CODE ==="
           # Kill test server
           kill $SERVER_PID 2>/dev/null || true
-          echo "=== Binary diagnostic complete ===" 
+          echo "=== Gradient test complete ===" 
 
       - name: P1-04 HTTP Client Gate Test (Windows)
         if: runner.os == 'Windows'
