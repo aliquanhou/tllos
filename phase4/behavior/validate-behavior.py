@@ -46,24 +46,48 @@ def parse_behavior_log(log_path, test_name, runtime_exit=None):
     )
 
     # Parse EXPECTED/ACTUAL from details
-    expected_pattern = re.compile(r'EXPECTED:\s*([^,)]+)', re.IGNORECASE)
-    actual_pattern = re.compile(r'ACTUAL:\s*([^,)]+)', re.IGNORECASE)
+    # IMPORTANT: Values may contain commas (e.g., "A,B,C"), so we cannot
+    # use [^,)]+ which truncates at the first comma. We parse intelligently:
+    # EXPECTED: <value> , ACTUAL: <value>
+    # or
+    # EXPECTED: <value> ACTUAL: <value>
+    def parse_expected_actual(details_str):
+        """Parse EXPECTED and ACTUAL values, handling commas within values."""
+        if not details_str:
+            return None, None
+
+        expected = None
+        actual = None
+
+        # Try pattern: EXPECTED: ... ACTUAL: ... (ACTUAL acts as delimiter)
+        exp_match = re.search(r'EXPECTED:\s*(.+?)\s*(?:,?\s*)ACTUAL:', details_str, re.IGNORECASE)
+        if exp_match:
+            expected = exp_match.group(1).strip()
+
+        # ACTUAL: everything after ACTUAL: until end of string
+        act_match = re.search(r'ACTUAL:\s*(.+?)\s*$', details_str, re.IGNORECASE)
+        if act_match:
+            actual = act_match.group(1).strip()
+
+        # Fallback: if only EXPECTED found, try to get value after comma
+        if expected is None:
+            simple_exp = re.search(r'EXPECTED:\s*([^,]+?)(?:,|$)', details_str, re.IGNORECASE)
+            if simple_exp:
+                expected = simple_exp.group(1).strip()
+
+        if actual is None:
+            simple_act = re.search(r'ACTUAL:\s*([^,]+?)(?:,|$)', details_str, re.IGNORECASE)
+            if simple_act:
+                actual = simple_act.group(1).strip()
+
+        return expected, actual
 
     for match in result_pattern.finditer(content):
         status = match.group(1)
         name = match.group(2).strip()
         details = match.group(3) if match.group(3) else ""
 
-        expected = None
-        actual = None
-
-        if details:
-            exp_match = expected_pattern.search(details)
-            act_match = actual_pattern.search(details)
-            if exp_match:
-                expected = exp_match.group(1).strip()
-            if act_match:
-                actual = act_match.group(1).strip()
+        expected, actual = parse_expected_actual(details)
 
         tests.append({
             "test_id": f"{test_name}_{len(tests)+1:03d}",
@@ -168,7 +192,11 @@ def validate_behavior(result):
 
     # ============================================
     # GATE 5: EXPECTED == ACTUAL validation
+    # IMPORTANT: PASS + missing EXPECTED/ACTUAL must FAIL (unless OBSERVED-based test)
+    # Memory tests use OBSERVED format (architect decision: don't presuppose answers)
+    # Evaluation/Ternary tests MUST have EXPECTED/ACTUAL for PASS to be valid
     # ============================================
+    has_observations = len(result.get('observations', [])) > 0
     expected_actual_mismatch = 0
     missing_expected_actual = 0
     for t in tests:
@@ -180,8 +208,17 @@ def validate_behavior(result):
                     f"expected='{t['expected']}', actual='{t['actual']}'"
                 )
         elif t['status'] == 'PASS':
-            # PASS tests should ideally have EXPECTED/ACTUAL, but not mandatory
-            missing_expected_actual += 1
+            # PASS tests without EXPECTED/ACTUAL:
+            # - If this is an OBSERVED-based test (Memory), it's allowed
+            # - Otherwise, it MUST FAIL (evidence integrity requirement)
+            if not has_observations:
+                missing_expected_actual += 1
+                errors.append(
+                    f"PASS test '{t['test_name']}' missing EXPECTED/ACTUAL - "
+                    f"evidence integrity requires explicit expected vs actual"
+                )
+            else:
+                missing_expected_actual += 1
 
     if expected_actual_mismatch > 0:
         print(f"  FAIL: {expected_actual_mismatch} test(s) with EXPECTED != ACTUAL")
@@ -189,7 +226,10 @@ def validate_behavior(result):
         print("  PASS: All EXPECTED == ACTUAL (where provided)")
 
     if missing_expected_actual > 0:
-        print(f"  INFO: {missing_expected_actual} PASS test(s) without explicit EXPECTED/ACTUAL")
+        if has_observations:
+            print(f"  INFO: {missing_expected_actual} OBSERVED-based PASS test(s) without EXPECTED/ACTUAL (allowed for Memory)")
+        else:
+            print(f"  FAIL: {missing_expected_actual} PASS test(s) missing EXPECTED/ACTUAL - evidence integrity violation")
 
     # ============================================
     # GATE 6: No FAIL tests

@@ -187,6 +187,31 @@ else
 fi
 
 # ============================================
+# Step 3.5: Negative Ternary Compile Gate
+# IMPORTANT: This is a NEGATIVE test - it MUST fail to compile.
+# If it compiles successfully, the compiler is NOT rejecting incompatible types.
+# Positive test: compile_exit == 0
+# Negative test: compile_exit != 0
+# ============================================
+echo ""
+echo "=== Step 3.5: Negative Ternary Compile Gate (must FAIL to compile) ==="
+
+run_with_tee "$LOG_DIR/ternary_negative_compile.log" \
+    "$TLLVM" "$TLLC" compile "$REPO_ROOT/tests/ternary-incompatible-types-negative.tll" -o "$LOG_DIR/ternary-negative.tllbc"
+NEGATIVE_COMPILE_STATUS=$RUN_EXIT_CODE
+
+echo "Negative ternary compile real exit code: $NEGATIVE_COMPILE_STATUS"
+
+# GATE: negative test MUST fail to compile (exit != 0)
+if [ $NEGATIVE_COMPILE_STATUS -eq 0 ]; then
+    echo "FAIL: Negative ternary test compiled successfully (exit 0) - compiler did NOT reject incompatible types - Evidence Gate FAIL"
+    OVERALL_STATUS=1
+    FAILED_STEPS+=("ternary_negative_compile")
+else
+    echo "PASS: Negative ternary test correctly failed to compile (exit $NEGATIVE_COMPILE_STATUS) - compiler rejects incompatible types"
+fi
+
+# ============================================
 # Step 4: Capture TypeChecker Warnings
 # ============================================
 echo ""
@@ -223,7 +248,16 @@ else
     VALIDATE_STATUS=$?
     set -e
 
-    echo "Warning validation exit status: $VALIDATE_STATUS (raw capture stage - classification pending)"
+    # GATE: Warning validator must pass (raw capture stage)
+    # Note: at raw capture stage, count may not equal 603 - that's expected
+    # and will be reported. But parser/schema failures must cause overall FAIL.
+    if [ $VALIDATE_STATUS -ne 0 ]; then
+        echo "FAIL: Warning validation failed (exit $VALIDATE_STATUS) - Evidence Gate FAIL"
+        OVERALL_STATUS=1
+        FAILED_STEPS+=("warning_validate")
+    else
+        echo "PASS: Warning validation passed (raw capture stage - classification pending)"
+    fi
 fi
 
 # ============================================
