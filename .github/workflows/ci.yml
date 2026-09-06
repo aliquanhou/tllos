@@ -154,27 +154,49 @@ jobs:
           echo "=== EVIDENCE Summary ==="
           grep '^EVIDENCE:' /tmp/memory-semantics-test.log
 
-      # === Phase 4 Staircase LEVEL 2 Step 1: Evaluation Minimal Evidence ===
-      # 3 most basic evaluation tests to verify the pipeline works.
-      # Bisecting: full 12-test suite timed out, start with minimal.
-      - name: Phase 4 - Evaluation Minimal Evidence (Ubuntu only)
+      # === Phase 4 Staircase LEVEL 2: Full Evaluation Evidence Suite ===
+      # 12 evaluation semantics tests (CI #342 verified: passes, ~12-15 min)
+      - name: Phase 4 - Evaluation Full Evidence Suite (Ubuntu only)
         if: runner.os == 'Linux'
         run: |
           set -e
-          echo "=== Compiling evaluation-minimal-test.tll ==="
-          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/evaluation-minimal-test.tll -o /tmp/evaluation-minimal-test.tllbc
-          echo "=== Running evaluation-minimal-test.tllbc ==="
-          host/c/tllvm /tmp/evaluation-minimal-test.tllbc | tee /tmp/evaluation-minimal-test.log
+          echo "=== Compiling evaluation-semantics-test.tll ==="
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/evaluation-semantics-test.tll -o /tmp/evaluation-semantics-test.tllbc
+          echo "=== Running evaluation-semantics-test.tllbc ==="
+          host/c/tllvm /tmp/evaluation-semantics-test.tllbc | tee /tmp/evaluation-semantics-test.log
           echo "=== Verifying EVIDENCE records ==="
-          EVIDENCE_COUNT=$(grep -c '^EVIDENCE:' /tmp/evaluation-minimal-test.log || true)
+          EVIDENCE_COUNT=$(grep -c '^EVIDENCE:' /tmp/evaluation-semantics-test.log || true)
           echo "EVIDENCE records found: $EVIDENCE_COUNT"
-          if [ "$EVIDENCE_COUNT" -lt 3 ]; then
-            echo "FAIL: Expected at least 3 EVIDENCE records, found $EVIDENCE_COUNT"
+          if [ "$EVIDENCE_COUNT" -lt 10 ]; then
+            echo "FAIL: Expected at least 10 EVIDENCE records, found $EVIDENCE_COUNT"
             exit 1
           fi
           echo "PASS: $EVIDENCE_COUNT EVIDENCE records found"
           echo "=== EVIDENCE Summary ==="
-          grep '^EVIDENCE:' /tmp/evaluation-minimal-test.log
+          grep '^EVIDENCE:' /tmp/evaluation-semantics-test.log
+
+      # === Phase 4 Staircase LEVEL 3: Full Ternary Evidence Suite ===
+      # 14 ternary acceptance tests: true/false branch, nested, precedence,
+      # arithmetic/function/assignment composition, int/float, promotion,
+      # incompatible types (WARNING semantics), laziness true/false.
+      - name: Phase 4 - Ternary Full Evidence Suite (Ubuntu only)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          echo "=== Compiling ternary-acceptance-test.tll ==="
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/ternary-acceptance-test.tll -o /tmp/ternary-acceptance-test.tllbc
+          echo "=== Running ternary-acceptance-test.tllbc ==="
+          host/c/tllvm /tmp/ternary-acceptance-test.tllbc | tee /tmp/ternary-acceptance-test.log
+          echo "=== Verifying EVIDENCE records ==="
+          EVIDENCE_COUNT=$(grep -c '^EVIDENCE:' /tmp/ternary-acceptance-test.log || true)
+          echo "EVIDENCE records found: $EVIDENCE_COUNT"
+          if [ "$EVIDENCE_COUNT" -lt 12 ]; then
+            echo "FAIL: Expected at least 12 EVIDENCE records, found $EVIDENCE_COUNT"
+            exit 1
+          fi
+          echo "PASS: $EVIDENCE_COUNT EVIDENCE records found"
+          echo "=== EVIDENCE Summary ==="
+          grep '^EVIDENCE:' /tmp/ternary-acceptance-test.log
       - name: Phase 4 - Upload Evidence Artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -433,7 +455,7 @@ jobs:
         run: scripts\run-bc-network-test.ps1 bc_invalid
 
       # === P0-15.18.3: Blockchain High-Message Stress Test ===
-      # 4 Node real TCP, 120 high-frequency transactions (fee闂備緡鍋呯敮鎺椔?triggers mempool capacity=50 overflow),
+      # 4 Node real TCP, 120 high-frequency transactions (fee闂傚倷绶￠崑鍛暜閹烘?triggers mempool capacity=50 overflow),
       # transaction propagation, block propagation, final 4-node consistency.
       # No Runtime changes 闂?if this fails, Runtime/P2P/Blockchain has a real bug.
       - name: Blockchain high-message stress 120 txs (Linux/macOS)
