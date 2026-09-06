@@ -49,7 +49,7 @@ run_with_tee() {
 # Step 1: Memory Behavior Test
 # ============================================
 echo ""
-echo "=== Step 1: Memory Behavior Test ==="
+echo "PHASE4_DEBUG: === Step 1: Memory Behavior Test STARTING ==="
 
 run_with_tee "$LOG_DIR/memory_compile.log" \
     "$TLLVM" "$TLLC" compile "$REPO_ROOT/tests/memory-semantics-test.tll" -o "$LOG_DIR/memory-semantics-test.tllbc"
@@ -60,7 +60,7 @@ if [ $COMPILE_STATUS -ne 0 ]; then
     OVERALL_STATUS=1
     FAILED_STEPS+=("memory_compile")
 else
-    echo "PASS: Memory test compiled successfully (exit 0)"
+    echo "PHASE4_DEBUG: Memory compile SUCCESS"
 
     run_with_tee "$LOG_DIR/memory_run.log" \
         "$TLLVM" "$LOG_DIR/memory-semantics-test.tllbc"
@@ -86,7 +86,7 @@ else
         OVERALL_STATUS=1
         FAILED_STEPS+=("memory_validate")
     else
-        echo "PASS: Memory behavior validation passed"
+        echo "PHASE4_DEBUG: Memory validator SUCCESS"
     fi
 fi
 
@@ -94,7 +94,7 @@ fi
 # Step 2: Evaluation Behavior Test
 # ============================================
 echo ""
-echo "=== Step 2: Evaluation Behavior Test ==="
+echo "PHASE4_DEBUG: === Step 2: Evaluation Behavior Test STARTING ==="
 
 run_with_tee "$LOG_DIR/evaluation_compile.log" \
     "$TLLVM" "$TLLC" compile "$REPO_ROOT/tests/evaluation-semantics-test.tll" -o "$LOG_DIR/evaluation-semantics-test.tllbc"
@@ -105,7 +105,7 @@ if [ $COMPILE_STATUS -ne 0 ]; then
     OVERALL_STATUS=1
     FAILED_STEPS+=("evaluation_compile")
 else
-    echo "PASS: Evaluation test compiled successfully (exit 0)"
+    echo "PHASE4_DEBUG: Evaluation compile SUCCESS"
 
     run_with_tee "$LOG_DIR/evaluation_run.log" \
         "$TLLVM" "$LOG_DIR/evaluation-semantics-test.tllbc"
@@ -131,7 +131,7 @@ else
         OVERALL_STATUS=1
         FAILED_STEPS+=("evaluation_validate")
     else
-        echo "PASS: Evaluation behavior validation passed"
+        echo "PHASE4_DEBUG: Evaluation validator SUCCESS"
     fi
 fi
 
@@ -139,7 +139,7 @@ fi
 # Step 3: Ternary Acceptance Test
 # ============================================
 echo ""
-echo "=== Step 3: Ternary Acceptance Test ==="
+echo "PHASE4_DEBUG: === Step 3: Ternary Acceptance Test STARTING ==="
 
 run_with_tee "$LOG_DIR/ternary_compile.log" \
     "$TLLVM" "$TLLC" compile "$REPO_ROOT/tests/ternary-acceptance-test.tll" -o "$LOG_DIR/ternary-acceptance-test.tllbc"
@@ -150,7 +150,7 @@ if [ $COMPILE_STATUS -ne 0 ]; then
     OVERALL_STATUS=1
     FAILED_STEPS+=("ternary_compile")
 else
-    echo "PASS: Ternary test compiled successfully (exit 0)"
+    echo "PHASE4_DEBUG: Ternary compile SUCCESS"
 
     run_with_tee "$LOG_DIR/ternary_run.log" \
         "$TLLVM" "$LOG_DIR/ternary-acceptance-test.tllbc"
@@ -176,7 +176,7 @@ else
         OVERALL_STATUS=1
         FAILED_STEPS+=("ternary_validate")
     else
-        echo "PASS: Ternary behavior validation passed"
+        echo "PHASE4_DEBUG: Ternary validator SUCCESS"
     fi
 fi
 
@@ -187,7 +187,7 @@ fi
 # We verify WARNING is present, not that compilation fails.
 # ============================================
 echo ""
-echo "=== Step 3.5: Negative Ternary - WARNING Presence (current TLL semantics) ==="
+echo "PHASE4_DEBUG: === Step 3.5: Negative Ternary STARTING ==="
 
 run_with_tee "$LOG_DIR/ternary_negative_compile.log" \
     "$TLLVM" "$TLLC" compile "$REPO_ROOT/tests/ternary-incompatible-types-negative.tll" -o "$LOG_DIR/ternary-negative.tllbc"
@@ -214,7 +214,7 @@ fi
 # Use compiler.tll compilation to capture TypeChecker warnings
 # ============================================
 echo ""
-echo "=== Step 4: Capture TypeChecker Warnings ==="
+echo "PHASE4_DEBUG: === Step 4: Capture TypeChecker Warnings STARTING ==="
 cd "$REPO_ROOT/compiler"
 
 # Compile compiler.tll to capture TypeChecker warnings
