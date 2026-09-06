@@ -1,0 +1,36 @@
+// TLL Commerce Dogfood - Product Vertical Slice (DEBUG STEP 3)
+// Test db_insert function (without array literals, use string concat)
+
+from "./core/database" import db_open, db_exec, db_query, db_insert
+
+let db = db_open("product_debug3.db")
+
+db_exec(db, "CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, price REAL, stock INTEGER)")
+
+// Test db_insert with string concatenation (no array literals)
+io.println("Testing db_insert...")
+let id1 = db_insert(db, "INSERT INTO products (name, price, stock) VALUES ('Widget', 9.99, 100)")
+io.println("Inserted id1: " + convert.toString(id1))
+let id2 = db_insert(db, "INSERT INTO products (name, price, stock) VALUES ('Gadget', 19.99, 50)")
+io.println("Inserted id2: " + convert.toString(id2))
+
+io.println("Database initialized with db_insert")
+
+fn productHandler(req) {
+    if req.path == "/products" && req.method == "GET" {
+        let rows = db_query(db, "SELECT id, name, price, stock FROM products ORDER BY id")
+        let count = arrays.length(rows)
+        io.println("Products query: count=" + convert.toString(count))
+        let jsonStr = json.stringify(rows)
+        return {status: 200, contentType: "application/json", body: jsonStr}
+    }
+
+    if req.path == "/health" && req.method == "GET" {
+        return {status: 200, contentType: "text/plain", body: "OK"}
+    }
+
+    return {status: 404, contentType: "text/plain", body: "Not Found: " + req.path}
+}
+
+io.println("=== Product Debug Step 3 Server starting on :8088 ===")
+http.serve("0.0.0.0:8088", productHandler)
