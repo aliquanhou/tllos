@@ -168,6 +168,8 @@ fn getKeywordType(word: string) -> string {
     if word == "agent" { return TK_AGENT }
     if word == "tool" { return TK_TOOL }
     if word == "workflow" { return TK_WORKFLOW }
+    if word == "and" { return TK_AND }
+    if word == "or" { return TK_OR }
     return ""
 }
 
