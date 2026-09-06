@@ -1,0 +1,42 @@
+// TLL Commerce Dogfood - Product Vertical Slice (DEBUG STEP 5)
+// Test db_get()/db_release() and GLOBAL_DB_PATH
+
+from "./core/database" import db_open, db_exec, db_query, db_get, db_release, db_insert, GLOBAL_DB_PATH
+
+io.println("GLOBAL_DB_PATH: " + GLOBAL_DB_PATH)
+
+// Initialize database using GLOBAL_DB_PATH
+let db = db_open(GLOBAL_DB_PATH)
+db_exec(db, "CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, price REAL, stock INTEGER)")
+db_insert(db, "INSERT INTO products (name, price, stock) VALUES (?, ?, ?)", ["Widget", 9.99, 100])
+db_insert(db, "INSERT INTO products (name, price, stock) VALUES (?, ?, ?)", ["Gadget", 19.99, 50])
+db_release(db)
+io.println("Database initialized with GLOBAL_DB_PATH")
+
+// Handler uses db_get()/db_release() per request
+fn productHandler(req) {
+    io.println("Handler called for: " + req.method + " " + req.path)
+    let db = db_get()
+    io.println("Got db connection from db_get()")
+
+    if req.path == "/products" && req.method == "GET" {
+        let rows = db_query(db, "SELECT id, name, price, stock FROM products ORDER BY id")
+        let count = arrays.length(rows)
+        io.println("Products query: count=" + convert.toString(count))
+        let jsonStr = json.stringify(rows)
+        db_release(db)
+        io.println("Released db connection")
+        return {status: 200, contentType: "application/json", body: jsonStr}
+    }
+
+    if req.path == "/health" && req.method == "GET" {
+        db_release(db)
+        return {status: 200, contentType: "text/plain", body: "OK"}
+    }
+
+    db_release(db)
+    return {status: 404, contentType: "text/plain", body: "Not Found: " + req.path}
+}
+
+io.println("=== Product Debug Step 5 Server starting on :8088 ===")
+http.serve("0.0.0.0:8088", productHandler)
