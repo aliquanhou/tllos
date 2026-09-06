@@ -70,6 +70,12 @@ if [ $COMPILE_STATUS -ne 0 ]; then
 else
     echo "PHASE4_DEBUG: Memory compile SUCCESS"
 
+    # DEBUG: Check compile log and bytecode file
+    echo "::error::DEBUG memory_compile.log size: $(stat -f%z "$LOG_DIR/memory_compile.log" 2>/dev/null || stat -c%s "$LOG_DIR/memory_compile.log" 2>/dev/null || echo unknown)" >&2
+    echo "::error::DEBUG memory_compile.log last 10 lines:" >&2
+    tail -10 "$LOG_DIR/memory_compile.log" 2>/dev/null | while IFS= read -r line; do echo "::error::  $line" >&2; done
+    echo "::error::DEBUG memory bytecode exists: $(test -f "$LOG_DIR/memory-semantics-test.tllbc" && echo YES || echo NO), size: $(stat -f%z "$LOG_DIR/memory-semantics-test.tllbc" 2>/dev/null || stat -c%s "$LOG_DIR/memory-semantics-test.tllbc" 2>/dev/null || echo unknown)" >&2
+
     run_with_tee "$LOG_DIR/memory_run.log" \
         "$TLLVM" "$LOG_DIR/memory-semantics-test.tllbc"
     RUN_STATUS=$RUN_EXIT_CODE
