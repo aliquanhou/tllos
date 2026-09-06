@@ -926,6 +926,19 @@ fn cg_compileStatement(stmt: map) -> void {
     if kind == "Export" { cg_compileStatement(stmt.declaration); return }
 }
 
+fn cg_compileTernary(expr: map) -> int {
+    let condReg = cg_compileExpression(expr.condition)
+    let jmpFalseIdx = arrays.length(cg_instructions)
+    cg_emit(OP_JMP_IF_FALSE, [condReg, -1])
+    let consequentReg = cg_compileExpression(expr.consequent)
+    let jmpEndIdx = arrays.length(cg_instructions)
+    cg_emit(OP_JMP, [-1])
+    cg_patchJump(jmpFalseIdx)
+    let alternateReg = cg_compileExpression(expr.alternate)
+    cg_patchJump(jmpEndIdx)
+    return consequentReg
+}
+
 fn cg_compileIf(stmt: map) -> void {
     let condReg = cg_compileExpression(stmt.condition)
     let jmpFalseIdx = arrays.length(cg_instructions)

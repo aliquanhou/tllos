@@ -316,6 +316,13 @@ fn tc_checkExpression(expr: map) -> map {
         return sym["type"]
     }
 
+    if kind == "Ternary" {
+        tc_checkExpression(expr["condition"])
+        let consType = tc_checkExpression(expr["consequent"])
+        tc_checkExpression(expr["alternate"])
+        return consType
+    }
+
     if kind == "Binary" {
         let left = tc_checkExpression(expr["left"])
         let right = tc_checkExpression(expr["right"])
