@@ -2,7 +2,7 @@
 // Reuses mall/core/database.tll, does NOT create a third mall
 // Goal: GET /products -> SQLite -> JSON -> HTTP Response
 
-from "./core/database" import db_open, db_exec, db_query, db_get, db_release, db_insert, db_tableExists, GLOBAL_DB_PATH
+from "./core/database" import db_open, db_exec, db_query, db_get, db_release, db_insert, GLOBAL_DB_PATH
 
 // === Product Schema & Seed ===
 
@@ -12,7 +12,6 @@ fn ensureProductsTable(db) {
 
 fn seedProducts(db) {
     let count = db_query(db, "SELECT COUNT(*) as cnt FROM products")
-    // If table is empty, seed with test products
     if arrays.length(count) > 0 {
         let cnt = count[0].cnt
         if cnt == 0 {
@@ -27,68 +26,45 @@ fn seedProducts(db) {
 // === HTTP Handler ===
 
 fn productHandler(req) {
-    // Get fresh DB connection per request (worker pool closure workaround)
     let db = db_get()
 
     if req.path == "/products" && req.method == "GET" {
         let rows = db_query(db, "SELECT id, name, price, stock, description FROM products ORDER BY id")
         db_release(db)
-        return {
-            status: 200,
-            contentType: "application/json",
-            body: json.stringify(rows)
-        }
+        return {status: 200, contentType: "application/json", body: json.stringify(rows)}
     }
 
     if req.path == "/products/seed" && req.method == "POST" {
         ensureProductsTable(db)
         seedProducts(db)
         db_release(db)
-        return {
-            status: 200,
-            contentType: "application/json",
-            body: json.stringify({ok: true, message: "Products seeded"})
-        }
+        return {status: 200, contentType: "application/json", body: json.stringify({ok: true, message: "Products seeded"})}
     }
 
     if req.path == "/health" && req.method == "GET" {
         db_release(db)
-        return {
-            status: 200,
-            contentType: "application/json",
-            body: json.stringify({status: "ok", service: "product-slice"})
-        }
+        return {status: 200, contentType: "application/json", body: json.stringify({status: "ok", service: "product-slice"})}
     }
 
     db_release(db)
-    return {
-        status: 404,
-        contentType: "application/json",
-        body: json.stringify({error: "Not Found", path: req.path})
-    }
+    return {status: 404, contentType: "application/json", body: json.stringify({error: "Not Found", path: req.path})}
 }
 
-// === Main ===
+// === Main (top-level execution, matching test_http_db.tll pattern) ===
 
-fn main() {
-    // Use global DB path so db_get() in handlers uses same DB
-    io.println("Using database: " + GLOBAL_DB_PATH)
-    let db = db_open(GLOBAL_DB_PATH)
-    ensureProductsTable(db)
-    seedProducts(db)
+io.println("Using database: " + GLOBAL_DB_PATH)
+let db = db_open(GLOBAL_DB_PATH)
+ensureProductsTable(db)
+seedProducts(db)
 
-    // Verify seed
-    let rows = db_query(db, "SELECT COUNT(*) as cnt FROM products")
-    if arrays.length(rows) > 0 {
-        io.println("Product count: " + convert.toString(rows[0].cnt))
-    }
-    db_release(db)
-
-    io.println("=== Product Vertical Slice starting on :8088 ===")
-    io.println("GET /products    - List all products")
-    io.println("GET /health      - Health check")
-    io.println("POST /products/seed - Re-seed products")
-    http.serve("0.0.0.0:8088", productHandler)
+let rows = db_query(db, "SELECT COUNT(*) as cnt FROM products")
+if arrays.length(rows) > 0 {
+    io.println("Product count: " + convert.toString(rows[0].cnt))
 }
+db_release(db)
 
-main()
+io.println("=== Product Vertical Slice starting on :8088 ===")
+io.println("GET /products    - List all products")
+io.println("GET /health      - Health check")
+io.println("POST /products/seed - Re-seed products")
+http.serve("0.0.0.0:8088", productHandler)
