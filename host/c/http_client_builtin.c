@@ -197,37 +197,44 @@ static void headers_to_string(TLLValue headersMap, char *out, int outLen) {
     }
 }
 
+static void parse_one_header_line(TLLMap *map, const char *line, int lineLen) {
+    if (lineLen <= 0) return;
+    const char *colon = memchr(line, ':', lineLen);
+    if (!colon) return;
+    int keyLen = (int)(colon - line);
+    const char *valStart = colon + 1;
+    while (*valStart == ' ') valStart++;
+    int valLen = lineLen - (int)(valStart - line);
+
+    char key[256];
+    if (keyLen >= (int)sizeof(key)) keyLen = sizeof(key) - 1;
+    strncpy(key, line, keyLen);
+    key[keyLen] = '\0';
+    for (int i = 0; key[i]; i++) key[i] = tolower((unsigned char)key[i]);
+
+    char val[4096];
+    if (valLen >= (int)sizeof(val)) valLen = sizeof(val) - 1;
+    strncpy(val, valStart, valLen);
+    val[valLen] = '\0';
+
+    map_set(map, key, tll_string(val));
+}
+
 static TLLValue parse_response_headers(const char *headerText) {
     TLLValue headersMap = tll_map();
     const char *p = headerText;
     while (*p) {
         const char *lineEnd = strstr(p, "\r\n");
-        if (!lineEnd) break;
-        int lineLen = (int)(lineEnd - p);
-        if (lineLen > 0) {
-            const char *colon = memchr(p, ':', lineLen);
-            if (colon) {
-                int keyLen = (int)(colon - p);
-                const char *valStart = colon + 1;
-                while (*valStart == ' ') valStart++;
-                int valLen = (int)(lineEnd - valStart);
-
-                char key[256];
-                if (keyLen >= (int)sizeof(key)) keyLen = sizeof(key) - 1;
-                strncpy(key, p, keyLen);
-                key[keyLen] = '\0';
-                /* lowercase the key */
-                for (int i = 0; key[i]; i++) key[i] = tolower((unsigned char)key[i]);
-
-                char val[4096];
-                if (valLen >= (int)sizeof(val)) valLen = sizeof(val) - 1;
-                strncpy(val, valStart, valLen);
-                val[valLen] = '\0';
-
-                map_set(headersMap.as.map, key, tll_string(val));
-            }
+        if (lineEnd) {
+            int lineLen = (int)(lineEnd - p);
+            parse_one_header_line(headersMap.as.map, p, lineLen);
+            p = lineEnd + 2;
+        } else {
+            /* Last line without trailing \r\n */
+            int lineLen = (int)strlen(p);
+            parse_one_header_line(headersMap.as.map, p, lineLen);
+            break;
         }
-        p = lineEnd + 2;
     }
     return headersMap;
 }
@@ -927,16 +934,6 @@ retry_request:
         if (respLen > 16 * 1024 * 1024) break;
     }
 
-    /* Debug: show raw response info */
-    if (respLen > 0) {
-        const char *he = strstr(respBuf, "\r\n\r\n");
-        int hdrLen = he ? (int)(he - respBuf) + 4 : respLen;
-        if (hdrLen > 512) hdrLen = 512;
-        printf("[DEBUG] respLen=%d, headers (%d bytes):\n%.*s\n---END HEADERS---\n", respLen, hdrLen, hdrLen, respBuf);
-    } else {
-        printf("[DEBUG] respLen=0 (empty response)\n");
-    }
-
     /* Check if server requested Connection: close */
     int serverWantsClose = 0;
     if (headerEnd >= 0) {
@@ -964,8 +961,7 @@ retry_request:
        while we were waiting), reconnect and retry once for idempotent requests.
        Must check BEFORE connection cache/close to avoid double-close. */
     if (respLen == 0 && fromCache && isIdempotent) {
-        printf("[DEBUG] Empty response from cached connection, reconnecting...\n");
-        http_close(&conn);
+http_close(&conn);
         free(respBuf);
         fromCache = 0;
         if (http_connect(&conn, pu.host, pu.port, pu.isHttps, timeoutMs, insecure) != 0) {
