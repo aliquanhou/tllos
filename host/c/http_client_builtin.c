@@ -45,6 +45,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <strings.h>
 #include <poll.h>
 #if defined(__APPLE__)
 #include <Security/SecureTransport.h>

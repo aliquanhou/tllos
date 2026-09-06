@@ -311,7 +311,7 @@ jobs:
             echo ::error::Level 4 test FAILED - ALL LEVEL 4 GATES PASSED not found
             exit /b 1
           ) else (
-            echo ::notice::Level 4 Connection Reuse & Stability test PASSED
+            echo ::notice::Level 4 Connection Reuse ^& Stability test PASSED
           )
 
   test-macos:
