@@ -1,0 +1,38 @@
+// P1-04 macOS Binary Search - Test 12-13 (404/500 status codes) + Test 14
+// CONFIRM if pollution source is non-200 response handling
+io.println("=== P1-04 macOS Binary Search: Test 12-13 + Test 14 ===")
+io.println("")
+
+let base = "http://127.0.0.1:18080"
+
+// Test 12: Custom status code 404
+io.println("--- Test 12: Custom status code 404 ---")
+let resp12 = httpc.get(base + "/status/404")
+io.println("  status=" + resp12.status + " ok=" + resp12.ok)
+
+// Test 13: Custom status code 500
+io.println("--- Test 13: Custom status code 500 ---")
+let resp13 = httpc.get(base + "/status/500")
+io.println("  status=" + resp13.status + " ok=" + resp13.ok)
+io.println("")
+
+// Test 14: 10 sequential requests (NO output per request to keep fast)
+io.println("--- Test 14: 10 sequential requests ---")
+let allOk = true
+let failedAt = -1
+for i in 1..11 {
+    let r = httpc.get(base + "/status")
+    if r.status != 200 {
+        allOk = false
+        failedAt = i
+        io.println("  req " + i + ": FAILED status=" + r.status + " error=[" + r.error + "]")
+    }
+}
+io.println("")
+io.println("Result: allOk=" + allOk + " failedAt=" + failedAt)
+if allOk {
+    io.println("TEST 12-13+14 PASSED - pollution NOT from 404/500 handling")
+} else {
+    io.println("TEST 12-13+14 FAILED at req " + failedAt + " - pollution IS from 404/500 response handling!")
+    io.println("Root cause: HTTP Client resource leak when handling non-200 status codes")
+}
