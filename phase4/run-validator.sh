@@ -80,7 +80,7 @@ else
     set +e
     $PYTHON "$BEHAVIOR_DIR/validate-behavior.py" \
         "$LOG_DIR/memory_run.log" "memory" "$BEHAVIOR_DIR/memory.json" \
-        --runtime-exit "$RUN_STATUS"
+        --runtime-exit "$RUN_STATUS" 1>&2
     VALIDATE_STATUS=$?
     set -e
 
@@ -125,7 +125,7 @@ else
     set +e
     $PYTHON "$BEHAVIOR_DIR/validate-behavior.py" \
         "$LOG_DIR/evaluation_run.log" "evaluation" "$BEHAVIOR_DIR/evaluation.json" \
-        --runtime-exit "$RUN_STATUS"
+        --runtime-exit "$RUN_STATUS" 1>&2
     VALIDATE_STATUS=$?
     set -e
 
@@ -170,7 +170,7 @@ else
     set +e
     $PYTHON "$BEHAVIOR_DIR/validate-behavior.py" \
         "$LOG_DIR/ternary_run.log" "ternary" "$BEHAVIOR_DIR/ternary.json" \
-        --runtime-exit "$RUN_STATUS"
+        --runtime-exit "$RUN_STATUS" 1>&2
     VALIDATE_STATUS=$?
     set -e
 
@@ -248,7 +248,7 @@ else
     echo "PASS: Warning parsing completed"
 
     set +e
-    $PYTHON "$WARNINGS_DIR/validate-warnings.py" "$WARNINGS_DIR/warnings.json"
+    $PYTHON "$WARNINGS_DIR/validate-warnings.py" "$WARNINGS_DIR/warnings.json" 1>&2
     VALIDATE_STATUS=$?
     set -e
 
