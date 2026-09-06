@@ -1,0 +1,138 @@
+// P1-04 Level 2 — POST + Custom Headers + Timeout + Error Handling
+// Verifies: httpc.post, custom request headers, error handling (404/500/connection refused), timeout
+// Server: tests/net/test_server.py on http://127.0.0.1:18080
+
+io.println("=== P1-04 Level 2: POST + Headers + Timeout + Error Handling ===")
+io.println("")
+
+let passed = 0
+let failed = 0
+
+fn test(name, cond) {
+    if cond {
+        io.println("  PASS: " + name)
+        passed = passed + 1
+    } else {
+        io.println("  FAIL: " + name)
+        failed = failed + 1
+    }
+}
+
+let base = "http://127.0.0.1:18080"
+
+// ============================================================
+// Section 1: POST with body
+// ============================================================
+io.println("--- Section 1: POST with body ---")
+let postBody = "{\"name\":\"TLL\",\"version\":\"1.0\"}"
+let resp1 = httpc.post(base + "/echo", postBody)
+io.println("  status=" + resp1.status + " ok=" + resp1.ok)
+io.println("  body=" + resp1.body)
+test("POST returns status 200", resp1.status == 200)
+test("POST ok is true", resp1.ok == true)
+test("POST body contains TLL", strings.contains(resp1.body, "TLL"))
+test("POST body contains version", strings.contains(resp1.body, "1.0"))
+test("POST body contains method POST", strings.contains(resp1.body, "POST"))
+io.println("")
+
+// ============================================================
+// Section 2: POST with Content-Type header
+// ============================================================
+io.println("--- Section 2: POST with Content-Type header ---")
+let headers2 = {}
+headers2["Content-Type"] = "application/json"
+let resp2 = httpc.post(base + "/echo", postBody, headers2)
+io.println("  status=" + resp2.status)
+test("POST with Content-Type status 200", resp2.status == 200)
+test("POST with headers body contains TLL", strings.contains(resp2.body, "TLL"))
+io.println("")
+
+// ============================================================
+// Section 3: Custom request headers on GET
+// ============================================================
+io.println("--- Section 3: Custom request headers on GET ---")
+let headers3 = {}
+headers3["X-Test-Header"] = "TLL-Level2"
+headers3["Accept"] = "application/json"
+let resp3 = httpc.get(base + "/headers", headers3)
+io.println("  status=" + resp3.status)
+io.println("  body=" + resp3.body)
+test("GET with custom headers status 200", resp3.status == 200)
+test("Server received X-Test-Header", strings.contains(resp3.body, "X-Test-Header"))
+test("Server received TLL-Level2 value", strings.contains(resp3.body, "TLL-Level2"))
+test("Server received Accept header", strings.contains(resp3.body, "Accept"))
+io.println("")
+
+// ============================================================
+// Section 4: Error handling - HTTP 404
+// ============================================================
+io.println("--- Section 4: Error handling - HTTP 404 ---")
+let resp4 = httpc.get(base + "/status/404")
+io.println("  status=" + resp4.status + " ok=" + resp4.ok)
+test("404 response status is 404", resp4.status == 404)
+test("404 response ok is false", resp4.ok == false)
+test("404 body is non-empty", strings.length(resp4.body) > 0)
+io.println("")
+
+// ============================================================
+// Section 5: Error handling - HTTP 500
+// ============================================================
+io.println("--- Section 5: Error handling - HTTP 500 ---")
+let resp5 = httpc.get(base + "/status/500")
+io.println("  status=" + resp5.status + " ok=" + resp5.ok)
+test("500 response status is 500", resp5.status == 500)
+test("500 response ok is false", resp5.ok == false)
+io.println("")
+
+// ============================================================
+// Section 6: Error handling - connection refused
+// ============================================================
+io.println("--- Section 6: Error handling - connection refused ---")
+let resp6 = httpc.get("http://127.0.0.1:19999/")
+io.println("  status=" + resp6.status + " ok=" + resp6.ok + " error=[" + resp6.error + "]")
+test("Connection refused ok is false", resp6.ok == false)
+test("Connection refused status is 0", resp6.status == 0)
+test("Connection refused error is non-empty", strings.length(resp6.error) > 0)
+io.println("")
+
+// ============================================================
+// Section 7: Timeout via httpc.request
+// ============================================================
+io.println("--- Section 7: Timeout parameter via httpc.request ---")
+let req7 = {}
+req7["method"] = "GET"
+req7["url"] = base + "/status"
+req7["timeout"] = 10000
+let resp7 = httpc.request(req7)
+io.println("  status=" + resp7.status + " ok=" + resp7.ok)
+test("request with timeout returns 200", resp7.status == 200)
+test("request with timeout ok is true", resp7.ok == true)
+test("request with timeout body non-empty", strings.length(resp7.body) > 0)
+io.println("")
+
+// ============================================================
+// Section 8: httpc.request with POST
+// ============================================================
+io.println("--- Section 8: httpc.request with POST ---")
+let req8 = {}
+req8["method"] = "POST"
+req8["url"] = base + "/echo"
+req8["body"] = "{\"test\":\"request-post\"}"
+let resp8 = httpc.request(req8)
+io.println("  status=" + resp8.status)
+test("request POST returns 200", resp8.status == 200)
+test("request POST body contains request-post", strings.contains(resp8.body, "request-post"))
+io.println("")
+
+// ============================================================
+// Results
+// ============================================================
+io.println("=== Results ===")
+io.println("Passed: " + passed)
+io.println("Failed: " + failed)
+io.println("")
+if failed == 0 {
+    io.println("ALL TESTS PASSED")
+} else {
+    io.println("SOME TESTS FAILED")
+}

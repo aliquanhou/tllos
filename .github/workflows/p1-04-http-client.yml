@@ -13,6 +13,7 @@ on:
       - 'compiler/codegen.tll'
       - 'compiler/linker.tll'
       - 'tests/net/gate_http_client_minimal.tll'
+      - 'tests/net/gate_http_client_level2.tll'
       - 'tests/net/test_server.py'
       - '.github/workflows/p1-04-http-client.yml'
   pull_request:
@@ -85,13 +86,28 @@ jobs:
           ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/net/gate_http_client_minimal.tll -o tests/net/gate_http_client_minimal.tllbc
           ls -la tests/net/gate_http_client_minimal.tllbc
 
-      - name: Run minimal HTTP GET test
+      - name: Run minimal HTTP GET test (Level 1)
         run: |
-          ./host/c/tllvm tests/net/gate_http_client_minimal.tllbc | tee test_output.txt
-          if grep -q "ALL TESTS PASSED" test_output.txt; then
-            echo "::notice::Minimal HTTP GET test PASSED"
+          ./host/c/tllvm tests/net/gate_http_client_minimal.tllbc | tee test_output_l1.txt
+          if grep -q "ALL TESTS PASSED" test_output_l1.txt; then
+            echo "::notice::Level 1 Minimal HTTP GET test PASSED"
           else
-            echo "::error::Minimal HTTP GET test FAILED - ALL TESTS PASSED not found in output"
+            echo "::error::Level 1 test FAILED - ALL TESTS PASSED not found"
+            exit 1
+          fi
+
+      - name: Compile Level 2 test
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/net/gate_http_client_level2.tll -o tests/net/gate_http_client_level2.tllbc
+          ls -la tests/net/gate_http_client_level2.tllbc
+
+      - name: Run Level 2 test (POST + headers + timeout + error handling)
+        run: |
+          ./host/c/tllvm tests/net/gate_http_client_level2.tllbc | tee test_output_l2.txt
+          if grep -q "ALL TESTS PASSED" test_output_l2.txt; then
+            echo "::notice::Level 2 POST+Headers+Timeout+Error test PASSED"
+          else
+            echo "::error::Level 2 test FAILED - ALL TESTS PASSED not found"
             exit 1
           fi
 
@@ -162,17 +178,36 @@ jobs:
           .\host\c\tllvm.exe tools\TLLC\tllc_new.tllbc compile tests\net\gate_http_client_minimal.tll -o tests\net\gate_http_client_minimal.tllbc
           if errorlevel 1 exit /b 1
 
-      - name: Run minimal HTTP GET test
+      - name: Run minimal HTTP GET test (Level 1)
         shell: cmd
         run: |
-          .\host\c\tllvm.exe tests\net\gate_http_client_minimal.tllbc > test_output.txt 2>&1
-          type test_output.txt
-          findstr /C:"ALL TESTS PASSED" test_output.txt >nul
+          .\host\c\tllvm.exe tests\net\gate_http_client_minimal.tllbc > test_output_l1.txt 2>&1
+          type test_output_l1.txt
+          findstr /C:"ALL TESTS PASSED" test_output_l1.txt >nul
           if errorlevel 1 (
-            echo ::error::Minimal HTTP GET test FAILED - ALL TESTS PASSED not found
+            echo ::error::Level 1 test FAILED - ALL TESTS PASSED not found
             exit /b 1
           ) else (
-            echo ::notice::Minimal HTTP GET test PASSED
+            echo ::notice::Level 1 Minimal HTTP GET test PASSED
+          )
+
+      - name: Compile Level 2 test
+        shell: cmd
+        run: |
+          .\host\c\tllvm.exe tools\TLLC\tllc_new.tllbc compile tests\net\gate_http_client_level2.tll -o tests\net\gate_http_client_level2.tllbc
+          if errorlevel 1 exit /b 1
+
+      - name: Run Level 2 test (POST + headers + timeout + error handling)
+        shell: cmd
+        run: |
+          .\host\c\tllvm.exe tests\net\gate_http_client_level2.tllbc > test_output_l2.txt 2>&1
+          type test_output_l2.txt
+          findstr /C:"ALL TESTS PASSED" test_output_l2.txt >nul
+          if errorlevel 1 (
+            echo ::error::Level 2 test FAILED - ALL TESTS PASSED not found
+            exit /b 1
+          ) else (
+            echo ::notice::Level 2 POST+Headers+Timeout+Error test PASSED
           )
 
   test-macos:
@@ -235,13 +270,28 @@ jobs:
           ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/net/gate_http_client_minimal.tll -o tests/net/gate_http_client_minimal.tllbc
           ls -la tests/net/gate_http_client_minimal.tllbc
 
-      - name: Run minimal HTTP GET test
+      - name: Run minimal HTTP GET test (Level 1)
         run: |
-          ./host/c/tllvm tests/net/gate_http_client_minimal.tllbc | tee test_output.txt
-          if grep -q "ALL TESTS PASSED" test_output.txt; then
-            echo "::notice::Minimal HTTP GET test PASSED"
+          ./host/c/tllvm tests/net/gate_http_client_minimal.tllbc | tee test_output_l1.txt
+          if grep -q "ALL TESTS PASSED" test_output_l1.txt; then
+            echo "::notice::Level 1 Minimal HTTP GET test PASSED"
           else
-            echo "::error::Minimal HTTP GET test FAILED - ALL TESTS PASSED not found in output"
+            echo "::error::Level 1 test FAILED - ALL TESTS PASSED not found"
+            exit 1
+          fi
+
+      - name: Compile Level 2 test
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/net/gate_http_client_level2.tll -o tests/net/gate_http_client_level2.tllbc
+          ls -la tests/net/gate_http_client_level2.tllbc
+
+      - name: Run Level 2 test (POST + headers + timeout + error handling)
+        run: |
+          ./host/c/tllvm tests/net/gate_http_client_level2.tllbc | tee test_output_l2.txt
+          if grep -q "ALL TESTS PASSED" test_output_l2.txt; then
+            echo "::notice::Level 2 POST+Headers+Timeout+Error test PASSED"
+          else
+            echo "::error::Level 2 test FAILED - ALL TESTS PASSED not found"
             exit 1
           fi
 
