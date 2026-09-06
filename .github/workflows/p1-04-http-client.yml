@@ -1,0 +1,253 @@
+name: P1-04 HTTP Client Level 1 Tests
+
+on:
+  push:
+    paths:
+      - 'host/c/http_client_builtin.c'
+      - 'host/c/tllvm.h'
+      - 'host/c/builtin.c'
+      - 'host/c/main.c'
+      - 'host/c/vm.c'
+      - 'host/c/value.c'
+      - 'host/c/json.c'
+      - 'compiler/codegen.tll'
+      - 'compiler/linker.tll'
+      - 'tests/net/gate_http_client_minimal.tll'
+      - 'tests/net/test_server.py'
+      - '.github/workflows/p1-04-http-client.yml'
+  pull_request:
+    paths:
+      - 'host/c/http_client_builtin.c'
+      - 'tests/net/**'
+
+jobs:
+  test-linux:
+    name: Linux (Ubuntu 22.04)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Disable CRLF conversion
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y gcc make libssl-dev python3
+
+      - name: Build tllvm (per-file, with http_client_builtin.c)
+        run: |
+          cd host/c
+          echo "=== Compiling each file separately ===" > build_log.txt
+          for f in main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c; do
+            echo "--- Compiling $f ---" >> build_log.txt
+            gcc -O0 -w -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -c $f -o ${f%.c}.o >> build_log.txt 2>&1
+            echo "  Exit: $?" >> build_log.txt
+          done
+          echo "--- Compiling sqlite3.c ---" >> build_log.txt
+          gcc -O0 -w -std=c99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -DSQLITE_THREADSAFE=1 -c sqlite3.c -o sqlite3.o >> build_log.txt 2>&1
+          echo "  sqlite3.c Exit: $?" >> build_log.txt
+          echo "=== Linking ===" >> build_log.txt
+          gcc -O0 -o tllvm main.o vm.o value.o json.o builtin.o sqlite_builtin.o crypto_builtin.o password_builtin.o hmac_builtin.o http_client_builtin.o sqlite3.o -lm -lpthread -ldl -lssl -lcrypto >> build_log.txt 2>&1
+          LINK_EXIT=$?
+          echo "=== Link exit code: $LINK_EXIT ===" >> build_log.txt
+          cat build_log.txt
+          if [ $LINK_EXIT -ne 0 ]; then
+            echo "::error::Link failed with exit code $LINK_EXIT"
+            exit 1
+          fi
+          ls -la tllvm
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build-log
+          path: host/c/build_log.txt
+          retention-days: 7
+
+      - name: Build TLL compiler
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc.tllbc compile tools/TLLC/main.tll -o tools/TLLC/tllc_new.tllbc
+          ls -la tools/TLLC/tllc_new.tllbc
+
+      - name: Start test server
+        run: |
+          python3 tests/net/test_server.py 18080 &
+          SERVER_PID=$!
+          echo "Server PID: $SERVER_PID"
+          echo $SERVER_PID > /tmp/test_server.pid
+          sleep 2
+          curl -s http://127.0.0.1:18080/status
+          echo ""
+
+      - name: Compile minimal HTTP GET test
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/net/gate_http_client_minimal.tll -o tests/net/gate_http_client_minimal.tllbc
+          ls -la tests/net/gate_http_client_minimal.tllbc
+
+      - name: Run minimal HTTP GET test
+        run: |
+          ./host/c/tllvm tests/net/gate_http_client_minimal.tllbc | tee test_output.txt
+          if grep -q "ALL TESTS PASSED" test_output.txt; then
+            echo "::notice::Minimal HTTP GET test PASSED"
+          else
+            echo "::error::Minimal HTTP GET test FAILED - ALL TESTS PASSED not found in output"
+            exit 1
+          fi
+
+      - name: Stop test server
+        if: always()
+        run: |
+          if [ -f /tmp/test_server.pid ]; then
+            kill $(cat /tmp/test_server.pid) 2>/dev/null || true
+          fi
+
+  test-windows:
+    name: Windows (MSVC)
+    runs-on: windows-latest
+    steps:
+      - name: Disable CRLF conversion
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build tllvm.exe (per-file, with http_client_builtin.c)
+        shell: cmd
+        run: |
+          cd host\c
+          echo === Compiling each file separately === > build_log.txt
+          for %%f in (main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c) do (
+            echo --- Compiling %%f --- >> build_log.txt
+            cl /c /O0 /w /D_CRT_SECURE_NO_WARNINGS /D_WIN32 %%f >> build_log.txt 2>&1
+            echo   Exit: %errorlevel% >> build_log.txt
+          )
+          echo --- Compiling sqlite3.c --- >> build_log.txt
+          cl /c /O0 /w /D_CRT_SECURE_NO_WARNINGS /D_WIN32 /DSQLITE_THREADSAFE=1 sqlite3.c >> build_log.txt 2>&1
+          echo   sqlite3.c Exit: %errorlevel% >> build_log.txt
+          echo === Linking === >> build_log.txt
+          link /OUT:tllvm.exe main.obj vm.obj value.obj json.obj builtin.obj sqlite_builtin.obj crypto_builtin.obj password_builtin.obj hmac_builtin.obj http_client_builtin.obj sqlite3.obj bcrypt.lib advapi32.lib ws2_32.lib winhttp.lib >> build_log.txt 2>&1
+          echo === Link exit code: %errorlevel% === >> build_log.txt
+          type build_log.txt
+          if errorlevel 1 exit /b 1
+          dir tllvm.exe
+
+      - name: Upload build log (Windows)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build-log
+          path: host/c/build_log.txt
+          retention-days: 7
+
+      - name: Build TLL compiler
+        shell: cmd
+        run: |
+          .\host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tools\TLLC\main.tll -o tools\TLLC\tllc_new.tllbc
+          if errorlevel 1 exit /b 1
+
+      - name: Start test server
+        shell: cmd
+        run: |
+          start /B python tests\net\test_server.py 18080
+          timeout /t 3 /nobreak >nul
+          curl -s http://127.0.0.1:18080/status
+          echo.
+
+      - name: Compile minimal HTTP GET test
+        shell: cmd
+        run: |
+          .\host\c\tllvm.exe tools\TLLC\tllc_new.tllbc compile tests\net\gate_http_client_minimal.tll -o tests\net\gate_http_client_minimal.tllbc
+          if errorlevel 1 exit /b 1
+
+      - name: Run minimal HTTP GET test
+        shell: cmd
+        run: |
+          .\host\c\tllvm.exe tests\net\gate_http_client_minimal.tllbc > test_output.txt 2>&1
+          type test_output.txt
+          findstr /C:"ALL TESTS PASSED" test_output.txt >nul
+          if errorlevel 1 (
+            echo ::error::Minimal HTTP GET test FAILED - ALL TESTS PASSED not found
+            exit /b 1
+          ) else (
+            echo ::notice::Minimal HTTP GET test PASSED
+          )
+
+  test-macos:
+    name: macOS (Apple Silicon / Intel)
+    runs-on: macos-latest
+    steps:
+      - name: Disable CRLF conversion
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - name: Build tllvm (per-file, with http_client_builtin.c, Secure Transport)
+        run: |
+          cd host/c
+          echo "=== Compiling each file separately ===" > build_log.txt
+          for f in main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c; do
+            echo "--- Compiling $f ---" >> build_log.txt
+            clang -O0 -w -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -D_DARWIN_C_SOURCE -c $f -o ${f%.c}.o >> build_log.txt 2>&1
+            echo "  Exit: $?" >> build_log.txt
+          done
+          echo "--- Compiling sqlite3.c ---" >> build_log.txt
+          clang -O0 -w -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -D_DARWIN_C_SOURCE -DSQLITE_THREADSAFE=1 -c sqlite3.c -o sqlite3.o >> build_log.txt 2>&1
+          echo "  sqlite3.c Exit: $?" >> build_log.txt
+          echo "=== Linking ===" >> build_log.txt
+          clang -O0 -o tllvm main.o vm.o value.o json.o builtin.o sqlite_builtin.o crypto_builtin.o password_builtin.o hmac_builtin.o http_client_builtin.o sqlite3.o -lm -lpthread -framework Security -framework CoreFoundation >> build_log.txt 2>&1
+          LINK_EXIT=$?
+          echo "=== Link exit code: $LINK_EXIT ===" >> build_log.txt
+          cat build_log.txt
+          if [ $LINK_EXIT -ne 0 ]; then
+            echo "::error::Link failed with exit code $LINK_EXIT"
+            exit 1
+          fi
+          ls -la tllvm
+
+      - name: Upload build log (macOS)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build-log
+          path: host/c/build_log.txt
+          retention-days: 7
+
+      - name: Build TLL compiler
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc.tllbc compile tools/TLLC/main.tll -o tools/TLLC/tllc_new.tllbc
+          ls -la tools/TLLC/tllc_new.tllbc
+
+      - name: Start test server
+        run: |
+          python3 tests/net/test_server.py 18080 &
+          SERVER_PID=$!
+          echo "Server PID: $SERVER_PID"
+          echo $SERVER_PID > /tmp/test_server.pid
+          sleep 2
+          curl -s http://127.0.0.1:18080/status
+          echo ""
+
+      - name: Compile minimal HTTP GET test
+        run: |
+          ./host/c/tllvm tools/TLLC/tllc_new.tllbc compile tests/net/gate_http_client_minimal.tll -o tests/net/gate_http_client_minimal.tllbc
+          ls -la tests/net/gate_http_client_minimal.tllbc
+
+      - name: Run minimal HTTP GET test
+        run: |
+          ./host/c/tllvm tests/net/gate_http_client_minimal.tllbc | tee test_output.txt
+          if grep -q "ALL TESTS PASSED" test_output.txt; then
+            echo "::notice::Minimal HTTP GET test PASSED"
+          else
+            echo "::error::Minimal HTTP GET test FAILED - ALL TESTS PASSED not found in output"
+            exit 1
+          fi
+
+      - name: Stop test server
+        if: always()
+        run: |
+          if [ -f /tmp/test_server.pid ]; then
+            kill $(cat /tmp/test_server.pid) 2>/dev/null || true
+          fi
