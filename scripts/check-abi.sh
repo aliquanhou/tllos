@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # ============================================================
 # TLL OS - Builtin ABI Consistency Check
 # Verifies spec/BUILTINS.json matches host/c/builtin.c

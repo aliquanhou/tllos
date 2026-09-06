@@ -323,8 +323,8 @@ fn tc_checkExpression(expr: map) -> map {
         if consType["name"] == altType["name"] {
             return consType
         }
-        if isNumeric(consType) and isNumeric(altType) {
-            if consType["name"] == "float" or altType["name"] == "float" {
+        if isNumeric(consType) && isNumeric(altType) {
+            if consType["name"] == "float" || altType["name"] == "float" {
                 return typeFloat()
             }
             return typeInt()
