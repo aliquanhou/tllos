@@ -11,7 +11,7 @@
 set -e
 
 # Trap to capture failure location
-trap 'echo "PHASE4_ERROR: Script failed at line $LINENO, command: $BASH_COMMAND"' ERR
+trap 'echo "::error::PHASE4_ERROR: `Script failed at line $LINENO, command: $BASH_COMMAND" >&2' ERR
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
