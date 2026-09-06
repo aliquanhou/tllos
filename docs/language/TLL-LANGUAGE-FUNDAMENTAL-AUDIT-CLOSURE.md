@@ -142,38 +142,47 @@
 
 ---
 
-## 四、Memory / Value / Reference Semantics 架构决策（初步）
+## 四、Memory / Value / Reference Semantics 架构决策（基于 Runtime 源码证据）
 
-| 语义项 | 决策 | 说明 |
-|--------|------|------|
-| 赋值语义 | **Reference（引用）** | TLL 采用引用语义，`a = b` 后 `a` 和 `b` 指向同一对象 |
-| 基本类型（int/float/bool） | **Value（值拷贝）** | 基本类型按值拷贝 |
-| 复合类型（array/map/struct） | **Reference（引用）** | 复合类型按引用传递 |
-| 参数传递 | **Reference（引用）** | 函数参数按引用传递 |
-| 返回值 | **Reference（引用）** | 函数返回值按引用返回 |
-| 闭包捕获 | **Reference（引用）** | 闭包按引用捕获变量 |
-| Struct 赋值 | **Reference（引用）** | Struct 赋值按引用 |
-| Array/Map 赋值 | **Reference（引用）** | Array/Map 赋值按引用 |
-| 可变性 | **默认可变** | TLL 默认所有变量可变 |
-| 别名 (aliasing) | **允许** | 允许多个变量指向同一对象 |
+**证据来源**: runtime/vm.tll
 
-**注**: 此为初步架构决策，需在 Phase 4 最终封板前通过 Runtime 源码验证确认。
+| 语义项 | 决策 | Runtime 证据 |
+|--------|------|-------------|
+| 赋值语义 | **Reference（引用）** | vm_setReg: `vm_registers[idx] = value`（vm.tll:89），直接引用赋值，无拷贝 |
+| 基本类型（int/float/bool） | **Value（值拷贝/不可变引用）** | 基本类型不可变，表现为值语义；Runtime 中直接存储原始值 |
+| 复合类型（array/map/struct） | **Reference（引用）** | vm_executeIndexSet/vm_executeMemberSet 直接修改对象，多引用共享同一对象 |
+| 参数传递 | **Reference（引用）** | vm_executeCall: `vm_setLocal(pi, arrays.get(args, pi))`（vm.tll:575），直接引用传递 |
+| 返回值 | **Reference（引用）** | vm_executeRet: `vm_setReg(retReg, returnValue)`（vm.tll:595），直接引用返回 |
+| 闭包捕获 | **Reference（引用）** | vm_executeCall: `callClosureEnv = possibleFn["env"]`（vm.tll:552），闭包持有环境对象引用 |
+| Struct 赋值 | **Reference（引用）** | Struct 作为对象存储，赋值传递引用 |
+| Array/Map 赋值 | **Reference（引用）** | Array/Map 作为对象存储，赋值传递引用 |
+| 可变性 | **默认可变** | 无 const/immutable 关键字，所有变量默认可变 |
+| 别名 (aliasing) | **允许** | 引用语义天然允许多个变量指向同一对象 |
+
+**结论**: TLL 采用**引用语义**（Reference Semantics），复合类型（array/map/struct/function/closure）按引用传递和赋值；基本类型（int/float/bool/string/null）因不可变性表现为值语义。
 
 ---
 
-## 五、Evaluation Semantics 架构决策（初步）
+## 五、Evaluation Semantics 架构决策（基于 Runtime 源码证据）
 
-| 语义项 | 决策 | 说明 |
+**证据来源**: runtime/vm.tll + compiler/codegen.tll
+
+| 语义项 | 决策 | 证据 |
 |--------|------|------|
-| 求值顺序 | **Left-to-right（从左到右）** | 操作数从左到右求值 |
-| 参数求值顺序 | **Left-to-right（从左到右）** | 函数参数从左到右求值 |
-| 操作数求值顺序 | **Left-to-right（从左到右）** | 二元操作数从左到右求值 |
-| 赋值求值 | **Right-to-left（从右到左）** | 赋值表达式先求右值，再赋值 |
-| 副作用 | **允许** | 允许表达式中的副作用 |
-| 短路求值 | **支持** | `and`/`or`/三元表达式支持短路 |
-| 条件分支求值 | **只执行一个分支** | if/三元只执行满足条件的分支 |
+| 求值顺序 | **Left-to-right（从左到右）** | VM 指令按顺序执行，codegen 按从左到右生成指令 |
+| 参数求值顺序 | **Left-to-right（从左到右）** | vm_executeCall 从 argStack 按顺序读取参数（vm.tll:488-496），argStack 按从左到右压入 |
+| 操作数求值顺序 | **Left-to-right（从左到右）** | 二元运算 codegen 先求左操作数，再求右操作数 |
+| 赋值 RHS 求值 | **先求右值，再赋值** | 赋值表达式先计算 RHS，再执行赋值操作；这不等同于"right-to-left 求值顺序" |
+| 副作用 | **允许** | 表达式中允许函数调用等副作用 |
+| 短路求值 | **支持** | `and`/`or`/三元表达式支持短路，codegen 生成条件跳转 |
+| 条件分支求值 | **只执行一个分支** | if/三元只执行满足条件的分支，codegen 生成跳转 |
 
-**注**: 此为初步架构决策，需在 Phase 4 最终封板前通过 Runtime 源码验证确认。
+**重要区分**: 
+- "赋值先求 RHS" ≠ "赋值求值顺序 Right-to-left"
+- 赋值表达式 `a = b` 的执行顺序是：先求 `b`（RHS），再赋值给 `a`（LHS）
+- 链式赋值 `a = b = c` 的执行顺序需要进一步验证 codegen
+
+**结论**: TLL 采用**从左到右求值顺序**（Left-to-right Evaluation Order），赋值表达式先求 RHS 再赋值，短路求值支持。
 
 ---
 
