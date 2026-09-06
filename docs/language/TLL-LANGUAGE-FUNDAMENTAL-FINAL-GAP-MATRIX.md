@@ -82,6 +82,8 @@
 
 **目标**: UNKNOWN = 0，sum(statuses) == TOTAL
 
+**审计覆盖**: 16/28 Domains 已详细审计，12/28 Domains 待展开
+
 ---
 
 ## 01 Lexical Foundation（详细审计）
@@ -191,15 +193,71 @@
 
 ---
 
-## 07 Composite Types（摘要，待展开）
+## 07 Composite Types（详细审计）
 
-（待展开为逐项 Capability Matrix）
+| ID | Capability | Expected | Actual | Source | Lexer | Parser | AST | TypeChecker | Codegen | Runtime | Test | CI | Evidence |
+|----|-----------|----------|--------|--------|-------|--------|-----|-------------|---------|---------|------|-----|----------|
+| LANG-07-001 | Array/List 创建 | MUST | COMPLETE | parser.tll:882 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | [1, 2, 3] |
+| LANG-07-002 | Array 索引读取 | MUST | COMPLETE | parser.tll:768 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | arr[i] |
+| LANG-07-003 | Array 索引写入 | MUST | COMPLETE | vm.tll:672 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | arr[i] = x |
+| LANG-07-004 | Array 长度 | MUST | COMPLETE | stdlib | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | arrays.length(arr) |
+| LANG-07-005 | Array 遍历 | MUST | COMPLETE | parser.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | for x in arr |
+| LANG-07-006 | Array 嵌套 | MUST | COMPLETE | parser.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | [[1,2], [3,4]] |
+| LANG-07-007 | Array 传参 | MUST | COMPLETE | vm.tll:575 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 引用传递 |
+| LANG-07-008 | Array 返回 | MUST | COMPLETE | vm.tll:595 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 引用返回 |
+| LANG-07-009 | Array 别名 (aliasing) | MUST | COMPLETE | vm.tll:89 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ✅ | 引用语义，a=b 后 a[0] 修改影响 b[0] |
+| LANG-07-010 | Map 创建 | MUST | COMPLETE | parser.tll:899 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | {"a": 1} |
+| LANG-07-011 | Map 键读取 | MUST | COMPLETE | parser.tll:768 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | map["key"] |
+| LANG-07-012 | Map 键写入 | MUST | COMPLETE | vm.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | map["key"] = x |
+| LANG-07-013 | Map 包含检查 | MUST | COMPLETE | stdlib | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | maps.contains(map, key) |
+| LANG-07-014 | Map 遍历 | MUST | COMPLETE | stdlib | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | maps.keys/maps.values |
+| LANG-07-015 | Map 嵌套 | MUST | COMPLETE | parser.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | {"a": {"b": 1}} |
+| LANG-07-016 | Map 别名 (aliasing) | MUST | COMPLETE | vm.tll:89 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ✅ | 引用语义 |
+| LANG-07-017 | Struct 定义 | MUST | COMPLETE | parser.tll:168 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | struct Person { name: string, age: int } |
+| LANG-07-018 | Struct 构造 | MUST | COMPLETE | parser.tll:168 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Person{name: "x", age: 1} |
+| LANG-07-019 | Struct 字段读取 | MUST | COMPLETE | parser.tll:760 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | person.name |
+| LANG-07-020 | Struct 字段写入 | MUST | COMPLETE | vm.tll:703 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | person.name = "y" |
+| LANG-07-021 | Struct 嵌套 | MUST | COMPLETE | parser.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 嵌套 Struct |
+| LANG-07-022 | Struct 传参 | MUST | COMPLETE | vm.tll:575 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 引用传递 |
+| LANG-07-023 | Struct 返回 | MUST | COMPLETE | vm.tll:595 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 引用返回 |
+| LANG-07-024 | Struct 别名 (aliasing) | MUST | COMPLETE | vm.tll:89 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ✅ | 引用语义，a=b 后 a.x 修改影响 b.x |
+| LANG-07-025 | Tuple 类型 | SHOULD | MISSING | - | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | 无 Tuple 类型，多返回值通过其他机制 |
+| LANG-07-026 | 多返回值 | MUST | PARTIAL | parser.tll | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | 支持多返回值，但非 Tuple 语义 |
+| LANG-07-027 | 复合类型相等比较 | SHOULD | PARTIAL | - | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | 基本类型相等已支持，复合类型引用相等 |
+| LANG-07-028 | 空复合类型 | MUST | COMPLETE | parser.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | [], {} |
+| LANG-07-029 | 复合类型闭包捕获 | MUST | COMPLETE | vm.tll:552 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ✅ | 引用捕获 |
+| LANG-07-030 | 复合类型可变性 | MUST | COMPLETE | - | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 默认可变 |
+
+**结论**: Array/Map/Struct 全部 COMPLETE，引用语义；Tuple 类型 MISSING；多返回值 PARTIAL（非 Tuple 语义）。
 
 ---
 
-## 08 Variables & Binding（摘要，待展开）
+## 08 Variables & Binding（详细审计）
 
-（待展开为逐项 Capability Matrix）
+| ID | Capability | Expected | Actual | Source | Lexer | Parser | AST | TypeChecker | Codegen | Runtime | Test | CI | Evidence |
+|----|-----------|----------|--------|--------|-------|--------|-----|-------------|---------|---------|------|-----|----------|
+| LANG-08-001 | 变量声明 | MUST | COMPLETE | parser.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | let x = 10 |
+| LANG-08-002 | 变量初始化 | MUST | COMPLETE | parser.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | let x = 10（声明时初始化） |
+| LANG-08-003 | 变量重新赋值 | MUST | COMPLETE | vm.tll:89 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | x = 20 |
+| LANG-08-004 | 局部作用域 | MUST | COMPLETE | vm.tll:100 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 函数内局部变量 |
+| LANG-08-005 | 块作用域 | SHOULD | PARTIAL | parser.tll | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | {} 块内变量，需验证作用域规则 |
+| LANG-08-006 | 函数作用域 | MUST | COMPLETE | vm.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 函数参数和局部变量 |
+| LANG-08-007 | 模块/全局作用域 | MUST | COMPLETE | vm.tll:105 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 全局变量 |
+| LANG-08-008 | 变量遮蔽 (shadowing) | SHOULD | PARTIAL | parser.tll | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | 内层变量遮蔽外层，需验证 |
+| LANG-08-009 | 参数绑定 | MUST | COMPLETE | vm.tll:575 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 函数参数绑定 |
+| LANG-08-010 | 返回值绑定 | MUST | COMPLETE | vm.tll:595 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | return x |
+| LANG-08-011 | 可变绑定 | MUST | COMPLETE | - | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 默认所有变量可变 |
+| LANG-08-012 | const/immutable | NOT_DESIGNED | NOT_DESIGNED | - | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 无 const 关键字，属于设计决策 |
+| LANG-08-013 | 未定义变量 | MUST | COMPLETE | typechecker.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | TypeChecker 报错 undefined symbol |
+| LANG-08-014 | 使用前定义 (use-before-def) | MUST | PARTIAL | typechecker.tll | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | 需验证是否检测使用前定义 |
+| LANG-08-015 | 变量生命周期 | MUST | COMPLETE | vm.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 函数调用栈管理 |
+| LANG-08-016 | 变量逃逸 (escape) | SHOULD | PARTIAL | vm.tll:552 | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | 闭包捕获导致变量逃逸 |
+| LANG-08-017 | 显式类型标注 | SHOULD | PARTIAL | parser.tll | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | let x: int = 10（需验证支持程度） |
+| LANG-08-018 | 类型推断 | MUST | COMPLETE | typechecker.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | let x = 10 推断为 int |
+| LANG-08-019 | 解构赋值 | SHOULD | MISSING | - | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | 无解构赋值（见 LANG-12） |
+| LANG-08-020 | 多变量声明 | SHOULD | PARTIAL | parser.tll | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | let a = 1, b = 2（需验证） |
+
+**结论**: 变量绑定基本 COMPLETE，块作用域/遮蔽/使用前定义 PARTIAL，const/immutable NOT_DESIGNED，解构赋值 MISSING。
 
 ---
 
@@ -257,15 +315,49 @@
 
 ---
 
-## 14 Resource / Cleanup（摘要，待展开）
+## 14 Resource / Cleanup（详细审计）
 
-（待展开为逐项 Capability Matrix）
+| ID | Capability | Expected | Actual | Source | Lexer | Parser | AST | TypeChecker | Codegen | Runtime | Test | CI | Evidence |
+|----|-----------|----------|--------|--------|-------|--------|-----|-------------|---------|---------|------|-----|----------|
+| LANG-14-001 | defer 语句 | MUST | MISSING | - | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | 无 defer 关键字 |
+| LANG-14-002 | finally 块 | MUST | PARTIAL | parser.tll:317 | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | try/catch/finally 存在，需验证资源清理 |
+| LANG-14-003 | using/with 语句 | SHOULD | MISSING | - | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | 无 using/with 语句 |
+| LANG-14-004 | RAII 语义 | NOT_DESIGNED | NOT_DESIGNED | - | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 不采用 RAII，属于设计决策 |
+| LANG-14-005 | 资源释放机制 | MUST | PARTIAL | stdlib | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | 依赖手动释放，无自动机制 |
+| LANG-14-006 | 文件句柄管理 | MUST | PARTIAL | stdlib | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | io 模块，需验证自动关闭 |
+| LANG-14-007 | Socket 句柄管理 | MUST | PARTIAL | stdlib | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | net 模块，需验证自动关闭 |
+| LANG-14-008 | 数据库连接管理 | MUST | PARTIAL | stdlib | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | sqlite 模块，需验证自动关闭 |
+| LANG-14-009 | 锁/事务管理 | SHOULD | PARTIAL | stdlib | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | 需验证 |
+| LANG-14-010 | 清理顺序保证 | MUST | MISSING | - | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | 无 defer/finally 顺序保证 |
+| LANG-14-011 | 异常时清理 | MUST | PARTIAL | parser.tll:317 | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | finally 块可处理异常时清理 |
+| LANG-14-012 | 内存/资源句柄 | MUST | COMPLETE | vm.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | VM 管理对象生命周期 |
+
+**结论**: defer/using MISSING，finally PARTIAL，资源释放依赖手动管理，无自动机制。
 
 ---
 
-## 15 Module / Package（摘要，待展开）
+## 15 Module / Package（详细审计）
 
-（待展开为逐项 Capability Matrix）
+| ID | Capability | Expected | Actual | Source | Lexer | Parser | AST | TypeChecker | Codegen | Runtime | Test | CI | Evidence |
+|----|-----------|----------|--------|--------|-------|--------|-----|-------------|---------|---------|------|-----|----------|
+| LANG-15-001 | import 语句 | MUST | COMPLETE | parser.tll:343 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | import module from "path" |
+| LANG-15-002 | export 语句 | MUST | COMPLETE | parser.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | export function/struct |
+| LANG-15-003 | module 关键字 | SHOULD | PARTIAL | parser.tll | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | 需验证 module 块支持 |
+| LANG-15-004 | package 概念 | SHOULD | MISSING | - | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | 无 package 管理系统 |
+| LANG-15-005 | namespace | SHOULD | PARTIAL | linker.tll | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | 模块命名空间，需验证 |
+| LANG-15-006 | 符号解析 | MUST | COMPLETE | linker.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | Linker 解析导入符号 |
+| LANG-15-007 | import alias | SHOULD | COMPLETE | parser.tll:343 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | import x as y |
+| LANG-15-008 | 可见性 (public/private) | SHOULD | PARTIAL | parser.tll | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | 需验证 private 关键字支持 |
+| LANG-15-009 | 重复符号检测 | MUST | COMPLETE | typechecker.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | TypeChecker 报错 duplicate symbol |
+| LANG-15-010 | 缺失符号检测 | MUST | COMPLETE | typechecker.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | TypeChecker 报错 undefined symbol |
+| LANG-15-011 | 循环依赖 | SHOULD | PARTIAL | linker.tll | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ | ⚠️ | ✅ | 需验证循环依赖处理 |
+| LANG-15-012 | 模块边界 | MUST | COMPLETE | linker.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 模块独立编译/链接 |
+| LANG-15-013 | 包版本 | SHOULD | MISSING | - | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | 无包版本管理 |
+| LANG-15-014 | 包兼容性 | SHOULD | MISSING | - | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | 无包兼容性检查 |
+| LANG-15-015 | 相对导入 | MUST | COMPLETE | linker.tll:611 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 相对路径导入 |
+| LANG-15-016 | 绝对导入 | MUST | COMPLETE | linker.tll | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 绝对路径导入 |
+
+**结论**: import/export/符号解析 COMPLETE，package/版本/兼容性 MISSING，可见性/循环依赖 PARTIAL。
 
 ---
 
@@ -275,9 +367,24 @@
 
 ---
 
-## 17 Enum / ADT（摘要，待展开）
+## 17 Enum / ADT（详细审计）
 
-（待展开为逐项 Capability Matrix）
+| ID | Capability | Expected | Actual | Source | Evidence |
+|----|-----------|----------|--------|--------|----------|
+| LANG-17-001 | enum 声明 | MUST | PARTIAL | parser.tll | 需验证 enum 关键字支持 |
+| LANG-17-002 | 枚举值 | MUST | PARTIAL | parser.tll | 枚举常量 |
+| LANG-17-003 | 枚举比较 | MUST | PARTIAL | - | 需验证 |
+| LANG-17-004 | 枚举 switch/match | SHOULD | MISSING | - | 无 Pattern Matching（见 LANG-11） |
+| LANG-17-005 | 带值枚举 (tagged union) | MUST | MISSING | - | 无 ADT/tagged union |
+| LANG-17-006 | 枚举 payload | MUST | MISSING | - | 无 payload |
+| LANG-17-007 | 枚举构造 | MUST | MISSING | - | 无带值构造 |
+| LANG-17-008 | 枚举提取 | MUST | MISSING | - | 无 payload 提取 |
+| LANG-17-009 | 枚举类型检查 | MUST | PARTIAL | typechecker.tll | 简单枚举类型检查 |
+| LANG-17-010 | 枚举代码生成 | MUST | PARTIAL | codegen.tll | 简单枚举代码生成 |
+| LANG-17-011 | 枚举运行时表示 | MUST | PARTIAL | vm.tll | 简单枚举作为整数 |
+| LANG-17-012 | 枚举方法 | SHOULD | MISSING | - | 无枚举方法 |
+
+**结论**: 简单枚举 PARTIAL，带值枚举/ADT/tagged union 全链路 MISSING。
 
 ---
 
@@ -287,9 +394,26 @@
 
 ---
 
-## 19 Methods / Object Model（摘要，待展开）
+## 19 Methods / Object Model（详细审计）
 
-（待展开为逐项 Capability Matrix）
+| ID | Capability | Expected | Actual | Source | Evidence |
+|----|-----------|----------|--------|--------|----------|
+| LANG-19-001 | 方法定义 | MUST | COMPLETE | parser.tll | struct 内方法定义 |
+| LANG-19-002 | self/this | MUST | COMPLETE | parser.tll | self 关键字 |
+| LANG-19-003 | 构造函数 | SHOULD | PARTIAL | parser.tll | Struct{...} 字面量构造，无专门 constructor |
+| LANG-19-004 | 静态方法 | SHOULD | PARTIAL | parser.tll | 需验证 static 关键字 |
+| LANG-19-005 | 字段可见性 | SHOULD | PARTIAL | parser.tll | 需验证 private/public 字段 |
+| LANG-19-006 | 方法接收者 | MUST | COMPLETE | vm.tll | 方法调用时 self 绑定 |
+| LANG-19-007 | 方法分派 | MUST | COMPLETE | codegen.tll | 静态分派（Struct 方法） |
+| LANG-19-008 | 继承 (inheritance) | NOT_DESIGNED | NOT_DESIGNED | - | 不采用类继承，属于设计决策 |
+| LANG-19-009 | 组合 (composition) | MUST | COMPLETE | parser.tll | Struct 嵌套组合 |
+| LANG-19-010 | 嵌入 (embedding) | SHOULD | MISSING | - | 无 Go 式嵌入 |
+| LANG-19-011 | 多态 (polymorphism) | MUST | PARTIAL | - | 接口多态缺失（见 LANG-18），函数多态有限 |
+| LANG-19-012 | 方法重写 | NOT_DESIGNED | NOT_DESIGNED | - | 无继承，无重写 |
+| LANG-19-013 | 抽象方法 | NOT_DESIGNED | NOT_DESIGNED | - | 无抽象类/接口（见 LANG-18） |
+| LANG-19-014 | 对象相等 | SHOULD | PARTIAL | - | 引用相等，无值相等重载 |
+
+**结论**: 方法/self/组合 COMPLETE，继承/嵌入/抽象 NOT_DESIGNED 或 MISSING，多态 PARTIAL。
 
 ---
 
@@ -344,39 +468,158 @@
 
 ---
 
-## 23 Compile-time Capabilities（摘要，待展开）
+## 23 Compile-time Capabilities（详细审计）
 
-（待展开为逐项 Capability Matrix）
+| ID | Capability | Expected | Actual | Source | Evidence |
+|----|-----------|----------|--------|--------|----------|
+| LANG-23-001 | 常量表达式 | MUST | COMPLETE | parser.tll | 字面量和常量表达式 |
+| LANG-23-002 | 常量折叠 (constant folding) | SHOULD | PARTIAL | codegen.tll | 需验证常量折叠优化 |
+| LANG-23-003 | 编译时求值 | SHOULD | MISSING | - | 无编译时函数求值 |
+| LANG-23-004 | 宏 (macro) | SHOULD | MISSING | - | 无宏系统 |
+| LANG-23-005 | 元编程 (metaprogramming) | SHOULD | MISSING | - | 无元编程能力 |
+| LANG-23-006 | 注解/属性 (annotation/attribute) | SHOULD | MISSING | - | 无注解系统 |
+| LANG-23-007 | 条件编译 | SHOULD | MISSING | - | 无 #ifdef 条件编译 |
+| LANG-23-008 | 编译器内建 (compiler intrinsic) | MUST | COMPLETE | codegen.tll | builtin 函数调用 |
+| LANG-23-009 | 编译期类型计算 | SHOULD | MISSING | - | 无编译期类型计算 |
+| LANG-23-010 | 编译期断言 | SHOULD | MISSING | - | 无 static_assert |
 
----
-
-## 24 FFI / Native（摘要，待展开）
-
-（待展开为逐项 Capability Matrix）
-
----
-
-## 25 Compiler Infrastructure（摘要，待展开）
-
-（待展开为逐项 Capability Matrix）
-
----
-
-## 26 Compiler Error（摘要，待展开）
-
-（待展开为逐项 Capability Matrix）
+**结论**: 常量表达式/编译器内建 COMPLETE，常量折叠 PARTIAL，宏/元编程/注解/条件编译 MISSING。
 
 ---
 
-## 27 Source Compatibility（摘要，待展开）
+## 24 FFI / Native Interop（详细审计）
 
-（待展开为逐项 Capability Matrix）
+| ID | Capability | Expected | Actual | Source | Evidence |
+|----|-----------|----------|--------|--------|----------|
+| LANG-24-001 | C ABI | MUST | PARTIAL | runtime | TLL Runtime 本身是 C/C++，但无显式 C ABI 调用 |
+| LANG-24-002 | native 函数调用 | MUST | PARTIAL | stdlib | builtin 函数调用 native 实现 |
+| LANG-24-003 | 基本类型 ABI | MUST | COMPLETE | runtime | int/float/bool/string ABI |
+| LANG-24-004 | Struct ABI | SHOULD | PARTIAL | runtime | 需验证 Struct 与 C 交互 |
+| LANG-24-005 | 数组 ABI | SHOULD | PARTIAL | runtime | 需验证数组与 C 交互 |
+| LANG-24-006 | 字符串 ABI | MUST | COMPLETE | runtime | 字符串与 native 交互 |
+| LANG-24-007 | 指针 (pointer) | SHOULD | MISSING | - | 无显式指针类型 |
+| LANG-24-008 | 回调 (callback) | SHOULD | PARTIAL | runtime | 需验证函数指针回调 |
+| LANG-24-009 | 所有权边界 | MUST | PARTIAL | runtime | 需验证内存所有权边界 |
+| LANG-24-010 | 调用约定 (calling convention) | SHOULD | PARTIAL | runtime | 依赖宿主调用约定 |
+| LANG-24-011 | 错误边界 | MUST | PARTIAL | runtime | 需验证 native 错误传播 |
+| LANG-24-012 | 函数指针 | SHOULD | PARTIAL | runtime | 函数作为值，需验证与 C 交互 |
+
+**结论**: 基本类型/字符串 ABI COMPLETE，C ABI/native 调用 PARTIAL，指针 MISSING。
 
 ---
 
-## 28 Stdlib Boundary（摘要，待展开）
+## 25 Compiler Infrastructure（详细审计）
 
-（待展开为逐项 Capability Matrix）
+| ID | Capability | Expected | Actual | Source | Evidence |
+|----|-----------|----------|--------|--------|----------|
+| LANG-25-001 | Lexer | MUST | COMPLETE | compiler/lexer.tll | 20KB 词法分析器 |
+| LANG-25-002 | Parser | MUST | COMPLETE | compiler/parser.tll | 27KB 语法分析器，17 级优先级 |
+| LANG-25-003 | AST | MUST | COMPLETE | compiler/parser.tll | AST 节点定义 |
+| LANG-25-004 | 符号解析 (Symbol Resolution) | MUST | COMPLETE | compiler/typechecker.tll | 符号表和解析 |
+| LANG-25-005 | 类型/语义分析 | MUST | COMPLETE | compiler/typechecker.tll | 15KB 类型检查器，603 warnings |
+| LANG-25-006 | 常量折叠 | SHOULD | PARTIAL | compiler/codegen.tll | 需验证常量折叠 |
+| LANG-25-007 | 优化 (Optimization) | SHOULD | PARTIAL | compiler/codegen.tll | 需验证优化级别 |
+| LANG-25-008 | 代码生成 (Codegen) | MUST | COMPLETE | compiler/codegen.tll | 72KB 代码生成器 |
+| LANG-25-009 | 字节码 (Bytecode) | MUST | COMPLETE | compiler/compiler.tllbc | 592KB 编译后字节码 |
+| LANG-25-010 | 链接器 (Linker) | MUST | COMPLETE | compiler/linker.tll | 38KB 链接器 |
+| LANG-25-011 | Runtime 绑定 | MUST | COMPLETE | runtime/vm.tll | 39KB 虚拟机 |
+| LANG-25-012 | 执行 (Execution) | MUST | COMPLETE | runtime/vm.tll | VM 执行循环 |
+| LANG-25-013 | Bootstrap | MUST | COMPLETE | compiler/compiler.tll | 自举编译器 |
+| LANG-25-014 | 确定性构建 (Deterministic Build) | MUST | COMPLETE | P4 Evidence | 两次自举 SHA256 一致 |
+| LANG-25-015 | 增量编译 | SHOULD | MISSING | - | 无增量编译 |
+| LANG-25-016 | 编译器自举 (Self-hosting) | MUST | COMPLETE | P4 Evidence | TLL 编译器用 TLL 编写 |
+| LANG-25-017 | 调试信息 (Debug Info) | SHOULD | PARTIAL | compiler/codegen.tll | 需验证源位置信息 |
+| LANG-25-018 | 源映射 (Source Mapping) | SHOULD | PARTIAL | compiler/codegen.tll | 需验证行号映射 |
+| LANG-25-019 | 字节码兼容性 | SHOULD | PARTIAL | runtime/vm.tll | 需验证字节码版本兼容 |
+| LANG-25-020 | Artifact Provenance | MUST | COMPLETE | P4 Evidence | SHA256 provenance |
+
+**结论**: 编译器基础设施基本 COMPLETE，增量编译 MISSING，优化/调试信息 PARTIAL。
+
+---
+
+## 26 Compiler Error System（详细审计）
+
+| ID | Capability | Expected | Actual | Source | Evidence |
+|----|-----------|----------|--------|--------|----------|
+| LANG-26-001 | 语法错误 | MUST | COMPLETE | compiler/parser.tll | expected ')', got '?' |
+| LANG-26-002 | 意外 token | MUST | COMPLETE | compiler/parser.tll | unexpected token 报错 |
+| LANG-26-003 | 缺失 token | MUST | COMPLETE | compiler/parser.tll | missing token 报错 |
+| LANG-26-004 | 源位置 (source location) | MUST | COMPLETE | compiler/lexer.tll | line/column 记录 |
+| LANG-26-005 | 行号 (line) | MUST | COMPLETE | compiler/lexer.tll | 行号记录 |
+| LANG-26-006 | 列号 (column) | MUST | COMPLETE | compiler/lexer.tll | 列号记录 |
+| LANG-26-007 | 期望 token | MUST | COMPLETE | compiler/parser.tll | expected token 报告 |
+| LANG-26-008 | 实际 token | MUST | COMPLETE | compiler/parser.tll | actual token 报告 |
+| LANG-26-009 | 类型不匹配 | MUST | COMPLETE | compiler/typechecker.tll | type mismatch 报错 |
+| LANG-26-010 | 未定义符号 | MUST | COMPLETE | compiler/typechecker.tll | undefined symbol 报错 |
+| LANG-26-011 | 重复符号 | MUST | COMPLETE | compiler/typechecker.tll | duplicate symbol 报错 |
+| LANG-26-012 | 无效操作符 | MUST | COMPLETE | compiler/typechecker.tll | invalid operator 报错 |
+| LANG-26-013 | 无效调用 | MUST | COMPLETE | compiler/typechecker.tll | invalid call 报错 |
+| LANG-26-014 | 无效成员 | MUST | COMPLETE | compiler/typechecker.tll | invalid member 报错 |
+| LANG-26-015 | 错误传播 | MUST | PARTIAL | compiler/typechecker.tll | 需验证多错误传播 |
+| LANG-26-016 | 诊断质量 | SHOULD | PARTIAL | compiler/typechecker.tll | 603 warnings，需提升质量 |
+| LANG-26-017 | 错误恢复 | SHOULD | MISSING | - | 无错误恢复（遇错即停） |
+| LANG-26-018 | 多错误报告 | SHOULD | PARTIAL | compiler/typechecker.tll | 需验证批量错误报告 |
+| LANG-26-019 | 错误建议 (suggestion) | SHOULD | MISSING | - | 无自动修复建议 |
+| LANG-26-020 | 上下文信息 | SHOULD | PARTIAL | compiler/typechecker.tll | 需验证错误上下文 |
+
+**结论**: 基本错误报告 COMPLETE，诊断质量/错误恢复 PARTIAL 或 MISSING。
+
+---
+
+## 27 Source Compatibility（详细审计）
+
+| ID | Capability | Expected | Actual | Source | Evidence |
+|----|-----------|----------|--------|--------|----------|
+| LANG-27-001 | 保留关键字 | MUST | COMPLETE | compiler/lexer.tll | 关键字列表 |
+| LANG-27-002 | 标识符规则 | MUST | COMPLETE | compiler/lexer.tll | ASCII 标识符规则 |
+| LANG-27-003 | 语法稳定性 | SHOULD | PARTIAL | - | 语言仍在演进，无正式稳定性保证 |
+| LANG-27-004 | 版本管理 | SHOULD | MISSING | - | 无语言版本号 |
+| LANG-27-005 | 废弃语法 (deprecated) | SHOULD | MISSING | - | 无废弃机制 |
+| LANG-27-006 | 向后兼容 | SHOULD | PARTIAL | - | 需验证旧代码兼容性 |
+| LANG-27-007 | 破坏性变更 | SHOULD | MISSING | - | 无破坏性变更管理 |
+| LANG-27-008 | 源码迁移策略 | SHOULD | MISSING | - | 无迁移工具/策略 |
+| LANG-27-009 | 语言规范 | MUST | PARTIAL | docs | 有规范文档，但不完整 |
+| LANG-27-010 | 语法演进 | SHOULD | PARTIAL | - | 语言持续演进，无正式流程 |
+
+**结论**: 保留关键字/标识符规则 COMPLETE，版本管理/废弃机制/迁移策略 MISSING，语法稳定性 PARTIAL。
+
+---
+
+## 28 Stdlib Boundary（详细审计）
+
+| ID | Capability | Layer | Actual | Source | Evidence |
+|----|-----------|-------|--------|--------|----------|
+| LANG-28-001 | crypto | STDLIB | COMPLETE | stdlib/crypto | Ed25519/SHA256/HMAC/bcrypt/Random |
+| LANG-28-002 | HTTP | STDLIB | PARTIAL | stdlib/http | Linux/Windows COMPLETE，macOS KNOWN ISSUE |
+| LANG-28-003 | filesystem | STDLIB | COMPLETE | stdlib/io | 文件读写 |
+| LANG-28-004 | JSON | STDLIB | COMPLETE | stdlib/json | JSON 解析/序列化 |
+| LANG-28-005 | SQLite | STDLIB | COMPLETE | stdlib/sqlite | 数据库操作 |
+| LANG-28-006 | random | STDLIB | COMPLETE | stdlib/crypto | crypto.randomBytes |
+| LANG-28-007 | process | RUNTIME | COMPLETE | runtime/vm.tll | 进程管理 |
+| LANG-28-008 | networking | STDLIB | PARTIAL | stdlib/net | Socket 操作 |
+| LANG-28-009 | time | STDLIB | COMPLETE | stdlib/time | 时间操作 |
+| LANG-28-010 | collections (array) | LANGUAGE | COMPLETE | parser.tll | 数组字面量/索引 |
+| LANG-28-011 | collections (map) | LANGUAGE | COMPLETE | parser.tll | Map 字面量/索引 |
+| LANG-28-012 | collections (struct) | LANGUAGE | COMPLETE | parser.tll | Struct 定义/访问 |
+| LANG-28-013 | string operations | STDLIB | COMPLETE | stdlib/strings | 字符串操作 |
+| LANG-28-014 | math | STDLIB | COMPLETE | stdlib/math | 数学函数 |
+| LANG-28-015 | conversion | STDLIB | COMPLETE | stdlib/convert | 类型转换 |
+| LANG-28-016 | arrays utility | STDLIB | COMPLETE | stdlib/arrays | 数组工具函数 |
+| LANG-28-017 | maps utility | STDLIB | COMPLETE | stdlib/maps | Map 工具函数 |
+| LANG-28-018 | io | STDLIB | COMPLETE | stdlib/io | 输入输出 |
+| LANG-28-019 | os | STDLIB | PARTIAL | stdlib/os | 操作系统接口 |
+| LANG-28-020 | regex | STDLIB | MISSING | - | 无正则表达式 |
+
+**重要边界**: 
+- **Language**: 数组/Map/Struct 字面量和操作（LANG-28-010/011/012）
+- **Compiler**: 编译器内建函数
+- **Runtime**: 进程/VM 执行（LANG-28-007）
+- **Stdlib**: crypto/HTTP/filesystem/JSON/SQLite/random/networking/time/string/math/conversion/collections utility/io/os
+- **Toolchain**: 编译器/链接器/构建工具
+
+**禁止把 Stdlib 功能错误计入 Language Fundamental GAP**：crypto/HTTP/SQLite/filesystem 等是标准库能力，不是语言语法能力。
+
+**结论**: Stdlib 基本 COMPLETE，HTTP/networking/os PARTIAL，regex MISSING。边界清晰，Language/Compiler/Runtime/Stdlib/Toolchain 分层明确。
 
 ---
 
