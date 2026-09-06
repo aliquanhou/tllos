@@ -131,6 +131,25 @@ jobs:
       #     chmod +x phase4/run-validator.sh
       #     phase4/run-validator.sh
 
+
+      # === Phase 4 Staircase LEVEL 1: Memory Minimal Evidence ===
+      # Smallest possible step: compile + run + verify EVIDENCE output exists.
+      - name: Phase 4 - Memory Minimal Evidence (Ubuntu only)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          echo "=== Compiling phase4-memory-minimal.tll ==="
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/phase4-memory-minimal.tll -o /tmp/phase4-memory-minimal.tllbc
+          echo "=== Running phase4-memory-minimal.tllbc ==="
+          host/c/tllvm /tmp/phase4-memory-minimal.tllbc | tee /tmp/phase4-memory-minimal.log
+          echo "=== Verifying EVIDENCE records ==="
+          EVIDENCE_COUNT=$(grep -c '^EVIDENCE:' /tmp/phase4-memory-minimal.log || true)
+          echo "EVIDENCE records found: $EVIDENCE_COUNT"
+          if [ "$EVIDENCE_COUNT" -lt 1 ]; then
+            echo "FAIL: No EVIDENCE records found"
+            exit 1
+          fi
+          echo "PASS: EVIDENCE records found"
       - name: Phase 4 - Upload Evidence Artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -146,7 +165,7 @@ jobs:
       # === P0-16.1: TLL Engineering Enforcement Layer ===
       # Validates .tll-engine/ structure, schema, Claim-Evidence matching.
       # This ensures the engineering cognition layer remains consistent with code.
-      # No Runtime/Compiler modification — if this fails, .tll-engine/ has an inconsistency.
+      # No Runtime/Compiler modification 鈥?if this fails, .tll-engine/ has an inconsistency.
 
       - name: Validate .tll-engine/ structure (Linux/macOS)
         if: runner.os != 'Windows'
@@ -389,9 +408,9 @@ jobs:
         run: scripts\run-bc-network-test.ps1 bc_invalid
 
       # === P0-15.18.3: Blockchain High-Message Stress Test ===
-      # 4 Node real TCP, 120 high-frequency transactions (fee递增 triggers mempool capacity=50 overflow),
+      # 4 Node real TCP, 120 high-frequency transactions (fee閫掑 triggers mempool capacity=50 overflow),
       # transaction propagation, block propagation, final 4-node consistency.
-      # No Runtime changes — if this fails, Runtime/P2P/Blockchain has a real bug.
+      # No Runtime changes 鈥?if this fails, Runtime/P2P/Blockchain has a real bug.
       - name: Blockchain high-message stress 120 txs (Linux/macOS)
         if: runner.os != 'Windows'
         timeout-minutes: 5
@@ -406,7 +425,7 @@ jobs:
       # === P0-15.18.1: Coroutine 100K Stress Test (black-box, zero Runtime changes) ===
       # Verifies 100K immediate-return + 10K x10 yield + 1K sleep coroutines.
       # External evidence: exit code + process lifecycle + runtime + peak RSS.
-      # No Runtime code modifications — if this fails, Runtime has a real bug.
+      # No Runtime code modifications 鈥?if this fails, Runtime has a real bug.
 
       - name: Coroutine 100K Stress Test (Linux/macOS)
         if: runner.os != 'Windows'

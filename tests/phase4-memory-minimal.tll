@@ -1,0 +1,29 @@
+// Phase 4 - Memory Evidence Minimal Test (Staircase LEVEL 1 Step 1)
+// Goal: Verify TLL program can run in CI and produce EVIDENCE output.
+// TLL executes top-level code directly (no fn main needed).
+// io is built-in (no import needed).
+
+io.println("=== Phase 4 Memory Minimal Test ===")
+
+// Test 1: Array aliasing - OBSERVE actual behavior, do not presuppose
+let a = [1, 2, 3]
+let b = a
+b[0] = 99
+let a0 = a[0]
+if a0 == 99 {
+    io.println("EVIDENCE: TEST_ID=memory.array.aliasing EXPECTED=OBSERVE ACTUAL=REFERENCE STATUS=OBSERVED")
+} else {
+    io.println("EVIDENCE: TEST_ID=memory.array.aliasing EXPECTED=OBSERVE ACTUAL=VALUE STATUS=OBSERVED")
+}
+
+// Test 2: Primitive value semantics
+let x = 42
+let y = x
+y = 100
+if x == 42 {
+    io.println("EVIDENCE: TEST_ID=memory.primitive.value EXPECTED=OBSERVE ACTUAL=VALUE STATUS=OBSERVED")
+} else {
+    io.println("EVIDENCE: TEST_ID=memory.primitive.value EXPECTED=OBSERVE ACTUAL=REFERENCE STATUS=OBSERVED")
+}
+
+io.println("=== Phase 4 Memory Minimal Test COMPLETE ===")
