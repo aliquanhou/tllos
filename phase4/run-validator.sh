@@ -59,7 +59,7 @@ run_with_tee "$LOG_DIR/memory_compile.log" \
 COMPILE_STATUS=$RUN_EXIT_CODE
 
 if [ $COMPILE_STATUS -ne 0 ]; then
-    echo "FAIL: Memory test compilation failed (real exit $COMPILE_STATUS)" >&2
+    echo "::error::FAIL: Memory test compilation failed (real exit $COMPILE_STATUS)" >&2
     OVERALL_STATUS=1
     FAILED_STEPS+=("memory_compile")
 else
@@ -72,7 +72,7 @@ else
     echo "Memory runtime real exit code: $RUN_STATUS"
 
     if [ $RUN_STATUS -ne 0 ]; then
-        echo "FAIL: Memory runtime exited non-zero ($RUN_STATUS)" >&2
+        echo "::error::FAIL: Memory runtime exited non-zero ($RUN_STATUS)" >&2
         OVERALL_STATUS=1
         FAILED_STEPS+=("memory_runtime")
     fi
@@ -85,7 +85,7 @@ else
     set -e
 
     if [ $VALIDATE_STATUS -ne 0 ]; then
-        echo "FAIL: Memory behavior validation failed (exit $VALIDATE_STATUS)" >&2
+        echo "::error::FAIL: Memory behavior validation failed (exit $VALIDATE_STATUS)" >&2
         OVERALL_STATUS=1
         FAILED_STEPS+=("memory_validate")
     else
@@ -104,7 +104,7 @@ run_with_tee "$LOG_DIR/evaluation_compile.log" \
 COMPILE_STATUS=$RUN_EXIT_CODE
 
 if [ $COMPILE_STATUS -ne 0 ]; then
-    echo "FAIL: Evaluation test compilation failed (real exit $COMPILE_STATUS)" >&2
+    echo "::error::FAIL: Evaluation test compilation failed (real exit $COMPILE_STATUS)" >&2
     OVERALL_STATUS=1
     FAILED_STEPS+=("evaluation_compile")
 else
@@ -117,7 +117,7 @@ else
     echo "Evaluation runtime real exit code: $RUN_STATUS"
 
     if [ $RUN_STATUS -ne 0 ]; then
-        echo "FAIL: Evaluation runtime exited non-zero ($RUN_STATUS)" >&2
+        echo "::error::FAIL: Evaluation runtime exited non-zero ($RUN_STATUS)" >&2
         OVERALL_STATUS=1
         FAILED_STEPS+=("evaluation_runtime")
     fi
@@ -130,7 +130,7 @@ else
     set -e
 
     if [ $VALIDATE_STATUS -ne 0 ]; then
-        echo "FAIL: Evaluation behavior validation failed (exit $VALIDATE_STATUS)" >&2
+        echo "::error::FAIL: Evaluation behavior validation failed (exit $VALIDATE_STATUS)" >&2
         OVERALL_STATUS=1
         FAILED_STEPS+=("evaluation_validate")
     else
@@ -149,7 +149,7 @@ run_with_tee "$LOG_DIR/ternary_compile.log" \
 COMPILE_STATUS=$RUN_EXIT_CODE
 
 if [ $COMPILE_STATUS -ne 0 ]; then
-    echo "FAIL: Ternary test compilation failed (real exit $COMPILE_STATUS)" >&2
+    echo "::error::FAIL: Ternary test compilation failed (real exit $COMPILE_STATUS)" >&2
     OVERALL_STATUS=1
     FAILED_STEPS+=("ternary_compile")
 else
@@ -162,7 +162,7 @@ else
     echo "Ternary runtime real exit code: $RUN_STATUS"
 
     if [ $RUN_STATUS -ne 0 ]; then
-        echo "FAIL: Ternary runtime exited non-zero ($RUN_STATUS)" >&2
+        echo "::error::FAIL: Ternary runtime exited non-zero ($RUN_STATUS)" >&2
         OVERALL_STATUS=1
         FAILED_STEPS+=("ternary_runtime")
     fi
@@ -175,7 +175,7 @@ else
     set -e
 
     if [ $VALIDATE_STATUS -ne 0 ]; then
-        echo "FAIL: Ternary behavior validation failed (exit $VALIDATE_STATUS)" >&2
+        echo "::error::FAIL: Ternary behavior validation failed (exit $VALIDATE_STATUS)" >&2
         OVERALL_STATUS=1
         FAILED_STEPS+=("ternary_validate")
     else
@@ -206,7 +206,7 @@ else
     if [ $NEGATIVE_COMPILE_STATUS -ne 0 ]; then
         echo "PASS: Negative ternary test failed to compile (hard error semantics)"
     else
-        echo "FAIL: Neither warning nor hard error detected for incompatible ternary types" >&2
+        echo "::error::FAIL: Neither warning nor hard error detected for incompatible ternary types" >&2
         OVERALL_STATUS=1
         FAILED_STEPS+=("ternary_negative_warning")
     fi
@@ -241,7 +241,7 @@ PARSE_STATUS=$?
 set -e
 
 if [ $PARSE_STATUS -ne 0 ]; then
-    echo "FAIL: Warning parsing failed (exit $PARSE_STATUS)" >&2
+    echo "::error::FAIL: Warning parsing failed (exit $PARSE_STATUS)" >&2
     OVERALL_STATUS=1
     FAILED_STEPS+=("warning_parse")
 else
@@ -253,7 +253,7 @@ else
     set -e
 
     if [ $VALIDATE_STATUS -ne 0 ]; then
-        echo "FAIL: Warning validation failed (exit $VALIDATE_STATUS)" >&2
+        echo "::error::FAIL: Warning validation failed (exit $VALIDATE_STATUS)" >&2
         OVERALL_STATUS=1
         FAILED_STEPS+=("warning_validate")
     else
