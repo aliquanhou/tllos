@@ -1,78 +1,97 @@
-// TLL Commerce Dogfood - Product Vertical Slice
-// Reuses mall/core/database.tll, does NOT create a third mall
-// Goal: GET /products -> SQLite -> JSON -> HTTP Response
+// TLL Commerce Dogfood - Product Vertical Slice (DEBUG STEP 7 - ORIGINAL WITH DEBUG)
+// This is the original product_slice_test.tll with added debug output
 
-from "./core/database" import db_open, db_exec, db_query, db_get, db_release, db_insert, GLOBAL_DB_PATH
+from "./core/database" import db_open, db_exec, db_query, db_get, db_release, db_insert, db_tableExists, GLOBAL_DB_PATH
 
-// === Product Schema & Seed ===
+io.println("=== DEBUG: Starting product_slice_test ===")
+io.println("GLOBAL_DB_PATH: " + GLOBAL_DB_PATH)
 
 fn ensureProductsTable(db) {
+    io.println("DEBUG: ensureProductsTable called")
     db_exec(db, "CREATE TABLE IF NOT EXISTS products (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, price REAL NOT NULL DEFAULT 0, stock INTEGER NOT NULL DEFAULT 0, description TEXT)")
+    io.println("DEBUG: ensureProductsTable done")
 }
 
 fn seedProducts(db) {
+    io.println("DEBUG: seedProducts called")
     let count = db_query(db, "SELECT COUNT(*) as cnt FROM products")
+    io.println("DEBUG: count array length: " + convert.toString(arrays.length(count)))
     if arrays.length(count) > 0 {
         let cnt = count[0].cnt
+        io.println("DEBUG: cnt value: " + convert.toString(cnt))
         if cnt == 0 {
+            io.println("DEBUG: Table is empty, seeding...")
             db_insert(db, "INSERT INTO products (name, price, stock, description) VALUES (?, ?, ?, ?)", ["Widget Pro", 99.99, 100, "High-quality widget"])
             db_insert(db, "INSERT INTO products (name, price, stock, description) VALUES (?, ?, ?, ?)", ["Gadget Plus", 149.50, 50, "Advanced gadget"])
             db_insert(db, "INSERT INTO products (name, price, stock, description) VALUES (?, ?, ?, ?)", ["Thingamajig", 29.99, 200, "Essential thingamajig"])
-            io.println("Seeded 3 products")
+            io.println("DEBUG: Seeded 3 products")
+        } else {
+            io.println("DEBUG: Table already has data, skip seeding")
         }
+    } else {
+        io.println("DEBUG: count array is empty!")
     }
+    io.println("DEBUG: seedProducts done")
 }
 
-// === HTTP Handler ===
-
 fn productHandler(req) {
-    // Get fresh DB connection per request (worker pool closure workaround)
+    io.println("DEBUG: Handler called for: " + req.method + " " + req.path)
     let db = db_get()
+    io.println("DEBUG: Got db connection")
 
     if req.path == "/products" && req.method == "GET" {
+        io.println("DEBUG: Handling GET /products")
         let rows = db_query(db, "SELECT id, name, price, stock, description FROM products ORDER BY id")
         db_release(db)
+        io.println("DEBUG: Released db, returning JSON")
         return {status: 200, contentType: "application/json", body: json.stringify(rows)}
     }
 
     if req.path == "/products/seed" && req.method == "POST" {
+        io.println("DEBUG: Handling POST /products/seed")
         ensureProductsTable(db)
         seedProducts(db)
         db_release(db)
+        io.println("DEBUG: Returning seed result")
         return {status: 200, contentType: "application/json", body: json.stringify({ok: true, message: "Products seeded"})}
     }
 
     if req.path == "/health" && req.method == "GET" {
+        io.println("DEBUG: Handling GET /health")
         db_release(db)
         return {status: 200, contentType: "application/json", body: json.stringify({status: "ok", service: "product-slice"})}
     }
 
+    io.println("DEBUG: No matching route, returning 404")
     db_release(db)
     return {status: 404, contentType: "application/json", body: json.stringify({error: "Not Found", path: req.path})}
 }
 
-// === Main (top-level execution, matching test_http_db.tll pattern) ===
-
-io.println("Product Slice: initializing...")
-io.println("Using database: " + GLOBAL_DB_PATH)
+io.println("DEBUG: Opening database...")
 let db = db_open(GLOBAL_DB_PATH)
-io.println("Database opened")
-ensureProductsTable(db)
-io.println("Table ensured")
-seedProducts(db)
-io.println("Seed complete")
+io.println("DEBUG: Database opened")
 
-// Verify seed
+io.println("DEBUG: Calling ensureProductsTable...")
+ensureProductsTable(db)
+io.println("DEBUG: ensureProductsTable returned")
+
+io.println("DEBUG: Calling seedProducts...")
+seedProducts(db)
+io.println("DEBUG: seedProducts returned")
+
+io.println("DEBUG: Verifying seed...")
 let rows = db_query(db, "SELECT COUNT(*) as cnt FROM products")
 if arrays.length(rows) > 0 {
     io.println("Product count: " + convert.toString(rows[0].cnt))
 }
+io.println("DEBUG: Releasing db...")
 db_release(db)
-io.println("Database released")
+io.println("DEBUG: db released")
 
 io.println("=== Product Vertical Slice starting on :8088 ===")
 io.println("GET /products    - List all products")
 io.println("GET /health      - Health check")
 io.println("POST /products/seed - Re-seed products")
-io.println("Server ready")
+io.println("DEBUG: About to call http.serve...")
 http.serve("0.0.0.0:8088", productHandler)
+io.println("DEBUG: http.serve returned (this should not happen)")
