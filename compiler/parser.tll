@@ -227,16 +227,38 @@ fn parseEnumDeclaration() -> map {
     let t = parse_advance() // enum
     let nameTok = parse_expect("IDENT", "enum name")
     let name = nameTok.tkValue
+    // Generic enum: enum Result<T> { ... }
+    let typeParams: list = []
+    if parse_match("LT") {
+        while true {
+            let tpTok = parse_expect("IDENT", "type parameter name")
+            arrays.push(typeParams, tpTok.tkValue)
+            if parse_match("COMMA") == false { break }
+        }
+        parse_expect("GT", "'>'")
+    }
     parse_expect("LBRACE", "'{'")
     let variants: list = []
     while !parse_check("RBRACE") && !parse_isAtEnd() {
         let variantNameTok = parse_expect("IDENT", "variant name")
         let variantName = variantNameTok.tkValue
         let variantValue: map = null
-        if parse_match("EQ") {
+        let variantPayload: list = null
+        // ADT variant with payload: Ok(T), Rectangle(float, float)
+        if parse_match("LPAREN") {
+            variantPayload = []
+            if parse_check("RPAREN") == false {
+                while true {
+                    let payloadType = parseType()
+                    arrays.push(variantPayload, payloadType)
+                    if parse_match("COMMA") == false { break }
+                }
+            }
+            parse_expect("RPAREN", "')'")
+        } else if parse_match("EQ") {
             variantValue = parseExpression()
         }
-        arrays.push(variants, { name: variantName, value: variantValue })
+        arrays.push(variants, { name: variantName, value: variantValue, payload: variantPayload })
         if !parse_match("COMMA") {
             if parse_check("RBRACE") { break }
         }
@@ -244,6 +266,7 @@ fn parseEnumDeclaration() -> map {
     parse_expect("RBRACE", "'}'")
     let node = makeNode("Enum", t.line, t.column)
     node.name = name
+    node.typeParams = typeParams
     node.variants = variants
     return node
 }

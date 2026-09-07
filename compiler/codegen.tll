@@ -477,7 +477,12 @@ export fn compile(program: map) -> map {
                         val = convert.toInt(v.value.value)
                     }
                 }
-                variantMap[v.name] = val
+                // ADT: record payload info
+                if v.payload != null && arrays.length(v.payload) > 0 {
+                    variantMap[v.name] = { value: val, hasPayload: true, payloadCount: arrays.length(v.payload) }
+                } else {
+                    variantMap[v.name] = { value: val, hasPayload: false, payloadCount: 0 }
+                }
                 nextValue = val + 1
                 evi = evi + 1
             }
@@ -557,7 +562,12 @@ export fn compile(program: map) -> map {
                         val = convert.toInt(v.value.value)
                     }
                 }
-                variantMap[v.name] = val
+                // ADT: record payload info
+                if v.payload != null && arrays.length(v.payload) > 0 {
+                    variantMap[v.name] = { value: val, hasPayload: true, payloadCount: arrays.length(v.payload) }
+                } else {
+                    variantMap[v.name] = { value: val, hasPayload: false, payloadCount: 0 }
+                }
                 nextValue = val + 1
                 vi = vi + 1
             }
@@ -1375,15 +1385,22 @@ fn cg_compileExpression(expr: map) -> int {
     if kind == "Ternary" { return cg_compileTernary(expr) }
     if kind == "Call" { return cg_compileCall(expr) }
     if kind == "Member" {
-        // Enum variant access: Color.Red -> constant integer value
+        // Enum variant access: Color.Red -> constant integer value (no payload)
+        // For ADT variants with payload, return tag string for constructor detection
         if expr.object["kind"] == "Ident" {
             let enumName = expr.object["name"]
             if cg_enumMap[enumName] != null {
                 let variantMap = cg_enumMap[enumName]
-                let variantValue = variantMap[expr.property]
-                if variantValue != null {
+                let variantInfo = variantMap[expr.property]
+                if variantInfo != null {
                     let reg = cg_allocReg()
-                    cg_emit(OP_LOAD_CONST, [reg, cg_addConstant(variantValue)])
+                    if variantInfo.hasPayload == true {
+                        // ADT constructor: return special marker string "EnumName.Variant"
+                        cg_emit(OP_LOAD_CONST, [reg, cg_addConstant(enumName + "." + expr.property)])
+                    } else {
+                        // Simple enum: return integer value
+                        cg_emit(OP_LOAD_CONST, [reg, cg_addConstant(variantInfo.value)])
+                    }
                     return reg
                 }
             }
@@ -1843,6 +1860,62 @@ fn cg_compileCall(expr: map) -> int {
             cg_emit(OP_LOAD_BUILTIN, [fnReg, builtinIdx])
             cg_emit(OP_CALL, [resultReg, fnReg + 100000, arrays.length(args)])
             return resultReg
+        }
+    }
+
+    // ADT constructor call: Result.Ok(42) -> { tag: "Ok", value: 42, __enum: "Result" }
+    if callee["kind"] == "Member" && callee.object["kind"] == "Ident" {
+        let adtEnumName = callee.object["name"]
+        let adtVariantName = callee["property"]
+        if cg_enumMap[adtEnumName] != null {
+            let adtVariantMap = cg_enumMap[adtEnumName]
+            let adtVariantInfo = adtVariantMap[adtVariantName]
+            if adtVariantInfo != null && adtVariantInfo.hasPayload == true {
+                // Compile payload args
+                let payloadRegs = []
+                let ai = 0
+                while ai < arrays.length(args) {
+                    let argReg = cg_compileExpression(arrays.get(args, ai))
+                    arrays.push(payloadRegs, argReg)
+                    ai = ai + 1
+                }
+                // Create map: { tag: "Variant", value: payload, __enum: "Enum" }
+                // Use OP_MAKE_MAP with entries pushed as key, value pairs
+                let tagKeyReg = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [tagKeyReg, cg_addConstant("tag")])
+                let tagValReg = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [tagValReg, cg_addConstant(adtVariantName)])
+                cg_emit(OP_PUSH, [tagKeyReg])
+                cg_emit(OP_PUSH, [tagValReg])
+                let valueKeyReg = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [valueKeyReg, cg_addConstant("value")])
+                cg_emit(OP_PUSH, [valueKeyReg])
+                if arrays.length(payloadRegs) == 1 {
+                    cg_emit(OP_PUSH, [arrays.get(payloadRegs, 0)])
+                } else if arrays.length(payloadRegs) > 1 {
+                    // Multiple payload: wrap in array
+                    let pi = 0
+                    while pi < arrays.length(payloadRegs) {
+                        cg_emit(OP_PUSH, [arrays.get(payloadRegs, pi)])
+                        pi = pi + 1
+                    }
+                    let tupleReg = cg_allocReg()
+                    cg_emit(OP_MAKE_ARRAY, [tupleReg, arrays.length(payloadRegs)])
+                    cg_emit(OP_PUSH, [tupleReg])
+                } else {
+                    let nullReg = cg_allocReg()
+                    cg_emit(OP_LOAD_CONST, [nullReg, cg_addConstant(null)])
+                    cg_emit(OP_PUSH, [nullReg])
+                }
+                let enumKeyReg = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [enumKeyReg, cg_addConstant("__enum")])
+                let enumValReg = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [enumValReg, cg_addConstant(adtEnumName)])
+                cg_emit(OP_PUSH, [enumKeyReg])
+                cg_emit(OP_PUSH, [enumValReg])
+                cg_emit(OP_MAKE_MAP, [resultReg, 3])
+                return resultReg
+            }
         }
     }
 
