@@ -1345,6 +1345,7 @@ fn cg_compileExpression(expr: map) -> int {
     if kind == "Ident" { return cg_compileIdent(expr) }
     if kind == "Binary" { return cg_compileBinary(expr) }
     if kind == "Unary" { return cg_compileUnary(expr) }
+    if kind == "UpdateExpr" { return cg_compileUpdateExpr(expr) }
     if kind == "Ternary" { return cg_compileTernary(expr) }
     if kind == "Call" { return cg_compileCall(expr) }
     if kind == "Member" {
@@ -1619,6 +1620,42 @@ fn cg_compileUnary(expr: map) -> int {
     else if op == "~" { cg_emit(OP_BNOT, [resultReg, operandReg]) }
     else { cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)]) }
     return resultReg
+}
+
+fn cg_compileUpdateExpr(expr: map) -> int {
+    // ++i, --i (prefix) or i++, i-- (postfix)
+    let isInc = expr.operator == "++"
+    let isPrefix = expr.prefix == true
+    if expr.argument.kind == "Ident" {
+        let varName = expr.argument.name
+        let resolved = cg_resolveVar(varName)
+        let oldValReg = cg_allocReg()
+        if resolved.isGlobal {
+            cg_emit(OP_LOAD_GLOBAL, [oldValReg, resolved.index])
+        } else {
+            cg_emit(OP_LOAD_VAR, [oldValReg, resolved.index])
+        }
+        let oneReg = cg_allocReg()
+        cg_emit(OP_LOAD_CONST, [oneReg, cg_addConstant(1)])
+        let newValReg = cg_allocReg()
+        if isInc {
+            cg_emit(OP_ADD, [newValReg, oldValReg, oneReg])
+        } else {
+            cg_emit(OP_SUB, [newValReg, oldValReg, oneReg])
+        }
+        if resolved.isGlobal {
+            cg_emit(OP_STORE_GLOBAL, [resolved.index, newValReg])
+        } else {
+            cg_emit(OP_STORE_VAR, [resolved.index, newValReg])
+        }
+        if isPrefix {
+            return newValReg
+        } else {
+            return oldValReg
+        }
+    }
+    let argReg = cg_compileExpression(expr.argument)
+    return argReg
 }
 
 fn cg_compileCall(expr: map) -> int {

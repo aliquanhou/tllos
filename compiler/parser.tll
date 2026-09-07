@@ -729,6 +729,16 @@ fn parseUnary() -> map {
         node.operand = operand
         return node
     }
+    if parse_match("PLUSPLUS") || parse_match("MINUSMINUS") {
+        let t = parse_previous()
+        let op = t.tkValue
+        let operand = parseUnary()
+        let node = makeNode("UpdateExpr", t.line, t.column)
+        node.operator = op
+        node.argument = operand
+        node.prefix = true
+        return node
+    }
     return parsePostfix()
 }
 
@@ -803,6 +813,14 @@ fn parsePostfix() -> map {
             let node = makeNode("Index", t.line, t.column)
             node.object = expr
             node.index = index
+            expr = node
+        } else if parse_match("PLUSPLUS") || parse_match("MINUSMINUS") {
+            let t = parse_previous()
+            let op = t.tkValue
+            let node = makeNode("UpdateExpr", t.line, t.column)
+            node.operator = op
+            node.argument = expr
+            node.prefix = false
             expr = node
         } else {
             break

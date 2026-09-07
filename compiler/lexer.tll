@@ -97,6 +97,8 @@ let TK_AT = "AT"
 let TK_QUESTION = "QUESTION"
 let TK_RANGE = "RANGE"
 let TK_RANGE_INCLUSIVE = "RANGE_INCLUSIVE"
+let TK_PLUSPLUS = "PLUSPLUS"
+let TK_MINUSMINUS = "MINUSMINUS"
 let TK_PLUS_EQ = "PLUS_EQ"
 let TK_MINUS_EQ = "MINUS_EQ"
 let TK_STAR_EQ = "STAR_EQ"
@@ -352,6 +354,8 @@ export fn tokenize(input: string) -> list {
             else if twoChar == ".." { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_RANGE, tkValue: "..", line: startLine, column: startCol }); matched = true }
             else if twoChar == "+=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_PLUS_EQ, tkValue: "+=", line: startLine, column: startCol }); matched = true }
             else if twoChar == "-=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_MINUS_EQ, tkValue: "-=", line: startLine, column: startCol }); matched = true }
+            else if twoChar == "++" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_PLUSPLUS, tkValue: "++", line: startLine, column: startCol }); matched = true }
+            else if twoChar == "--" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_MINUSMINUS, tkValue: "--", line: startLine, column: startCol }); matched = true }
             else if twoChar == "*=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_STAR_EQ, tkValue: "*=", line: startLine, column: startCol }); matched = true }
             else if twoChar == "/=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SLASH_EQ, tkValue: "/=", line: startLine, column: startCol }); matched = true }
             else if twoChar == "%=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_PERCENT_EQ, tkValue: "%=", line: startLine, column: startCol }); matched = true }
