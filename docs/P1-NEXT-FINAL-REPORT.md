@@ -147,7 +147,24 @@ L3: Database Abstraction stdlib (已有实现在 mall/，未抽象 + 关键Bug)
 
 CI 放置顺序：Build → Bootstrap → L1 FS → L2 HTTP Server → L3 Database → P1-04 Level 1-4
 
-**CI Run ID**：待推送后触发（当前 HEAD `7946d3c` 已推送）
+**CI Run ID**：`34075379859`（HEAD `051e183`）
+
+**三平台结果**：
+
+| 平台 | 状态 | L1 FS | L2 HTTP Server | L3 Database | P1-04 L1-4 |
+|------|------|-------|----------------|-------------|-------------|
+| Linux (Ubuntu 22.04) | ✅ PASS | 25/25 | 19/19 | 20/20 | PASS |
+| Windows (MSVC) | ✅ PASS | 25/25 | 19/19 | 20/20 | PASS |
+| macOS (Apple Silicon / Intel) | ✅ PASS | 25/25 | 19/19 | 20/20 | PASS |
+
+**CI 修复记录**：
+- `f5f181e`：修复 `test_http_server.py` 在 Linux/macOS 上错误执行 Windows `tllvm.exe` 的问题（PermissionError）
+- `051e183`：扩展 CI path 过滤，包含 `tests/fs/**`、`tests/http/**`、`tests/db/**`、`stdlib/**`、`mall/core/database.tll`
+
+**商城回归测试**（db_buildSQL Bug 修复后）：
+- `mall/test_db_debug.tll`：✅ PASS（数据库打开、迁移、表创建、直接执行全部正常）
+- `mall/test_minimal.tll`：✅ PASS（数据库查询、session 创建、auth_login 正常）
+- `mall/test_auth.tll`：✅ PASS（admin 创建、用户注册、登录验证正常）
 
 ---
 
