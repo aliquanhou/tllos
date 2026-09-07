@@ -133,6 +133,8 @@ typedef struct {
     int tryStackSize;
     int tryStackCapacity;
     int returnReg;
+    int exception_pending;  /* 1 if exception is propagating, 0 if normal */
+    TLLValue pending_exception;  /* saved exception value for rethrow after finally */
     TLLClosureEnv *closureEnv;
 } TLLFrame;
 
@@ -233,7 +235,9 @@ enum {
     OP_WAIT_WRITE = 58,   /* wait for fd writable: reg[a] = fd, suspend until IO ready */
     OP_WAIT_CHANNEL = 59, /* wait for channel send: reg[a] = channel map, suspend until wakeChannel */
     /* P0-COMPILER-02: register move for ternary/branch result unification */
-    OP_MOV = 60           /* reg[a] = reg[b] */
+    OP_MOV = 60,          /* reg[a] = reg[b] */
+    OP_CATCH_ENTER = 61,   /* clear exception_pending (entering catch block) */
+    OP_FINALLY_END = 62     /* if exception_pending, rethrow; else continue */
 };
 
 /* === Function declarations === */

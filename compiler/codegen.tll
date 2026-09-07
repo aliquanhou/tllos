@@ -69,6 +69,8 @@ let OP_WAIT_WRITE = 58
 let OP_WAIT_CHANNEL = 59
 // P0-COMPILER-02: register move for ternary/branch result unification
 let OP_MOV = 60
+let OP_CATCH_ENTER = 61
+let OP_FINALLY_END = 62
 
 // ============ Codegen state ============
 let cg_instructions: list = []
@@ -1001,6 +1003,7 @@ fn cg_compileTry(stmt: map) -> void {
 
     // Catch block
     if stmt.catchBlock != null {
+        cg_emit(OP_CATCH_ENTER, [])
         if stmt.catchParam != null && stmt.catchParam != "" {
             let errVarIdx = cg_getOrCreateVar(stmt.catchParam)
             cg_emit(OP_STORE_VAR, [errVarIdx, 0])
@@ -1023,6 +1026,8 @@ fn cg_compileTry(stmt: map) -> void {
         }
         // Compile finally body
         cg_compileBlock(stmt.finallyBlock)
+        // Mark end of finally: rethrow if exception is pending
+        cg_emit(OP_FINALLY_END, [])
         // If there was a pending return from try body, execute it now
         if cg_pendingReturnReg >= 0 {
             cg_emit(OP_RET, [cg_pendingReturnReg])

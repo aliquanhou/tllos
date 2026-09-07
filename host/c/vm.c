@@ -474,12 +474,19 @@ static void free_frame(TLLFrame *frame) {
         free(env);
     }
 
+    /* Release pending exception (P0-COMPILER-05 fix) */
+    tll_value_free(frame->pending_exception);
+    frame->pending_exception = tll_null();
+    frame->exception_pending = 0;
+
     /* Return frame to pool instead of freeing (P0-10 frame pool) */
     frame_pool_release(frame);
 }
 
 static void throw_exception(TLLVM *vm, TLLFrame *frame, TLLValue error) {
     tll_value_incref(error);
+    frame->exception_pending = 1;
+    frame->pending_exception = error;
     /* Search current frame's try stack first */
     while (frame->tryStackSize > 0) {
         int catchPc = pop_try(frame);
@@ -1174,6 +1181,19 @@ static void tll_vm_exec(TLLVM *vm) {
                 break;
             case OP_THROW:
                 throw_exception(vm, frame, regs[a]);
+                break;
+            case OP_CATCH_ENTER:
+                frame->exception_pending = 0;
+                tll_value_free(frame->pending_exception);
+                frame->pending_exception = tll_null();
+                break;
+            case OP_FINALLY_END:
+                if (frame->exception_pending) {
+                    /* Re-throw the saved exception (not reg[0], which may be overwritten by finally) */
+                    TLLValue err = frame->pending_exception;
+                    frame->pending_exception = tll_null();
+                    throw_exception(vm, frame, err);
+                }
                 break;
             default:
                 fprintf(stderr, "tllvm: unknown opcode %d at pc %d in %s\n", inst->op, frame->pc - 1, frame->function->name);

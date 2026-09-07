@@ -1,0 +1,440 @@
+// P0-COMPILER-05: Error / Resource Capability Probe Matrix
+// Probes error handling and resource management through full pipeline
+
+let probeTotal = 0
+let probePassed = 0
+let probeFailed = 0
+
+fn probeAssert(cond, name) {
+    probeTotal = probeTotal + 1
+    if cond {
+        probePassed = probePassed + 1
+    } else {
+        probeFailed = probeFailed + 1
+        io.println("PROBE FAIL: " + name)
+    }
+}
+
+fn probeEq(actual, expected, name) {
+    probeAssert(actual == expected, name + " (expected=" + convert.toString(expected) + " got=" + convert.toString(actual) + ")")
+}
+
+// ============================================================
+// SECTION 1: Basic try/catch
+// ============================================================
+io.println("--- Section 1: Basic try/catch ---")
+
+// 1.1 throw string and catch
+fn testThrowString() {
+    let caught = false
+    let errorVal = ""
+    try {
+        throw "something went wrong"
+    } catch e {
+        caught = true
+        errorVal = e
+    }
+    if caught && errorVal == "something went wrong" {
+        return true
+    }
+    return false
+}
+probeAssert(testThrowString(), "1.1 throw string and catch")
+
+// 1.2 throw number and catch
+fn testThrowNumber() {
+    let caught = false
+    let errorVal = 0
+    try {
+        throw 42
+    } catch e {
+        caught = true
+        errorVal = e
+    }
+    return caught && errorVal == 42
+}
+probeAssert(testThrowNumber(), "1.2 throw number and catch")
+
+// 1.3 throw null and catch
+fn testThrowNull() {
+    let caught = false
+    try {
+        throw null
+    } catch e {
+        caught = true
+    }
+    return caught
+}
+probeAssert(testThrowNull(), "1.3 throw null and catch")
+
+// 1.4 throw map and catch
+fn testThrowMap() {
+    let caught = false
+    let errorCode = 0
+    try {
+        let err = {}
+        err["code"] = 500
+        err["message"] = "server error"
+        throw err
+    } catch e {
+        caught = true
+        errorCode = e["code"]
+    }
+    return caught && errorCode == 500
+}
+probeAssert(testThrowMap(), "1.4 throw map and catch")
+
+// 1.5 no exception - try block normal execution
+fn testNoException() {
+    let result = 0
+    try {
+        result = 10 + 20
+    } catch e {
+        result = -1
+    }
+    return result == 30
+}
+probeAssert(testNoException(), "1.5 no exception - normal execution")
+
+// 1.6 catch block executes and continues
+fn testCatchContinues() {
+    let steps = ""
+    try {
+        steps = steps + "try"
+        throw "error"
+    } catch e {
+        steps = steps + "catch"
+    }
+    steps = steps + "after"
+    return steps == "trycatchafter"
+}
+probeAssert(testCatchContinues(), "1.6 catch executes and continues")
+
+// ============================================================
+// SECTION 2: try/finally
+// ============================================================
+io.println("--- Section 2: try/finally ---")
+
+// 2.1 finally always executes on normal path
+fn testFinallyNormal() {
+    let finallyRan = false
+    try {
+        let x = 1 + 1
+    } finally {
+        finallyRan = true
+    }
+    return finallyRan
+}
+probeAssert(testFinallyNormal(), "2.1 finally executes on normal path")
+
+// 2.2 finally always executes on exception path
+fn testFinallyException() {
+    let finallyRan = false
+    try {
+        throw "error"
+    } catch e {
+        // catch
+    } finally {
+        finallyRan = true
+    }
+    return finallyRan
+}
+probeAssert(testFinallyException(), "2.2 finally executes on exception path")
+
+// 2.3 try/catch/finally full combination
+fn testTryCatchFinally() {
+    let order = ""
+    try {
+        order = order + "try"
+        throw "error"
+    } catch e {
+        order = order + "catch"
+    } finally {
+        order = order + "finally"
+    }
+    return order == "trycatchfinally"
+}
+probeAssert(testTryCatchFinally(), "2.3 try/catch/finally order")
+
+// ============================================================
+// SECTION 3: Nested try/catch
+// ============================================================
+io.println("--- Section 3: Nested try/catch ---")
+
+// 3.1 inner catch handles exception
+fn testInnerCatch() {
+    let innerCaught = false
+    let outerCaught = false
+    try {
+        try {
+            throw "inner error"
+        } catch e {
+            innerCaught = true
+        }
+    } catch e {
+        outerCaught = true
+    }
+    return innerCaught && !outerCaught
+}
+probeAssert(testInnerCatch(), "3.1 inner catch handles exception")
+
+// 3.2 inner throws, outer catches
+fn testOuterCatch() {
+    let innerCaught = false
+    let outerCaught = false
+    try {
+        try {
+            throw "inner error"
+        } catch e {
+            // re-throw
+            throw e
+        }
+    } catch e {
+        outerCaught = true
+    }
+    return outerCaught
+}
+probeAssert(testOuterCatch(), "3.2 inner re-throws, outer catches")
+
+// ============================================================
+// SECTION 4: Cross-function exception propagation
+// ============================================================
+io.println("--- Section 4: Cross-function propagation ---")
+
+// 4.1 exception propagates through function call
+fn innerThrower() {
+    throw "from inner"
+}
+fn testCrossFunction() {
+    let caught = false
+    let msg = ""
+    try {
+        innerThrower()
+    } catch e {
+        caught = true
+        msg = e
+    }
+    return caught && msg == "from inner"
+}
+probeAssert(testCrossFunction(), "4.1 exception propagates through function call")
+
+// 4.2 exception propagates through multiple function calls
+fn level3() {
+    throw "deep error"
+}
+fn level2() {
+    level3()
+}
+fn level1() {
+    level2()
+}
+fn testDeepPropagation() {
+    let caught = false
+    try {
+        level1()
+    } catch e {
+        caught = true
+    }
+    return caught
+}
+probeAssert(testDeepPropagation(), "4.2 exception propagates through 3 function calls")
+
+// ============================================================
+// SECTION 5: Error value types
+// ============================================================
+io.println("--- Section 5: Error value types ---")
+
+// 5.1 boolean error
+fn testBoolError() {
+    let caught = false
+    let val = false
+    try {
+        throw true
+    } catch e {
+        caught = true
+        val = e
+    }
+    return caught && val == true
+}
+probeAssert(testBoolError(), "5.1 throw boolean")
+
+// 5.2 float error
+fn testFloatError() {
+    let caught = false
+    let val = 0.0
+    try {
+        throw 3.14
+    } catch e {
+        caught = true
+        val = e
+    }
+    return caught && val > 3.0
+}
+probeAssert(testFloatError(), "5.2 throw float")
+
+// 5.3 array error
+fn testArrayError() {
+    let caught = false
+    let len = 0
+    try {
+        throw [1, 2, 3]
+    } catch e {
+        caught = true
+        len = arrays.length(e)
+    }
+    return caught && len == 3
+}
+probeAssert(testArrayError(), "5.3 throw array")
+
+// ============================================================
+// SECTION 6: Resource management patterns
+// ============================================================
+io.println("--- Section 6: Resource management ---")
+
+// 6.1 try/finally cleanup pattern
+let resourceCleaned = false
+fn testResourceCleanup() {
+    resourceCleaned = false
+    try {
+        // simulate resource acquisition
+        resourceCleaned = false
+        throw "resource error"
+    } catch e {
+        // handle error
+    } finally {
+        // simulate resource release
+        resourceCleaned = true
+    }
+    return resourceCleaned
+}
+probeAssert(testResourceCleanup(), "6.1 try/finally resource cleanup")
+
+// 6.2 nested resource cleanup
+let outerCleaned = false
+let innerCleaned = false
+fn testNestedResource() {
+    outerCleaned = false
+    innerCleaned = false
+    try {
+        try {
+            throw "error"
+        } finally {
+            innerCleaned = true
+        }
+    } catch e {
+        // handle
+    } finally {
+        outerCleaned = true
+    }
+    return innerCleaned && outerCleaned
+}
+probeAssert(testNestedResource(), "6.2 nested resource cleanup")
+
+// 6.3 resource cleanup on normal path
+let normalResourceCleaned = false
+fn testNormalResource() {
+    normalResourceCleaned = false
+    try {
+        let x = 1 + 1
+    } finally {
+        normalResourceCleaned = true
+    }
+    return normalResourceCleaned
+}
+probeAssert(testNormalResource(), "6.3 resource cleanup on normal path")
+
+// ============================================================
+// SECTION 7: Return in try with finally
+// ============================================================
+io.println("--- Section 7: Return in try ---")
+
+// 7.1 finally runs when return in try
+let finallyBeforeReturn = false
+fn returnInTry() {
+    try {
+        return 42
+    } finally {
+        finallyBeforeReturn = true
+    }
+}
+fn testReturnFinally() {
+    finallyBeforeReturn = false
+    let result = returnInTry()
+    return result == 42 && finallyBeforeReturn
+}
+probeAssert(testReturnFinally(), "7.1 finally runs when return in try")
+
+// ============================================================
+// SECTION 8: Exception in catch
+// ============================================================
+io.println("--- Section 8: Exception in catch ---")
+
+// 8.1 exception in catch propagates outward
+fn testExceptionInCatch() {
+    let outerCaught = false
+    try {
+        try {
+            throw "first"
+        } catch e {
+            throw "second"
+        }
+    } catch e {
+        if e == "second" {
+            outerCaught = true
+        }
+    }
+    return outerCaught
+}
+probeAssert(testExceptionInCatch(), "8.1 exception in catch propagates outward")
+
+// ============================================================
+// SECTION 9: Empty catch / finally
+// ============================================================
+io.println("--- Section 9: Empty blocks ---")
+
+// 9.1 empty catch block
+fn testEmptyCatch() {
+    let ran = false
+    try {
+        throw "error"
+    } catch e {
+        // empty
+    }
+    ran = true
+    return ran
+}
+probeAssert(testEmptyCatch(), "9.1 empty catch block")
+
+// 9.2 try with only finally (no catch) - exception should propagate
+fn testTryOnlyFinally() {
+    let finallyRan = false
+    let caught = false
+    try {
+        try {
+            throw "error"
+        } finally {
+            finallyRan = true
+        }
+    } catch e {
+        caught = true
+    }
+    return finallyRan && caught
+}
+probeAssert(testTryOnlyFinally(), "9.2 try with only finally propagates exception")
+
+// ============================================================
+// SUMMARY
+// ============================================================
+io.println("")
+io.println("============================================================")
+io.println("P0-COMPILER-05 Error / Resource Capability Probe Results")
+io.println("============================================================")
+io.println("Total: " + convert.toString(probeTotal))
+io.println("Passed: " + convert.toString(probePassed))
+io.println("Failed: " + convert.toString(probeFailed))
+if probeFailed == 0 {
+    io.println("ALL ERROR / RESOURCE PROBES PASSED")
+} else {
+    io.println("SOME ERROR / RESOURCE PROBES FAILED")
+}
+
