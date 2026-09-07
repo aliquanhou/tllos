@@ -1,9 +1,10 @@
 # P0-COMPILER-07: IO / Network / Database Capability Implementation
 
-**Status**: IMPLEMENTED + VERIFIED (Windows)
+**Status**: SEALED (pending CI verification)
 **Date**: 2026-09-07
 **Branch**: p0-compiler-keyword-fix
 **Base Commit**: 53cb49f
+**Final Commit**: e8874a6
 
 ---
 
@@ -129,57 +130,46 @@ P0-COMPILER-07 implements and verifies TLL's IO/Network/Database capabilities th
 
 ---
 
-## 4. Bug Discovery
+## 4. Bug Discovery and Fix
 
-### Bug 1: convert.toString on map-derived strings causes json.parse crash
+### Bug 1: arrays.length returns 0 for strings (FIXED)
 
 **Severity**: HIGH
-**Status**: DOCUMENTED, workaround applied
-
-**Description**:
-When a string is retrieved from a TLL map (e.g., `req["body"]`) and passed through `convert.toString()`, the resulting string has an incorrect internal length field (`arrays.length()` returns 0), although the string content is correct. Passing this string to `json.parse()` causes a VM crash.
+**Status**: ✅ FIXED in commit e8874a6
+**Root Cause**: `arrays.length` (builtin 49) only handled `TLL_ARRAY` type. For `TLL_STRING`, the `arr` variable was NULL, so it returned 0.
 
 **Reproduction**:
 ```tll
-fn handler(req: map) -> any {
-    let body = req["body"]
-    let bodyStr = convert.toString(body)  // arrays.length(bodyStr) returns 0!
-    let parsed = json.parse(bodyStr)      // CRASH
-    return { status: 200, body: "ok" }
+let s = "hello"
+io.println(arrays.length(s))  // printed 0, should be 5
+```
+
+**Fix**: Modified `host/c/builtin.c` case 49 to also handle `TLL_STRING`:
+```c
+case 49: { /* length - supports arrays and strings */
+    if (arr) return tll_int(arr->length);
+    if (argCount > 0 && args[0].type == TLL_STRING) return tll_int((int)strlen(args[0].as.string));
+    return tll_int(0);
 }
 ```
 
-**Workaround**:
-Pass the map value directly to `json.parse()` without `convert.toString()`:
-```tll
-let body = req["body"]
-let parsed = json.parse(body)  // Works correctly
-```
+**Impact**: This bug affected:
+- `json.parse(convert.toString(body))` - crashed because length was 0
+- HTTP route path parameter matching (`:id`) - failed because `strings.startsWith` used length
+- All code using `arrays.length` on strings
 
-**Impact**:
-- Affects all code that uses `convert.toString()` on map-derived strings before passing to functions expecting proper strings
-- `strings.substring()`, `strings.startsWith()`, `strings.charAt()` may also be affected
+**Verification**: After fix, all string length operations return correct values, JSON parse works, path parameters work.
 
-### Bug 2: convert.toString on array-derived strings returns length 0
+### Bug 2: convert.toString on map/array-derived strings (RESOLVED)
 
 **Severity**: HIGH
-**Status**: DOCUMENTED, workaround applied
+**Status**: ✅ RESOLVED (was a symptom of Bug 1)
 
-**Description**:
-Similar to Bug 1, when strings are retrieved from arrays (e.g., `arrays.get(parts, i)`) and passed through `convert.toString()`, the resulting string has `arrays.length()` returning 0. This breaks path parameter matching in routers.
+**Description**: Originally thought to be a `convert.toString` bug, but after investigation, it was determined that `convert.toString` works correctly. The real issue was `arrays.length` returning 0 for strings, which caused downstream failures in `json.parse` and `strings.startsWith`.
 
-**Reproduction**:
-```tll
-let parts = strings.split("/api/todos/1", "/")
-let part = convert.toString(arrays.get(parts, 3))  // "1"
-io.println(convert.toString(arrays.length(part)))    // prints 0, should be 1
-```
-
-**Workaround**:
-Use direct comparison without `convert.toString()`, or use known pattern matching with hardcoded parameter names.
-
-**Root Cause Hypothesis**:
-The `convert.toString()` function may return a string wrapper that doesn't properly initialize the length field in the TLL string object, or there's a reference counting issue when converting TLLValue to string.
+**Workaround removed**: After fixing `arrays.length`, all workarounds in `examples/rest_api_sqlite.tll` were removed:
+- `parseJsonBody` now can use `convert.toString(body)` before `json.parse`
+- `matchPattern` no longer needs fallback parameter name matching (`:id`, `:userId`, `:todoId`)
 
 ---
 
@@ -267,7 +257,7 @@ Therefore, no regression is expected in previously sealed capabilities.
 
 P0-COMPILER-07 successfully demonstrates that TLL can independently develop real-world web/network/database applications. The two fully verified dogfood projects (HTTP Server and REST API + SQLite) prove that TLL's existing builtin capabilities (http.serve, sqlite, json, tcp, coroutine) are sufficient for building production-style applications.
 
-The phase also discovered two real bugs in `convert.toString()` that affect string handling when retrieving values from maps and arrays. These bugs are documented with workarounds and should be addressed in a future compiler hardening phase.
+The phase discovered and fixed a real bug in `arrays.length` (builtin 49), which only handled arrays and returned 0 for strings. This bug was the root cause of JSON parse crashes and HTTP route path parameter matching failures. After fixing `arrays.length`, all workarounds were removed from the REST API example.
 
-**Overall Status**: 🟢 IMPLEMENTED + VERIFIED (core capabilities)
-**Recommendation**: Proceed to P0-COMPILER-08 (Web / Service) after addressing the convert.toString bugs and completing Concurrent TCP Server verification.
+**Overall Status**: 🟢 SEALED (pending CI verification)
+**Recommendation**: Proceed to P0-COMPILER-08 (Web / Service) after CI verification.
