@@ -828,12 +828,42 @@ static void tll_vm_exec(TLLVM *vm) {
                               (regs[c].type==TLL_INT?(double)regs[c].as.integer:regs[c].as.floating)) :
                     tll_int(regs[b].as.integer - regs[c].as.integer);
                 break;
-            case OP_MUL:
-                regs[a] = (regs[b].type == TLL_FLOAT || regs[c].type == TLL_FLOAT) ?
-                    tll_float((regs[b].type==TLL_INT?(double)regs[b].as.integer:regs[b].as.floating) *
-                              (regs[c].type==TLL_INT?(double)regs[c].as.integer:regs[c].as.floating)) :
-                    tll_int(regs[b].as.integer * regs[c].as.integer);
+            case OP_MUL: {
+                TLLValue x = regs[b], y = regs[c];
+                if (x.type == TLL_STRING && y.type == TLL_INT) {
+                    const char *s = x.as.string;
+                    int n = y.as.integer;
+                    if (n <= 0) { regs[a] = tll_string(""); }
+                    else {
+                        int len = (int)strlen(s);
+                        char *buf = (char*)malloc(sizeof(int) + len * n + 1);
+                        *(int*)buf = 1;
+                        for (int i = 0; i < n; i++) memcpy(buf + sizeof(int) + i * len, s, len);
+                        buf[sizeof(int) + len * n] = '\0';
+                        TLLValue v; v.type = TLL_STRING; v.as.string = buf + sizeof(int);
+                        regs[a] = v;
+                    }
+                } else if (x.type == TLL_INT && y.type == TLL_STRING) {
+                    const char *s = y.as.string;
+                    int n = x.as.integer;
+                    if (n <= 0) { regs[a] = tll_string(""); }
+                    else {
+                        int len = (int)strlen(s);
+                        char *buf = (char*)malloc(sizeof(int) + len * n + 1);
+                        *(int*)buf = 1;
+                        for (int i = 0; i < n; i++) memcpy(buf + sizeof(int) + i * len, s, len);
+                        buf[sizeof(int) + len * n] = '\0';
+                        TLLValue v; v.type = TLL_STRING; v.as.string = buf + sizeof(int);
+                        regs[a] = v;
+                    }
+                } else if (x.type == TLL_FLOAT || y.type == TLL_FLOAT) {
+                    regs[a] = tll_float((x.type==TLL_INT?(double)x.as.integer:x.as.floating) *
+                                        (y.type==TLL_INT?(double)y.as.integer:y.as.floating));
+                } else {
+                    regs[a] = tll_int(x.as.integer * y.as.integer);
+                }
                 break;
+            }
             case OP_DIV: {
                 double dx = (regs[b].type==TLL_INT?(double)regs[b].as.integer:regs[b].as.floating);
                 double dy = (regs[c].type==TLL_INT?(double)regs[c].as.integer:regs[c].as.floating);
