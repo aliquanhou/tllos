@@ -459,6 +459,33 @@ export fn compile(program: map) -> map {
     let mainFn = { name: "__main__", paramCount: 0, instructions: [], localCount: 0 }
     arrays.push(cg_functions, mainFn)
 
+    // Collect Enum declarations for variant resolution (must be before function body compilation)
+    cg_enumMap = json.parse("{}")
+    let eci = 0
+    while eci < arrays.length(stmts) {
+        let estmt = arrays.get(stmts, eci)
+        if estmt.kind == "Enum" {
+            let enumName = estmt.name
+            let variantMap = json.parse("{}")
+            let nextValue = 0
+            let evi = 0
+            while evi < arrays.length(estmt.variants) {
+                let v = arrays.get(estmt.variants, evi)
+                let val = nextValue
+                if v.value != null {
+                    if v.value.kind == "Int" {
+                        val = convert.toInt(v.value.value)
+                    }
+                }
+                variantMap[v.name] = val
+                nextValue = val + 1
+                evi = evi + 1
+            }
+            cg_enumMap[enumName] = variantMap
+        }
+        eci = eci + 1
+    }
+
     // Second pass: compile ALL function bodies (top-level + nested)
     // IMPORTANT: must push placeholder for main to keep index alignment with cg_functions
     let p2i = 0
@@ -933,6 +960,7 @@ fn cg_compileStatement(stmt: map) -> void {
     }
     if kind == "Throw" { let r = cg_compileExpression(stmt.value); cg_emit(OP_THROW, [r]); return }
     if kind == "Try" { cg_compileTry(stmt); return }
+    if kind == "Match" { cg_compileMatch(stmt); return }
     if kind == "Block" { cg_compileBlock(stmt); return }
     if kind == "ExpressionStatement" { cg_compileExpression(stmt.expression); return }
     if kind == "Export" { cg_compileStatement(stmt.declaration); return }
@@ -968,6 +996,46 @@ fn cg_compileIf(stmt: map) -> void {
         cg_patchJump(jmpEndIdx)
     } else {
         cg_patchJump(jmpFalseIdx)
+    }
+}
+
+fn cg_compileMatch(stmt: map) -> void {
+    // Compile match value
+    let valueReg = cg_compileExpression(stmt.value)
+    let endJumpList: list = []
+    let armCount = arrays.length(stmt.arms)
+    let i = 0
+    while i < armCount {
+        let arm = arrays.get(stmt.arms, i)
+        let isLast = (i == armCount - 1)
+        if arm.patternType == "wildcard" {
+            // Wildcard: always matches, execute body
+            cg_compileStatement(arm.body)
+        } else {
+            // Compile pattern expression
+            let patternReg = cg_compileExpression(arm.pattern)
+            // Compare value == pattern
+            let eqReg = cg_allocReg()
+            cg_emit(OP_EQ, [eqReg, valueReg, patternReg])
+            // If not equal, jump to next arm (or end)
+            let jmpFalseIdx = arrays.length(cg_instructions)
+            cg_emit(OP_JMP_IF_FALSE, [eqReg, -1])
+            // Execute body
+            cg_compileStatement(arm.body)
+            // Jump to end of match
+            let jmpEndIdx = arrays.length(cg_instructions)
+            cg_emit(OP_JMP, [-1])
+            arrays.push(endJumpList, jmpEndIdx)
+            // Patch the false jump to here (next arm)
+            cg_patchJump(jmpFalseIdx)
+        }
+        i = i + 1
+    }
+    // Patch all end jumps to current position
+    let j = 0
+    while j < arrays.length(endJumpList) {
+        cg_patchJump(arrays.get(endJumpList, j))
+        j = j + 1
     }
 }
 

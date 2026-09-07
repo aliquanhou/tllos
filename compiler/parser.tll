@@ -102,6 +102,7 @@ fn parseStatement() -> map {
     if stmtType == "CONTINUE" { return parseContinueStatement() }
     if stmtType == "TRY" { return parseTryStatement() }
     if stmtType == "THROW" { return parseThrowStatement() }
+    if stmtType == "MATCH" { return parseMatchStatement() }
     if stmtType == "IMPORT" { return parseImportStatement() }
     if stmtType == "FROM" { return parseFromImportStatement() }
     if stmtType == "EXPORT" { return parseExportStatement() }
@@ -322,6 +323,36 @@ fn parseTryStatement() -> map {
     node.catchParam = catchParam
     node.catchBlock = catchBlock
     node.finallyBlock = finallyBlock
+    return node
+}
+
+fn parseMatchStatement() -> map {
+    let t = parse_advance() // match
+    let value = parseExpression()
+    parse_expect("LBRACE", "'{' after match expression")
+    let arms: list = []
+    while !parse_check("RBRACE") && !parse_isAtEnd() {
+        // Parse pattern: literal, identifier, member access, or _ (wildcard)
+        let pattern: map = null
+        let patternType = "expression"
+        if parse_check("IDENT") && parse_peek().tkValue == "_" {
+            parse_advance()
+            patternType = "wildcard"
+        } else {
+            pattern = parseExpression()
+            patternType = "expression"
+        }
+        parse_expect("FAT_ARROW", "'=>' in match arm")
+        let body = parseStatement()
+        arrays.push(arms, { pattern: pattern, patternType: patternType, body: body })
+        if !parse_match("COMMA") {
+            if parse_check("RBRACE") { break }
+        }
+    }
+    parse_expect("RBRACE", "'}' to close match")
+    let node = makeNode("Match", t.line, t.column)
+    node.value = value
+    node.arms = arms
     return node
 }
 
