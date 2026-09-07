@@ -1,0 +1,54 @@
+// Probe B3: Simplified closure capture test
+io.println("=== Probe B3: Simplified Closure Capture ===")
+
+// Test B3-1: function-local variable modified by spawned coroutine
+io.println("--- B3-1: function-local var modified by coroutine ---")
+fn testFunctionCapture() {
+    let local_var = "initial"
+    fn coroBody() {
+        local_var = "modified"
+    }
+    coroutine.spawn(coroBody)
+    coroutine.yield()
+    coroutine.yield()
+    if local_var == "modified" {
+        io.println("B3-1 PASS: function-local var modified")
+    } else {
+        io.println("B3-1 FAIL: local_var = " + local_var)
+    }
+}
+testFunctionCapture()
+
+// Test B3-2: module-level variable modified by spawned coroutine (control)
+io.println("")
+io.println("--- B3-2: module-level var modified by coroutine ---")
+let module_var = "initial"
+fn coroBody2() {
+    module_var = "modified"
+}
+coroutine.spawn(coroBody2)
+coroutine.yield()
+coroutine.yield()
+if module_var == "modified" {
+    io.println("B3-2 PASS: module-level var modified")
+} else {
+    io.println("B3-2 FAIL: module_var = " + module_var)
+}
+
+// Test B3-3: anonymous function in coroutine.spawn
+io.println("")
+io.println("--- B3-3: anonymous function in spawn ---")
+let anon_var = "initial"
+coroutine.spawn(fn() {
+    anon_var = "modified_anon"
+})
+coroutine.yield()
+coroutine.yield()
+if anon_var == "modified_anon" {
+    io.println("B3-3 PASS: anonymous function works")
+} else {
+    io.println("B3-3 FAIL: anon_var = " + anon_var)
+}
+
+io.println("")
+io.println("=== Probe B3 Complete ===")

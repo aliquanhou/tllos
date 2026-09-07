@@ -1,0 +1,95 @@
+// Probe B: Function closure + coroutine capture
+// Minimal reproduction: function local -> closure -> coroutine.spawn -> modify captured local
+io.println("=== Probe B: Function Closure + Coroutine Capture ===")
+
+// Test B1: module-level closure + coroutine (control - should work)
+io.println("--- B1: module-level closure + coroutine ---")
+let b1_captured = "initial"
+coroutine.spawn(fn() {
+    b1_captured = "modified_by_coro"
+})
+coroutine.yield()
+coroutine.yield()
+if b1_captured == "modified_by_coro" {
+    io.println("B1 PASS: module-level captured var modified")
+} else {
+    io.println("B1 FAIL: module-level captured var = " + b1_captured)
+}
+
+// Test B2: function-local closure + coroutine (the suspect)
+io.println("")
+io.println("--- B2: function-local closure + coroutine ---")
+fn testFunctionCapture() {
+    let local_var = "initial"
+    coroutine.spawn(fn() {
+        local_var = "modified_by_coro"
+    })
+    coroutine.yield()
+    coroutine.yield()
+    if local_var == "modified_by_coro" {
+        io.println("B2 PASS: function-local captured var modified")
+    } else {
+        io.println("B2 FAIL: function-local captured var = " + local_var)
+    }
+}
+testFunctionCapture()
+
+// Test B3: function-local closure with explicit sleep (give coroutine time)
+io.println("")
+io.println("--- B3: function-local closure + sleep wait ---")
+fn testFunctionCaptureSleep() {
+    let local_var = "initial"
+    coroutine.spawn(fn() {
+        local_var = "modified_by_coro"
+    })
+    coroutine.sleep(20)
+    if local_var == "modified_by_coro" {
+        io.println("B3 PASS: function-local captured var modified (sleep wait)")
+    } else {
+        io.println("B3 FAIL: function-local captured var = " + local_var + " (sleep wait)")
+    }
+}
+testFunctionCaptureSleep()
+
+// Test B4: function-local closure reading (not writing)
+io.println("")
+io.println("--- B4: function-local closure reading ---")
+fn testFunctionCaptureRead() {
+    let local_var = "hello_from_function"
+    let read_value = "not_set"
+    coroutine.spawn(fn() {
+        read_value = local_var
+    })
+    coroutine.yield()
+    coroutine.yield()
+    if read_value == "hello_from_function" {
+        io.println("B4 PASS: function-local captured var read correctly")
+    } else {
+        io.println("B4 FAIL: read_value = " + read_value)
+    }
+}
+testFunctionCaptureRead()
+
+// Test B5: nested function closure + coroutine
+io.println("")
+io.println("--- B5: nested function closure + coroutine ---")
+fn outer() {
+    let outer_var = "outer_initial"
+    fn inner() {
+        coroutine.spawn(fn() {
+            outer_var = "modified_from_nested"
+        })
+    }
+    inner()
+    coroutine.yield()
+    coroutine.yield()
+    if outer_var == "modified_from_nested" {
+        io.println("B5 PASS: nested function captured var modified")
+    } else {
+        io.println("B5 FAIL: outer_var = " + outer_var)
+    }
+}
+outer()
+
+io.println("")
+io.println("=== Probe B Complete ===")
