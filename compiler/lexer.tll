@@ -153,21 +153,12 @@ fn getKeywordType(word: string) -> string {
     if word == "from" { return TK_FROM }
     if word == "export" { return TK_EXPORT }
     if word == "as" { return TK_AS }
-    if word == "type" { return TK_TYPE }
     if word == "struct" { return TK_STRUCT }
     if word == "enum" { return TK_ENUM }
-    if word == "entity" { return TK_ENTITY }
-    if word == "api" { return TK_API }
-    if word == "application" { return TK_APPLICATION }
-    if word == "async" { return TK_ASYNC }
-    if word == "await" { return TK_AWAIT }
     if word == "try" { return TK_TRY }
     if word == "catch" { return TK_CATCH }
     if word == "finally" { return TK_FINALLY }
     if word == "throw" { return TK_THROW }
-    if word == "agent" { return TK_AGENT }
-    if word == "tool" { return TK_TOOL }
-    if word == "workflow" { return TK_WORKFLOW }
     if word == "and" { return TK_AND }
     if word == "or" { return TK_OR }
     return ""

@@ -903,7 +903,7 @@ fn parseMapLiteral() -> map {
         while true {
             let keyTok = parse_peek()
             let keyStr = ""
-            if parse_check("IDENT") || parse_check("STRING") || parse_check("TYPE") || parse_check("STRUCT") || parse_check("ENUM") || parse_check("ASYNC") || parse_check("AWAIT") {
+            if parse_check("IDENT") || parse_check("STRING") || parse_check("STRUCT") || parse_check("ENUM") {
                 let kt = parse_advance()
                 keyStr = kt.tkValue
             } else {

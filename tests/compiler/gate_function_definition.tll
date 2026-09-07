@@ -1,0 +1,281 @@
+// P0-COMPILER-01: Function Definition Completeness Gate
+// Tests: no-param, single-param, multi-param, defined-not-called, called,
+// if/else/nested-if, return/multi-return/conditional-return,
+// string/number/bool/array/map params, module imports,
+// 9 previously-reserved keywords as identifiers (type, entity, api, application, async, await, agent, tool, workflow)
+
+let assertions = 0
+let passed = 0
+
+fn assertEq(actual, expected, msg) {
+    assertions = assertions + 1
+    if actual == expected {
+        passed = passed + 1
+    } else {
+        io.println("FAIL: " + msg + " expected=" + convert.toString(expected) + " actual=" + convert.toString(actual))
+    }
+}
+
+fn assertTrue(cond, msg) {
+    assertions = assertions + 1
+    if cond {
+        passed = passed + 1
+    } else {
+        io.println("FAIL: " + msg)
+    }
+}
+
+// ============ Gate 1: No-param function ============
+fn gate1_noParam() {
+    return "no-param-ok"
+}
+
+// ============ Gate 2: Single-param function ============
+fn gate2_singleParam(x) {
+    return x
+}
+
+// ============ Gate 3: Two-param function ============
+fn gate3_twoParam(a, b) {
+    return a + b
+}
+
+// ============ Gate 4: Multi-param function ============
+fn gate4_multiParam(a, b, c, d) {
+    return a + b + c + d
+}
+
+// ============ Gate 5: Function defined but NOT called ============
+fn gate5_definedNotCalled() {
+    return "this-should-never-be-called"
+}
+
+// ============ Gate 6: if / if-else / nested-if ============
+fn gate6_ifOnly(x) {
+    if x > 0 {
+        return "positive"
+    }
+    return "non-positive"
+}
+
+fn gate6_ifElse(x) {
+    if x > 0 {
+        return "positive"
+    } else {
+        return "non-positive"
+    }
+}
+
+fn gate6_nestedIf(x) {
+    if x > 0 {
+        if x > 10 {
+            return "large-positive"
+        }
+        return "small-positive"
+    }
+    return "non-positive"
+}
+
+// ============ Gate 7: return / multi-return / conditional-return ============
+fn gate7_singleReturn() {
+    return 42
+}
+
+fn gate7_multiReturn(x) {
+    if x == 1 { return "one" }
+    if x == 2 { return "two" }
+    if x == 3 { return "three" }
+    return "other"
+}
+
+fn gate7_conditionalReturn(x) {
+    if x > 0 {
+        if x > 100 {
+            return "huge"
+        }
+        return "normal"
+    }
+    return "negative-or-zero"
+}
+
+// ============ Gate 8: Various param types ============
+fn gate8_stringParam(s) {
+    return strings.length(s)
+}
+
+fn gate8_numberParam(n) {
+    return n * 2
+}
+
+fn gate8_boolParam(b) {
+    if b { return "true-branch" }
+    return "false-branch"
+}
+
+fn gate8_arrayParam(arr) {
+    return arrays.length(arr)
+}
+
+fn gate8_mapParam(m) {
+    return m["key"]
+}
+
+// ============ Gate 9: 9 previously-reserved keywords as identifiers ============
+// These were reserved keywords but never used in parser grammar.
+// Now they should be valid identifiers.
+
+fn gate9_typeParam(type) {
+    return type
+}
+
+fn gate9_entityParam(entity) {
+    return entity
+}
+
+fn gate9_apiParam(api) {
+    return api
+}
+
+fn gate9_applicationParam(application) {
+    return application
+}
+
+fn gate9_asyncParam(async) {
+    return async
+}
+
+fn gate9_awaitParam(await) {
+    return await
+}
+
+fn gate9_agentParam(agent) {
+    return agent
+}
+
+fn gate9_toolParam(tool) {
+    return tool
+}
+
+fn gate9_workflowParam(workflow) {
+    return workflow
+}
+
+// Keywords as local variables
+fn gate9_keywordLocals() {
+    let type = "type-var"
+    let entity = "entity-var"
+    let api = "api-var"
+    let application = "application-var"
+    let async = "async-var"
+    let await = "await-var"
+    let agent = "agent-var"
+    let tool = "tool-var"
+    let workflow = "workflow-var"
+    return type + entity + api + application + async + await + agent + tool + workflow
+}
+
+// Keywords as function names
+fn type_fn() { return "type-fn" }
+fn entity_fn() { return "entity-fn" }
+fn api_fn() { return "api-fn" }
+fn application_fn() { return "application-fn" }
+fn async_fn() { return "async-fn" }
+fn await_fn() { return "await-fn" }
+fn agent_fn() { return "agent-fn" }
+fn tool_fn() { return "tool-fn" }
+fn workflow_fn() { return "workflow-fn" }
+
+// Keywords as map keys
+fn gate9_keywordMapKeys() {
+    let m = { type: "t", entity: "e", api: "a", application: "ap", async: "as", await: "aw", agent: "ag", tool: "to", workflow: "w" }
+    return m["type"] + m["entity"] + m["api"] + m["application"] + m["async"] + m["await"] + m["agent"] + m["tool"] + m["workflow"]
+}
+
+// ============ Main test runner ============
+fn main() {
+    io.println("=== P0-COMPILER-01: Function Definition Completeness Gate ===")
+
+    // Gate 1: No-param
+    assertEq(gate1_noParam(), "no-param-ok", "Gate1 no-param function")
+
+    // Gate 2: Single-param
+    assertEq(gate2_singleParam("hello"), "hello", "Gate2 single-param function")
+
+    // Gate 3: Two-param
+    assertEq(gate3_twoParam("a", "b"), "ab", "Gate3 two-param function")
+
+    // Gate 4: Multi-param
+    assertEq(gate4_multiParam("a", "b", "c", "d"), "abcd", "Gate4 multi-param function")
+
+    // Gate 5: defined-not-called (just verify it compiles, no call)
+    assertTrue(true, "Gate5 defined-not-called compiles")
+
+    // Gate 6: if / if-else / nested-if
+    assertEq(gate6_ifOnly(5), "positive", "Gate6 ifOnly positive")
+    assertEq(gate6_ifOnly(-1), "non-positive", "Gate6 ifOnly non-positive")
+    assertEq(gate6_ifElse(5), "positive", "Gate6 ifElse positive")
+    assertEq(gate6_ifElse(-1), "non-positive", "Gate6 ifElse non-positive")
+    assertEq(gate6_nestedIf(5), "small-positive", "Gate6 nestedIf small")
+    assertEq(gate6_nestedIf(15), "large-positive", "Gate6 nestedIf large")
+    assertEq(gate6_nestedIf(-1), "non-positive", "Gate6 nestedIf non-positive")
+
+    // Gate 7: return / multi-return / conditional-return
+    assertEq(gate7_singleReturn(), 42, "Gate7 singleReturn")
+    assertEq(gate7_multiReturn(1), "one", "Gate7 multiReturn 1")
+    assertEq(gate7_multiReturn(2), "two", "Gate7 multiReturn 2")
+    assertEq(gate7_multiReturn(3), "three", "Gate7 multiReturn 3")
+    assertEq(gate7_multiReturn(99), "other", "Gate7 multiReturn other")
+    assertEq(gate7_conditionalReturn(50), "normal", "Gate7 conditionalReturn normal")
+    assertEq(gate7_conditionalReturn(150), "huge", "Gate7 conditionalReturn huge")
+    assertEq(gate7_conditionalReturn(-5), "negative-or-zero", "Gate7 conditionalReturn negative")
+
+    // Gate 8: Various param types
+    assertEq(gate8_stringParam("hello"), 5, "Gate8 stringParam")
+    assertEq(gate8_numberParam(21), 42, "Gate8 numberParam")
+    assertEq(gate8_boolParam(true), "true-branch", "Gate8 boolParam true")
+    assertEq(gate8_boolParam(false), "false-branch", "Gate8 boolParam false")
+    assertEq(gate8_arrayParam([1, 2, 3]), 3, "Gate8 arrayParam")
+    assertEq(gate8_mapParam({ key: "value" }), "value", "Gate8 mapParam")
+
+    // Gate 9: 9 previously-reserved keywords as identifiers
+    assertEq(gate9_typeParam("type-val"), "type-val", "Gate9 type as param")
+    assertEq(gate9_entityParam("entity-val"), "entity-val", "Gate9 entity as param")
+    assertEq(gate9_apiParam("api-val"), "api-val", "Gate9 api as param")
+    assertEq(gate9_applicationParam("app-val"), "app-val", "Gate9 application as param")
+    assertEq(gate9_asyncParam("async-val"), "async-val", "Gate9 async as param")
+    assertEq(gate9_awaitParam("await-val"), "await-val", "Gate9 await as param")
+    assertEq(gate9_agentParam("agent-val"), "agent-val", "Gate9 agent as param")
+    assertEq(gate9_toolParam("tool-val"), "tool-val", "Gate9 tool as param")
+    assertEq(gate9_workflowParam("wf-val"), "wf-val", "Gate9 workflow as param")
+
+    assertEq(gate9_keywordLocals(), "type-varentity-varapi-varapplication-varasync-varawait-varagent-vartool-varworkflow-var", "Gate9 keyword locals")
+
+    assertEq(type_fn(), "type-fn", "Gate9 type as fn name")
+    assertEq(entity_fn(), "entity-fn", "Gate9 entity as fn name")
+    assertEq(api_fn(), "api-fn", "Gate9 api as fn name")
+    assertEq(application_fn(), "application-fn", "Gate9 application as fn name")
+    assertEq(async_fn(), "async-fn", "Gate9 async as fn name")
+    assertEq(await_fn(), "await-fn", "Gate9 await as fn name")
+    assertEq(agent_fn(), "agent-fn", "Gate9 agent as fn name")
+    assertEq(tool_fn(), "tool-fn", "Gate9 tool as fn name")
+    assertEq(workflow_fn(), "workflow-fn", "Gate9 workflow as fn name")
+
+    assertEq(gate9_keywordMapKeys(), "teaapasawagtow", "Gate9 keyword map keys")
+
+    // Summary
+    io.println("")
+    io.println("=== Results ===")
+    io.println("Assertions: " + convert.toString(assertions))
+    io.println("Passed: " + convert.toString(passed))
+    io.println("Failed: " + convert.toString(assertions - passed))
+
+    if passed == assertions {
+        io.println("ALL TESTS PASSED")
+    } else {
+        io.println("SOME TESTS FAILED")
+    }
+
+    return 0
+}
+
+main()

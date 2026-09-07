@@ -1,0 +1,245 @@
+// P0-COMPILER-PROBE-01: Function Capability Probe Matrix
+// Probes: recursion, mutual recursion, forward/backward calls,
+// local variables, parameter shadowing, return types, early return,
+// multi-exit, nested return, conditional return.
+
+let probePassed = 0
+let probeFailed = 0
+let probeTotal = 0
+
+fn probeAssert(cond, name) {
+    probeTotal = probeTotal + 1
+    if cond {
+        probePassed = probePassed + 1
+    } else {
+        probeFailed = probeFailed + 1
+        io.println("PROBE FAIL: " + name)
+    }
+}
+
+// ============ 1. Recursion ============
+fn probe_factorial(n) {
+    if n <= 1 { return 1 }
+    return n * probe_factorial(n - 1)
+}
+
+fn probe_fibonacci(n) {
+    if n <= 1 { return n }
+    return probe_fibonacci(n - 1) + probe_fibonacci(n - 2)
+}
+
+// ============ 2. Mutual Recursion ============
+fn probe_isEven(n) {
+    if n == 0 { return true }
+    return probe_isOdd(n - 1)
+}
+
+fn probe_isOdd(n) {
+    if n == 0 { return false }
+    return probe_isEven(n - 1)
+}
+
+// ============ 3. Forward Call (caller before callee definition) ============
+fn probe_forwardCaller() {
+    return probe_forwardCallee() + 1
+}
+
+fn probe_forwardCallee() {
+    return 41
+}
+
+// ============ 4. Backward Call (callee before caller definition) ============
+fn probe_backwardCallee() {
+    return 99
+}
+
+fn probe_backwardCaller() {
+    return probe_backwardCallee()
+}
+
+// ============ 5. Local Variables ============
+fn probe_localVars() {
+    let a = 10
+    let b = 20
+    let c = a + b
+    a = 100
+    return a + b + c
+}
+
+// ============ 6. Parameter Shadowing ============
+fn probe_shadowOuter(x) {
+    let result = x
+    fn probe_shadowInner(x) {
+        return x * 2
+    }
+    return result + probe_shadowInner(5)
+}
+
+// ============ 7. Return Types ============
+fn probe_returnNull() {
+    return null
+}
+
+fn probe_returnBool() {
+    return true
+}
+
+fn probe_returnInt() {
+    return 42
+}
+
+fn probe_returnFloat() {
+    return 3.14
+}
+
+fn probe_returnString() {
+    return "hello"
+}
+
+fn probe_returnArray() {
+    return [1, 2, 3]
+}
+
+fn probe_returnMap() {
+    return { key: "value" }
+}
+
+// ============ 8. Early Return ============
+fn probe_earlyReturn(x) {
+    if x > 0 {
+        return "positive"
+    }
+    let unreachable = "this should not execute"
+    return unreachable
+}
+
+// ============ 9. Multi-Exit Return ============
+fn probe_multiExit(x) {
+    if x == 1 { return "one" }
+    if x == 2 { return "two" }
+    if x == 3 { return "three" }
+    return "other"
+}
+
+// ============ 10. Nested Return ============
+fn probe_nestedReturn(x) {
+    if x > 0 {
+        if x > 10 {
+            if x > 100 {
+                return "huge"
+            }
+            return "large"
+        }
+        return "small"
+    }
+    return "non-positive"
+}
+
+// ============ 11. Conditional Return ============
+fn probe_conditionalReturn(x) {
+    if x > 0 && x < 100 {
+        return "normal"
+    }
+    if x <= 0 || x >= 100 {
+        return "out-of-range"
+    }
+    return "impossible"
+}
+
+// ============ 12. Function as Parameter (higher-order) ============
+fn probe_applyTwice(f, x) {
+    return f(f(x))
+}
+
+fn probe_double(x) {
+    return x * 2
+}
+
+// ============ 13. Function as Return Value ============
+fn probe_makeAdder(n) {
+    fn adder(x) {
+        return x + n
+    }
+    return adder
+}
+
+// ============ Main Probe Runner ============
+fn main() {
+    io.println("=== P0-COMPILER-PROBE-01: Function Capability Probe Matrix ===")
+
+    // 1. Recursion
+    probeAssert(probe_factorial(5) == 120, "recursion factorial(5)=120")
+    probeAssert(probe_factorial(0) == 1, "recursion factorial(0)=1")
+    probeAssert(probe_fibonacci(10) == 55, "recursion fibonacci(10)=55")
+
+    // 2. Mutual Recursion
+    probeAssert(probe_isEven(4) == true, "mutual recursion isEven(4)=true")
+    probeAssert(probe_isEven(5) == false, "mutual recursion isEven(5)=false")
+    probeAssert(probe_isOdd(5) == true, "mutual recursion isOdd(5)=true")
+    probeAssert(probe_isOdd(4) == false, "mutual recursion isOdd(4)=false")
+
+    // 3. Forward Call
+    probeAssert(probe_forwardCaller() == 42, "forward call caller->callee=42")
+
+    // 4. Backward Call
+    probeAssert(probe_backwardCaller() == 99, "backward call caller->callee=99")
+
+    // 5. Local Variables
+    probeAssert(probe_localVars() == 150, "local vars 100+20+30=150")
+
+    // 6. Parameter Shadowing
+    probeAssert(probe_shadowOuter(10) == 20, "parameter shadowing 10+10=20")
+
+    // 7. Return Types
+    probeAssert(probe_returnNull() == null, "return type null")
+    probeAssert(probe_returnBool() == true, "return type bool")
+    probeAssert(probe_returnInt() == 42, "return type int")
+    probeAssert(probe_returnFloat() == 3.14, "return type float")
+    probeAssert(probe_returnString() == "hello", "return type string")
+    probeAssert(arrays.length(probe_returnArray()) == 3, "return type array length=3")
+    probeAssert(probe_returnMap()["key"] == "value", "return type map key=value")
+
+    // 8. Early Return
+    probeAssert(probe_earlyReturn(5) == "positive", "early return positive")
+    probeAssert(probe_earlyReturn(-1) == "this should not execute", "early return negative path")
+
+    // 9. Multi-Exit Return
+    probeAssert(probe_multiExit(1) == "one", "multi-exit 1=one")
+    probeAssert(probe_multiExit(2) == "two", "multi-exit 2=two")
+    probeAssert(probe_multiExit(3) == "three", "multi-exit 3=three")
+    probeAssert(probe_multiExit(99) == "other", "multi-exit 99=other")
+
+    // 10. Nested Return
+    probeAssert(probe_nestedReturn(5) == "small", "nested return 5=small")
+    probeAssert(probe_nestedReturn(50) == "large", "nested return 50=large")
+    probeAssert(probe_nestedReturn(150) == "huge", "nested return 150=huge")
+    probeAssert(probe_nestedReturn(-1) == "non-positive", "nested return -1=non-positive")
+
+    // 11. Conditional Return
+    probeAssert(probe_conditionalReturn(50) == "normal", "conditional return 50=normal")
+    probeAssert(probe_conditionalReturn(-1) == "out-of-range", "conditional return -1=out-of-range")
+    probeAssert(probe_conditionalReturn(100) == "out-of-range", "conditional return 100=out-of-range")
+
+    // 12. Function as Parameter
+    probeAssert(probe_applyTwice(probe_double, 5) == 20, "higher-order applyTwice(double,5)=20")
+
+    // 13. Function as Return Value (closure)
+    let add5 = probe_makeAdder(5)
+    probeAssert(add5(10) == 15, "closure makeAdder(5)(10)=15")
+
+    // Summary
+    io.println("")
+    io.println("=== Probe Results ===")
+    io.println("Total: " + convert.toString(probeTotal))
+    io.println("Passed: " + convert.toString(probePassed))
+    io.println("Failed: " + convert.toString(probeFailed))
+    if probeFailed == 0 {
+        io.println("ALL PROBES PASSED")
+    } else {
+        io.println("SOME PROBES FAILED")
+    }
+
+    return 0
+}
+
+main()
