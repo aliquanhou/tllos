@@ -1549,6 +1549,32 @@ fn cg_compileBinary(expr: map) -> int {
         cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
         return resultReg
     }
+    // Compound assignment: +=, -=, *=, /=, %=, &=, |=, ^=, <<=, >>=
+    if op == "+=" || op == "-=" || op == "*=" || op == "/=" || op == "%=" || op == "&=" || op == "|=" || op == "^=" || op == "<<=" || op == ">>=" {
+        let leftKind = expr.left["kind"]
+        if leftKind == "Ident" {
+            let varName = expr.left["name"]
+            let resolved = cg_resolveVar(varName)
+            let leftReg = cg_allocReg()
+            if resolved.isGlobal { cg_emit(OP_LOAD_GLOBAL, [leftReg, resolved.index]) }
+            else { cg_emit(OP_LOAD_VAR, [leftReg, resolved.index]) }
+            let rightReg = cg_compileExpression(expr.right)
+            let resultReg = cg_allocReg()
+            if op == "+=" { cg_emit(OP_ADD, [resultReg, leftReg, rightReg]) }
+            else if op == "-=" { cg_emit(OP_SUB, [resultReg, leftReg, rightReg]) }
+            else if op == "*=" { cg_emit(OP_MUL, [resultReg, leftReg, rightReg]) }
+            else if op == "/=" { cg_emit(OP_DIV, [resultReg, leftReg, rightReg]) }
+            else if op == "%=" { cg_emit(OP_MOD, [resultReg, leftReg, rightReg]) }
+            else if op == "&=" { cg_emit(OP_BAND, [resultReg, leftReg, rightReg]) }
+            else if op == "|=" { cg_emit(OP_BOR, [resultReg, leftReg, rightReg]) }
+            else if op == "^=" { cg_emit(OP_BXOR, [resultReg, leftReg, rightReg]) }
+            else if op == "<<=" { cg_emit(OP_SHL, [resultReg, leftReg, rightReg]) }
+            else if op == ">>=" { cg_emit(OP_SHR, [resultReg, leftReg, rightReg]) }
+            if resolved.isGlobal { cg_emit(OP_STORE_GLOBAL, [resolved.index, resultReg]) }
+            else { cg_emit(OP_STORE_VAR, [resolved.index, resultReg]) }
+            return resultReg
+        }
+    }
     let leftReg = cg_compileExpression(expr.left)
     // Short-circuit AND/OR: handle before right operand compilation
     if op == "&&" {

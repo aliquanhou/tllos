@@ -528,7 +528,7 @@ fn parseTernary() -> map {
 
 fn parseAssignment() -> map {
     let left = parseTernary()
-    if parse_match("EQ") || parse_match("PLUSEQ") || parse_match("MINUSEQ") || parse_match("STAREQ") || parse_match("SLASHEQ") || parse_match("PERCENTEQ") {
+    if parse_match("EQ") || parse_match("PLUS_EQ") || parse_match("MINUS_EQ") || parse_match("STAR_EQ") || parse_match("SLASH_EQ") || parse_match("PERCENT_EQ") || parse_match("BAND_EQ") || parse_match("BOR_EQ") || parse_match("BXOR_EQ") || parse_match("SHL_EQ") || parse_match("SHR_EQ") {
         let t = parse_previous()
         let op = t.tkValue
         let right = parseAssignment()

@@ -112,6 +112,11 @@ let TK_BXOR = "BXOR"
 let TK_BNOT = "BNOT"
 let TK_SHL = "SHL"
 let TK_SHR = "SHR"
+let TK_BAND_EQ = "BAND_EQ"
+let TK_BOR_EQ = "BOR_EQ"
+let TK_BXOR_EQ = "BXOR_EQ"
+let TK_SHL_EQ = "SHL_EQ"
+let TK_SHR_EQ = "SHR_EQ"
 
 fn isDigit(ch: string) -> bool {
     return ch >= "0" && ch <= "9"
@@ -360,8 +365,13 @@ export fn tokenize(input: string) -> list {
             else if twoChar == "/=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SLASH_EQ, tkValue: "/=", line: startLine, column: startCol }); matched = true }
             else if twoChar == "%=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_PERCENT_EQ, tkValue: "%=", line: startLine, column: startCol }); matched = true }
             else if twoChar == "**" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_POWER, tkValue: "**", line: startLine, column: startCol }); matched = true }
+            else if threeChar == "<<=" { pos = pos + 1; column = column + 1; pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SHL_EQ, tkValue: "<<=", line: startLine, column: startCol }); matched = true }
+            else if threeChar == ">>=" { pos = pos + 1; column = column + 1; pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SHR_EQ, tkValue: ">>=", line: startLine, column: startCol }); matched = true }
             else if twoChar == "<<" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SHL, tkValue: "<<", line: startLine, column: startCol }); matched = true }
             else if twoChar == ">>" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SHR, tkValue: ">>", line: startLine, column: startCol }); matched = true }
+            else if twoChar == "&=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_BAND_EQ, tkValue: "&=", line: startLine, column: startCol }); matched = true }
+            else if twoChar == "|=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_BOR_EQ, tkValue: "|=", line: startLine, column: startCol }); matched = true }
+            else if twoChar == "^=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_BXOR_EQ, tkValue: "^=", line: startLine, column: startCol }); matched = true }
 
             if !matched {
                 if opCh == "+" { arrays.push(tokens, { tkType: TK_PLUS, tkValue: "+", line: startLine, column: startCol }) }
