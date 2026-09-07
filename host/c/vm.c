@@ -274,11 +274,12 @@ static void coroutine_yield(TLLVM *vm) {
     /* Save current coroutine state */
     coroutine_save_current(vm);
 
-    /* If current is dead, destroy it now (after save, before switch) */
+    /* If current is dead, mark it but do NOT destroy immediately.
+     * P0-06-R3: immediate destruction frees the call stack, which may
+     * invalidate captured locals referenced by other still-running coroutines.
+     * Dead coroutines are collected and destroyed when all coroutines finish. */
     if (old >= 0 && old < vm->coroutineCount && vm->coroutines[old] && vm->coroutines[old]->state == 2) {
         selfDead = 1;
-        coroutine_destroy(vm, old);
-        if (old >= vm->coroutineCount) old = (vm->coroutineCount > 0) ? vm->coroutineCount - 1 : 0;
     }
 
     /* No coroutines left - nothing to restore */
@@ -606,19 +607,29 @@ static void tll_vm_exec(TLLVM *vm) {
             if (vm->coroutineCount > 0 && vm->currentCoroutine < vm->coroutineCount) {
                 vm->coroutines[vm->currentCoroutine]->state = 2; /* dead */
             }
-            /* If no coroutines left (or only this dead one), exit */
+            /* If no coroutines left, exit */
             if (vm->coroutineCount == 0) break;
-            if (vm->coroutineCount == 1 && vm->coroutines[0]->state == 2) {
-                /* Save and destroy the last dead coroutine */
-                int idx = vm->currentCoroutine;
-                if (idx >= 0 && idx < vm->coroutineCount) {
-                    coroutine_save_current(vm);
-                    coroutine_destroy(vm, idx);
+            /* P0-06-R3: check if ALL coroutines are dead. If so, destroy
+             * them all and exit. This ensures captured locals remain valid
+             * until every coroutine has finished. */
+            {
+                int allDead = 1;
+                int ci;
+                for (ci = 0; ci < vm->coroutineCount; ci++) {
+                    if (vm->coroutines[ci] && vm->coroutines[ci]->state != 2) {
+                        allDead = 0;
+                        break;
+                    }
                 }
-                vm->callStack = NULL;
-                vm->callStackSize = 0;
-                vm->callStackCapacity = 0;
-                break;
+                if (allDead) {
+                    while (vm->coroutineCount > 0) {
+                        coroutine_destroy(vm, 0);
+                    }
+                    vm->callStack = NULL;
+                    vm->callStackSize = 0;
+                    vm->callStackCapacity = 0;
+                    break;
+                }
             }
             coroutine_yield(vm);
             continue;
