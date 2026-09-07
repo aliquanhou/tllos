@@ -68,12 +68,17 @@ def http_post(path, body, content_type="text/plain"):
             raise
 
 def main():
-    # Find tllvm
+    # Find tllvm - use platform-specific binary name
+    # On Linux/macOS, tllvm.exe may exist in repo (Windows prebuilt) but is not executable
     script_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.abspath(os.path.join(script_dir, "..", ".."))
-    tllvm = os.path.join(repo_root, "host", "c", "tllvm.exe")
-    if not os.path.exists(tllvm):
+    if sys.platform == "win32":
+        tllvm = os.path.join(repo_root, "host", "c", "tllvm.exe")
+    else:
         tllvm = os.path.join(repo_root, "host", "c", "tllvm")
+        # Ensure executable permission on Unix
+        if os.path.exists(tllvm):
+            os.chmod(tllvm, 0o755)
     tllc = os.path.join(repo_root, "tools", "TLLC", "tllc.tllbc")
     server_tll = os.path.join(script_dir, "gate_http_server.tll")
     server_bc = os.path.join(script_dir, "gate_http_server.tllbc")
