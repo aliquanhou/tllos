@@ -114,6 +114,26 @@ fn parseStatement() -> map {
 
 fn parseLetStatement() -> map {
     let t = parse_advance() // let/mut
+    // Check for destructuring: let (a, b, c) = ...
+    if parse_check("LPAREN") {
+        parse_advance() // consume (
+        let names = []
+        while true {
+            let nameTok = parse_expect("IDENT", "variable name in destructuring")
+            arrays.push(names, nameTok.tkValue)
+            if parse_match("COMMA") == false { break }
+        }
+        parse_expect("RPAREN", "')'")
+        parse_expect("EQ", "'='")
+        let value = parseExpression()
+        let node = makeNode("Let", t.line, t.column)
+        node.name = ""
+        node.names = names
+        node.value = value
+        node.isConst = false
+        node.isDestructuring = true
+        return node
+    }
     let nameTok = parse_expect("IDENT", "variable name")
     let name = nameTok.tkValue
     let typeAnnotation: map = null

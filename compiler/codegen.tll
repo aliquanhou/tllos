@@ -855,6 +855,32 @@ fn cg_compileStatement(stmt: map) -> void {
     }
 
     if kind == "Let" || kind == "Const" {
+        // Destructuring assignment: let (a, b, c) = tuple
+        if stmt.isDestructuring == true && stmt.names != null {
+            let tupleReg = cg_compileExpression(stmt.value)
+            let di = 0
+            while di < arrays.length(stmt.names) {
+                let dname = arrays.get(stmt.names, di)
+                let dresolved = null
+                if cg_currentFn != null && cg_currentFn.name == "__main__" {
+                    dresolved = cg_resolveVar(dname)
+                } else {
+                    let dlocalIdx = cg_getOrCreateVar(dname)
+                    dresolved = { index: dlocalIdx, isGlobal: false }
+                }
+                let didxReg = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [didxReg, cg_addConstant(di)])
+                let delemReg = cg_allocReg()
+                cg_emit(OP_INDEX_GET, [delemReg, tupleReg, didxReg])
+                if dresolved.isGlobal {
+                    cg_emit(OP_STORE_GLOBAL, [dresolved.index, delemReg])
+                } else {
+                    cg_emit(OP_STORE_VAR, [dresolved.index, delemReg])
+                }
+                di = di + 1
+            }
+            return
+        }
         // P0-15.18.4-RUNTIME.3 fix: in non-main functions, let/const must create a NEW local
         // variable, not fall back to a global with the same name. cg_resolveVar would return
         // the global, causing function-local assignments to silently overwrite globals.
