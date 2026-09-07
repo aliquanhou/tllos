@@ -1,0 +1,415 @@
+// P0-COMPILER-02: Control Flow Capability Probe Matrix
+// Probes 16 control flow features through full pipeline:
+// Source -> Lexer -> Parser -> AST -> Codegen -> Runtime -> Expected Result
+// Auto-classification: PASS / BUG / PARTIAL / MISSING / UNTESTED
+
+let probeTotal = 0
+let probePassed = 0
+let probeFailed = 0
+
+fn probeAssert(cond, name) {
+    probeTotal = probeTotal + 1
+    if cond {
+        probePassed = probePassed + 1
+    } else {
+        probeFailed = probeFailed + 1
+        io.println("PROBE FAIL: " + name)
+    }
+}
+
+fn probeEq(actual, expected, name) {
+    probeAssert(actual == expected, name + " (expected=" + convert.toString(expected) + " got=" + convert.toString(actual) + ")")
+}
+
+// ============================================================
+// PROBE 1: if (basic)
+// ============================================================
+io.println("--- Probe 1: if (basic) ---")
+fn probe_if_basic(x) {
+    let result = "no"
+    if x > 0 {
+        result = "yes"
+    }
+    return result
+}
+probeEq(probe_if_basic(5), "yes", "1.1 if true branch")
+probeEq(probe_if_basic(-1), "no", "1.2 if false branch skip")
+probeEq(probe_if_basic(0), "no", "1.3 if zero condition")
+
+// ============================================================
+// PROBE 2: if / else
+// ============================================================
+io.println("--- Probe 2: if / else ---")
+fn probe_if_else(x) {
+    if x > 0 {
+        return "positive"
+    } else {
+        return "non-positive"
+    }
+}
+probeEq(probe_if_else(5), "positive", "2.1 if/else true")
+probeEq(probe_if_else(-1), "non-positive", "2.2 if/else false")
+probeEq(probe_if_else(0), "non-positive", "2.3 if/else zero")
+
+// ============================================================
+// PROBE 3: else if (chain)
+// ============================================================
+io.println("--- Probe 3: else if (chain) ---")
+fn probe_else_if(x) {
+    if x > 100 {
+        return "huge"
+    } else if x > 10 {
+        return "large"
+    } else if x > 0 {
+        return "small"
+    } else {
+        return "non-positive"
+    }
+}
+probeEq(probe_else_if(150), "huge", "3.1 else if first")
+probeEq(probe_else_if(50), "large", "3.2 else if second")
+probeEq(probe_else_if(5), "small", "3.3 else if third")
+probeEq(probe_else_if(-1), "non-positive", "3.4 else if final else")
+
+// ============================================================
+// PROBE 4: nested if
+// ============================================================
+io.println("--- Probe 4: nested if ---")
+fn probe_nested_if(x, y) {
+    if x > 0 {
+        if y > 0 {
+            return "both-positive"
+        } else {
+            return "x-positive-y-not"
+        }
+    } else {
+        if y > 0 {
+            return "x-not-y-positive"
+        } else {
+            return "neither-positive"
+        }
+    }
+}
+probeEq(probe_nested_if(5, 5), "both-positive", "4.1 nested both true")
+probeEq(probe_nested_if(5, -1), "x-positive-y-not", "4.2 nested outer true inner false")
+probeEq(probe_nested_if(-1, 5), "x-not-y-positive", "4.3 nested outer false inner true")
+probeEq(probe_nested_if(-1, -1), "neither-positive", "4.4 nested both false")
+
+// ============================================================
+// PROBE 5: while loop
+// ============================================================
+io.println("--- Probe 5: while loop ---")
+fn probe_while_sum(n) {
+    let sum = 0
+    let i = 0
+    while i < n {
+        sum = sum + i
+        i = i + 1
+    }
+    return sum
+}
+probeEq(probe_while_sum(5), 10, "5.1 while sum 0..4 = 10")
+probeEq(probe_while_sum(0), 0, "5.2 while zero iterations")
+probeEq(probe_while_sum(1), 0, "5.3 while one iteration (i=0)")
+probeEq(probe_while_sum(10), 45, "5.4 while sum 0..9 = 45")
+
+// ============================================================
+// PROBE 6: for loop (for x in iterable)
+// ============================================================
+io.println("--- Probe 6: for loop ---")
+fn probe_for_sum(arr) {
+    let sum = 0
+    for x in arr {
+        sum = sum + x
+    }
+    return sum
+}
+probeEq(probe_for_sum([1, 2, 3, 4, 5]), 15, "6.1 for sum array = 15")
+probeEq(probe_for_sum([]), 0, "6.2 for empty array = 0")
+probeEq(probe_for_sum([100]), 100, "6.3 for single element = 100")
+
+fn probe_for_string(s) {
+    let count = 0
+    for ch in s {
+        count = count + 1
+    }
+    return count
+}
+probeEq(probe_for_string("hello"), 5, "6.4 for iterate string chars = 5")
+
+// ============================================================
+// PROBE 7: break
+// ============================================================
+io.println("--- Probe 7: break ---")
+fn probe_break_sum(n, breakAt) {
+    let sum = 0
+    let i = 0
+    while i < n {
+        if i == breakAt {
+            break
+        }
+        sum = sum + i
+        i = i + 1
+    }
+    return sum
+}
+probeEq(probe_break_sum(10, 3), 3, "7.1 break at i=3, sum=0+1+2=3")
+probeEq(probe_break_sum(10, 0), 0, "7.2 break at i=0, sum=0")
+probeEq(probe_break_sum(10, 100), 45, "7.3 break never reached, sum=45")
+
+fn probe_break_for(arr, breakAt) {
+    let sum = 0
+    let idx = 0
+    for x in arr {
+        if idx == breakAt {
+            break
+        }
+        sum = sum + x
+        idx = idx + 1
+    }
+    return sum
+}
+probeEq(probe_break_for([1, 2, 3, 4, 5], 2), 3, "7.4 break in for loop at idx=2, sum=1+2=3")
+
+// ============================================================
+// PROBE 8: continue
+// ============================================================
+io.println("--- Probe 8: continue ---")
+fn probe_continue_sum(n) {
+    let sum = 0
+    let i = 0
+    while i < n {
+        i = i + 1
+        if i % 2 == 0 {
+            continue
+        }
+        sum = sum + i
+    }
+    return sum
+}
+probeEq(probe_continue_sum(5), 9, "8.1 continue skips even, sum=1+3+5=9")
+probeEq(probe_continue_sum(1), 1, "8.2 continue single odd=1")
+
+fn probe_continue_for(arr) {
+    let sum = 0
+    for x in arr {
+        if x % 2 == 0 {
+            continue
+        }
+        sum = sum + x
+    }
+    return sum
+}
+probeEq(probe_continue_for([1, 2, 3, 4, 5]), 9, "8.3 continue in for, sum odds=1+3+5=9")
+
+// ============================================================
+// PROBE 9: return in loop
+// ============================================================
+io.println("--- Probe 9: return in loop ---")
+fn probe_return_in_loop(arr, target) {
+    let idx = 0
+    for x in arr {
+        if x == target {
+            return idx
+        }
+        idx = idx + 1
+    }
+    return -1
+}
+probeEq(probe_return_in_loop([10, 20, 30, 40], 30), 2, "9.1 return in loop found at idx=2")
+probeEq(probe_return_in_loop([10, 20, 30, 40], 99), -1, "9.2 return in loop not found=-1")
+probeEq(probe_return_in_loop([10, 20, 30, 40], 10), 0, "9.3 return in loop first element=0")
+
+fn probe_return_in_while(n, target) {
+    let i = 0
+    while i < n {
+        if i == target {
+            return i * 10
+        }
+        i = i + 1
+    }
+    return -1
+}
+probeEq(probe_return_in_while(100, 5), 50, "9.4 return in while at i=5 -> 50")
+
+// ============================================================
+// PROBE 10: nested loop
+// ============================================================
+io.println("--- Probe 10: nested loop ---")
+fn probe_nested_loop(rows, cols) {
+    let count = 0
+    let i = 0
+    while i < rows {
+        let j = 0
+        while j < cols {
+            count = count + 1
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return count
+}
+probeEq(probe_nested_loop(3, 4), 12, "10.1 nested while 3x4=12")
+probeEq(probe_nested_loop(1, 1), 1, "10.2 nested while 1x1=1")
+probeEq(probe_nested_loop(0, 5), 0, "10.3 nested while 0 rows=0")
+
+fn probe_nested_for(matrix) {
+    let sum = 0
+    for row in matrix {
+        for cell in row {
+            sum = sum + cell
+        }
+    }
+    return sum
+}
+probeEq(probe_nested_for([[1, 2], [3, 4], [5, 6]]), 21, "10.4 nested for sum matrix=21")
+
+fn probe_break_inner_loop(rows, cols) {
+    let count = 0
+    let i = 0
+    while i < rows {
+        let j = 0
+        while j < cols {
+            if j == 2 {
+                break
+            }
+            count = count + 1
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return count
+}
+probeEq(probe_break_inner_loop(3, 5), 6, "10.5 break inner only, 3x2=6")
+
+// ============================================================
+// PROBE 11: && (and)
+// ============================================================
+io.println("--- Probe 11: && (and) ---")
+fn probe_and(a, b) {
+    if a > 0 and b > 0 {
+        return "both-positive"
+    }
+    return "not-both"
+}
+probeEq(probe_and(5, 5), "both-positive", "11.1 and both true")
+probeEq(probe_and(5, -1), "not-both", "11.2 and first true second false")
+probeEq(probe_and(-1, 5), "not-both", "11.3 and first false second true")
+probeEq(probe_and(-1, -1), "not-both", "11.4 and both false")
+
+// ============================================================
+// PROBE 12: || (or)
+// ============================================================
+io.println("--- Probe 12: || (or) ---")
+fn probe_or(a, b) {
+    if a > 0 or b > 0 {
+        return "at-least-one"
+    }
+    return "neither"
+}
+probeEq(probe_or(5, 5), "at-least-one", "12.1 or both true")
+probeEq(probe_or(5, -1), "at-least-one", "12.2 or first true second false")
+probeEq(probe_or(-1, 5), "at-least-one", "12.3 or first false second true")
+probeEq(probe_or(-1, -1), "neither", "12.4 or both false")
+
+// ============================================================
+// PROBE 13: short-circuit evaluation
+// ============================================================
+io.println("--- Probe 13: short-circuit ---")
+let sideEffectCount = 0
+fn probe_side_effect() {
+    sideEffectCount = sideEffectCount + 1
+    return true
+}
+
+// AND short-circuit: false && side_effect() should NOT call side_effect
+sideEffectCount = 0
+let andResult = false and probe_side_effect()
+probeEq(sideEffectCount, 0, "13.1 AND short-circuit: false && fn() does not call fn")
+probeEq(andResult, false, "13.2 AND short-circuit result is false")
+
+// OR short-circuit: true || side_effect() should NOT call side_effect
+sideEffectCount = 0
+let orResult = true or probe_side_effect()
+probeEq(sideEffectCount, 0, "13.3 OR short-circuit: true || fn() does not call fn")
+probeEq(orResult, true, "13.4 OR short-circuit result is true")
+
+// AND non-short-circuit: true && side_effect() SHOULD call side_effect
+sideEffectCount = 0
+let andResult2 = true and probe_side_effect()
+probeEq(sideEffectCount, 1, "13.5 AND non-short-circuit: true && fn() calls fn")
+probeEq(andResult2, true, "13.6 AND non-short-circuit result is true")
+
+// OR non-short-circuit: false || side_effect() SHOULD call side_effect
+sideEffectCount = 0
+let orResult2 = false or probe_side_effect()
+probeEq(sideEffectCount, 1, "13.7 OR non-short-circuit: false || fn() calls fn")
+probeEq(orResult2, true, "13.8 OR non-short-circuit result is true")
+
+// ============================================================
+// PROBE 14: ! (logical not)
+// ============================================================
+io.println("--- Probe 14: ! (logical not) ---")
+fn probe_not(x) {
+    if !(x > 0) {
+        return "not-positive"
+    }
+    return "positive"
+}
+probeEq(probe_not(5), "positive", "14.1 !false = true branch")
+probeEq(probe_not(-1), "not-positive", "14.2 !true = false branch")
+probeEq(probe_not(0), "not-positive", "14.3 !(0>0) = !false = true")
+
+fn probe_not_chain(x) {
+    return !!(x > 0)
+}
+probeEq(probe_not_chain(5), true, "14.4 !!true = true")
+probeEq(probe_not_chain(-1), false, "14.5 !!false = false")
+
+// ============================================================
+// PROBE 15: ternary (condition ? consequent : alternate)
+// ============================================================
+io.println("--- Probe 15: ternary ---")
+fn probe_ternary(x) {
+    return x > 0 ? "positive" : "non-positive"
+}
+probeEq(probe_ternary(5), "positive", "15.1 ternary true branch")
+probeEq(probe_ternary(-1), "non-positive", "15.2 ternary false branch")
+probeEq(probe_ternary(0), "non-positive", "15.3 ternary zero condition")
+
+fn probe_ternary_nested(x) {
+    return x > 100 ? "huge" : (x > 10 ? "large" : "small")
+}
+probeEq(probe_ternary_nested(150), "huge", "15.4 nested ternary first")
+probeEq(probe_ternary_nested(50), "large", "15.5 nested ternary second")
+probeEq(probe_ternary_nested(5), "small", "15.6 nested ternary third")
+
+fn probe_ternary_assignment(x) {
+    let result = x > 0 ? "yes" : "no"
+    return result
+}
+probeEq(probe_ternary_assignment(5), "yes", "15.7 ternary in assignment true")
+probeEq(probe_ternary_assignment(-1), "no", "15.8 ternary in assignment false")
+
+// ============================================================
+// PROBE 16: switch / match (expected MISSING)
+// Tested separately to confirm compile failure
+// ============================================================
+io.println("--- Probe 16: switch / match ---")
+io.println("  (tested separately - expected MISSING if compile fails)")
+
+// ============================================================
+// SUMMARY
+// ============================================================
+io.println("")
+io.println("============================================================")
+io.println("P0-COMPILER-02 Control Flow Probe Results (Probes 1-15)")
+io.println("============================================================")
+io.println("Total: " + convert.toString(probeTotal))
+io.println("Passed: " + convert.toString(probePassed))
+io.println("Failed: " + convert.toString(probeFailed))
+if probeFailed == 0 {
+    io.println("ALL CONTROL FLOW PROBES PASSED (1-15)")
+} else {
+    io.println("SOME CONTROL FLOW PROBES FAILED")
+}

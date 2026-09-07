@@ -67,6 +67,8 @@ let OP_SLEEP = 56
 let OP_WAIT_READ = 57
 let OP_WAIT_WRITE = 58
 let OP_WAIT_CHANNEL = 59
+// P0-COMPILER-02: register move for ternary/branch result unification
+let OP_MOV = 60
 
 // ============ Codegen state ============
 let cg_instructions: list = []
@@ -79,6 +81,7 @@ let cg_loopContexts: list = []
 let cg_currentBreakLabel = -1
 let cg_currentContinueLabel = -1
 let cg_breakPatchList: list = []
+let cg_continuePatchList: list = []
 let cg_mainFnIndex = 0
 let cg_allFnInstructions: list = []
 let cg_allFnLocalCounts: list = []
@@ -916,7 +919,14 @@ fn cg_compileStatement(stmt: map) -> void {
         return
     }
     if kind == "Continue" {
-        cg_emit(OP_JMP, [cg_currentContinueLabel])
+        if cg_currentContinueLabel == -2 {
+            // For loop: forward reference to increment point
+            let contIdx = arrays.length(cg_instructions)
+            cg_emit(OP_JMP, [-1])
+            arrays.push(cg_continuePatchList, contIdx)
+        } else {
+            cg_emit(OP_JMP, [cg_currentContinueLabel])
+        }
         return
     }
     if kind == "Throw" { let r = cg_compileExpression(stmt.value); cg_emit(OP_THROW, [r]); return }
@@ -928,15 +938,18 @@ fn cg_compileStatement(stmt: map) -> void {
 
 fn cg_compileTernary(expr: map) -> int {
     let condReg = cg_compileExpression(expr.condition)
+    let resultReg = cg_allocReg()
     let jmpFalseIdx = arrays.length(cg_instructions)
     cg_emit(OP_JMP_IF_FALSE, [condReg, -1])
     let consequentReg = cg_compileExpression(expr.consequent)
+    cg_emit(OP_MOV, [resultReg, consequentReg])
     let jmpEndIdx = arrays.length(cg_instructions)
     cg_emit(OP_JMP, [-1])
     cg_patchJump(jmpFalseIdx)
     let alternateReg = cg_compileExpression(expr.alternate)
+    cg_emit(OP_MOV, [resultReg, alternateReg])
     cg_patchJump(jmpEndIdx)
-    return consequentReg
+    return resultReg
 }
 
 fn cg_compileIf(stmt: map) -> void {
@@ -1045,8 +1058,12 @@ fn cg_compileFor(stmt: map) -> void {
     // Save loop context
     let oldBreak = cg_currentBreakLabel
     let oldContinue = cg_currentContinueLabel
+    let oldBreakPatchList = cg_breakPatchList
+    let oldContinuePatchList = cg_continuePatchList
     let startIdx = arrays.length(cg_instructions)
-    cg_currentContinueLabel = startIdx
+    cg_currentContinueLabel = -2  // forward reference: patched at increment point
+    cg_breakPatchList = []
+    cg_continuePatchList = []
     // Condition: idx < len
     let idxReg = cg_allocReg()
     cg_emit(OP_LOAD_VAR, [idxReg, idxVar])
@@ -1066,6 +1083,15 @@ fn cg_compileFor(stmt: map) -> void {
     cg_emit(OP_STORE_VAR, [loopVar, elemReg])
     // Compile body
     cg_compileBlock(stmt.body)
+    // Patch all continue statements to jump to increment point
+    let continueTarget = arrays.length(cg_instructions)
+    let ci = 0
+    while ci < arrays.length(cg_continuePatchList) {
+        let contIdx = arrays.get(cg_continuePatchList, ci)
+        let inst = arrays.get(cg_instructions, contIdx)
+        inst.operands = [continueTarget]
+        ci = ci + 1
+    }
     // Increment index
     let idxLoadReg = cg_allocReg()
     cg_emit(OP_LOAD_VAR, [idxLoadReg, idxVar])
@@ -1074,12 +1100,23 @@ fn cg_compileFor(stmt: map) -> void {
     let addReg = cg_allocReg()
     cg_emit(OP_ADD, [addReg, idxLoadReg, oneReg])
     cg_emit(OP_STORE_VAR, [idxVar, addReg])
+    // Patch all break statements to jump to after the loop
+    let breakTarget = arrays.length(cg_instructions) + 1
+    let bi = 0
+    while bi < arrays.length(cg_breakPatchList) {
+        let breakIdx = arrays.get(cg_breakPatchList, bi)
+        let inst = arrays.get(cg_instructions, breakIdx)
+        inst.operands = [breakTarget]
+        bi = bi + 1
+    }
     // Jump back to start
     cg_emit(OP_JMP, [startIdx])
     // Patch end
     cg_patchJump(jmpEndIdx)
     cg_currentBreakLabel = oldBreak
     cg_currentContinueLabel = oldContinue
+    cg_breakPatchList = oldBreakPatchList
+    cg_continuePatchList = oldContinuePatchList
 }
 
 fn cg_compileWhile(stmt: map) -> void {
@@ -1156,6 +1193,7 @@ fn cg_compileExpression(expr: map) -> int {
     if kind == "Ident" { return cg_compileIdent(expr) }
     if kind == "Binary" { return cg_compileBinary(expr) }
     if kind == "Unary" { return cg_compileUnary(expr) }
+    if kind == "Ternary" { return cg_compileTernary(expr) }
     if kind == "Call" { return cg_compileCall(expr) }
     if kind == "Member" {
         // Enum variant access: Color.Red -> constant integer value
@@ -1359,6 +1397,39 @@ fn cg_compileBinary(expr: map) -> int {
         return resultReg
     }
     let leftReg = cg_compileExpression(expr.left)
+    // Short-circuit AND/OR: handle before right operand compilation
+    if op == "&&" {
+        let scResultReg = cg_allocReg()
+        let scJmpFalseIdx = arrays.length(cg_instructions)
+        cg_emit(OP_JMP_IF_FALSE, [leftReg, -1])
+        let scRightReg = cg_compileExpression(expr.right)
+        cg_emit(OP_MOV, [scResultReg, scRightReg])
+        let scJmpEndIdx = arrays.length(cg_instructions)
+        cg_emit(OP_JMP, [-1])
+        cg_patchJump(scJmpFalseIdx)
+        let scFalseReg = cg_allocReg()
+        cg_emit(OP_LOAD_CONST, [scFalseReg, cg_addConstant(false)])
+        cg_emit(OP_MOV, [scResultReg, scFalseReg])
+        cg_patchJump(scJmpEndIdx)
+        return scResultReg
+    }
+    if op == "||" {
+        let scResultReg = cg_allocReg()
+        let scNotReg = cg_allocReg()
+        cg_emit(OP_NOT, [scNotReg, leftReg])
+        let scJmpFalseIdx = arrays.length(cg_instructions)
+        cg_emit(OP_JMP_IF_FALSE, [scNotReg, -1])
+        let scRightReg = cg_compileExpression(expr.right)
+        cg_emit(OP_MOV, [scResultReg, scRightReg])
+        let scJmpEndIdx = arrays.length(cg_instructions)
+        cg_emit(OP_JMP, [-1])
+        cg_patchJump(scJmpFalseIdx)
+        let scTrueReg = cg_allocReg()
+        cg_emit(OP_LOAD_CONST, [scTrueReg, cg_addConstant(true)])
+        cg_emit(OP_MOV, [scResultReg, scTrueReg])
+        cg_patchJump(scJmpEndIdx)
+        return scResultReg
+    }
     let rightReg = cg_compileExpression(expr.right)
     let resultReg = cg_allocReg()
 

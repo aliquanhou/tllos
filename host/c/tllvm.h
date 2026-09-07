@@ -231,7 +231,9 @@ enum {
     /* P0-15.16 IO-aware scheduler opcodes */
     OP_WAIT_READ = 57,    /* wait for fd readable: reg[a] = fd, suspend until IO ready */
     OP_WAIT_WRITE = 58,   /* wait for fd writable: reg[a] = fd, suspend until IO ready */
-    OP_WAIT_CHANNEL = 59  /* wait for channel send: reg[a] = channel map, suspend until wakeChannel */
+    OP_WAIT_CHANNEL = 59, /* wait for channel send: reg[a] = channel map, suspend until wakeChannel */
+    /* P0-COMPILER-02: register move for ternary/branch result unification */
+    OP_MOV = 60           /* reg[a] = reg[b] */
 };
 
 /* === Function declarations === */

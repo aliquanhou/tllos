@@ -870,6 +870,11 @@ static void tll_vm_exec(TLLVM *vm) {
             case OP_NEG:
                 regs[a] = (regs[b].type == TLL_FLOAT) ? tll_float(-regs[b].as.floating) : tll_int(-regs[b].as.integer);
                 break;
+            case OP_MOV:
+                tll_value_incref(regs[b]);
+                tll_value_free(regs[a]);
+                regs[a] = regs[b];
+                break;
             case OP_JMP: frame->pc = a; break;
             case OP_JMP_IF_FALSE:
                 if (!tll_truthy(regs[a])) frame->pc = b;

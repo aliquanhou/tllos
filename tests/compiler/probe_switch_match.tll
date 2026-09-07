@@ -1,0 +1,29 @@
+// P0-COMPILER-02 Probe 16: switch / match
+// This file tests whether TLL supports switch/match syntax.
+// If compilation fails, switch/match = MISSING.
+
+fn test_switch(x) {
+    switch x {
+        case 1:
+            return "one"
+        case 2:
+            return "two"
+        default:
+            return "other"
+    }
+}
+
+fn test_match(x) {
+    match x {
+        1 => "one"
+        2 => "two"
+        _ => "other"
+    }
+}
+
+fn main() {
+    io.println(test_switch(1))
+    io.println(test_match(2))
+}
+
+main()
