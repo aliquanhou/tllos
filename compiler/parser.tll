@@ -170,6 +170,16 @@ fn parseFnDeclaration() -> map {
     let t = parse_advance() // fn
     let nameTok = parse_expect("IDENT", "function name")
     let name = nameTok.tkValue
+    // Generic parameters: fn name<T, U>(...)
+    let typeParams: list = []
+    if parse_match("LT") {
+        while true {
+            let tpTok = parse_expect("IDENT", "type parameter name")
+            arrays.push(typeParams, tpTok.tkValue)
+            if parse_match("COMMA") == false { break }
+        }
+        parse_expect("GT", "'>'")
+    }
     parse_expect("LPAREN", "'('")
     let params = parseParams()
     parse_expect("RPAREN", "')'")
@@ -180,6 +190,7 @@ fn parseFnDeclaration() -> map {
     let body = parseBlockStatement()
     let node = makeNode("Fn", t.line, t.column)
     node.name = name
+    node.typeParams = typeParams
     node.params = params
     node.returnType = returnType
     node.body = body
@@ -496,6 +507,17 @@ fn parsePrimaryType() -> map {
         let nt = parse_advance()
         let node = makeNode("TypeRef", t.line, t.column)
         node.name = nt.tkValue
+        // Generic type: List<int>, Map<string, int>
+        if parse_match("LT") {
+            let typeArgs = []
+            while true {
+                let ta = parseType()
+                arrays.push(typeArgs, ta)
+                if parse_match("COMMA") == false { break }
+            }
+            parse_expect("GT", "'>'")
+            node.typeArgs = typeArgs
+        }
         return node
     }
     if parse_match("LPAREN") {
@@ -810,6 +832,31 @@ fn parsePostfix() -> map {
                 continue
             }
         }
+        // Generic call: name<Type>(args)
+        let typeArgs: list = null
+        if expr.kind == "Ident" && parse_check("LT") {
+            // Look ahead: < IDENT , or < IDENT >
+            let savedPos = parse_pos
+            parse_advance() // consume LT
+            if parse_check("IDENT") {
+                let maybeTypeArgs = []
+                let isValid = true
+                while true {
+                    if parse_check("IDENT") == false { isValid = false; break }
+                    let taTok = parse_advance()
+                    arrays.push(maybeTypeArgs, taTok.tkValue)
+                    if parse_match("COMMA") { continue }
+                    break
+                }
+                if isValid && parse_match("GT") {
+                    typeArgs = maybeTypeArgs
+                } else {
+                    parse_pos = savedPos // not a generic call, restore
+                }
+            } else {
+                parse_pos = savedPos // not a generic call, restore
+            }
+        }
         if parse_match("LPAREN") {
             let t = parse_previous()
             let args = parseArgs()
@@ -817,6 +864,7 @@ fn parsePostfix() -> map {
             let node = makeNode("Call", t.line, t.column)
             node.callee = expr
             node.args = args
+            if typeArgs != null { node.typeArgs = typeArgs }
             expr = node
         } else if parse_match("DOT") {
             let t = parse_previous()
