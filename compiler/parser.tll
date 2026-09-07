@@ -882,19 +882,23 @@ fn parsePrimary() -> map {
         return node
     }
     if parse_match("LPAREN") {
-        // Could be parenthesized expression OR arrow function (params) => body
-        let expr = parseExpression()
-        // Check if this was actually an arrow function params list
-        // We detect by: after parsing expression, if next is RPAREN then FAT_ARROW
-        if parse_check("RPAREN") {
-            // Look ahead: is it ) => ?
-            // We need to handle this differently - parse as arrow function
-            // For now, treat as parenthesized expression
+        // Could be parenthesized expression, Tuple, or arrow function params
+        let firstExpr = parseExpression()
+        if parse_match("COMMA") {
+            // Tuple: (expr1, expr2, ...)
+            let elements = [firstExpr]
+            while true {
+                let elem = parseExpression()
+                arrays.push(elements, elem)
+                if parse_match("COMMA") == false { break }
+            }
             parse_expect("RPAREN", "')'")
-            return expr
+            let node = makeNode("Tuple", t.line, t.column)
+            node.elements = elements
+            return node
         }
         parse_expect("RPAREN", "')'")
-        return expr
+        return firstExpr
     }
     if parse_match("FN") {
         // Anonymous function: fn(params) -> type { body }

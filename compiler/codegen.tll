@@ -1379,8 +1379,23 @@ fn cg_compileExpression(expr: map) -> int {
             return reg
         }
         let objReg = cg_compileExpression(expr.object)
+        let propStr = expr.property
+        // Numeric property: p.0 -> arrays.get(p, 0)
+        let isNumeric = true
+        let npi = 0
+        while npi < strings.length(propStr) {
+            let npc = strings.charAt(propStr, npi)
+            if npc < "0" || npc > "9" { isNumeric = false; npi = strings.length(propStr) }
+            npi = npi + 1
+        }
         let reg = cg_allocReg()
-        cg_emit(OP_MEMBER_GET, [reg, objReg, cg_addConstant(expr.property)])
+        if isNumeric && strings.length(propStr) > 0 {
+            let idxReg = cg_allocReg()
+            cg_emit(OP_LOAD_CONST, [idxReg, cg_addConstant(convert.toInt(propStr))])
+            cg_emit(OP_INDEX_GET, [reg, objReg, idxReg])
+        } else {
+            cg_emit(OP_MEMBER_GET, [reg, objReg, cg_addConstant(expr.property)])
+        }
         return reg
     }
     if kind == "Index" {
@@ -1391,6 +1406,7 @@ fn cg_compileExpression(expr: map) -> int {
         return reg
     }
     if kind == "Array" { return cg_compileArray(expr) }
+    if kind == "Tuple" { return cg_compileArray(expr) }
     if kind == "Map" { return cg_compileMap(expr) }
     if kind == "StructLiteral" {
         // Struct literal: TypeName { field: value, ... }
