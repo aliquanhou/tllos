@@ -252,7 +252,7 @@ fn cg_collectIdentsInExpr(expr: any, result: list) -> void {
     }
     let keys = ["left", "right", "operand", "callee", "args", "object", "index",
         "value", "condition", "body", "elseBody", "statements", "elements", "entries",
-        "expression", "iterable", "catchBody", "finallyBlock"]
+        "expression", "iterable", "block", "catchBlock", "finallyBlock"]
     let ki = 0
     while ki < arrays.length(keys) {
         let k = arrays.get(keys, ki)
@@ -292,7 +292,7 @@ fn cg_collectFnExprsInExpr(expr: any, result: list) -> void {
     }
     let keys = ["left", "right", "operand", "callee", "args", "object", "index",
         "value", "condition", "body", "elseBody", "statements", "elements", "entries",
-        "expression", "iterable", "catchBody", "finallyBlock", "consequent", "alternate",
+        "expression", "iterable", "block", "catchBlock", "finallyBlock", "consequent", "alternate",
         "declaration", "params", "returnType"]
     let ki = 0
     while ki < arrays.length(keys) {
