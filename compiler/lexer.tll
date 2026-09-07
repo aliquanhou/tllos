@@ -201,6 +201,23 @@ export fn tokenize(input: string) -> list {
         let startLine = line
         let startCol = column
 
+        if ch == "\"" && pos + 2 < inputLen && strings.charAt(input, pos + 1) == "\"" && strings.charAt(input, pos + 2) == "\"" {
+            // read multiline string
+            pos = pos + 3; column = column + 3
+            let mvalue = ""
+            while pos + 2 < inputLen {
+                if strings.charAt(input, pos) == "\"" && strings.charAt(input, pos + 1) == "\"" && strings.charAt(input, pos + 2) == "\"" {
+                    pos = pos + 3; column = column + 3
+                    arrays.push(tokens, { tkType: TK_STRING, tkValue: mvalue, line: startLine, column: startCol })
+                    break
+                }
+                let mc = strings.charAt(input, pos)
+                pos = pos + 1; column = column + 1
+                if mc == "\n" { line = line + 1; column = 1 }
+                mvalue = mvalue + mc
+            }
+            continue
+        }
         if ch == "\"" {
             // read string (inlined)
             pos = pos + 1; column = column + 1
