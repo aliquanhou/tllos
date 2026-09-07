@@ -766,7 +766,11 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
     if (idx >= 49 && idx <= 71) {
         TLLArray *arr = (argCount > 0 && args[0].type == TLL_ARRAY) ? args[0].as.array : NULL;
         switch (idx) {
-            case 49: return tll_int(arr ? arr->length : 0); /* length */
+            case 49: { /* length - supports arrays and strings */
+                if (arr) return tll_int(arr->length);
+                if (argCount > 0 && args[0].type == TLL_STRING) return tll_int((int)strlen(args[0].as.string));
+                return tll_int(0);
+            }
             case 50: { /* get */
                 int i = (argCount>1)?(int)args[1].as.integer:0;
                 TLLValue v = arr ? array_get(arr, i) : tll_null();

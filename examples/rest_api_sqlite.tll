@@ -68,7 +68,6 @@ fn matchPattern(pattern: string, path: string) -> map {
         let pp = arrays.get(patternParts, i)
         let rp = arrays.get(pathParts, i)
 
-        // Check if pp starts with ":" by checking first char
         let ppStr = convert.toString(pp)
         let isParam = false
         if arrays.length(ppStr) >= 1 {
@@ -76,21 +75,9 @@ fn matchPattern(pattern: string, path: string) -> map {
                 isParam = true
             }
         }
-        // Fallback: direct string comparison if length is broken
-        if !isParam {
-            if pp == ":id" || pp == ":userId" || pp == ":todoId" {
-                isParam = true
-            }
-        }
 
         if isParam {
             let paramName = convert.toString(strings.substring(ppStr, 1, arrays.length(ppStr)))
-            if paramName == "" {
-                // Extract from known patterns
-                if pp == ":id" { paramName = "id" }
-                else if pp == ":userId" { paramName = "userId" }
-                else if pp == ":todoId" { paramName = "todoId" }
-            }
             params[paramName] = rp
         } else if pp != rp {
             return { matched: false, params: params }
