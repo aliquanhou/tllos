@@ -1,0 +1,14 @@
+// Module C: imports from B (transitive dependency A -> B -> C)
+from "./module_b" import addB, getConstB, MODULE_B_CONST, createPointB
+
+export fn addC(a, b) {
+    return addB(a, b) + 100
+}
+
+export fn getConstC() {
+    return getConstB() + MODULE_B_CONST
+}
+
+export fn createPointC(x, y) {
+    return createPointB(x, y)
+}

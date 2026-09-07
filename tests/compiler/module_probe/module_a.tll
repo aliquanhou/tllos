@@ -1,0 +1,21 @@
+// Module A: basic functions and variables
+export fn addA(a, b) {
+    return a + b
+}
+
+export fn multiplyA(a, b) {
+    return a * b
+}
+
+export const MODULE_A_CONST = 42
+
+export let moduleAVar = 100
+
+export struct PointA {
+    x
+    y
+}
+
+export fn createPointA(x, y) {
+    return PointA{x: x, y: y}
+}

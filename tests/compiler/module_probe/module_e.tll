@@ -1,0 +1,10 @@
+// Module E: circular dependency test
+from "./module_f" import funcF
+
+export fn funcE(x) {
+    return x + 1
+}
+
+export fn callF(x) {
+    return funcF(x)
+}
