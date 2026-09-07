@@ -12,19 +12,21 @@ on:
       - 'host/c/json.c'
       - 'compiler/codegen.tll'
       - 'compiler/linker.tll'
-      - 'tests/net/gate_http_client_minimal.tll'
-      - 'tests/net/gate_http_client_level2.tll'
-      - 'tests/net/gate_http_client_level3.tll'
-      - 'tests/net/gate_http_client_level4.tll'
-      - 'tests/net/test_https_server.py'
-      - 'tests/net/test_cert.pem'
-      - 'tests/net/test_key.pem'
-      - 'tests/net/test_server.py'
+      - 'tests/net/**'
+      - 'tests/fs/**'
+      - 'tests/http/**'
+      - 'tests/db/**'
+      - 'stdlib/**'
+      - 'mall/core/database.tll'
       - '.github/workflows/p1-04-http-client.yml'
   pull_request:
     paths:
       - 'host/c/http_client_builtin.c'
       - 'tests/net/**'
+      - 'tests/fs/**'
+      - 'tests/http/**'
+      - 'tests/db/**'
+      - 'stdlib/**'
 
 jobs:
   test-linux:
