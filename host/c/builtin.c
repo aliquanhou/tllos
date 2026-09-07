@@ -1062,29 +1062,35 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
             case 80: { /* writeFile */
                 const char *content = (argCount>1)?args[1].as.string:"";
                 FILE *f = fopen(path, "wb");
-                if (f) { fputs(content, f); fclose(f); }
-                return tll_null();
+                if (!f) return tll_bool(0);
+                size_t len = content ? strlen(content) : 0;
+                size_t written = fwrite(content, 1, len, f);
+                fclose(f);
+                return tll_bool(written == len);
             }
             case 81: { /* appendFile */
                 const char *content = (argCount>1)?args[1].as.string:"";
                 FILE *f = fopen(path, "ab");
-                if (f) { fputs(content, f); fclose(f); }
-                return tll_null();
+                if (!f) return tll_bool(0);
+                size_t len = content ? strlen(content) : 0;
+                size_t written = fwrite(content, 1, len, f);
+                fclose(f);
+                return tll_bool(written == len);
             }
             case 82: { /* exists */
                 struct stat st;
                 return tll_bool(stat(path, &st) == 0);
             }
-            case 83: /* mkdir */
+            case 83: { /* mkdir */
 #ifdef _WIN32
-                mkdir(path);
+                int ret = _mkdir(path);
 #else
-                mkdir(path, 0755);
+                int ret = mkdir(path, 0755);
 #endif
-                return tll_null();
+                return tll_bool(ret == 0 || errno == EEXIST);
+            }
             case 84: /* remove */
-                remove(path);
-                return tll_null();
+                return tll_bool(remove(path) == 0);
             case 85: { /* listDir */
                 TLLValue arr = tll_array();
 #ifdef _WIN32
@@ -1128,18 +1134,20 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
             case 89: { /* copyFile */
                 const char *dst = (argCount>1)?args[1].as.string:"";
                 FILE *src = fopen(path, "rb");
-                if (!src) return tll_null();
+                if (!src) return tll_bool(0);
                 FILE *out = fopen(dst, "wb");
-                if (!out) { fclose(src); return tll_null(); }
+                if (!out) { fclose(src); return tll_bool(0); }
                 char buf[4096]; size_t n;
-                while ((n = fread(buf, 1, sizeof(buf), src)) > 0) fwrite(buf, 1, n, out);
+                int ok = 1;
+                while ((n = fread(buf, 1, sizeof(buf), src)) > 0) {
+                    if (fwrite(buf, 1, n, out) != n) { ok = 0; break; }
+                }
                 fclose(src); fclose(out);
-                return tll_null();
+                return tll_bool(ok);
             }
             case 90: { /* rename */
                 const char *dst = (argCount>1)?args[1].as.string:"";
-                rename(path, dst);
-                return tll_null();
+                return tll_bool(rename(path, dst) == 0);
             }
         }
     }

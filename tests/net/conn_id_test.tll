@@ -1,0 +1,15 @@
+// Quick test: check X-Connection-ID across multiple requests
+io.println("=== Connection ID Test ===")
+let base = "http://127.0.0.1:18080"
+
+let i = 1
+while i <= 5 {
+    let r = httpc.get(base + "/status")
+    let cid = r.headers["x-connection-id"]
+    io.println("req " + i + ": status=" + r.status + " conn_id=" + cid)
+    i = i + 1
+}
+
+io.println("")
+io.println("If all conn_ids are the same -> connection is being reused")
+io.println("If conn_ids increase -> new connection each time")

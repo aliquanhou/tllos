@@ -1,0 +1,256 @@
+// P1-NEXT L3: Database Abstraction Gate Test
+// Tests stdlib/db.tll - extracted from mall/core/database.tll
+
+from "../../stdlib/db" import db_open, db_close, db_exec, db_query, db_queryOne, db_insert, db_begin, db_commit, db_rollback, db_transaction, db_ensureMigrationsTable, db_applyMigration, db_migrate, db_tableExists, db_stats, db_buildSQL, db_escapeString
+
+fn main() -> void {
+    let passed = 0
+    let failed = 0
+    let dbPath = "fs_gate_test_db.sqlite"
+
+    // Cleanup from previous run
+    fs.remove(dbPath)
+
+    io.println("=== P1-NEXT L3: Database Abstraction Gate Test ===")
+
+    // --- Gate 1: Open / Close ---
+    io.println("--- Gate 1: db_open / db_close ---")
+    let db = db_open(dbPath)
+    if (db != null && db.raw != null) {
+        io.println("PASS: db_open returns handle")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: db_open returns handle")
+        failed = failed + 1
+    }
+
+    // --- Gate 2: CREATE TABLE + INSERT ---
+    io.println("--- Gate 2: CREATE TABLE + INSERT ---")
+    db_exec(db, "CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, age INTEGER, email TEXT)")
+    if (db_tableExists(db, "users")) {
+        io.println("PASS: CREATE TABLE works")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: CREATE TABLE works")
+        failed = failed + 1
+    }
+
+    let id1 = db_insert(db, "INSERT INTO users (name, age, email) VALUES (?, ?, ?)", ["Alice", 30, "alice@test.com"])
+    let id2 = db_insert(db, "INSERT INTO users (name, age, email) VALUES (?, ?, ?)", ["Bob", 25, "bob@test.com"])
+    if (id1 == 1 && id2 == 2) {
+        io.println("PASS: db_insert returns correct rowids (1, 2)")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: db_insert returns correct rowids (got: " + convert.toString(id1) + ", " + convert.toString(id2) + ")")
+        failed = failed + 1
+    }
+
+    // --- Gate 3: Query ---
+    io.println("--- Gate 3: db_query / db_queryOne ---")
+    let rows = db_query(db, "SELECT * FROM users ORDER BY id")
+    if (arrays.length(rows) == 2) {
+        io.println("PASS: db_query returns 2 rows")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: db_query returns 2 rows (got: " + convert.toString(arrays.length(rows)) + ")")
+        failed = failed + 1
+    }
+
+    if (rows[0].name == "Alice" && rows[0].age == 30) {
+        io.println("PASS: query row data correct (Alice, 30)")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: query row data correct")
+        failed = failed + 1
+    }
+
+    let one = db_queryOne(db, "SELECT * FROM users WHERE name = ?", ["Bob"])
+    if (one != null && one.email == "bob@test.com") {
+        io.println("PASS: db_queryOne with parameter works")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: db_queryOne with parameter works")
+        failed = failed + 1
+    }
+
+    let none = db_queryOne(db, "SELECT * FROM users WHERE name = ?", ["Nobody"])
+    if (none == null) {
+        io.println("PASS: db_queryOne returns null for no result")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: db_queryOne returns null for no result")
+        failed = failed + 1
+    }
+
+    // --- Gate 4: UPDATE / DELETE ---
+    io.println("--- Gate 4: UPDATE / DELETE ---")
+    db_exec(db, "UPDATE users SET age = ? WHERE name = ?", [31, "Alice"])
+    let updated = db_queryOne(db, "SELECT age FROM users WHERE name = ?", ["Alice"])
+    if (updated.age == 31) {
+        io.println("PASS: UPDATE with parameters works")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: UPDATE with parameters works")
+        failed = failed + 1
+    }
+
+    db_exec(db, "DELETE FROM users WHERE name = ?", ["Bob"])
+    let afterDelete = db_query(db, "SELECT * FROM users")
+    if (arrays.length(afterDelete) == 1) {
+        io.println("PASS: DELETE with parameters works")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: DELETE with parameters works")
+        failed = failed + 1
+    }
+
+    // --- Gate 5: Transaction commit ---
+    io.println("--- Gate 5: Transaction commit ---")
+    db_begin(db)
+    db_exec(db, "INSERT INTO users (name, age, email) VALUES (?, ?, ?)", ["Charlie", 35, "charlie@test.com"])
+    db_commit(db)
+    let charlie = db_queryOne(db, "SELECT * FROM users WHERE name = ?", ["Charlie"])
+    if (charlie != null && charlie.age == 35) {
+        io.println("PASS: Transaction commit persists data")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: Transaction commit persists data")
+        failed = failed + 1
+    }
+
+    // --- Gate 6: Transaction rollback ---
+    io.println("--- Gate 6: Transaction rollback ---")
+    let beforeCount = arrays.length(db_query(db, "SELECT * FROM users"))
+    db_begin(db)
+    db_exec(db, "INSERT INTO users (name, age, email) VALUES (?, ?, ?)", ["Dave", 40, "dave@test.com"])
+    db_rollback(db)
+    let afterCount = arrays.length(db_query(db, "SELECT * FROM users"))
+    if (afterCount == beforeCount) {
+        io.println("PASS: Transaction rollback discards data")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: Transaction rollback discards data (before: " + convert.toString(beforeCount) + ", after: " + convert.toString(afterCount) + ")")
+        failed = failed + 1
+    }
+
+    // --- Gate 7: db_transaction auto-commit ---
+    io.println("--- Gate 7: db_transaction auto-commit ---")
+    let txResult = db_transaction(db, fn(h) {
+        db_exec(h, "INSERT INTO users (name, age, email) VALUES (?, ?, ?)", ["Eve", 28, "eve@test.com"])
+        return {ok: true}
+    })
+    let eve = db_queryOne(db, "SELECT * FROM users WHERE name = ?", ["Eve"])
+    if (eve != null && eve.email == "eve@test.com") {
+        io.println("PASS: db_transaction auto-commits on success")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: db_transaction auto-commits on success")
+        failed = failed + 1
+    }
+
+    // --- Gate 8: db_transaction auto-rollback ---
+    io.println("--- Gate 8: db_transaction auto-rollback ---")
+    let beforeRollback = arrays.length(db_query(db, "SELECT * FROM users"))
+    db_transaction(db, fn(h) {
+        db_exec(h, "INSERT INTO users (name, age, email) VALUES (?, ?, ?)", ["Frank", 50, "frank@test.com"])
+        return {error: "intentional failure"}
+    })
+    let afterRollback = arrays.length(db_query(db, "SELECT * FROM users"))
+    if (afterRollback == beforeRollback) {
+        io.println("PASS: db_transaction auto-rollsback on error")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: db_transaction auto-rollsback on error")
+        failed = failed + 1
+    }
+
+    // --- Gate 9: SQL Injection protection ---
+    io.println("--- Gate 9: SQL Injection protection ---")
+    let malicious = "Robert'); DROP TABLE users;--"
+    db_exec(db, "INSERT INTO users (name, age, email) VALUES (?, ?, ?)", [malicious, 99, "robert@test.com"])
+    if (db_tableExists(db, "users")) {
+        io.println("PASS: Parameterized query prevents SQL injection (table still exists)")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: Parameterized query prevents SQL injection")
+        failed = failed + 1
+    }
+    let robert = db_queryOne(db, "SELECT * FROM users WHERE name = ?", [malicious])
+    if (robert != null && robert.age == 99) {
+        io.println("PASS: Malicious input stored as literal string")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: Malicious input stored as literal string")
+        failed = failed + 1
+    }
+
+    // --- Gate 10: Migration ---
+    io.println("--- Gate 10: Migration ---")
+    db_ensureMigrationsTable(db)
+    if (db_tableExists(db, "_migrations")) {
+        io.println("PASS: db_ensureMigrationsTable creates _migrations table")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: db_ensureMigrationsTable creates _migrations table")
+        failed = failed + 1
+    }
+
+    let m1 = db_applyMigration(db, "001_add_posts", "CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT, user_id INTEGER)")
+    if (m1.applied == true && db_tableExists(db, "posts")) {
+        io.println("PASS: db_applyMigration applies migration")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: db_applyMigration applies migration")
+        failed = failed + 1
+    }
+
+    let m1again = db_applyMigration(db, "001_add_posts", "CREATE TABLE posts (id INTEGER PRIMARY KEY, title TEXT, user_id INTEGER)")
+    if (m1again.skipped == true) {
+        io.println("PASS: db_applyMigration skips already-applied migration")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: db_applyMigration skips already-applied migration")
+        failed = failed + 1
+    }
+
+    let migrateResult = db_migrate(db, [
+        {name: "002_add_comments", sql: "CREATE TABLE comments (id INTEGER PRIMARY KEY, post_id INTEGER, body TEXT)"},
+        {name: "003_add_tags", sql: "CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT)"}
+    ])
+    if (migrateResult.success == true && db_tableExists(db, "comments") && db_tableExists(db, "tags")) {
+        io.println("PASS: db_migrate applies multiple migrations")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: db_migrate applies multiple migrations")
+        failed = failed + 1
+    }
+
+    // --- Gate 11: db_stats ---
+    io.println("--- Gate 11: db_stats ---")
+    let stats = db_stats(db)
+    if (stats.queryCount > 0 && stats.execCount > 0) {
+        io.println("PASS: db_stats tracks query/exec counts")
+        passed = passed + 1
+    } else {
+        io.println("FAIL: db_stats tracks query/exec counts")
+        failed = failed + 1
+    }
+
+    // Cleanup
+    db_close(db)
+    fs.remove(dbPath)
+
+    // --- Results ---
+    io.println("")
+    io.println("=== Results ===")
+    io.println("Passed: " + convert.toString(passed))
+    io.println("Failed: " + convert.toString(failed))
+
+    if (failed == 0) {
+        io.println("ALL DATABASE GATES PASSED")
+    } else {
+        io.println("SOME GATES FAILED")
+    }
+}
+
+main()

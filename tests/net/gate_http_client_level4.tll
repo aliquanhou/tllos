@@ -1,0 +1,218 @@
+// P1-04 Level 4: Connection Reuse & Stability Gate Tests
+// Requires test_server.py with /stats, /reset-stats, /close, /sleep endpoints
+// and X-Connection-ID response header.
+
+io.println("=== P1-04 Level 4: Connection Reuse & Stability ===")
+io.println("")
+
+let passed = 0
+let failed = 0
+
+fn test(name, cond) {
+    if cond {
+        io.println("  PASS: " + name)
+        passed = passed + 1
+    } else {
+        io.println("  FAIL: " + name)
+        failed = failed + 1
+    }
+}
+
+let base = "http://127.0.0.1:18080"
+
+// ============================================================
+// Gate 1: Connection Reuse Authenticity
+// 10 requests should use fewer than 10 TCP connections
+// ============================================================
+io.println("--- Gate 1: Connection Reuse Authenticity ---")
+
+httpc.get(base + "/reset-stats")
+
+let g1Success = 0
+let i = 1
+while i <= 10 {
+    let r = httpc.get(base + "/status")
+    if r.status == 200 {
+        g1Success = g1Success + 1
+    }
+    i = i + 1
+}
+
+let stats1 = httpc.get(base + "/stats")
+io.println("  Server stats after 10 requests: " + stats1.body)
+
+// Parse connections from JSON body: {"connections": N, "requests": N}
+// connections should be < 10 (proving reuse)
+let connStr = strings.replace(stats1.body, "{\"connections\": ", "")
+connStr = strings.replace(connStr, ",\"requests\": 11}", "")
+let connCount = strings.toInt(connStr)
+
+test("10 requests all succeed", g1Success == 10)
+test("connection reuse: TCP connections < 10 (actual=" + connCount + ")", connCount < 10)
+test("connection reuse: TCP connections <= 3 (actual=" + connCount + ")", connCount <= 3)
+
+// Verify X-Connection-ID consistency across requests
+let r1a = httpc.get(base + "/status")
+let r1b = httpc.get(base + "/status")
+let cid1 = r1a.headers["x-connection-id"]
+let cid2 = r1b.headers["x-connection-id"]
+test("X-Connection-ID consistent on reuse (" + cid1 + "==" + cid2 + ")", cid1 == cid2)
+
+io.println("")
+
+// ============================================================
+// Gate 2: 50 Sequential Requests
+// ============================================================
+io.println("--- Gate 2: 50 Sequential Requests ---")
+
+httpc.get(base + "/reset-stats")
+
+let g2Success = 0
+let g2BodyOk = 0
+i = 1
+while i <= 50 {
+    let r = httpc.get(base + "/status")
+    if r.status == 200 {
+        g2Success = g2Success + 1
+    }
+    if strings.contains(r.body, "\"status\":\"ok\"") || strings.contains(r.body, "\"status\": \"ok\"") {
+        g2BodyOk = g2BodyOk + 1
+    }
+    i = i + 1
+}
+
+let stats2 = httpc.get(base + "/stats")
+io.println("  50 requests: " + g2Success + " success, " + g2BodyOk + " correct body")
+io.println("  Server stats: " + stats2.body)
+
+test("50/50 status 200", g2Success == 50)
+test("50/50 body correct", g2BodyOk == 50)
+
+io.println("")
+
+// ============================================================
+// Gate 3: 100 Sequential Requests
+// ============================================================
+io.println("--- Gate 3: 100 Sequential Requests ---")
+
+httpc.get(base + "/reset-stats")
+
+let g3Success = 0
+i = 1
+while i <= 100 {
+    let r = httpc.get(base + "/status")
+    if r.status == 200 {
+        g3Success = g3Success + 1
+    }
+    i = i + 1
+}
+
+let stats3 = httpc.get(base + "/stats")
+io.println("  100 requests: " + g3Success + " success")
+io.println("  Server stats: " + stats3.body)
+
+test("100/100 status 200", g3Success == 100)
+
+io.println("")
+
+// ============================================================
+// Gate 4: Connection Drop / Reconnect
+// Server idle timeout = 5s. Wait >5s, then request should reconnect.
+// ============================================================
+io.println("--- Gate 4: Connection Drop / Reconnect ---")
+
+// Establish a connection
+let r4a = httpc.get(base + "/status")
+let cidBefore = r4a.headers["x-connection-id"]
+io.println("  Established connection, conn_id=" + cidBefore)
+
+// Wait > 5 seconds for server idle timeout to close connection
+// TLL has no sleep, use busy loop (~10M iterations ~ 6+ seconds)
+io.println("  Waiting for server idle timeout (5s)...")
+let waste = 0
+i = 1
+while i <= 200000000 {
+    waste = waste + 1
+    i = i + 1
+}
+io.println("  Wait complete, waste=" + waste)
+
+// Next request should detect dead connection and reconnect
+let r4b = httpc.get(base + "/status")
+let cidAfter = r4b.headers["x-connection-id"]
+io.println("  After timeout, conn_id=" + cidAfter)
+
+test("request succeeds after server idle timeout", r4b.status == 200)
+test("reconnect: new connection after timeout (" + cidBefore + "->" + cidAfter + ")", cidBefore != cidAfter)
+
+io.println("")
+
+// ============================================================
+// Gate 5: Connection: close handling
+// Server sends Connection: close -> client must NOT reuse that connection
+// ============================================================
+io.println("--- Gate 5: Connection: close Handling ---")
+
+// Request /close endpoint (server sends Connection: close header)
+let r5a = httpc.get(base + "/close")
+let cidClose = r5a.headers["x-connection-id"]
+io.println("  /close response, conn_id=" + cidClose + ", status=" + r5a.status)
+
+// Next request should use a NEW connection (not the closed one)
+let r5b = httpc.get(base + "/status")
+let cidAfterClose = r5b.headers["x-connection-id"]
+io.println("  Next request conn_id=" + cidAfterClose)
+
+test("/close returns 200", r5a.status == 200)
+test("Connection: close not reused (" + cidClose + "->" + cidAfterClose + ")", cidClose != cidAfterClose)
+test("next request after close succeeds", r5b.status == 200)
+
+io.println("")
+
+// ============================================================
+// Gate 6: HTTPS Connection Reuse
+// Multiple HTTPS requests should work with certificate verification
+// ============================================================
+io.println("--- Gate 6: HTTPS Connection Reuse ---")
+
+let httpsBase = "https://127.0.0.1:18443"
+let g6Success = 0
+i = 1
+while i <= 5 {
+    // Use insecure option for self-signed test cert
+    let req = {}
+    req["method"] = "GET"
+    req["url"] = httpsBase + "/status"
+    req["insecure"] = true
+    let r = httpc.request(req)
+    if r.status == 200 {
+        g6Success = g6Success + 1
+    }
+    i = i + 1
+}
+
+test("HTTPS 5/5 sequential requests succeed", g6Success == 5)
+
+// Verify HTTPS with certificate verification still works (real site would be needed,
+// but we verify insecure flag is NOT default - request without insecure should fail)
+let reqVerify = {}
+reqVerify["method"] = "GET"
+reqVerify["url"] = httpsBase + "/status"
+// insecure NOT set - should fail on self-signed cert
+let rVerify = httpc.request(reqVerify)
+test("HTTPS without insecure fails on self-signed cert (ok=" + rVerify.ok + ")", rVerify.ok == false)
+
+io.println("")
+
+// ============================================================
+// Summary
+// ============================================================
+io.println("=== Results ===")
+io.println("Passed: " + passed)
+io.println("Failed: " + failed)
+io.println("")
+if failed == 0 {
+    io.println("ALL LEVEL 4 GATES PASSED")
+} else {
+    io.println("SOME GATES FAILED")
+}

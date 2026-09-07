@@ -1,0 +1,150 @@
+// P1-04 Level 3: HTTPS/TLS Acceptance Test
+// Validates: HTTPS success (insecure mode), TLS failure (self-signed cert rejection),
+//            response semantics consistency with Level 1/2.
+//
+// Requires: test_https_server.py running on https://127.0.0.1:18443
+// The server uses a SELF-SIGNED certificate.
+//   - Gate 1 uses httpc.request({insecure: true}) to accept the cert
+//   - Gate 2 uses httpc.get() (default verify) which MUST reject the cert
+
+io.println("=== P1-04 Level 3: HTTPS/TLS ===")
+io.println("")
+
+let passed = 0
+let failed = 0
+
+fn test(name, cond) {
+    if cond {
+        io.println("  PASS: " + name)
+        passed = passed + 1
+    } else {
+        io.println("  FAIL: " + name)
+        failed = failed + 1
+    }
+}
+
+// ============================================================
+// Gate 1: HTTPS Success (insecure mode for self-signed cert)
+// ============================================================
+io.println("--- Gate 1: HTTPS Success (insecure mode) ---")
+
+let resp1 = httpc.request({
+    url: "https://127.0.0.1:18443/status",
+    insecure: true
+})
+
+io.println("  status: " + resp1.status)
+io.println("  ok: " + resp1.ok)
+io.println("  statusText: [" + resp1.statusText + "]")
+io.println("  url: [" + resp1.url + "]")
+io.println("  error: [" + resp1.error + "]")
+io.println("  body len: " + strings.length(resp1.body))
+io.println("  body: " + resp1.body)
+
+test("HTTPS insecure GET status == 200", resp1.status == 200)
+test("HTTPS insecure GET ok == true", resp1.ok == true)
+test("HTTPS insecure GET body non-empty", strings.length(resp1.body) > 0)
+test("HTTPS insecure GET error is empty", resp1.error == "")
+test("HTTPS insecure GET body contains status", strings.contains(resp1.body, "status"))
+test("HTTPS insecure GET body contains https", strings.contains(resp1.body, "https"))
+
+// Response semantics: all 7 fields present and sane
+test("HTTPS statusText is non-empty", strings.length(resp1.statusText) > 0)
+test("HTTPS url contains 127.0.0.1", strings.contains(resp1.url, "127.0.0.1"))
+
+// Check headers field exists and has content-type
+let ct1 = resp1.headers["content-type"]
+test("HTTPS headers has content-type", strings.length(ct1) > 0)
+
+io.println("")
+
+// ============================================================
+// Gate 2: TLS Failure (default verify rejects self-signed cert)
+// ============================================================
+io.println("--- Gate 2: TLS Failure (self-signed cert rejected) ---")
+
+let resp2 = httpc.get("https://127.0.0.1:18443/status")
+
+io.println("  status: " + resp2.status)
+io.println("  ok: " + resp2.ok)
+io.println("  error: [" + resp2.error + "]")
+io.println("  body len: " + strings.length(resp2.body))
+
+test("TLS failure ok == false", resp2.ok == false)
+test("TLS failure status == 0", resp2.status == 0)
+test("TLS failure error is non-empty", strings.length(resp2.error) > 0)
+test("TLS failure body is empty", strings.length(resp2.body) == 0)
+test("TLS failure does NOT fake HTTP 200", resp2.status != 200)
+
+io.println("")
+
+// ============================================================
+// Gate 3: Response Semantics (HTTPS vs HTTP consistency)
+// ============================================================
+io.println("--- Gate 3: Response Semantics Consistency ---")
+
+// HTTPS /json endpoint (insecure)
+let resp3 = httpc.request({
+    url: "https://127.0.0.1:18443/json",
+    insecure: true
+})
+
+io.println("  /json status: " + resp3.status)
+io.println("  /json body: " + resp3.body)
+
+test("HTTPS /json status == 200", resp3.status == 200)
+test("HTTPS /json ok == true", resp3.ok == true)
+test("HTTPS /json body contains name", strings.contains(resp3.body, "name"))
+test("HTTPS /json body contains TLL", strings.contains(resp3.body, "TLL"))
+test("HTTPS /json error empty", resp3.error == "")
+
+// HTTPS custom status code endpoint
+let resp4 = httpc.request({
+    url: "https://127.0.0.1:18443/status/404",
+    insecure: true
+})
+
+io.println("  /status/404 status: " + resp4.status)
+io.println("  /status/404 ok: " + resp4.ok)
+
+test("HTTPS 404 status == 404", resp4.status == 404)
+test("HTTPS 404 ok == false", resp4.ok == false)
+test("HTTPS 404 error empty (HTTP-level error, not TLS)", resp4.error == "")
+
+io.println("")
+
+// ============================================================
+// Gate 4: HTTPS POST (insecure) - verify full request path
+// ============================================================
+io.println("--- Gate 4: HTTPS POST (insecure) ---")
+
+let resp5 = httpc.request({
+    method: "POST",
+    url: "https://127.0.0.1:18443/echo",
+    body: "{\"https\":\"test\"}",
+    insecure: true
+})
+
+io.println("  POST status: " + resp5.status)
+io.println("  POST body: " + resp5.body)
+
+test("HTTPS POST status == 200", resp5.status == 200)
+test("HTTPS POST ok == true", resp5.ok == true)
+test("HTTPS POST body contains method", strings.contains(resp5.body, "POST"))
+test("HTTPS POST body contains https test", strings.contains(resp5.body, "https"))
+
+io.println("")
+
+// ============================================================
+// Summary
+// ============================================================
+io.println("=== Results ===")
+io.println("Passed: " + passed)
+io.println("Failed: " + failed)
+io.println("")
+
+if failed > 0 {
+    io.println("SOME TESTS FAILED")
+} else {
+    io.println("ALL TESTS PASSED")
+}

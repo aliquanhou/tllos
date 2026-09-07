@@ -100,10 +100,10 @@
 | P2P | COMPLETE | stdlib/p2p.tll | tests/ | ci.yml | P0-15 | - | 点对点网络 |
 | Agent | COMPLETE | stdlib/agent.tll | tests/agent/ | ci.yml | P0-15.25 | - | Agent基础 |
 | Capability | COMPLETE | stdlib/capability.tll | tests/capability/ | ci.yml | P0-15.21 | - | 能力系统 |
-| File System | MISSING | - | - | - | - | - | 标准文件IO API未建立 |
+| File System | COMPLETE | builtin idx 79-90 | 25/25 | 3/3 | tests/fs/gate_file_system.tll | P1-NEXT-L1: readFile/writeFile/appendFile/exists/mkdir/remove/listDir/isFile/isDir/fileSize/copyFile/rename |
 | Scheduler | MISSING | - | - | - | - | - | 定时任务/调度器未建立 |
 | Image Processing | MISSING | - | - | - | - | - | 图像处理未建立 |
-| HTTP Server | PARTIAL | mall/ | - | - | - | - | 商城已实现HTTP Server,未抽象为stdlib |
+| HTTP Server | COMPLETE | builtin idx 94 | 19/19 | 3/3 | tests/http/gate_http_server.tll | P1-NEXT-L2: http.serve with worker pool, request/response maps |
 | HTTP Client | AVAILABLE | host/c/http_client_builtin.c | tests/net/ | ci.yml | P1-04 | 3a67b44 | Linux/Windows完整,macOS基础可用有Known Issue |
 
 ---
@@ -145,7 +145,8 @@
 | 能力 | 状态 | Source | Test | CI | Evidence | Commit | 说明 |
 |------|------|--------|------|-----|----------|--------|------|
 | SQLite C Binding | COMPLETE | host/c/sqlite_builtin.c, sqlite3.c | - | ci.yml | - | - | idx 150-159,完整CRUD |
-| Database Abstraction | PARTIAL | mall/ | - | - | - | - | 商城已实现封装,未抽象为stdlib |
+| Database Abstraction | COMPLETE | stdlib/db.tll | 20/20 | 3/3 | tests/db/gate_database.tll | P1-NEXT-L3: connection/query/exec/transaction/migration, extracted from mall |
+| Database Migration | COMPLETE | stdlib/db.tll | 4/4 | 3/3 | tests/db/gate_database.tll | P1-NEXT-L3: db_ensureMigrationsTable/db_applyMigration/db_migrate |
 | Transaction | PARTIAL | mall/ | - | - | - | - | 商城已实现基础事务 |
 | Migration | MISSING | - | - | - | - | - | 数据库迁移工具未建立 |
 | MySQL/MariaDB | MISSING | - | - | - | - | - | 仅SQLite,可扩展 |
@@ -161,7 +162,7 @@
 | HTTP Client (Windows) | COMPLETE | host/c/http_client_builtin.c | tests/net/gate_http_client.tll | ci.yml | P1-04 | - | WinHTTP,29/29 Gate |
 | HTTP Client (macOS) | AVAILABLE | host/c/http_client_builtin.c | tests/net/ | ci.yml | P1-04 | - | Secure Transport+POSIX socket,基础HTTP/HTTPS可用,完整Gate混合请求有时序问题(Known Issue) |
 | HTTP Client API | COMPLETE | host/c/http_client_builtin.c | tests/net/ | ci.yml | P1-04 | - | get/post/put/delete/head/patch/request/getJson/postJson/options,idx 200-209 |
-| HTTP Server | PARTIAL | mall/ | - | - | - | - | 商城已实现,未抽象为stdlib |
+| HTTP Server | COMPLETE | builtin idx 94 | 19/19 | 3/3 | tests/http/gate_http_server.tll | P1-NEXT-L2: see Network section |
 | Router | PARTIAL | mall/ | - | - | - | - | 商城已实现,未抽象为stdlib |
 | Middleware | PARTIAL | mall/ | - | - | - | - | 商城已实现,未抽象为stdlib |
 | WebSocket | MISSING | - | - | - | - | - | 未实现 |
@@ -192,7 +193,7 @@
 
 | 能力 | 状态 | Source | Test | CI | Evidence | Commit | 说明 |
 |------|------|--------|------|-----|----------|--------|------|
-| Web Framework | PARTIAL | mall/ | - | - | - | - | HTTP Server+Router+Middleware |
+| Web Framework | PARTIAL | mall/ | - | - | - | - | HTTP Server COMPLETE (P1-NEXT-L2), Router still in mall/ |
 | Session/Cookie | PARTIAL | mall/ | - | - | - | - | 数据库存储Session,Session ID仍为可预测格式(需换CSPRNG) |
 | RBAC Auth | PARTIAL | mall/ | - | - | - | - | 角色权限基础 |
 | Product Management | COMPLETE | mall/ | - | - | - | - | 商品CRUD/分类/品牌/SKU/库存 |
@@ -242,7 +243,7 @@
 4. **未定义标识符仍为warning**: 编译时不报错,运行时可能崩溃
 5. **Blockchain无持久化**: 全内存,重启从genesis开始
 6. **Blockchain无账户状态**: 无nonce/balance/双花防护
-7. **无File System stdlib**: 标准文件IO API未建立
+7. ~~无File System stdlib~~ **已解决 (P1-NEXT-L1)**: fs builtin idx 79-90 + 25-assertion Gate test
 8. **无Scheduler stdlib**: 定时任务/调度器未建立
 9. **无WebSocket**: 实时通信未实现
 10. **Compiler Rollback机制未建立**: 无正式救援工具链

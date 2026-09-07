@@ -1,0 +1,64 @@
+// P1-04 Level 1 — Minimal HTTP GET Acceptance Test
+// Verifies: httpc.get(url) -> status / headers / body + 7-field response semantics
+// Server: tests/net/test_server.py on http://127.0.0.1:18080
+
+io.println("=== P1-04 Level 1: Minimal HTTP GET ===")
+io.println("")
+
+let passed = 0
+let failed = 0
+
+fn test(name, cond) {
+    if cond {
+        io.println("  PASS: " + name)
+        passed = passed + 1
+    } else {
+        io.println("  FAIL: " + name)
+        failed = failed + 1
+    }
+}
+
+let url = "http://127.0.0.1:18080/status"
+io.println("GET " + url)
+io.println("")
+
+let resp = httpc.get(url)
+
+// --- Field inspection (confirm all 7 fields exist and have sane semantics) ---
+io.println("--- Response Field Inspection ---")
+io.println("  status     = " + resp.status)
+io.println("  ok         = " + resp.ok)
+io.println("  statusText = [" + resp.statusText + "]")
+io.println("  url        = [" + resp.url + "]")
+io.println("  error      = [" + resp.error + "]")
+io.println("  body len   = " + strings.length(resp.body))
+io.println("  body       = " + resp.body)
+let ct = resp.headers["content-type"]
+io.println("  headers[content-type] = [" + ct + "]")
+io.println("")
+
+// --- 3 core assertions (status / headers / body) ---
+io.println("--- Core Assertions ---")
+test("response.status == 200", resp.status == 200)
+test("response.body is non-empty", strings.length(resp.body) > 0)
+test("response.headers contains content-type", strings.length(ct) > 0)
+io.println("")
+
+// --- Additional semantic sanity checks (success path) ---
+io.println("--- Semantic Sanity Checks ---")
+test("response.ok == true for status 200", resp.ok == true)
+test("response.statusText is non-empty", strings.length(resp.statusText) > 0)
+test("response.url contains 127.0.0.1", strings.contains(resp.url, "127.0.0.1"))
+test("response.error is empty on success", strings.length(resp.error) == 0)
+test("response.body contains status field", strings.contains(resp.body, "status"))
+io.println("")
+
+io.println("=== Results ===")
+io.println("Passed: " + passed)
+io.println("Failed: " + failed)
+io.println("")
+if failed == 0 {
+    io.println("ALL TESTS PASSED")
+} else {
+    io.println("SOME TESTS FAILED")
+}
