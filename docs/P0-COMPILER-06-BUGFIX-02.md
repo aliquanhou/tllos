@@ -110,10 +110,19 @@ node.finallyBlock  = finally body
 
 ## E. CI
 
-提交后触发 GitHub Actions CI。
-- Workflow: P0-COMPILER 相关 workflow
-- 三平台: Ubuntu / Windows / macOS
-- 结果: 待 CI 运行完成后补充
+提交后触发 GitHub Actions CI，全部通过。
+
+| Workflow | Run ID | 结果 |
+|----------|--------|------|
+| CI (三平台 native-build-test) | 34115644348 | ✅ SUCCESS |
+| P1-01 Secure Random Tests | 34115641777 | ✅ SUCCESS |
+
+**三平台结果：**
+- Ubuntu (ubuntu-latest): ✅ success
+- Windows (windows-latest): ✅ success
+- macOS (macos-latest): ✅ success
+
+CI URL: https://github.com/aliquanhou/tllos/actions/runs/34115644348
 
 ---
 
