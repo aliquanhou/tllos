@@ -299,6 +299,10 @@ static void coroutine_yield(TLLVM *vm) {
         int next = -1;
         for (i = 0; i < vm->coroutineCount; i++) {
             int idx = (old + 1 + i) % vm->coroutineCount;
+            /* P0-COMPILER-06 BUG-A: in pass 0, exclude self so that
+             * yield() with no other runnable coroutine enters timer/IO wait
+             * instead of immediately selecting itself. */
+            if (pass == 0 && idx == old) continue;
             if (coroutine_is_runnable(vm->coroutines[idx])) {
                 next = idx;
                 break;
