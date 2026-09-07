@@ -1,0 +1,218 @@
+// TLL Standard Library - HTTP Server (High-level)
+// Router + Request/Response helpers built on top of http.serve builtin
+// P0-COMPILER-07: IO / Network / Database Capability Implementation
+
+// === Response Helpers ===
+
+// Create a JSON response
+fn httpd_json(data: any, status: int) -> map {
+    let body = json.stringify(data)
+    return {
+        status: status,
+        body: body,
+        contentType: "application/json; charset=utf-8"
+    }
+}
+
+// Create a text response
+fn httpd_text(text: string, status: int) -> map {
+    return {
+        status: status,
+        body: text,
+        contentType: "text/plain; charset=utf-8"
+    }
+}
+
+// Create an HTML response
+fn httpd_html(html: string, status: int) -> map {
+    return {
+        status: status,
+        body: html,
+        contentType: "text/html; charset=utf-8"
+    }
+}
+
+// Create a 404 Not Found response
+fn httpd_notFound() -> map {
+    return httpd_text("404 Not Found", 404)
+}
+
+// Create a 500 Internal Server Error response
+fn httpd_serverError(msg: string) -> map {
+    return httpd_text("500 Internal Server Error: " + msg, 500)
+}
+
+// Create a redirect response
+fn httpd_redirect(url: string, status: int) -> map {
+    return {
+        status: status,
+        body: "",
+        contentType: "text/html; charset=utf-8",
+        headers: { "Location": url }
+    }
+}
+
+// === Request Helpers ===
+
+// Parse JSON body from request
+fn httpd_parseJsonBody(req: map) -> any {
+    let body = req["body"]
+    if body == null || body == "" {
+        return null
+    }
+    return json.parse(convert.toString(body))
+}
+
+// Get query parameter value
+fn httpd_queryParam(req: map, key: string) -> string {
+    let queryMap = req["queryMap"]
+    if queryMap == null {
+        return ""
+    }
+    let val = queryMap[key]
+    if val == null {
+        return ""
+    }
+    return convert.toString(val)
+}
+
+// Get header value
+fn httpd_header(req: map, key: string) -> string {
+    let headers = req["headers"]
+    if headers == null {
+        return ""
+    }
+    let val = headers[key]
+    if val == null {
+        return ""
+    }
+    return convert.toString(val)
+}
+
+// Get request method
+fn httpd_method(req: map) -> string {
+    return convert.toString(req["method"])
+}
+
+// Get request path
+fn httpd_path(req: map) -> string {
+    return convert.toString(req["path"])
+}
+
+// === Router ===
+
+// Route entry: { method: string, pattern: string, handler: fn }
+// Pattern supports simple path params like /users/:id
+
+// Create a new router
+fn httpd_newRouter() -> map {
+    return {
+        routes: [],
+        notFoundHandler: null
+    }
+}
+
+// Add a route to the router
+fn httpd_addRoute(router: map, method: string, pattern: string, handler: any) -> void {
+    let routes = router["routes"]
+    arrays.push(routes, {
+        method: method,
+        pattern: pattern,
+        handler: handler
+    })
+}
+
+// Add GET route
+fn httpd_get(router: map, pattern: string, handler: any) -> void {
+    httpd_addRoute(router, "GET", pattern, handler)
+}
+
+// Add POST route
+fn httpd_post(router: map, pattern: string, handler: any) -> void {
+    httpd_addRoute(router, "POST", pattern, handler)
+}
+
+// Add PUT route
+fn httpd_put(router: map, pattern: string, handler: any) -> void {
+    httpd_addRoute(router, "PUT", pattern, handler)
+}
+
+// Add DELETE route
+fn httpd_delete(router: map, pattern: string, handler: any) -> void {
+    httpd_addRoute(router, "DELETE", pattern, handler)
+}
+
+// Set custom 404 handler
+fn httpd_setNotFound(router: map, handler: any) -> void {
+    router["notFoundHandler"] = handler
+}
+
+// Match path pattern (supports :param)
+// Returns { matched: bool, params: map }
+fn httpd_matchPattern(pattern: string, path: string) -> map {
+    let patternParts = strings.split(pattern, "/")
+    let pathParts = strings.split(path, "/")
+    let params: map = {}
+
+    if arrays.length(patternParts) != arrays.length(pathParts) {
+        return { matched: false, params: params }
+    }
+
+    let i = 0
+    while i < arrays.length(patternParts) {
+        let pp = convert.toString(arrays.get(patternParts, i))
+        let rp = convert.toString(arrays.get(pathParts, i))
+
+        if strings.startsWith(pp, ":") {
+            let paramName = strings.substring(pp, 1, arrays.length(pp))
+            params[paramName] = rp
+        } else if pp != rp {
+            return { matched: false, params: params }
+        }
+        i = i + 1
+    }
+
+    return { matched: true, params: params }
+}
+
+// Create the main handler function for http.serve
+// This returns a handler function that routes requests
+fn httpd_handler(router: map) -> any {
+    // We need to return a function that takes req and returns resp
+    // Since TLL functions are first-class, we create a closure
+    fn handle(req: map) -> any {
+        let method = httpd_method(req)
+        let path = httpd_path(req)
+        let routes = router["routes"]
+
+        let i = 0
+        while i < arrays.length(routes) {
+            let route = arrays.get(routes, i)
+            if route["method"] == method {
+                let matchResult = httpd_matchPattern(convert.toString(route["pattern"]), path)
+                if matchResult["matched"] == true {
+                    // Attach params to request
+                    req["params"] = matchResult["params"]
+                    let handler = route["handler"]
+                    // Call handler with request
+                    return handler(req)
+                }
+            }
+            i = i + 1
+        }
+
+        // Not found
+        let notFoundHandler = router["notFoundHandler"]
+        if notFoundHandler != null {
+            return notFoundHandler(req)
+        }
+        return httpd_notFound()
+    }
+    return handle
+}
+
+// Start the HTTP server with a router
+fn httpd_listen(router: map, addr: string) -> void {
+    let handler = httpd_handler(router)
+    http.serve(addr, handler)
+}

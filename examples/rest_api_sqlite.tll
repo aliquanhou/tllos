@@ -1,0 +1,253 @@
+// Dogfood Project 2: TLL REST API + SQLite
+// Demonstrates REST API with SQLite database (CRUD operations)
+// P0-COMPILER-07: IO / Network / Database Capability Implementation
+
+// === Database Setup ===
+
+let DB_PATH = "examples_todo.db"
+
+fn initDatabase() -> void {
+    let db = sqlite.open(DB_PATH)
+    sqlite.exec(db, "CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, completed INTEGER DEFAULT 0, created_at INTEGER)")
+    sqlite.close(db)
+    io.println("Database initialized: " + DB_PATH)
+}
+
+// === Response Helpers ===
+
+fn jsonResponse(data: any, status: int) -> map {
+    return {
+        status: status,
+        body: json.stringify(data),
+        contentType: "application/json; charset=utf-8"
+    }
+}
+
+fn errorResponse(message: string, status: int) -> map {
+    return jsonResponse({ error: message }, status)
+}
+
+// === Request Helpers ===
+
+fn parseJsonBody(req: map) -> any {
+    let body = req["body"]
+    if body == null || body == "" {
+        return null
+    }
+    // NOTE: Direct body parse works; convert.toString(body) has a length bug
+    return json.parse(body)
+}
+
+fn getPathId(req: map) -> int {
+    let params = req["params"]
+    if params == null {
+        return 0
+    }
+    return convert.toInt(params["id"])
+}
+
+// === Router ===
+
+let routes: list = []
+
+fn addRoute(method: string, pattern: string, handler: any) -> void {
+    arrays.push(routes, { method: method, pattern: pattern, handler: handler })
+}
+
+fn matchPattern(pattern: string, path: string) -> map {
+    let patternParts = strings.split(pattern, "/")
+    let pathParts = strings.split(path, "/")
+    let params: map = {}
+
+    if arrays.length(patternParts) != arrays.length(pathParts) {
+        return { matched: false, params: params }
+    }
+
+    let i = 0
+    while i < arrays.length(patternParts) {
+        let pp = arrays.get(patternParts, i)
+        let rp = arrays.get(pathParts, i)
+
+        // Check if pp starts with ":" by checking first char
+        let ppStr = convert.toString(pp)
+        let isParam = false
+        if arrays.length(ppStr) >= 1 {
+            if strings.charAt(ppStr, 0) == ":" {
+                isParam = true
+            }
+        }
+        // Fallback: direct string comparison if length is broken
+        if !isParam {
+            if pp == ":id" || pp == ":userId" || pp == ":todoId" {
+                isParam = true
+            }
+        }
+
+        if isParam {
+            let paramName = convert.toString(strings.substring(ppStr, 1, arrays.length(ppStr)))
+            if paramName == "" {
+                // Extract from known patterns
+                if pp == ":id" { paramName = "id" }
+                else if pp == ":userId" { paramName = "userId" }
+                else if pp == ":todoId" { paramName = "todoId" }
+            }
+            params[paramName] = rp
+        } else if pp != rp {
+            return { matched: false, params: params }
+        }
+        i = i + 1
+    }
+
+    return { matched: true, params: params }
+}
+
+// === API Handlers ===
+
+// GET /api/todos - List all todos
+addRoute("GET", "/api/todos", fn(req: map) -> any {
+    let db = sqlite.open(DB_PATH)
+    let rows = sqlite.query(db, "SELECT id, title, completed, created_at FROM todos ORDER BY id DESC")
+    sqlite.close(db)
+    return jsonResponse({ todos: rows, count: arrays.length(rows) }, 200)
+})
+
+// GET /api/todos/:id - Get single todo
+addRoute("GET", "/api/todos/:id", fn(req: map) -> any {
+    let id = getPathId(req)
+    let db = sqlite.open(DB_PATH)
+    let rows = sqlite.query(db, "SELECT id, title, completed, created_at FROM todos WHERE id = " + convert.toString(id))
+    sqlite.close(db)
+
+    if arrays.length(rows) == 0 {
+        return errorResponse("Todo not found", 404)
+    }
+    return jsonResponse(arrays.get(rows, 0), 200)
+})
+
+// POST /api/todos - Create todo
+addRoute("POST", "/api/todos", fn(req: map) -> any {
+    let body = parseJsonBody(req)
+    if body == null {
+        return errorResponse("Invalid JSON body", 400)
+    }
+
+    let title = body["title"]
+    if title == null || title == "" {
+        return errorResponse("Title is required", 400)
+    }
+
+    let db = sqlite.open(DB_PATH)
+    let titleStr = convert.toString(title)
+    // Escape single quotes
+    let escapedTitle = strings.replaceAll(titleStr, "'", "''")
+    let now = time.now()
+    sqlite.exec(db, "INSERT INTO todos (title, completed, created_at) VALUES ('" + escapedTitle + "', 0, " + convert.toString(now) + ")")
+    let newId = sqlite.lastInsertRowid(db)
+    sqlite.close(db)
+
+    return jsonResponse({ id: newId, title: title, completed: 0, created_at: now }, 201)
+})
+
+// PUT /api/todos/:id - Update todo
+addRoute("PUT", "/api/todos/:id", fn(req: map) -> any {
+    let id = getPathId(req)
+    let body = parseJsonBody(req)
+    if body == null {
+        return errorResponse("Invalid JSON body", 400)
+    }
+
+    let db = sqlite.open(DB_PATH)
+    let rows = sqlite.query(db, "SELECT id FROM todos WHERE id = " + convert.toString(id))
+    if arrays.length(rows) == 0 {
+        sqlite.close(db)
+        return errorResponse("Todo not found", 404)
+    }
+
+    let title = body["title"]
+    let completed = body["completed"]
+
+    if title != null {
+        let titleStr = convert.toString(title)
+        let escapedTitle = strings.replaceAll(titleStr, "'", "''")
+        sqlite.exec(db, "UPDATE todos SET title = '" + escapedTitle + "' WHERE id = " + convert.toString(id))
+    }
+    if completed != null {
+        let compVal = 0
+        if completed == true {
+            compVal = 1
+        }
+        sqlite.exec(db, "UPDATE todos SET completed = " + convert.toString(compVal) + " WHERE id = " + convert.toString(id))
+    }
+
+    let updated = sqlite.query(db, "SELECT id, title, completed, created_at FROM todos WHERE id = " + convert.toString(id))
+    sqlite.close(db)
+    return jsonResponse(arrays.get(updated, 0), 200)
+})
+
+// DELETE /api/todos/:id - Delete todo
+addRoute("DELETE", "/api/todos/:id", fn(req: map) -> any {
+    let id = getPathId(req)
+    let db = sqlite.open(DB_PATH)
+    let rows = sqlite.query(db, "SELECT id FROM todos WHERE id = " + convert.toString(id))
+    if arrays.length(rows) == 0 {
+        sqlite.close(db)
+        return errorResponse("Todo not found", 404)
+    }
+    sqlite.exec(db, "DELETE FROM todos WHERE id = " + convert.toString(id))
+    sqlite.close(db)
+    return jsonResponse({ message: "Todo deleted", id: id }, 200)
+})
+
+// GET /api/stats - Database stats
+addRoute("GET", "/api/stats", fn(req: map) -> any {
+    let db = sqlite.open(DB_PATH)
+    let totalRows = sqlite.query(db, "SELECT COUNT(*) as total FROM todos")
+    let completedRows = sqlite.query(db, "SELECT COUNT(*) as completed FROM todos WHERE completed = 1")
+    sqlite.close(db)
+
+    let total = 0
+    let completed = 0
+    if arrays.length(totalRows) > 0 {
+        total = convert.toInt(arrays.get(totalRows, 0)["total"])
+    }
+    if arrays.length(completedRows) > 0 {
+        completed = convert.toInt(arrays.get(completedRows, 0)["completed"])
+    }
+
+    return jsonResponse({
+        total: total,
+        completed: completed,
+        pending: total - completed,
+        platform: process.platform()
+    }, 200)
+})
+
+// === Main Handler ===
+
+fn mainHandler(req: map) -> any {
+    let method = convert.toString(req["method"])
+    let path = convert.toString(req["path"])
+
+    let i = 0
+    while i < arrays.length(routes) {
+        let route = arrays.get(routes, i)
+        if route["method"] == method {
+            let matchResult = matchPattern(convert.toString(route["pattern"]), path)
+            if matchResult["matched"] == true {
+                req["params"] = matchResult["params"]
+                let handler = route["handler"]
+                return handler(req)
+            }
+        }
+        i = i + 1
+    }
+
+    return errorResponse("Not found: " + method + " " + path, 404)
+}
+
+// === Start Server ===
+
+initDatabase()
+io.println("TLL REST API + SQLite starting on :8081")
+io.println("Routes: GET /api/todos, GET /api/todos/:id, POST /api/todos, PUT /api/todos/:id, DELETE /api/todos/:id, GET /api/stats")
+http.serve("0.0.0.0:8081", mainHandler)
