@@ -269,12 +269,14 @@ int coroutine_wake_channel(TLLVM *vm, void *channelPtr) {
  */
 static void coroutine_yield(TLLVM *vm) {
     int old = vm->currentCoroutine;
+    int selfDead = 0;
 
     /* Save current coroutine state */
     coroutine_save_current(vm);
 
     /* If current is dead, destroy it now (after save, before switch) */
     if (old >= 0 && old < vm->coroutineCount && vm->coroutines[old] && vm->coroutines[old]->state == 2) {
+        selfDead = 1;
         coroutine_destroy(vm, old);
         if (old >= vm->coroutineCount) old = (vm->coroutineCount > 0) ? vm->coroutineCount - 1 : 0;
     }
@@ -302,7 +304,7 @@ static void coroutine_yield(TLLVM *vm) {
             /* P0-COMPILER-06 BUG-A: in pass 0, exclude self so that
              * yield() with no other runnable coroutine enters timer/IO wait
              * instead of immediately selecting itself. */
-            if (pass == 0 && idx == old) continue;
+            if (pass == 0 && !selfDead && idx == old) continue;
             if (coroutine_is_runnable(vm->coroutines[idx])) {
                 next = idx;
                 break;
@@ -342,8 +344,11 @@ static void coroutine_yield(TLLVM *vm) {
                 }
             }
 
-            /* Nothing to wait on (only channel-waiters) 鈫?exit cleanly */
-            if (ioCount == 0 && sleepCount == 0) return;
+            /* Nothing to wait on (only channel-waiters) -> restore self */
+            if (ioCount == 0 && sleepCount == 0) {
+                coroutine_restore(vm, old);
+                return;
+            }
 
             if (ioCount > 0) {
                 struct timeval tv, *ptv = NULL;
