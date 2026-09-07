@@ -1110,8 +1110,87 @@ fn cg_compileTry(stmt: map) -> void {
     cg_tryFinallyPatches = oldPatches
 }
 
+fn cg_compileForRange(stmt: map) -> void {
+    // for x in start..end { body } or for x in start..=end { body }
+    let range = stmt.iterable
+    let startVar = cg_getOrCreateVar("__for_start_" + convert.toString(cg_labelCounter))
+    let endVar = cg_getOrCreateVar("__for_end_" + convert.toString(cg_labelCounter))
+    cg_labelCounter = cg_labelCounter + 1
+    // Compile start and end
+    let startReg = cg_compileExpression(range.start)
+    cg_emit(OP_STORE_VAR, [startVar, startReg])
+    let endReg = cg_compileExpression(range.end)
+    cg_emit(OP_STORE_VAR, [endVar, endReg])
+    // Save loop context
+    let oldBreak = cg_currentBreakLabel
+    let oldContinue = cg_currentContinueLabel
+    let oldBreakPatchList = cg_breakPatchList
+    let oldContinuePatchList = cg_continuePatchList
+    let startIdx = arrays.length(cg_instructions)
+    cg_currentContinueLabel = -2
+    cg_breakPatchList = []
+    cg_continuePatchList = []
+    // Condition: idx < end (exclusive) or idx <= end (inclusive)
+    let idxReg = cg_allocReg()
+    cg_emit(OP_LOAD_VAR, [idxReg, startVar])
+    let endLoadReg = cg_allocReg()
+    cg_emit(OP_LOAD_VAR, [endLoadReg, endVar])
+    let cmpReg = cg_allocReg()
+    if range.inclusive == true {
+        cg_emit(OP_LE, [cmpReg, idxReg, endLoadReg])
+    } else {
+        cg_emit(OP_LT, [cmpReg, idxReg, endLoadReg])
+    }
+    let jmpEndIdx = arrays.length(cg_instructions)
+    cg_emit(OP_JMP_IF_FALSE, [cmpReg, -1])
+    // Set loop variable: x = idx
+    let loopVar = cg_getOrCreateVar(stmt.variable)
+    cg_emit(OP_STORE_VAR, [loopVar, idxReg])
+    // Compile body
+    cg_compileBlock(stmt.body)
+    // Patch continue statements to increment point
+    let incIdx = arrays.length(cg_instructions)
+    let ci = 0
+    while ci < arrays.length(cg_continuePatchList) {
+        let patchIdx = arrays.get(cg_continuePatchList, ci)
+        let inst = arrays.get(cg_instructions, patchIdx)
+        inst.operands = [incIdx]
+        ci = ci + 1
+    }
+    // Increment: idx = idx + 1
+    let idxLoadReg = cg_allocReg()
+    cg_emit(OP_LOAD_VAR, [idxLoadReg, startVar])
+    let oneReg = cg_allocReg()
+    cg_emit(OP_LOAD_CONST, [oneReg, cg_addConstant(1)])
+    let addReg = cg_allocReg()
+    cg_emit(OP_ADD, [addReg, idxLoadReg, oneReg])
+    cg_emit(OP_STORE_VAR, [startVar, addReg])
+    // Jump back to condition
+    cg_emit(OP_JMP, [startIdx])
+    // Patch break statements
+    let endIdx = arrays.length(cg_instructions)
+    let bi = 0
+    while bi < arrays.length(cg_breakPatchList) {
+        let patchIdx = arrays.get(cg_breakPatchList, bi)
+        let inst = arrays.get(cg_instructions, patchIdx)
+        inst.operands = [endIdx]
+        bi = bi + 1
+    }
+    cg_patchJump(jmpEndIdx)
+    // Restore loop context
+    cg_currentBreakLabel = oldBreak
+    cg_currentContinueLabel = oldContinue
+    cg_breakPatchList = oldBreakPatchList
+    cg_continuePatchList = oldContinuePatchList
+}
+
 fn cg_compileFor(stmt: map) -> void {
     // for x in iterable { body }
+    // Special case: Range iteration (for x in start..end)
+    if stmt.iterable.kind == "Range" {
+        cg_compileForRange(stmt)
+        return
+    }
     // Compile iterable to array
     let iterReg = cg_compileExpression(stmt.iterable)
     // Allocate index and length variables

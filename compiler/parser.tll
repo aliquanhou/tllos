@@ -646,9 +646,9 @@ fn parseComparison() -> map {
 
 fn parseRange() -> map {
     let left = parseAddition()
-    if parse_match("RANGE") || parse_match("RANGEINCLUSIVE") {
+    if parse_match("RANGE") || parse_match("RANGE_INCLUSIVE") {
         let t = parse_previous()
-        let inclusive = t.tkType == "RANGEINCLUSIVE"
+        let inclusive = t.tkType == "RANGE_INCLUSIVE"
         let right = parseAddition()
         let node = makeNode("Range", t.line, t.column)
         node.start = left
