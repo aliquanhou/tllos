@@ -1,0 +1,48 @@
+// TLL D01 Lexical: # single-line comment test
+// Verifies: # comment, trailing comment, string "#" semantics, // comment regression
+
+fn main() -> int {
+    // This is a // comment (should still work)
+    # This is a # single-line comment
+    let x = 10 # trailing comment after value
+    let y = 20  # another trailing comment with spaces
+
+    // String containing # must preserve string semantics
+    let s = "hello # world"
+    let hashChar = "#"
+
+    // Multi-line logic with # comments
+    let sum = x + y # x=10, y=20, sum should be 30
+    let result = 0
+
+    if sum == 30 {
+        result = result + 1
+        # comment inside if block
+    }
+
+    # comment before string check
+    if strings.length(s) == 13 {
+        result = result + 1
+    }
+
+    if hashChar == "#" {
+        result = result + 1
+    }
+
+    // Verify // comment still works after # comments
+    let z = 100 // trailing // comment
+    if z == 100 {
+        result = result + 1
+    }
+
+    # final comment
+    if result == 4 {
+        io.println("PASS: D01 # comment test - all 4 checks passed")
+        return 0
+    } else {
+        io.println("FAIL: D01 # comment test - result=" + convert.toString(result) + " expected 4")
+        return 1
+    }
+}
+
+main()

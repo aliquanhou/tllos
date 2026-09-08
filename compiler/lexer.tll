@@ -194,6 +194,12 @@ export fn tokenize(input: string) -> list {
                     pos = pos + 1
                     column = column + 1
                 }
+            } else if ch == "#" {
+                // # single-line comment (TLL lexical feature)
+                while pos < inputLen && strings.charAt(input, pos) != "\n" {
+                    pos = pos + 1
+                    column = column + 1
+                }
             } else {
                 break
             }
@@ -414,7 +420,6 @@ export fn tokenize(input: string) -> list {
                 else if opCh == "[" { arrays.push(tokens, { tkType: TK_LBRACKET, tkValue: "[", line: startLine, column: startCol }) }
                 else if opCh == "]" { arrays.push(tokens, { tkType: TK_RBRACKET, tkValue: "]", line: startLine, column: startCol }) }
                 else if opCh == "@" { arrays.push(tokens, { tkType: TK_AT, tkValue: "@", line: startLine, column: startCol }) }
-                else if opCh == "#" { arrays.push(tokens, { tkType: TK_HASH, tkValue: "#", line: startLine, column: startCol }) }
                 else if opCh == "?" { arrays.push(tokens, { tkType: TK_QUESTION, tkValue: "?", line: startLine, column: startCol }) }
                 else if opCh == "&" { arrays.push(tokens, { tkType: TK_BAND, tkValue: "&", line: startLine, column: startCol }) }
                 else if opCh == "|" { arrays.push(tokens, { tkType: TK_BOR, tkValue: "|", line: startLine, column: startCol }) }
