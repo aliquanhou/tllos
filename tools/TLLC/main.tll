@@ -77,7 +77,7 @@ fn main() -> void {
         return
     }
 
-    printError("Unknown command: " + cmd)
+    printError("Unknown command: " + cmd)`n    process.exit(1)
 }
 
 main()
