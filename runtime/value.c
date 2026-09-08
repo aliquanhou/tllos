@@ -82,18 +82,6 @@ TLLValue tll_array(void) {
     return v;
 }
 
-// B.9: Create array from C array of TLLValue elements
-// Used by native_lower for array literal [1, 2, 3]
-TLLValue tll_array_from(TLLValue *items, int count) {
-    TLLValue arr = tll_array();
-    int i = 0;
-    while (i < count) {
-        array_push(arr.as.array, items[i]);
-        i = i + 1;
-    }
-    return arr;
-}
-
 TLLValue tll_map(void) {
     TLLValue v;
     v.type = TLL_MAP;

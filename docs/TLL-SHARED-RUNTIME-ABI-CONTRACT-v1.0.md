@@ -148,7 +148,6 @@ struct TLLClosureEnv {
 | `tll_string` | `TLLValue tll_string(const char *s)` | 创建 string 值（复制字符串） |
 | `tll_string_n` | `TLLValue tll_string_n(const char *s, int len)` | 创建指定长度的 string 值 |
 | `tll_array` | `TLLValue tll_array(void)` | 创建空数组（capacity=8） |
-| `tll_array_from` | `TLLValue tll_array_from(TLLValue *items, int count)` | 从 C 数组创建数组（B.9 新增，**当前暂无消费者**，B.10 评估保留或删除） |
 | `tll_map` | `TLLValue tll_map(void)` | 创建空 map（bucketCount=16） |
 | `tll_function` | `TLLValue tll_function(int fnIdx, TLLClosureEnv *env)` | 创建 function 值 |
 | `tll_builtin` | `TLLValue tll_builtin(int idx)` | 创建 builtin 值 |
@@ -297,7 +296,7 @@ struct TLLClosureEnv {
 
 | 类别 | 函数数量 | 验证状态 |
 |------|---------|---------|
-| 值创建 | 11 | ✅ 全部声明 |
+| 值创建 | 10 | ✅ 全部声明 |
 | 引用计数 | 2 | ✅ 全部声明 |
 | 真值与相等 | 2 | ✅ 全部声明 |
 | 字符串转换 | 2 | ✅ 全部声明 |
@@ -306,7 +305,7 @@ struct TLLClosureEnv {
 | Array/Map 操作 | 6 | ✅ 全部声明 |
 | 基础 IO | 2 | ✅ 全部声明 |
 | 生命周期 | 2 | ✅ 全部声明 |
-| **总计** | **38** | ✅ **全部声明** |
+| **总计** | **37** | ✅ **全部声明** |
 
 ### 6.3 语义一致性验证
 

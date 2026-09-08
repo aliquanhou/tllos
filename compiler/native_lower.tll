@@ -16,6 +16,8 @@
 let nl_output: list = []
 let nl_indent = 0
 let nl_functionCount = 0
+// B.10: Track local variables for refcount management
+let nl_localVars: list = []
 
 // ============ Helpers ============
 fn nl_emit(line: string) -> void {
@@ -67,7 +69,8 @@ fn nl_lowerExpression(expr: map) -> string {
 
     // 布尔常量
     if kind == "Bool" {
-        if expr.value == "true" { return "tll_bool(1)" }
+        // B.10 FIX: AST Bool.value is boolean type, not string
+        if expr.value { return "tll_bool(1)" }
         return "tll_bool(0)"
     }
 
@@ -88,6 +91,12 @@ fn nl_lowerExpression(expr: map) -> string {
         if op == "=" {
             let left = nl_lowerExpression(expr.left)
             let right = nl_lowerExpression(expr.right)
+            // B.10: Map index assignment: m["key"] = value -> map_set(m.as.map, "key", value)
+            if expr.left.kind == "Index" && expr.left.index.kind == "String" {
+                let mapObj = nl_lowerExpression(expr.left.object)
+                let keyStr = expr.left.index.value
+                return "(map_set(" + mapObj + ".as.map, \"" + keyStr + "\", " + right + "), " + right + ")"
+            }
             // Array index assignment: arr[0] = value -> array_set(arr.as.array, 0, value)
             if expr.left.kind == "Index" {
                 let idxObj = nl_lowerExpression(expr.left.object)
@@ -154,10 +163,19 @@ fn nl_lowerExpression(expr: map) -> string {
         return obj + "_" + name
     }
 
-    // B.9: 数组索引访问（读）arr[0] -> array_get(arr.as.array, 0)
+    // B.9/B.10: 索引访问（读）
+    // Array: arr[0] -> array_get(arr.as.array, 0)
+    // Map:   m["key"] -> map_get(m.as.map, "key")
     if kind == "Index" {
         let obj = nl_lowerExpression(expr.object)
-        let idx = nl_lowerExpression(expr.index)
+        let idxExpr = expr.index
+        // B.10: Map index with string literal key
+        if idxExpr.kind == "String" {
+            let keyStr = idxExpr.value
+            return "map_get(" + obj + ".as.map, \"" + keyStr + "\")"
+        }
+        // Array index with integer
+        let idx = nl_lowerExpression(idxExpr)
         return "array_get(" + obj + ".as.array, " + idx + ".as.integer)"
     }
 
@@ -167,9 +185,10 @@ fn nl_lowerExpression(expr: map) -> string {
         return "NULL /* array literal only in let/const */"
     }
 
-    // Map 字面量（暂不支持）
+    // B.10: Map literal - only supported in Let/Const statements
+    // (same MSVC compound literal limitation as Array)
     if kind == "Map" {
-        return "NULL /* map literal */"
+        return "NULL /* map literal only in let/const */"
     }
 
     // 默认：返回空
@@ -186,6 +205,8 @@ fn nl_lowerStatement(stmt: map) -> void {
         if stmt.type != null && stmt.type != "" {
             varType = nl_convertType(stmt.type)
         }
+        // B.10: Track local variable for refcount management
+        arrays.push(nl_localVars, stmt.name)
         // B.9: Array literal special handling - create empty array then push elements
         // (MSVC doesn't support C99 compound literals (TLLValue[]){...})
         if stmt.value != null && stmt.value.kind == "Array" {
@@ -195,6 +216,19 @@ fn nl_lowerStatement(stmt: map) -> void {
                 let elem = nl_lowerExpression(arrays.get(stmt.value.elements, ai))
                 nl_emit("array_push(" + stmt.name + ".as.array, " + elem + ");")
                 ai = ai + 1
+            }
+            return
+        }
+        // B.10: Map literal special handling - create empty map then set entries
+        if stmt.value != null && stmt.value.kind == "Map" {
+            nl_emit(varType + " " + stmt.name + " = tll_map();")
+            let mi = 0
+            while mi < arrays.length(stmt.value.entries) {
+                let entry = arrays.get(stmt.value.entries, mi)
+                let keyStr = entry.key
+                let valExpr = nl_lowerExpression(entry.value)
+                nl_emit("map_set(" + stmt.name + ".as.map, \"" + keyStr + "\", " + valExpr + ");")
+                mi = mi + 1
             }
             return
         }
@@ -216,10 +250,28 @@ fn nl_lowerStatement(stmt: map) -> void {
 
     // return
     if kind == "Return" {
+        // B.10: Refcount cleanup before return
+        if arrays.length(nl_localVars) > 0 {
+            nl_emit("/* B.10: refcount cleanup before return */")
+        }
         if stmt.value != null {
             let value = nl_lowerExpression(stmt.value)
+            // B.10: Increment refcount of return value (caller will own it)
+            nl_emit("tll_value_incref(" + value + ");")
+            // B.10: Free all local variables
+            let vi = 0
+            while vi < arrays.length(nl_localVars) {
+                nl_emit("tll_value_free(" + arrays.get(nl_localVars, vi) + ");")
+                vi = vi + 1
+            }
             nl_emit("return " + value + ";")
         } else {
+            // B.10: Free all local variables for void return
+            let vi = 0
+            while vi < arrays.length(nl_localVars) {
+                nl_emit("tll_value_free(" + arrays.get(nl_localVars, vi) + ");")
+                vi = vi + 1
+            }
             nl_emit("return;")
         }
         return
@@ -327,6 +379,9 @@ fn nl_lowerFunction(fnDecl: map) -> void {
     nl_emit(returnType + " " + fnName + "(" + nl_join(params, ", ") + ") {")
     nl_indent = nl_indent + 1
 
+    // B.10: Reset local variable tracking for refcount management
+    nl_localVars = []
+
     // 函数体（可能是 Block 节点，也可能直接是语句列表）
     let body = fnDecl.body
     let bodyStmts: list = []
@@ -342,6 +397,22 @@ fn nl_lowerFunction(fnDecl: map) -> void {
     while i < arrays.length(bodyStmts) {
         nl_lowerStatement(arrays.get(bodyStmts, i))
         i = i + 1
+    }
+
+    // B.10: Free all local variables at function end (refcount management)
+    // Only if function doesn't end with explicit return (return handles its own cleanup)
+    let hasReturn = false
+    if arrays.length(bodyStmts) > 0 {
+        let lastStmt = arrays.get(bodyStmts, arrays.length(bodyStmts) - 1)
+        if lastStmt.kind == "Return" { hasReturn = true }
+    }
+    if hasReturn == false && arrays.length(nl_localVars) > 0 {
+        nl_emit("/* B.10: refcount cleanup */")
+        let vi = 0
+        while vi < arrays.length(nl_localVars) {
+            nl_emit("tll_value_free(" + arrays.get(nl_localVars, vi) + ");")
+            vi = vi + 1
+        }
     }
 
     nl_indent = nl_indent - 1

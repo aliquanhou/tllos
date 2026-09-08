@@ -1,0 +1,37 @@
+// Cross-Target Conformance Case 06: Map
+// 覆盖: map literal, map index read, map index write, map iteration
+
+fn main() {
+    // map literal
+    let m = {"a": 1, "b": 2, "c": 3};
+
+    // map index read
+    io.println(m["a"]);
+    io.println(m["b"]);
+    io.println(m["c"]);
+
+    // map index write
+    m["a"] = 100;
+    m["d"] = 400;
+    io.println(m["a"]);
+    io.println(m["d"]);
+
+    // map with string values
+    let info = {"name": "TLL", "version": "2.0"};
+    io.println(info["name"]);
+    io.println(info["version"]);
+
+    // map with mixed values
+    let mixed = {"int": 42, "str": "hello", "bool": true};
+    io.println(mixed["int"]);
+    io.println(mixed["str"]);
+    io.println(mixed["bool"]);
+
+    // empty map
+    let empty = {};
+    io.println(empty["nonexistent"]);
+
+    return 0;
+}
+
+main()

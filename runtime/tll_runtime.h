@@ -135,7 +135,6 @@ TLLValue tll_float(double v);
 TLLValue tll_string(const char *s);
 TLLValue tll_string_n(const char *s, int len);
 TLLValue tll_array(void);
-TLLValue tll_array_from(TLLValue *items, int count);
 TLLValue tll_map(void);
 TLLValue tll_function(int fnIdx, TLLClosureEnv *env);
 TLLValue tll_builtin(int idx);
