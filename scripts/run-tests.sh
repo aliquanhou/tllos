@@ -162,6 +162,9 @@ for f in "$REPO_ROOT/tests/scope/"*.tll; do
         FAILED=$((FAILED + 1))
         continue
     fi
+    # DEBUG: check compiled file
+    if [ ! -f "$out" ]; then echo "  DEBUG: $out MISSING after compile"; ls -la "$(dirname "$out")" | head -5; fi
+    if [ -f "$out" ]; then echo "  DEBUG: $out size=$(stat -f%z "$out" 2>/dev/null || stat -c%s "$out" 2>/dev/null)"; fi
     # Run
     set +e
     if [ -n "$TIMEOUT_CMD" ]; then
