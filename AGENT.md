@@ -84,13 +84,13 @@ scripts\bootstrap-tllc.bat   # Windows
 
 ```bash
 # Compile a program
-host/c/tllvm tools/TLLC/tllc.tllbc compile hello.tll
+host/c/tllvm tools/TLLC/tllc.tllbc compile examples/hello.tll
 
 # Compile with custom output
-host/c/tllvm tools/TLLC/tllc.tllbc compile hello.tll -o output.tllbc
+host/c/tllvm tools/TLLC/tllc.tllbc compile examples/hello.tll -o output.tllbc
 
 # Check syntax/types (no output)
-host/c/tllvm tools/TLLC/tllc.tllbc check hello.tll
+host/c/tllvm tools/TLLC/tllc.tllbc check examples/hello.tll
 
 # Inspect bytecode
 host/c/tllvm tools/TLLC/tllc.tllbc info hello.tllbc

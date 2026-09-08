@@ -17,7 +17,6 @@ on:
       - 'tests/http/**'
       - 'tests/db/**'
       - 'stdlib/**'
-      - 'mall/core/database.tll'
       - '.github/workflows/p1-04-http-client.yml'
   pull_request:
     paths:

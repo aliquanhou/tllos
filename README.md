@@ -90,8 +90,8 @@ This produces `tools/TLLC/tllc.tllbc`.
 ### 3. Compile and Run a Program
 
 ```bash
-# Compile hello.tll -> hello.tllbc
-host/c/tllvm tools/TLLC/tllc.tllbc compile hello.tll
+# Compile examples/hello.tll -> hello.tllbc
+host/c/tllvm tools/TLLC/tllc.tllbc compile examples/hello.tll
 
 # Run the compiled bytecode
 host/c/tllvm hello.tllbc

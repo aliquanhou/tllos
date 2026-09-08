@@ -27,9 +27,18 @@ fi
 echo "Using compiler: $CC"
 
 # Step 2: Build tllvm
+# Canonical C source list — must match build-native.sh, build-native.bat, and CI workflows
+TLL_C_SOURCES="main.c vm.c value.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c"
+
 echo "[2/3] Building tllvm..."
 cd "$HOST_C"
-$CC -O2 -std=c99 -o tllvm main.c vm.c value.c json.c builtin.c -lm
+
+UNAME=$(uname -s)
+if [ "$UNAME" = "Darwin" ]; then
+    $CC -O2 -std=gnu99 -D_DARWIN_C_SOURCE -o tllvm $TLL_C_SOURCES -lm -lpthread -framework Security -framework CoreFoundation
+else
+    $CC -O2 -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm $TLL_C_SOURCES -lm -lpthread -ldl -lssl -lcrypto
+fi
 
 # Step 3: Verify
 echo "[3/3] Verifying build..."

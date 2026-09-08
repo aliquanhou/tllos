@@ -129,8 +129,6 @@ jobs:
       # - name: Phase 4 - Run Evidence Validator (Linux/macOS)
       #   if: runner.os != 'Windows'
       #   run: |
-      #     chmod +x phase4/run-validator.sh
-      #     phase4/run-validator.sh
 
 
       # === Phase 4 Staircase LEVEL 1: Full Memory Evidence Suite ===
@@ -202,18 +200,6 @@ jobs:
       #     echo "PASS: $EVIDENCE_COUNT EVIDENCE records found"
       #     echo "=== EVIDENCE Summary ==="
       #     grep '^EVIDENCE:' /tmp/ternary-acceptance-test.log
-      - name: Phase 4 - Upload Evidence Artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: phase4-evidence-${{ matrix.os }}
-          path: |
-            /tmp/phase4_logs/
-            phase4/behavior/*.json
-            phase4/warnings/*.json
-            phase4/warnings/typechecker_raw.log
-          if-no-files-found: warn
-
       # === P0-16.1: TLL Engineering Enforcement Layer ===
       # Validates .tll-engine/ structure, schema, Claim-Evidence matching.
       # This ensures the engineering cognition layer remains consistent with code.
@@ -244,14 +230,14 @@ jobs:
       - name: End-to-end tllc verification (Linux/macOS)
         if: runner.os != 'Windows'
         run: |
-          host/c/tllvm tools/TLLC/tllc.tllbc compile hello.tll -o /tmp/hello.tllbc
+          host/c/tllvm tools/TLLC/tllc.tllbc compile examples/hello.tll -o /tmp/hello.tllbc
           host/c/tllvm /tmp/hello.tllbc | grep -q "Hello"
 
       - name: End-to-end tllc verification (Windows)
         if: runner.os == 'Windows'
         shell: cmd
         run: |
-          host\c\tllvm.exe tools\TLLC\tllc.tllbc compile hello.tll -o hello_e2e.tllbc
+          host\c\tllvm.exe tools\TLLC\tllc.tllbc compile examples/hello.tll -o hello_e2e.tllbc
           if errorlevel 1 exit /b 1
           host\c\tllvm.exe hello_e2e.tllbc
           if errorlevel 1 exit /b 1
