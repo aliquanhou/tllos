@@ -366,8 +366,29 @@ fn nl_lowerStatement(stmt: map) -> void {
 
     // 表达式语句
     if kind == "ExpressionStatement" {
-        let expr = nl_lowerExpression(stmt.expression)
-        nl_emit(expr + ";")
+        let innerExpr = stmt.expression
+        // P2-01-B11-R1-R2 Blocker 1: Assignment expression result ownership closure.
+        // tll_assign() returns new_value with refcount retained (incref inside).
+        // If RHS is a temporary expression (literal, function call, etc.), the return
+        // value owns the temporary reference and MUST be released to avoid leak.
+        // If RHS is a variable reference (Ident), the return value is a borrow (not own),
+        // so we must NOT release it (would cause UAF for x=x self-assignment).
+        if innerExpr.kind == "Binary" && innerExpr.operator == "=" {
+            let assignExpr = nl_lowerExpression(innerExpr)
+            if innerExpr.right.kind == "Ident" {
+                // RHS is variable reference: return value is borrow, do not release
+                nl_emit(assignExpr + ";")
+            } else {
+                // RHS is temporary expression: return value owns reference, must release
+                nl_emit("{")
+                nl_emit("    TLLValue __tll_assign_result = " + assignExpr + ";")
+                nl_emit("    tll_value_free(__tll_assign_result);")
+                nl_emit("}")
+            }
+        } else {
+            let expr = nl_lowerExpression(innerExpr)
+            nl_emit(expr + ";")
+        }
         return
     }
 

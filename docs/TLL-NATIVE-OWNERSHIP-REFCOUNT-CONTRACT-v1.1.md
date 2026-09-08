@@ -103,6 +103,34 @@ Native Target 使用 `tll_assign()` 辅助函数，确保：
 2. **安全顺序**：先 incref(new)，再 free(old)，安全处理 `x = x` 自赋值
 3. **统一入口**：所有普通变量赋值都通过 `tll_assign`，保证所有权语义一致
 
+**ExpressionStatement 中的赋值表达式结果 ownership**（P2-01-B11-R1-R2 Blocker 1 修复）:
+
+`tll_assign()` 返回 `new_value`，且该返回值已被 incref（refcount +1）。在语句上下文（ExpressionStatement）中，赋值表达式的返回值被丢弃，因此必须根据 RHS 类型决定是否 release：
+
+- **RHS 是临时表达式**（字面量、函数调用、Binary 运算等）：返回值拥有临时引用，**必须 release**，否则泄漏
+- **RHS 是变量引用**（Ident）：返回值是 borrow（不拥有引用），**不得 release**，否则会导致 `x = x` 自赋值时的 UAF
+
+Native lowering 对赋值表达式语句生成：
+
+**RHS 是临时表达式**（如 `x = "second"` / `x = get_string()`）:
+```c
+{
+    TLLValue __tll_assign_result = tll_assign(&x, rhs);
+    tll_value_free(__tll_assign_result);  // release expression result (temporary)
+}
+```
+
+**RHS 是变量引用**（如 `x = x` / `x = y`）:
+```c
+tll_assign(&x, x);  // return value is borrow, do not release (avoids UAF in x=x)
+```
+
+这样：
+- `x = "second"`：临时 RHS ref=1 -> tll_assign incref -> ref=2 -> release 返回值 -> ref=1 -> x 持有 ref=1 -> 函数退出 free(x) -> ref=0 ✅
+- `x = x`：x ref=1 -> tll_assign incref -> ref=2 -> free(old) -> ref=1 -> store -> 返回 borrow -> 不 release -> x 持有 ref=1 -> 函数退出 free(x) -> ref=0 ✅
+
+**注意**: 对于非语句上下文的赋值表达式（如 `let y = (x = 5)`），返回值的 ownership 由调用者负责，调用者必须在使用后 release。
+
 **两种实现的语义等价性**: 两种顺序最终都达到相同的语义结果——old 被 release，new 被 retain，变量存储 new。Native Target 使用 `tll_assign` 辅助函数额外保证了 RHS 只求值一次，避免了函数调用作为 RHS 时的 double-evaluation 问题。
 
 **注意**: 对于值类型（null/bool/int/float/builtin），tll_value_free 和 tll_value_incref 是 no-op，所以可以安全调用。

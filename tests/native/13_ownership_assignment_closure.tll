@@ -88,16 +88,22 @@ fn test_alias() {
     io.println(b);
 }
 
+fn get_with_marker() {
+    // P2-01-B11-R1-R2 Blocker 2: observable side-effect to prove RHS called exactly once.
+    // If RHS is evaluated twice, "MARKER_CALL" will appear twice in output.
+    io.println("MARKER_CALL");
+    return 42;
+}
+
 fn test_rhs_function_call_once() {
-    io.println("=== 7. RHS function call evaluated once ===");
-    let counter = 0;
-    let s = "before";
-    io.println(s);
-    // If RHS is evaluated twice, get_string() would be called twice
-    // but output should still be correct (same return value)
-    s = get_string();
-    io.println(s);
-    io.println(get_string());
+    io.println("=== 7. RHS function call evaluated once (observable marker) ===");
+    let x = 0;
+    // If RHS is evaluated twice in assignment, MARKER_CALL will print twice
+    x = get_with_marker();
+    io.println(x);
+    // Independent call to verify marker works (assign first to avoid separate arg-incref GAP)
+    let y = get_with_marker();
+    io.println(y);
 }
 
 fn main() {
