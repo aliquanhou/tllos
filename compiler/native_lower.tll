@@ -95,16 +95,20 @@ fn nl_lowerExpression(expr: map) -> string {
             if expr.left.kind == "Index" && expr.left.index.kind == "String" {
                 let mapObj = nl_lowerExpression(expr.left.object)
                 let keyStr = expr.left.index.value
-                return "(map_set(" + mapObj + ".as.map, \"" + keyStr + "\", " + right + "), " + right + ")"
+                // B.11: Ownership - retain value before map_set (container frees old, does not incref new)
+                return "(tll_value_incref(" + right + "), map_set(" + mapObj + ".as.map, \"" + keyStr + "\", " + right + "), " + right + ")"
             }
             // Array index assignment: arr[0] = value -> array_set(arr.as.array, 0, value)
             if expr.left.kind == "Index" {
                 let idxObj = nl_lowerExpression(expr.left.object)
                 let idxVal = nl_lowerExpression(expr.left.index)
-                return "(array_set(" + idxObj + ".as.array, " + idxVal + ".as.integer, " + right + "), " + right + ")"
+                // B.11: Ownership - retain value before array_set (container frees old, does not incref new)
+                return "(tll_value_incref(" + right + "), array_set(" + idxObj + ".as.array, " + idxVal + ".as.integer, " + right + "), " + right + ")"
             }
             // Normal variable assignment
-            return "(" + left + " = " + right + ")"
+            // B.11: Ownership - retain new, release old, then assign
+            // Order: incref(right) first, then free(left), to avoid use-after-free when x=x
+            return "(tll_value_incref(" + right + "), tll_value_free(" + left + "), " + left + " = " + right + ")"
         }
         let left = nl_lowerExpression(expr.left)
         let right = nl_lowerExpression(expr.right)
@@ -145,6 +149,18 @@ fn nl_lowerExpression(expr: map) -> string {
         while i < arrays.length(expr.args) {
             arrays.push(args, nl_lowerExpression(arrays.get(expr.args, i)))
             i = i + 1
+        }
+        // B.11: Ownership - caller retains arguments for user-defined functions
+        // Built-in functions (tll_ prefix) are C functions, do not follow TLL refcount rules
+        let isBuiltin = strings.hasPrefix(callee, "tll_")
+        if isBuiltin == false && arrays.length(args) > 0 {
+            let increfExprs: list = []
+            let ai = 0
+            while ai < arrays.length(args) {
+                arrays.push(increfExprs, "tll_value_incref(" + arrays.get(args, ai) + ")")
+                ai = ai + 1
+            }
+            return "(" + nl_join(increfExprs, ", ") + ", " + callee + "(" + nl_join(args, ", ") + "))"
         }
         return callee + "(" + nl_join(args, ", ") + ")"
     }
@@ -214,6 +230,8 @@ fn nl_lowerStatement(stmt: map) -> void {
             let ai = 0
             while ai < arrays.length(stmt.value.elements) {
                 let elem = nl_lowerExpression(arrays.get(stmt.value.elements, ai))
+                // B.11: Ownership - retain element before array_push (container does not incref)
+                nl_emit("tll_value_incref(" + elem + ");")
                 nl_emit("array_push(" + stmt.name + ".as.array, " + elem + ");")
                 ai = ai + 1
             }
@@ -227,6 +245,8 @@ fn nl_lowerStatement(stmt: map) -> void {
                 let entry = arrays.get(stmt.value.entries, mi)
                 let keyStr = entry.key
                 let valExpr = nl_lowerExpression(entry.value)
+                // B.11: Ownership - retain value before map_set (container does not incref)
+                nl_emit("tll_value_incref(" + valExpr + ");")
                 nl_emit("map_set(" + stmt.name + ".as.map, \"" + keyStr + "\", " + valExpr + ");")
                 mi = mi + 1
             }

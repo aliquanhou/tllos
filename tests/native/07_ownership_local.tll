@@ -1,0 +1,45 @@
+fn make_string() {
+    return "hello from make_string";
+}
+
+fn test_local_basic() {
+    let x = 10;
+    let y = "local string";
+    io.println(x);
+    io.println(y);
+}
+
+fn test_local_reassignment() {
+    let s = "first";
+    io.println(s);
+    s = "second";
+    io.println(s);
+    s = "third";
+    io.println(s);
+}
+
+fn test_local_from_function() {
+    let result = make_string();
+    io.println(result);
+}
+
+fn test_local_mixed_types() {
+    let i = 42;
+    let b = true;
+    let s = "mixed";
+    io.println(i);
+    io.println(b);
+    io.println(s);
+}
+
+fn main() {
+    io.println("=== ownership_local ===");
+    test_local_basic();
+    test_local_reassignment();
+    test_local_from_function();
+    test_local_mixed_types();
+    io.println("=== done ===");
+    return 0;
+}
+
+main()

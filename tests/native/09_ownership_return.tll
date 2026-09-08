@@ -1,0 +1,99 @@
+// P2-01-B.11 Ownership Conformance Test 09: Function return ownership
+// Verifies: function return value is properly retained for caller
+// Both Bytecode and Native must produce identical output
+
+fn return_string() {
+    let s = "returned string";
+    return s;
+}
+
+fn return_int() {
+    let n = 42;
+    return n;
+}
+
+fn return_concat() {
+    let a = "hello";
+    let b = " world";
+    return a + b;
+}
+
+fn return_from_branch(n) {
+    if n == 1 {
+        let s = "branch one";
+        return s;
+    }
+    if n == 2 {
+        let s = "branch two";
+        return s;
+    }
+    let s = "default branch";
+    return s;
+}
+
+fn return_array() {
+    let arr = [10, 20, 30];
+    return arr;
+}
+
+fn return_map() {
+    let m = {"a": 1, "b": 2};
+    return m;
+}
+
+fn test_use_returned_string() {
+    let result = return_string();
+    io.println(result);
+}
+
+fn test_use_returned_int() {
+    let result = return_int();
+    io.println(result);
+}
+
+fn test_use_returned_concat() {
+    let result = return_concat();
+    io.println(result);
+}
+
+fn test_use_returned_branch() {
+    io.println(return_from_branch(1));
+    io.println(return_from_branch(2));
+    io.println(return_from_branch(99));
+}
+
+fn test_use_returned_array() {
+    let arr = return_array();
+    io.println(arr[0]);
+    io.println(arr[1]);
+    io.println(arr[2]);
+    io.println(arr.length);
+}
+
+fn test_use_returned_map() {
+    let m = return_map();
+    io.println(m["a"]);
+    io.println(m["b"]);
+}
+
+fn test_nested_return() {
+    let outer = return_string();
+    let inner = return_concat();
+    io.println(outer);
+    io.println(inner);
+}
+
+fn main() {
+    io.println("=== ownership_return ===");
+    test_use_returned_string();
+    test_use_returned_int();
+    test_use_returned_concat();
+    test_use_returned_branch();
+    test_use_returned_array();
+    test_use_returned_map();
+    test_nested_return();
+    io.println("=== done ===");
+    return 0;
+}
+
+main()

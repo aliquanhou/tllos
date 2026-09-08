@@ -1,0 +1,68 @@
+// P2-01-B.11 Ownership Conformance Test 08: Assignment ownership
+// Verifies: variable assignment releases old value and retains new value
+// Both Bytecode and Native must produce identical output
+
+fn get_value(n) {
+    if n == 1 { return "one" }
+    if n == 2 { return "two" }
+    return "other"
+}
+
+fn test_simple_assignment() {
+    let x = "initial";
+    io.println(x);
+    x = "updated";
+    io.println(x);
+}
+
+fn test_multiple_assignment() {
+    let s = "a";
+    io.println(s);
+    s = "b";
+    io.println(s);
+    s = "c";
+    io.println(s);
+    s = "d";
+    io.println(s);
+}
+
+fn test_assignment_from_function() {
+    let val = get_value(1);
+    io.println(val);
+    val = get_value(2);
+    io.println(val);
+    val = get_value(99);
+    io.println(val);
+}
+
+fn test_assignment_chain() {
+    let a = "start";
+    let b = a;
+    io.println(a);
+    io.println(b);
+    a = "changed";
+    io.println(a);
+    io.println(b);
+}
+
+fn test_int_assignment() {
+    let n = 10;
+    io.println(n);
+    n = 20;
+    io.println(n);
+    n = n + 5;
+    io.println(n);
+}
+
+fn main() {
+    io.println("=== ownership_assignment ===");
+    test_simple_assignment();
+    test_multiple_assignment();
+    test_assignment_from_function();
+    test_assignment_chain();
+    test_int_assignment();
+    io.println("=== done ===");
+    return 0;
+}
+
+main()

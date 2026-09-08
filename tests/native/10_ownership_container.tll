@@ -1,0 +1,99 @@
+// P2-01-B.11 Ownership Conformance Test 10: Container element ownership
+// Verifies: array/map elements are properly retained when stored and released when container is freed
+// Both Bytecode and Native must produce identical output
+
+fn test_array_literal() {
+    let arr = [10, 20, 30];
+    io.println(arr[0]);
+    io.println(arr[1]);
+    io.println(arr[2]);
+    io.println(arr.length);
+}
+
+fn test_array_string_elements() {
+    let arr = ["alpha", "beta", "gamma"];
+    io.println(arr[0]);
+    io.println(arr[1]);
+    io.println(arr[2]);
+}
+
+fn test_array_mixed_elements() {
+    let arr = [42, "hello", true, 3.14];
+    io.println(arr[0]);
+    io.println(arr[1]);
+    io.println(arr[2]);
+    io.println(arr[3]);
+}
+
+fn test_array_index_write() {
+    let arr = [1, 2, 3];
+    io.println(arr[0]);
+    arr[0] = 100;
+    io.println(arr[0]);
+    arr[1] = "replaced";
+    io.println(arr[1]);
+}
+
+fn test_map_literal() {
+    let m = {"name": "tll", "version": 1, "active": true};
+    io.println(m["name"]);
+    io.println(m["version"]);
+    io.println(m["active"]);
+}
+
+fn test_map_index_write() {
+    let m = {"a": 1};
+    io.println(m["a"]);
+    m["a"] = 100;
+    io.println(m["a"]);
+    m["b"] = "new key";
+    io.println(m["b"]);
+}
+
+fn test_nested_containers() {
+    let inner1 = {"x": 10};
+    let inner2 = {"x": 20};
+    let arr = [inner1, inner2];
+    io.println(arr[0]["x"]);
+    io.println(arr[1]["x"]);
+}
+
+fn test_container_as_argument() {
+    let arr = [5, 10, 15];
+    let sum = arr[0] + arr[1] + arr[2];
+    io.println(sum);
+}
+
+fn test_container_from_function() {
+    let m = {"key": "value"};
+    io.println(m["key"]);
+}
+
+fn test_multiple_containers() {
+    let a1 = [1, 2, 3];
+    let a2 = ["x", "y", "z"];
+    let m1 = {"n": 1};
+    let m2 = {"s": "two"};
+    io.println(a1[0]);
+    io.println(a2[0]);
+    io.println(m1["n"]);
+    io.println(m2["s"]);
+}
+
+fn main() {
+    io.println("=== ownership_container ===");
+    test_array_literal();
+    test_array_string_elements();
+    test_array_mixed_elements();
+    test_array_index_write();
+    test_map_literal();
+    test_map_index_write();
+    test_nested_containers();
+    test_container_as_argument();
+    test_container_from_function();
+    test_multiple_containers();
+    io.println("=== done ===");
+    return 0;
+}
+
+main()
