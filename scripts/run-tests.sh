@@ -165,8 +165,15 @@ for f in "$REPO_ROOT/tests/scope/"*.tll; do
         FAILED=$((FAILED + 1))
         continue
     fi
-    echo "  DEBUG: compile_rc=$compile_rc out=$out exists=$([ -f "$out" ] && echo yes || echo no)"
+    echo "  DEBUG: compile_rc=$compile_rc"
+    echo "  DEBUG: TLLVM_EXE=$TLLVM_EXE"
+    echo "  DEBUG: TLLC_BC=$TLLC_BC"
+    echo "  DEBUG: f=$f"
+    echo "  DEBUG: out=$out"
+    echo "  DEBUG: === COMPILE OUTPUT START ==="
     cat "$TMPFILE"
+    echo "  DEBUG: === COMPILE OUTPUT END ==="
+    echo "  DEBUG: file exists=$([ -f "$out" ] && echo yes || echo no)"
     # Run
     set +e
     if [ -n "$TIMEOUT_CMD" ]; then
