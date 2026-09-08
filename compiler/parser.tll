@@ -93,6 +93,8 @@ fn parseStatement() -> map {
     if stmtType == "CONST" { return parseConstStatement() }
     if stmtType == "FN" { return parseFnDeclaration() }
     if stmtType == "STRUCT" { return parseStructDeclaration() }
+    if stmtType == "INTERFACE" { return parseInterfaceDeclaration() }
+    if stmtType == "IMPL" { return parseImplDeclaration() }
     if stmtType == "ENUM" { return parseEnumDeclaration() }
     if stmtType == "RETURN" { return parseReturnStatement() }
     if stmtType == "IF" { return parseIfStatement() }
@@ -220,6 +222,65 @@ fn parseStructDeclaration() -> map {
     let node = makeNode("Struct", t.line, t.column)
     node.name = name
     node.fields = fields
+    return node
+}
+
+fn parseInterfaceDeclaration() -> map {
+    let t = parse_advance() // interface
+    let nameTok = parse_expect("IDENT", "interface name")
+    let name = nameTok.tkValue
+    parse_expect("LBRACE", "'{'")
+    let methods: list = []
+    while !parse_check("RBRACE") && !parse_isAtEnd() {
+        parse_expect("FN", "method fn")
+        let mNameTok = parse_expect("IDENT", "method name")
+        let mName = mNameTok.tkValue
+        parse_expect("LPAREN", "'('")
+        let mParams: list = []
+        while !parse_check("RPAREN") && !parse_isAtEnd() {
+            let pNameTok = parse_expect("IDENT", "param name")
+            let pName = pNameTok.tkValue
+            let pType: map = null
+            if parse_match("COLON") { pType = parseType() }
+            arrays.push(mParams, { name: pName, type: pType })
+            if !parse_match("COMMA") { break }
+        }
+        parse_expect("RPAREN", "')'")
+        let retType: map = null
+        if parse_match("ARROW") { retType = parseType() }
+        arrays.push(methods, { name: mName, params: mParams, returnType: retType })
+    }
+    parse_expect("RBRACE", "'}'")
+    let node = makeNode("Interface", t.line, t.column)
+    node.name = name
+    node.methods = methods
+    return node
+}
+
+fn parseImplDeclaration() -> map {
+    let t = parse_advance() // impl
+    let ifaceTok = parse_expect("IDENT", "interface name")
+    let ifaceName = ifaceTok.tkValue
+    parse_expect("FOR", "'for'")
+    let typeTok = parse_expect("IDENT", "target type name")
+    let typeName = typeTok.tkValue
+    parse_expect("LBRACE", "'{'")
+    let methods: list = []
+    while !parse_check("RBRACE") && !parse_isAtEnd() {
+        if parse_check("FN") {
+            let fnNode = parseFnDeclaration()
+            fnNode.implInterface = ifaceName
+            fnNode.implType = typeName
+            arrays.push(methods, fnNode)
+        } else {
+            parse_advance()
+        }
+    }
+    parse_expect("RBRACE", "'}'")
+    let node = makeNode("Impl", t.line, t.column)
+    node.interfaceName = ifaceName
+    node.typeName = typeName
+    node.methods = methods
     return node
 }
 

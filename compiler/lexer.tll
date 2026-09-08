@@ -169,6 +169,8 @@ fn getKeywordType(word: string) -> string {
     if word == "and" { return TK_AND }
     if word == "or" { return TK_OR }
     if word == "match" { return TK_MATCH }
+    if word == "interface" { return TK_INTERFACE }
+    if word == "impl" { return TK_IMPL }
     return ""
 }
 

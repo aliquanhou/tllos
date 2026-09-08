@@ -103,6 +103,7 @@ let cg_fnDeclMap: map = json.parse("{}")
 let cg_varMap: map = json.parse("{}")
 let cg_globalMap: map = json.parse("{}")
 let cg_enumMap: map = json.parse("{}")  // EnumName -> { variantName: value }
+let cg_methodDispatchMap: map = json.parse("{}")  // TypeName -> { methodName: fnName }
 let cg_anonCounter = 0
 
 // ============ Map helpers ============
@@ -215,6 +216,35 @@ fn cg_collectFunctions(stmts: auto, parentName: auto) -> void {
             // Recursively collect nested functions
             if stmt.body != null && stmt.body.statements != null {
                 cg_collectFunctions(stmt.body.statements, internalName)
+            }
+        }
+        if stmt != null && stmt.kind == "Impl" {
+            // Collect impl methods as mangled functions
+            let implMethods = stmt.methods
+            if implMethods != null {
+                let mi = 0
+                while mi < arrays.length(implMethods) {
+                    let mFn = arrays.get(implMethods, mi)
+                    let mangledName = stmt.typeName + "__" + mFn.name
+                    mFn.internalName = mangledName
+                    mFn.name = mangledName
+                    mFn.parentInternalName = null
+                    let fnIdx = arrays.length(cg_functions)
+                    cg_fnMapSet(mangledName, fnIdx)
+                    cg_fnDeclMap[mangledName] = mFn
+                    let fnObj = { name: mangledName, paramCount: arrays.length(mFn.params), instructions: [], localCount: 0, decl: mFn, isTopLevel: true, parentInternalName: null, upvalueMap: null }
+                    arrays.push(cg_functions, fnObj)
+                    // Register in dispatch map
+                    if cg_methodDispatchMap[stmt.typeName] == null {
+                        cg_methodDispatchMap[stmt.typeName] = json.parse("{}")
+                    }
+                    cg_methodDispatchMap[stmt.typeName][mFn.name] = mangledName
+                    // Recursively collect nested functions in method body
+                    if mFn.body != null && mFn.body.statements != null {
+                        cg_collectFunctions(mFn.body.statements, mangledName)
+                    }
+                    mi = mi + 1
+                }
             }
         }
         i = i + 1
@@ -580,7 +610,7 @@ export fn compile(program: map) -> map {
     while mi < arrays.length(stmts) {
         let stmt = arrays.get(stmts, mi)
         let kind = stmt.kind
-        if kind != "Fn" && kind != "Struct" && kind != "Enum" && kind != "Import" && kind != "FromImport" && kind != "Export" {
+        if kind != "Fn" && kind != "Struct" && kind != "Enum" && kind != "Interface" && kind != "Impl" && kind != "Import" && kind != "FromImport" && kind != "Export" {
             cg_compileStatement(stmt)
         }
         mi = mi + 1
@@ -1840,6 +1870,99 @@ fn cg_compileCall(expr: map) -> int {
         }
         cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
         return resultReg
+    }
+
+    // Method dispatch: if callee is Member access and property is a known interface method
+    if callee["kind"] == "Member" {
+        let propName = callee["property"]
+        // Direct traversal of cg_functions: find functions ending with "__propName"
+        let hasImpl = false
+        let implTypes: list = []
+        let implFns: list = []
+        let suffix = "__" + propName
+        let suffixLen = strings.length(suffix)
+        let fi = 0
+        while fi < arrays.length(cg_functions) {
+            let fdef = arrays.get(cg_functions, fi)
+            let fname = fdef.name
+            let fnameLen = strings.length(fname)
+            if fnameLen > suffixLen {
+                let ending = strings.substring(fname, fnameLen - suffixLen, fnameLen)
+                if ending == suffix {
+                    hasImpl = true
+                    let typeName = strings.substring(fname, 0, fnameLen - suffixLen)
+                    arrays.push(implTypes, typeName)
+                    arrays.push(implFns, fname)
+                }
+            }
+            fi = fi + 1
+        }
+        if hasImpl {
+            let selfReg = cg_compileExpression(callee["object"])
+            // Get __struct type field
+            let typeReg = cg_allocReg()
+            cg_emit(OP_MEMBER_GET, [typeReg, selfReg, cg_addConstant("__struct")])
+            let argRegs: list = []
+            let ai = 0
+            while ai < arrays.length(args) {
+                let ar = cg_compileExpression(arrays.get(args, ai))
+                arrays.push(argRegs, ar)
+                ai = ai + 1
+            }
+            let endJumpIdxs: list = []
+            let ti = 0
+            while ti < arrays.length(implTypes) {
+                let tname = arrays.get(implTypes, ti)
+                let fname = arrays.get(implFns, ti)
+                // Compare typeReg == tname
+                let cmpReg = cg_allocReg()
+                let nameReg = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [nameReg, cg_addConstant(tname)])
+                cg_emit(OP_EQ, [cmpReg, typeReg, nameReg])
+                // If false, jump to next type
+                let jmpFalseIdx = arrays.length(cg_instructions)
+                cg_emit(OP_JMP_IF_FALSE, [cmpReg, -1])
+                // Push self + args
+                cg_emit(OP_PUSH, [selfReg])
+                let pi = 0
+                while pi < arrays.length(argRegs) {
+                    cg_emit(OP_PUSH, [arrays.get(argRegs, pi)])
+                    pi = pi + 1
+                }
+                // Find function index
+                let fnIdx = -1
+                let fi2 = 0
+                while fi2 < arrays.length(cg_functions) {
+                    let fdef2 = arrays.get(cg_functions, fi2)
+                    if fdef2.name == fname {
+                        fnIdx = fi2
+                        break
+                    }
+                    fi2 = fi2 + 1
+                }
+                if fnIdx >= 0 {
+                    cg_emit(OP_CALL, [resultReg, fnIdx, arrays.length(args) + 1])
+                } else {
+                    cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
+                }
+                // Jump to end
+                let jmpEndIdx = arrays.length(cg_instructions)
+                cg_emit(OP_JMP, [-1])
+                arrays.push(endJumpIdxs, jmpEndIdx)
+                // Patch false jump to here (next type)
+                cg_patchJump(jmpFalseIdx)
+                ti = ti + 1
+            }
+            // Fallback: no type matched
+            cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
+            // Patch all end jumps to here
+            let ei = 0
+            while ei < arrays.length(endJumpIdxs) {
+                cg_patchJump(arrays.get(endJumpIdxs, ei))
+                ei = ei + 1
+            }
+            return resultReg
+        }
     }
 
     // Standard library function call (module.function) -> LOAD_BUILTIN + CALL
