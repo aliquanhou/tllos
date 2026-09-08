@@ -1,0 +1,80 @@
+// P2-01-B11-R1-R2-FIX4: Assignment Expression Ownership Evidence Closure
+// 5 boundary scenarios required by architecture review:
+// A. let z = (x = y)
+// B. let z = (x = x)  [self-assignment + let consumer]
+// C. let z = (x = get_with_marker())  [temporary-return + let consumer]
+// D. y = (x = z)  [nested statement with Ident RHS]
+// E. z = (y = (x = y2))  [two-level nested with Ident RHS]
+
+fn get_with_marker() {
+    io.println("MARKER_CALL");
+    return 42;
+}
+
+// A. let z = (x = y)
+fn test_a_let_ident_rhs() {
+    io.println("=== A. let z = (x = y) ===");
+    let x = "old_x";
+    let y = "source_y";
+    let z = (x = y);
+    io.println(x);
+    io.println(y);
+    io.println(z);
+}
+
+// B. let z = (x = x) [self-assignment + let consumer]
+fn test_b_let_self_assignment() {
+    io.println("=== B. let z = (x = x) ===");
+    let x = "self_value";
+    let z = (x = x);
+    io.println(x);
+    io.println(z);
+}
+
+// C. let z = (x = get_with_marker()) [temporary-return + let consumer]
+fn test_c_let_function_return() {
+    io.println("=== C. let z = (x = get_with_marker()) ===");
+    let x = 0;
+    let z = (x = get_with_marker());
+    io.println(x);
+    io.println(z);
+}
+
+// D. y = (x = z) [nested statement with Ident RHS]
+fn test_d_stmt_ident_rhs() {
+    io.println("=== D. y = (x = z) ===");
+    let x = "old_x";
+    let y = "old_y";
+    let z = "source_z";
+    y = (x = z);
+    io.println(x);
+    io.println(y);
+    io.println(z);
+}
+
+// E. z = (y = (x = y2)) [two-level nested with Ident RHS]
+fn test_e_two_level_nested() {
+    io.println("=== E. z = (y = (x = y2)) ===");
+    let x = "old_x";
+    let y = "old_y";
+    let z = "old_z";
+    let y2 = "source_y2";
+    z = (y = (x = y2));
+    io.println(x);
+    io.println(y);
+    io.println(z);
+    io.println(y2);
+}
+
+fn main() {
+    io.println("=== assignment_ownership_evidence_closure ===");
+    test_a_let_ident_rhs();
+    test_b_let_self_assignment();
+    test_c_let_function_return();
+    test_d_stmt_ident_rhs();
+    test_e_two_level_nested();
+    io.println("=== done ===");
+    return 0;
+}
+
+main()
