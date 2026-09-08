@@ -33,7 +33,7 @@ fn main() -> void {
 
     if parsed["ok"] == false {
         printError(convert.toString(parsed["error"]))
-        return
+        process.exit(1)
     }
 
     let cmd = parsed["command"]
@@ -49,7 +49,7 @@ fn main() -> void {
         let result = compileFile(input, output)
         if result["ok"] == false {
             printError(convert.toString(result["error"]))
-            return
+            process.exit(1)
         }
         printCompileSuccess(input, output, result["functions"], result["constants"])
         return
@@ -60,7 +60,7 @@ fn main() -> void {
         let result = checkFile(input)
         if result["ok"] == false {
             printError(convert.toString(result["error"]))
-            return
+            process.exit(1)
         }
         printCheckSuccess(input, result["functions"], result["constants"])
         return

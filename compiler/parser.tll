@@ -56,7 +56,7 @@ fn parse_expect(tkType: string, message: string) -> map {
         return parse_advance()
     }
     let t = parse_peek()
-    throw "Parse error: expected " + message + ", got '" + t.tkValue + "' (" + t.tkType + ") at line " + convert.toString(t.line)
+    throw "TLL-E002 Parse error at line " + convert.toString(t.line) + " column " + convert.toString(t.column) + ": expected " + message + ", got '" + t.tkValue + "' (" + t.tkType + ")"
 }
 
 // ============ AST helpers ============
@@ -1081,7 +1081,7 @@ fn parsePrimary() -> map {
         return node
     }
 
-    throw "Parse error: unexpected token '" + t.tkValue + "' (" + t.tkType + ") at line " + convert.toString(t.line)
+    throw "TLL-E002 Parse error at line " + convert.toString(t.line) + " column " + convert.toString(t.column) + ": unexpected token '" + t.tkValue + "' (" + t.tkType + ")"
 }
 
 fn parseArrayLiteral() -> map {

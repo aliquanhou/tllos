@@ -519,7 +519,12 @@ static void throw_exception(TLLVM *vm, TLLFrame *frame, TLLValue error) {
     }
     /* No handler - fatal */
     char *msg = tll_to_string(error);
-    fprintf(stderr, "Uncaught exception: %s\n", msg);
+    /* Compiler diagnostic errors (TLL-E###) are printed cleanly without prefix */
+    if (strncmp(msg, "TLL-E", 5) == 0) {
+        fprintf(stderr, "%s\n", msg);
+    } else {
+        fprintf(stderr, "Uncaught exception: %s\n", msg);
+    }
     free(msg);
     tll_value_free(error);
     exit(1);
