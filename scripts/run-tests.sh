@@ -48,19 +48,6 @@ run_test() {
     if [[ "$basename" == exit* ]]; then
         expected="${basename#exit}"
     fi
-    # DEBUG: scope test compile diagnostics
-    echo "  DEBUG: compile_cmd=$TLLVM_EXE $TLLC_BC compile $f -o $out"
-    echo "  DEBUG: compile_rc=$compile_rc"
-    echo "  DEBUG: arg0=$TLLVM_EXE"
-    echo "  DEBUG: arg1=$TLLC_BC"
-    echo "  DEBUG: arg2=compile"
-    echo "  DEBUG: arg3=$f"
-    echo "  DEBUG: arg4=-o"
-    echo "  DEBUG: arg5=$out"
-    echo "  DEBUG: === OUTPUT ==="
-    cat "$TMPFILE"
-    echo "  DEBUG: === END OUTPUT ==="
-    echo "  DEBUG: file exists=$([ -f "$out" ] && echo yes || echo no)"
     # Run
     set +e
     if [ -n "$TIMEOUT_CMD" ]; then
