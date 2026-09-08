@@ -48,6 +48,12 @@ run_test() {
     if [[ "$basename" == exit* ]]; then
         expected="${basename#exit}"
     fi
+    # DEBUG: scope test compile diagnostics
+    echo "  DEBUG: compile_cmd=$TLLVM_EXE $TLLC_BC compile $f -o $out"
+    echo "  DEBUG: compile_rc=$compile_rc"
+    echo "  DEBUG: compile_output=$(cat $TMPFILE)"
+    if [ -f "$out" ]; then echo "  DEBUG: $out EXISTS size=$(stat -c%s "$out" 2>/dev/null || stat -f%z "$out" 2>/dev/null)"; else echo "  DEBUG: $out MISSING"; fi
+    echo "  DEBUG: scope_dir_files=$(ls -la "$(dirname "$out")" | head -10)"
     # Run test with optional timeout (prevents infinite loops from hanging CI)
     set +e
     if [ -n "$TIMEOUT_CMD" ]; then
