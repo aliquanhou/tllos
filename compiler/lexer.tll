@@ -94,6 +94,7 @@ let TK_ARROW = "ARROW"
 let TK_FAT_ARROW = "FAT_ARROW"
 let TK_PIPE = "PIPE"
 let TK_AT = "AT"
+let TK_HASH = "HASH"
 let TK_QUESTION = "QUESTION"
 let TK_RANGE = "RANGE"
 let TK_RANGE_INCLUSIVE = "RANGE_INCLUSIVE"
@@ -411,12 +412,13 @@ export fn tokenize(input: string) -> list {
                 else if opCh == "[" { arrays.push(tokens, { tkType: TK_LBRACKET, tkValue: "[", line: startLine, column: startCol }) }
                 else if opCh == "]" { arrays.push(tokens, { tkType: TK_RBRACKET, tkValue: "]", line: startLine, column: startCol }) }
                 else if opCh == "@" { arrays.push(tokens, { tkType: TK_AT, tkValue: "@", line: startLine, column: startCol }) }
+                else if opCh == "#" { arrays.push(tokens, { tkType: TK_HASH, tkValue: "#", line: startLine, column: startCol }) }
                 else if opCh == "?" { arrays.push(tokens, { tkType: TK_QUESTION, tkValue: "?", line: startLine, column: startCol }) }
                 else if opCh == "&" { arrays.push(tokens, { tkType: TK_BAND, tkValue: "&", line: startLine, column: startCol }) }
                 else if opCh == "|" { arrays.push(tokens, { tkType: TK_BOR, tkValue: "|", line: startLine, column: startCol }) }
                 else if opCh == "^" { arrays.push(tokens, { tkType: TK_BXOR, tkValue: "^", line: startLine, column: startCol }) }
                 else if opCh == "~" { arrays.push(tokens, { tkType: TK_BNOT, tkValue: "~", line: startLine, column: startCol }) }
-                else { throw "Lexer error: unexpected char '" + opCh + "'" }
+                else { throw "Lexer error: unexpected char '" + opCh + "' at line " + convert.toString(startLine) + ", col " + convert.toString(startCol) }
             }
         }
     }
