@@ -1,0 +1,12 @@
+// BUG-B Test 2: function + coroutine + closure capture WITHOUT try/catch (PASS scenario)
+fn testWithoutTryCatch() {
+    let result = "initial"
+    fn coroBody() {
+        result = "modified"
+    }
+    coroutine.spawn(coroBody)
+    coroutine.yield()
+    coroutine.yield()
+    return result
+}
+io.println(testWithoutTryCatch())

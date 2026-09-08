@@ -1,0 +1,138 @@
+// P0-COMPILER-01 FINAL AUDIT: SHOP Original Case Regression Test
+// Exact reproduction of the SHOP aftersale_typeText() bug that triggered P0-COMPILER-01.
+// This file proves: Source -> Compile -> Link -> Run -> Function call -> Correct return.
+
+let assertions = 0
+let passed = 0
+
+fn assertEq(actual, expected, msg) {
+    assertions = assertions + 1
+    if actual == expected {
+        passed = passed + 1
+    } else {
+        io.println("FAIL: " + msg + " expected=" + convert.toString(expected) + " actual=" + convert.toString(actual))
+    }
+}
+
+// ============ EXACT SHOP ORIGINAL CODE ============
+// This is the exact function from SHOP that failed to compile before P0-COMPILER-01 fix.
+// It uses 'type' as parameter name and Chinese string return values.
+
+fn aftersale_typeText(type) {
+    if type == "refund" {
+        return "退款"
+    }
+    return "其他"
+}
+
+// ============ Additional SHOP-style helper functions with keyword params ============
+// These prove the fix is not a special-case bypass for 'type' only.
+
+fn order_statusText(status) {
+    if status == "pending" {
+        return "待付款"
+    }
+    if status == "paid" {
+        return "已付款"
+    }
+    if status == "shipped" {
+        return "已发货"
+    }
+    return "未知"
+}
+
+fn product_categoryName(category) {
+    if category == "electronics" {
+        return "电子产品"
+    }
+    if category == "clothing" {
+        return "服装"
+    }
+    return "其他分类"
+}
+
+// ============ Function defined but NOT called ============
+// This proves that defining a function with 'type' param and not calling it
+// still compiles and links successfully (the original SHOP bug scenario).
+
+fn this_function_is_never_called(type) {
+    if type == "test" {
+        return "never-returned"
+    }
+    return "also-never-returned"
+}
+
+// ============ Main test runner ============
+fn main() {
+    io.println("=== P0-COMPILER-01 FINAL AUDIT: SHOP Original Case Regression ===")
+    io.println("")
+
+    // Test 1: Exact SHOP function - refund case
+    io.println("Test 1: aftersale_typeText(\"refund\")")
+    let r1 = aftersale_typeText("refund")
+    assertEq(r1, "退款", "aftersale_typeText(refund) should return 退款")
+
+    // Test 2: Exact SHOP function - other case
+    io.println("Test 2: aftersale_typeText(\"exchange\")")
+    let r2 = aftersale_typeText("exchange")
+    assertEq(r2, "其他", "aftersale_typeText(exchange) should return 其他")
+
+    // Test 3: Exact SHOP function - empty string
+    io.println("Test 3: aftersale_typeText(\"\")")
+    let r3 = aftersale_typeText("")
+    assertEq(r3, "其他", "aftersale_typeText(empty) should return 其他")
+
+    // Test 4: Additional SHOP-style function
+    io.println("Test 4: order_statusText(\"paid\")")
+    let r4 = order_statusText("paid")
+    assertEq(r4, "已付款", "order_statusText(paid) should return 已付款")
+
+    // Test 5: Additional SHOP-style function
+    io.println("Test 5: product_categoryName(\"electronics\")")
+    let r5 = product_categoryName("electronics")
+    assertEq(r5, "电子产品", "product_categoryName(electronics) should return 电子产品")
+
+    // Test 6: Function with 'type' param used as local variable
+    io.println("Test 6: type param used in expression")
+    fn type_in_expression(type) {
+        let prefix = "type-"
+        return prefix + type
+    }
+    let r6 = type_in_expression("abc")
+    assertEq(r6, "type-abc", "type param in expression should work")
+
+    // Test 7: 'type' as local variable (not param)
+    io.println("Test 7: type as local variable")
+    fn type_as_local() {
+        let type = "local-type-value"
+        return type
+    }
+    let r7 = type_as_local()
+    assertEq(r7, "local-type-value", "type as local variable should work")
+
+    // Test 8: 'type' as map key
+    io.println("Test 8: type as map key")
+    let m8 = { type: "map-value", status: "ok" }
+    assertEq(m8["type"], "map-value", "type as map key should work")
+
+    // Test 9: 'type' in string literal
+    io.println("Test 9: type in string literal")
+    let s9 = "this is a type string"
+    assertEq(strings.length(s9), 21, "type in string should not be parsed as keyword")
+
+    // Summary
+    io.println("")
+    io.println("=== SHOP Regression Results ===")
+    io.println("Assertions: " + convert.toString(assertions))
+    io.println("Passed: " + convert.toString(passed))
+    io.println("Failed: " + convert.toString(assertions - passed))
+    if passed == assertions {
+        io.println("ALL SHOP REGRESSION TESTS PASSED")
+    } else {
+        io.println("SOME SHOP REGRESSION TESTS FAILED")
+    }
+
+    return 0
+}
+
+main()

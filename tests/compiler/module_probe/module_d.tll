@@ -1,0 +1,6 @@
+// Module D: alias import test
+from "./module_a" import addA as adderA, multiplyA as multiplierA, MODULE_A_CONST as constA
+
+export fn useAlias() {
+    return adderA(5, 3) + multiplierA(2, 4) + constA
+}

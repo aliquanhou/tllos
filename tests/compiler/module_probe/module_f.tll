@@ -1,0 +1,6 @@
+// Module F: circular dependency test
+from "./module_e" import funcE
+
+export fn funcF(x) {
+    return funcE(x) * 2
+}

@@ -1,0 +1,58 @@
+// Probe A: Scheduler Timer-Wait Bug
+// Minimal reproduction: spawn sleep coroutine + main repeatedly yield
+io.println("=== Probe A: Scheduler Timer-Wait ===")
+
+// Test A1: main uses yield() loop to wait for sleeping coroutine
+let a1_done = false
+let a1_yieldCount = 0
+coroutine.spawn(fn() {
+    coroutine.sleep(20)
+    a1_done = true
+})
+
+let i = 0
+while i < 100 {
+    coroutine.yield()
+    a1_yieldCount = a1_yieldCount + 1
+    if a1_done { break }
+    i = i + 1
+}
+
+if a1_done {
+    io.println("A1 PASS: sleeper woken after " + a1_yieldCount + " yields")
+} else {
+    io.println("A1 FAIL: sleeper NOT woken after " + a1_yieldCount + " yields")
+}
+
+// Test A2: main uses sleep() to wait (control group - should work)
+let a2_done = false
+coroutine.spawn(fn() {
+    coroutine.sleep(20)
+    a2_done = true
+})
+coroutine.sleep(50)
+if a2_done {
+    io.println("A2 PASS (control): sleeper woken via main sleep()")
+} else {
+    io.println("A2 FAIL (control): sleeper NOT woken via main sleep()")
+}
+
+// Test A3: yield loop with explicit longer sleep in coroutine
+let a3_done = false
+coroutine.spawn(fn() {
+    coroutine.sleep(10)
+    a3_done = true
+})
+let j = 0
+while j < 200 {
+    coroutine.yield()
+    if a3_done { break }
+    j = j + 1
+}
+if a3_done {
+    io.println("A3 PASS: 10ms sleeper woken after " + j + " yields")
+} else {
+    io.println("A3 FAIL: 10ms sleeper NOT woken after " + j + " yields")
+}
+
+io.println("=== Probe A Complete ===")

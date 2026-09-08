@@ -1,0 +1,155 @@
+// Dogfood Project 3: TLL Concurrent TCP Server
+// Demonstrates concurrent TCP server using coroutines and non-blocking IO
+// P0-COMPILER-07: IO / Network / Database Capability Implementation
+
+// === Configuration ===
+
+let LISTEN_PORT = 9090
+let MAX_CLIENTS = 64
+let BUFFER_SIZE = 4096
+
+// === Statistics ===
+
+let stats = {
+    totalConnections: 0,
+    activeConnections: 0,
+    totalMessages: 0,
+    totalBytes: 0
+}
+
+// === Client State ===
+
+// Each client is tracked in a map: fd -> { addr, connected, buffer }
+let clients: map = {}
+
+// === Response Helpers ===
+
+fn buildResponse(message: string) -> string {
+    let response = "ECHO: " + message + "\r\n"
+    return response
+}
+
+fn buildWelcome(addr: string) -> string {
+    return "Welcome to TLL Concurrent TCP Server!\r\nYour address: " + addr + "\r\nType 'quit' to disconnect, 'stats' for server stats.\r\n"
+}
+
+fn buildStats() -> string {
+    return "=== Server Stats ===\r\n" +
+        "Total connections: " + convert.toString(stats["totalConnections"]) + "\r\n" +
+        "Active connections: " + convert.toString(stats["activeConnections"]) + "\r\n" +
+        "Total messages: " + convert.toString(stats["totalMessages"]) + "\r\n" +
+        "Total bytes: " + convert.toString(stats["totalBytes"]) + "\r\n" +
+        "Platform: " + process.platform() + "\r\n" +
+        "====================\r\n"
+}
+
+// === Client Handler (runs as coroutine) ===
+
+fn handleClient(fd: int, addr: string) -> void {
+    io.println("[server] Client connected: " + addr + " (fd=" + convert.toString(fd) + ")")
+
+    // Send welcome
+    tcp.send(fd, buildWelcome(addr))
+
+    let connected = true
+    while connected {
+        // Non-blocking receive with coroutine yield
+        let data = ""
+        let trying = true
+        let attempts = 0
+
+        while trying {
+            let result = tcp.tryRecv(fd, BUFFER_SIZE)
+            if result != null && result != "" {
+                data = convert.toString(result)
+                trying = false
+            } else {
+                // Yield to allow other coroutines to run
+                coroutine.yield()
+                attempts = attempts + 1
+                // Check if client still connected (try a select with timeout 0)
+                if attempts > 1000 {
+                    // Use select to check if data is available
+                    let readable = tcp.select([fd], [], [], 0)
+                    if arrays.length(readable) == 0 {
+                        // No data, continue yielding
+                        attempts = 0
+                    }
+                }
+            }
+        }
+
+        // Process data
+        stats["totalMessages"] = stats["totalMessages"] + 1
+        stats["totalBytes"] = stats["totalBytes"] + arrays.length(data)
+
+        // Trim whitespace
+        let trimmed = strings.trim(data)
+
+        if trimmed == "quit" || trimmed == "exit" {
+            tcp.send(fd, "Goodbye!\r\n")
+            connected = false
+        } else if trimmed == "stats" {
+            tcp.send(fd, buildStats())
+        } else if trimmed == "" {
+            // Empty line, ignore
+        } else {
+            // Echo back
+            tcp.send(fd, buildResponse(trimmed))
+        }
+    }
+
+    // Cleanup
+    tcp.close(fd)
+    stats["activeConnections"] = stats["activeConnections"] - 1
+    io.println("[server] Client disconnected: " + addr + " (fd=" + convert.toString(fd) + ")")
+}
+
+// === Main Server Loop ===
+
+fn main() -> void {
+    io.println("========================================")
+    io.println("TLL Concurrent TCP Server")
+    io.println("Port: " + convert.toString(LISTEN_PORT))
+    io.println("Platform: " + process.platform())
+    io.println("Using: coroutines + non-blocking IO")
+    io.println("========================================")
+
+    // Create listening socket
+    let listenFd = tcp.listen("0.0.0.0", LISTEN_PORT)
+    if listenFd < 0 {
+        io.println("[error] Failed to bind port " + convert.toString(LISTEN_PORT))
+        process.exit(1)
+    }
+    io.println("[server] Listening on 0.0.0.0:" + convert.toString(LISTEN_PORT))
+
+    // Main accept loop
+    while true {
+        // Non-blocking accept
+        let clientFd = tcp.tryAccept(listenFd)
+
+        if clientFd >= 0 {
+            // New client connected
+            let addr = "unknown"
+            stats["totalConnections"] = stats["totalConnections"] + 1
+            stats["activeConnections"] = stats["activeConnections"] + 1
+
+            // Spawn coroutine to handle client
+            coroutine.spawn(fn() -> void {
+                handleClient(clientFd, addr)
+            })
+
+            io.println("[server] Spawned coroutine for fd=" + convert.toString(clientFd))
+        } else {
+            // No pending connection, yield to let client coroutines run
+            coroutine.yield()
+        }
+    }
+
+    // Should never reach here
+    tcp.close(listenFd)
+}
+
+// === Start ===
+
+main()

@@ -97,6 +97,8 @@ let TK_AT = "AT"
 let TK_QUESTION = "QUESTION"
 let TK_RANGE = "RANGE"
 let TK_RANGE_INCLUSIVE = "RANGE_INCLUSIVE"
+let TK_PLUSPLUS = "PLUSPLUS"
+let TK_MINUSMINUS = "MINUSMINUS"
 let TK_PLUS_EQ = "PLUS_EQ"
 let TK_MINUS_EQ = "MINUS_EQ"
 let TK_STAR_EQ = "STAR_EQ"
@@ -110,6 +112,11 @@ let TK_BXOR = "BXOR"
 let TK_BNOT = "BNOT"
 let TK_SHL = "SHL"
 let TK_SHR = "SHR"
+let TK_BAND_EQ = "BAND_EQ"
+let TK_BOR_EQ = "BOR_EQ"
+let TK_BXOR_EQ = "BXOR_EQ"
+let TK_SHL_EQ = "SHL_EQ"
+let TK_SHR_EQ = "SHR_EQ"
 
 fn isDigit(ch: string) -> bool {
     return ch >= "0" && ch <= "9"
@@ -153,23 +160,15 @@ fn getKeywordType(word: string) -> string {
     if word == "from" { return TK_FROM }
     if word == "export" { return TK_EXPORT }
     if word == "as" { return TK_AS }
-    if word == "type" { return TK_TYPE }
     if word == "struct" { return TK_STRUCT }
     if word == "enum" { return TK_ENUM }
-    if word == "entity" { return TK_ENTITY }
-    if word == "api" { return TK_API }
-    if word == "application" { return TK_APPLICATION }
-    if word == "async" { return TK_ASYNC }
-    if word == "await" { return TK_AWAIT }
     if word == "try" { return TK_TRY }
     if word == "catch" { return TK_CATCH }
     if word == "finally" { return TK_FINALLY }
     if word == "throw" { return TK_THROW }
-    if word == "agent" { return TK_AGENT }
-    if word == "tool" { return TK_TOOL }
-    if word == "workflow" { return TK_WORKFLOW }
     if word == "and" { return TK_AND }
     if word == "or" { return TK_OR }
+    if word == "match" { return TK_MATCH }
     return ""
 }
 
@@ -202,6 +201,23 @@ export fn tokenize(input: string) -> list {
         let startLine = line
         let startCol = column
 
+        if ch == "\"" && pos + 2 < inputLen && strings.charAt(input, pos + 1) == "\"" && strings.charAt(input, pos + 2) == "\"" {
+            // read multiline string
+            pos = pos + 3; column = column + 3
+            let mvalue = ""
+            while pos + 2 < inputLen {
+                if strings.charAt(input, pos) == "\"" && strings.charAt(input, pos + 1) == "\"" && strings.charAt(input, pos + 2) == "\"" {
+                    pos = pos + 3; column = column + 3
+                    arrays.push(tokens, { tkType: TK_STRING, tkValue: mvalue, line: startLine, column: startCol })
+                    break
+                }
+                let mc = strings.charAt(input, pos)
+                pos = pos + 1; column = column + 1
+                if mc == "\n" { line = line + 1; column = 1 }
+                mvalue = mvalue + mc
+            }
+            continue
+        }
         if ch == "\"" {
             // read string (inlined)
             pos = pos + 1; column = column + 1
@@ -360,12 +376,19 @@ export fn tokenize(input: string) -> list {
             else if twoChar == ".." { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_RANGE, tkValue: "..", line: startLine, column: startCol }); matched = true }
             else if twoChar == "+=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_PLUS_EQ, tkValue: "+=", line: startLine, column: startCol }); matched = true }
             else if twoChar == "-=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_MINUS_EQ, tkValue: "-=", line: startLine, column: startCol }); matched = true }
+            else if twoChar == "++" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_PLUSPLUS, tkValue: "++", line: startLine, column: startCol }); matched = true }
+            else if twoChar == "--" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_MINUSMINUS, tkValue: "--", line: startLine, column: startCol }); matched = true }
             else if twoChar == "*=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_STAR_EQ, tkValue: "*=", line: startLine, column: startCol }); matched = true }
             else if twoChar == "/=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SLASH_EQ, tkValue: "/=", line: startLine, column: startCol }); matched = true }
             else if twoChar == "%=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_PERCENT_EQ, tkValue: "%=", line: startLine, column: startCol }); matched = true }
             else if twoChar == "**" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_POWER, tkValue: "**", line: startLine, column: startCol }); matched = true }
+            else if threeChar == "<<=" { pos = pos + 1; column = column + 1; pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SHL_EQ, tkValue: "<<=", line: startLine, column: startCol }); matched = true }
+            else if threeChar == ">>=" { pos = pos + 1; column = column + 1; pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SHR_EQ, tkValue: ">>=", line: startLine, column: startCol }); matched = true }
             else if twoChar == "<<" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SHL, tkValue: "<<", line: startLine, column: startCol }); matched = true }
             else if twoChar == ">>" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SHR, tkValue: ">>", line: startLine, column: startCol }); matched = true }
+            else if twoChar == "&=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_BAND_EQ, tkValue: "&=", line: startLine, column: startCol }); matched = true }
+            else if twoChar == "|=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_BOR_EQ, tkValue: "|=", line: startLine, column: startCol }); matched = true }
+            else if twoChar == "^=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_BXOR_EQ, tkValue: "^=", line: startLine, column: startCol }); matched = true }
 
             if !matched {
                 if opCh == "+" { arrays.push(tokens, { tkType: TK_PLUS, tkValue: "+", line: startLine, column: startCol }) }

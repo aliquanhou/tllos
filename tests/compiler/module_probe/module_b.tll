@@ -1,0 +1,16 @@
+// Module B: imports from A, adds more functions
+from "./module_a" import addA, multiplyA, MODULE_A_CONST, PointA, createPointA
+
+export fn addB(a, b) {
+    return addA(a, b) + 10
+}
+
+export fn getConstB() {
+    return MODULE_A_CONST
+}
+
+export fn createPointB(x, y) {
+    return createPointA(x, y)
+}
+
+export const MODULE_B_CONST = 200

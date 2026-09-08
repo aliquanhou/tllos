@@ -269,14 +269,17 @@ int coroutine_wake_channel(TLLVM *vm, void *channelPtr) {
  */
 static void coroutine_yield(TLLVM *vm) {
     int old = vm->currentCoroutine;
+    int selfDead = 0;
 
     /* Save current coroutine state */
     coroutine_save_current(vm);
 
-    /* If current is dead, destroy it now (after save, before switch) */
+    /* If current is dead, mark it but do NOT destroy immediately.
+     * P0-06-R3: immediate destruction frees the call stack, which may
+     * invalidate captured locals referenced by other still-running coroutines.
+     * Dead coroutines are collected and destroyed when all coroutines finish. */
     if (old >= 0 && old < vm->coroutineCount && vm->coroutines[old] && vm->coroutines[old]->state == 2) {
-        coroutine_destroy(vm, old);
-        if (old >= vm->coroutineCount) old = (vm->coroutineCount > 0) ? vm->coroutineCount - 1 : 0;
+        selfDead = 1;
     }
 
     /* No coroutines left - nothing to restore */
@@ -299,6 +302,10 @@ static void coroutine_yield(TLLVM *vm) {
         int next = -1;
         for (i = 0; i < vm->coroutineCount; i++) {
             int idx = (old + 1 + i) % vm->coroutineCount;
+            /* P0-COMPILER-06 BUG-A: in pass 0, exclude self so that
+             * yield() with no other runnable coroutine enters timer/IO wait
+             * instead of immediately selecting itself. */
+            if (pass == 0 && !selfDead && idx == old) continue;
             if (coroutine_is_runnable(vm->coroutines[idx])) {
                 next = idx;
                 break;
@@ -338,8 +345,11 @@ static void coroutine_yield(TLLVM *vm) {
                 }
             }
 
-            /* Nothing to wait on (only channel-waiters) 鈫?exit cleanly */
-            if (ioCount == 0 && sleepCount == 0) return;
+            /* Nothing to wait on (only channel-waiters) -> restore self */
+            if (ioCount == 0 && sleepCount == 0) {
+                coroutine_restore(vm, old);
+                return;
+            }
 
             if (ioCount > 0) {
                 struct timeval tv, *ptv = NULL;
@@ -474,12 +484,19 @@ static void free_frame(TLLFrame *frame) {
         free(env);
     }
 
+    /* Release pending exception (P0-COMPILER-05 fix) */
+    tll_value_free(frame->pending_exception);
+    frame->pending_exception = tll_null();
+    frame->exception_pending = 0;
+
     /* Return frame to pool instead of freeing (P0-10 frame pool) */
     frame_pool_release(frame);
 }
 
 static void throw_exception(TLLVM *vm, TLLFrame *frame, TLLValue error) {
     tll_value_incref(error);
+    frame->exception_pending = 1;
+    frame->pending_exception = error;
     /* Search current frame's try stack first */
     while (frame->tryStackSize > 0) {
         int catchPc = pop_try(frame);
@@ -590,19 +607,29 @@ static void tll_vm_exec(TLLVM *vm) {
             if (vm->coroutineCount > 0 && vm->currentCoroutine < vm->coroutineCount) {
                 vm->coroutines[vm->currentCoroutine]->state = 2; /* dead */
             }
-            /* If no coroutines left (or only this dead one), exit */
+            /* If no coroutines left, exit */
             if (vm->coroutineCount == 0) break;
-            if (vm->coroutineCount == 1 && vm->coroutines[0]->state == 2) {
-                /* Save and destroy the last dead coroutine */
-                int idx = vm->currentCoroutine;
-                if (idx >= 0 && idx < vm->coroutineCount) {
-                    coroutine_save_current(vm);
-                    coroutine_destroy(vm, idx);
+            /* P0-06-R3: check if ALL coroutines are dead. If so, destroy
+             * them all and exit. This ensures captured locals remain valid
+             * until every coroutine has finished. */
+            {
+                int allDead = 1;
+                int ci;
+                for (ci = 0; ci < vm->coroutineCount; ci++) {
+                    if (vm->coroutines[ci] && vm->coroutines[ci]->state != 2) {
+                        allDead = 0;
+                        break;
+                    }
                 }
-                vm->callStack = NULL;
-                vm->callStackSize = 0;
-                vm->callStackCapacity = 0;
-                break;
+                if (allDead) {
+                    while (vm->coroutineCount > 0) {
+                        coroutine_destroy(vm, 0);
+                    }
+                    vm->callStack = NULL;
+                    vm->callStackSize = 0;
+                    vm->callStackCapacity = 0;
+                    break;
+                }
             }
             coroutine_yield(vm);
             continue;
@@ -801,12 +828,42 @@ static void tll_vm_exec(TLLVM *vm) {
                               (regs[c].type==TLL_INT?(double)regs[c].as.integer:regs[c].as.floating)) :
                     tll_int(regs[b].as.integer - regs[c].as.integer);
                 break;
-            case OP_MUL:
-                regs[a] = (regs[b].type == TLL_FLOAT || regs[c].type == TLL_FLOAT) ?
-                    tll_float((regs[b].type==TLL_INT?(double)regs[b].as.integer:regs[b].as.floating) *
-                              (regs[c].type==TLL_INT?(double)regs[c].as.integer:regs[c].as.floating)) :
-                    tll_int(regs[b].as.integer * regs[c].as.integer);
+            case OP_MUL: {
+                TLLValue x = regs[b], y = regs[c];
+                if (x.type == TLL_STRING && y.type == TLL_INT) {
+                    const char *s = x.as.string;
+                    int n = y.as.integer;
+                    if (n <= 0) { regs[a] = tll_string(""); }
+                    else {
+                        int len = (int)strlen(s);
+                        char *buf = (char*)malloc(sizeof(int) + len * n + 1);
+                        *(int*)buf = 1;
+                        for (int i = 0; i < n; i++) memcpy(buf + sizeof(int) + i * len, s, len);
+                        buf[sizeof(int) + len * n] = '\0';
+                        TLLValue v; v.type = TLL_STRING; v.as.string = buf + sizeof(int);
+                        regs[a] = v;
+                    }
+                } else if (x.type == TLL_INT && y.type == TLL_STRING) {
+                    const char *s = y.as.string;
+                    int n = x.as.integer;
+                    if (n <= 0) { regs[a] = tll_string(""); }
+                    else {
+                        int len = (int)strlen(s);
+                        char *buf = (char*)malloc(sizeof(int) + len * n + 1);
+                        *(int*)buf = 1;
+                        for (int i = 0; i < n; i++) memcpy(buf + sizeof(int) + i * len, s, len);
+                        buf[sizeof(int) + len * n] = '\0';
+                        TLLValue v; v.type = TLL_STRING; v.as.string = buf + sizeof(int);
+                        regs[a] = v;
+                    }
+                } else if (x.type == TLL_FLOAT || y.type == TLL_FLOAT) {
+                    regs[a] = tll_float((x.type==TLL_INT?(double)x.as.integer:x.as.floating) *
+                                        (y.type==TLL_INT?(double)y.as.integer:y.as.floating));
+                } else {
+                    regs[a] = tll_int(x.as.integer * y.as.integer);
+                }
                 break;
+            }
             case OP_DIV: {
                 double dx = (regs[b].type==TLL_INT?(double)regs[b].as.integer:regs[b].as.floating);
                 double dy = (regs[c].type==TLL_INT?(double)regs[c].as.integer:regs[c].as.floating);
@@ -869,6 +926,11 @@ static void tll_vm_exec(TLLVM *vm) {
             case OP_NOT: regs[a] = tll_bool(!tll_truthy(regs[b])); break;
             case OP_NEG:
                 regs[a] = (regs[b].type == TLL_FLOAT) ? tll_float(-regs[b].as.floating) : tll_int(-regs[b].as.integer);
+                break;
+            case OP_MOV:
+                tll_value_incref(regs[b]);
+                tll_value_free(regs[a]);
+                regs[a] = regs[b];
                 break;
             case OP_JMP: frame->pc = a; break;
             case OP_JMP_IF_FALSE:
@@ -1169,6 +1231,19 @@ static void tll_vm_exec(TLLVM *vm) {
                 break;
             case OP_THROW:
                 throw_exception(vm, frame, regs[a]);
+                break;
+            case OP_CATCH_ENTER:
+                frame->exception_pending = 0;
+                tll_value_free(frame->pending_exception);
+                frame->pending_exception = tll_null();
+                break;
+            case OP_FINALLY_END:
+                if (frame->exception_pending) {
+                    /* Re-throw the saved exception (not reg[0], which may be overwritten by finally) */
+                    TLLValue err = frame->pending_exception;
+                    frame->pending_exception = tll_null();
+                    throw_exception(vm, frame, err);
+                }
                 break;
             default:
                 fprintf(stderr, "tllvm: unknown opcode %d at pc %d in %s\n", inst->op, frame->pc - 1, frame->function->name);

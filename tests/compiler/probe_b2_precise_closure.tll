@@ -1,0 +1,98 @@
+// Probe B2: Precise reproduction of closure capture in try/catch + coroutine
+io.println("=== Probe B2: Precise Closure Capture Reproduction ===")
+
+// Test B2-1: Original scenario - function with try/catch, spawn coroutine that sets caught flag
+io.println("--- B2-1: function try/catch + coroutine sets flag ---")
+fn coroBody1() {
+    try {
+        throw "test error"
+    } catch (e) {
+        caught1 = true
+    }
+}
+fn testTryCatchCoro() {
+    caught1 = false
+    coroutine.spawn(coroBody1)
+    coroutine.yield()
+    coroutine.yield()
+    coroutine.yield()
+    if caught1 {
+        io.println("B2-1 PASS: caught flag set by coroutine")
+    } else {
+        io.println("B2-1 FAIL: caught flag = " + caught1)
+    }
+}
+let caught1 = false
+testTryCatchCoro()
+
+// Test B2-2: Same but module-level (control)
+io.println("")
+io.println("--- B2-2: module-level try/catch + coroutine sets flag ---")
+fn coroBody2() {
+    try {
+        throw "test error"
+    } catch (e) {
+        caught2 = true
+    }
+}
+let caught2 = false
+coroutine.spawn(coroBody2)
+coroutine.yield()
+coroutine.yield()
+coroutine.yield()
+if caught2 {
+    io.println("B2-2 PASS: caught2 flag set by coroutine")
+} else {
+    io.println("B2-2 FAIL: caught2 flag = " + caught2)
+}
+
+// Test B2-3: Function with coroutine that modifies captured var after yield
+io.println("")
+io.println("--- B2-3: function coroutine modifies var after multiple yields ---")
+fn coroBody3() {
+    coroutine.yield()
+    coroutine.yield()
+    result3 = "after_yields"
+}
+fn testMultiYield() {
+    result3 = "initial"
+    coroutine.spawn(coroBody3)
+    coroutine.yield()
+    coroutine.yield()
+    coroutine.yield()
+    coroutine.yield()
+    if result3 == "after_yields" {
+        io.println("B2-3 PASS: result modified after yields")
+    } else {
+        io.println("B2-3 FAIL: result = " + result3)
+    }
+}
+let result3 = "initial"
+testMultiYield()
+
+// Test B2-4: Function with coroutine that reads captured var, then function modifies it
+io.println("")
+io.println("--- B2-4: shared mutation between function and coroutine ---")
+fn coroBody4() {
+    counter4 = counter4 + 1
+    coroutine.yield()
+    counter4 = counter4 + 1
+}
+fn testSharedMutation() {
+    counter4 = 0
+    coroutine.spawn(coroBody4)
+    coroutine.yield()
+    counter4 = counter4 + 1
+    coroutine.yield()
+    coroutine.yield()
+    if counter4 == 3 {
+        io.println("B2-4 PASS: counter = 3 (shared mutation works)")
+    } else {
+        io.println("B2-4 FAIL: counter = " + counter4)
+    }
+}
+let counter4 = 0
+testSharedMutation()
+
+io.println("")
+io.println("=== Probe B2 Complete ===")

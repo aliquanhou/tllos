@@ -67,6 +67,10 @@ let OP_SLEEP = 56
 let OP_WAIT_READ = 57
 let OP_WAIT_WRITE = 58
 let OP_WAIT_CHANNEL = 59
+// P0-COMPILER-02: register move for ternary/branch result unification
+let OP_MOV = 60
+let OP_CATCH_ENTER = 61
+let OP_FINALLY_END = 62
 
 // ============ Codegen state ============
 let cg_instructions: list = []
@@ -79,6 +83,7 @@ let cg_loopContexts: list = []
 let cg_currentBreakLabel = -1
 let cg_currentContinueLabel = -1
 let cg_breakPatchList: list = []
+let cg_continuePatchList: list = []
 let cg_mainFnIndex = 0
 let cg_allFnInstructions: list = []
 let cg_allFnLocalCounts: list = []
@@ -247,7 +252,7 @@ fn cg_collectIdentsInExpr(expr: any, result: list) -> void {
     }
     let keys = ["left", "right", "operand", "callee", "args", "object", "index",
         "value", "condition", "body", "elseBody", "statements", "elements", "entries",
-        "expression", "iterable", "catchBody", "finallyBlock"]
+        "expression", "iterable", "block", "catchBlock", "finallyBlock"]
     let ki = 0
     while ki < arrays.length(keys) {
         let k = arrays.get(keys, ki)
@@ -287,7 +292,7 @@ fn cg_collectFnExprsInExpr(expr: any, result: list) -> void {
     }
     let keys = ["left", "right", "operand", "callee", "args", "object", "index",
         "value", "condition", "body", "elseBody", "statements", "elements", "entries",
-        "expression", "iterable", "catchBody", "finallyBlock", "consequent", "alternate",
+        "expression", "iterable", "block", "catchBlock", "finallyBlock", "consequent", "alternate",
         "declaration", "params", "returnType"]
     let ki = 0
     while ki < arrays.length(keys) {
@@ -454,6 +459,38 @@ export fn compile(program: map) -> map {
     let mainFn = { name: "__main__", paramCount: 0, instructions: [], localCount: 0 }
     arrays.push(cg_functions, mainFn)
 
+    // Collect Enum declarations for variant resolution (must be before function body compilation)
+    cg_enumMap = json.parse("{}")
+    let eci = 0
+    while eci < arrays.length(stmts) {
+        let estmt = arrays.get(stmts, eci)
+        if estmt.kind == "Enum" {
+            let enumName = estmt.name
+            let variantMap = json.parse("{}")
+            let nextValue = 0
+            let evi = 0
+            while evi < arrays.length(estmt.variants) {
+                let v = arrays.get(estmt.variants, evi)
+                let val = nextValue
+                if v.value != null {
+                    if v.value.kind == "Int" {
+                        val = convert.toInt(v.value.value)
+                    }
+                }
+                // ADT: record payload info
+                if v.payload != null && arrays.length(v.payload) > 0 {
+                    variantMap[v.name] = { value: val, hasPayload: true, payloadCount: arrays.length(v.payload) }
+                } else {
+                    variantMap[v.name] = { value: val, hasPayload: false, payloadCount: 0 }
+                }
+                nextValue = val + 1
+                evi = evi + 1
+            }
+            cg_enumMap[enumName] = variantMap
+        }
+        eci = eci + 1
+    }
+
     // Second pass: compile ALL function bodies (top-level + nested)
     // IMPORTANT: must push placeholder for main to keep index alignment with cg_functions
     let p2i = 0
@@ -525,7 +562,12 @@ export fn compile(program: map) -> map {
                         val = convert.toInt(v.value.value)
                     }
                 }
-                variantMap[v.name] = val
+                // ADT: record payload info
+                if v.payload != null && arrays.length(v.payload) > 0 {
+                    variantMap[v.name] = { value: val, hasPayload: true, payloadCount: arrays.length(v.payload) }
+                } else {
+                    variantMap[v.name] = { value: val, hasPayload: false, payloadCount: 0 }
+                }
                 nextValue = val + 1
                 vi = vi + 1
             }
@@ -823,6 +865,32 @@ fn cg_compileStatement(stmt: map) -> void {
     }
 
     if kind == "Let" || kind == "Const" {
+        // Destructuring assignment: let (a, b, c) = tuple
+        if stmt.isDestructuring == true && stmt.names != null {
+            let tupleReg = cg_compileExpression(stmt.value)
+            let di = 0
+            while di < arrays.length(stmt.names) {
+                let dname = arrays.get(stmt.names, di)
+                let dresolved = null
+                if cg_currentFn != null && cg_currentFn.name == "__main__" {
+                    dresolved = cg_resolveVar(dname)
+                } else {
+                    let dlocalIdx = cg_getOrCreateVar(dname)
+                    dresolved = { index: dlocalIdx, isGlobal: false }
+                }
+                let didxReg = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [didxReg, cg_addConstant(di)])
+                let delemReg = cg_allocReg()
+                cg_emit(OP_INDEX_GET, [delemReg, tupleReg, didxReg])
+                if dresolved.isGlobal {
+                    cg_emit(OP_STORE_GLOBAL, [dresolved.index, delemReg])
+                } else {
+                    cg_emit(OP_STORE_VAR, [dresolved.index, delemReg])
+                }
+                di = di + 1
+            }
+            return
+        }
         // P0-15.18.4-RUNTIME.3 fix: in non-main functions, let/const must create a NEW local
         // variable, not fall back to a global with the same name. cg_resolveVar would return
         // the global, causing function-local assignments to silently overwrite globals.
@@ -916,11 +984,19 @@ fn cg_compileStatement(stmt: map) -> void {
         return
     }
     if kind == "Continue" {
-        cg_emit(OP_JMP, [cg_currentContinueLabel])
+        if cg_currentContinueLabel == -2 {
+            // For loop: forward reference to increment point
+            let contIdx = arrays.length(cg_instructions)
+            cg_emit(OP_JMP, [-1])
+            arrays.push(cg_continuePatchList, contIdx)
+        } else {
+            cg_emit(OP_JMP, [cg_currentContinueLabel])
+        }
         return
     }
     if kind == "Throw" { let r = cg_compileExpression(stmt.value); cg_emit(OP_THROW, [r]); return }
     if kind == "Try" { cg_compileTry(stmt); return }
+    if kind == "Match" { cg_compileMatch(stmt); return }
     if kind == "Block" { cg_compileBlock(stmt); return }
     if kind == "ExpressionStatement" { cg_compileExpression(stmt.expression); return }
     if kind == "Export" { cg_compileStatement(stmt.declaration); return }
@@ -928,15 +1004,18 @@ fn cg_compileStatement(stmt: map) -> void {
 
 fn cg_compileTernary(expr: map) -> int {
     let condReg = cg_compileExpression(expr.condition)
+    let resultReg = cg_allocReg()
     let jmpFalseIdx = arrays.length(cg_instructions)
     cg_emit(OP_JMP_IF_FALSE, [condReg, -1])
     let consequentReg = cg_compileExpression(expr.consequent)
+    cg_emit(OP_MOV, [resultReg, consequentReg])
     let jmpEndIdx = arrays.length(cg_instructions)
     cg_emit(OP_JMP, [-1])
     cg_patchJump(jmpFalseIdx)
     let alternateReg = cg_compileExpression(expr.alternate)
+    cg_emit(OP_MOV, [resultReg, alternateReg])
     cg_patchJump(jmpEndIdx)
-    return consequentReg
+    return resultReg
 }
 
 fn cg_compileIf(stmt: map) -> void {
@@ -953,6 +1032,46 @@ fn cg_compileIf(stmt: map) -> void {
         cg_patchJump(jmpEndIdx)
     } else {
         cg_patchJump(jmpFalseIdx)
+    }
+}
+
+fn cg_compileMatch(stmt: map) -> void {
+    // Compile match value
+    let valueReg = cg_compileExpression(stmt.value)
+    let endJumpList: list = []
+    let armCount = arrays.length(stmt.arms)
+    let i = 0
+    while i < armCount {
+        let arm = arrays.get(stmt.arms, i)
+        let isLast = (i == armCount - 1)
+        if arm.patternType == "wildcard" {
+            // Wildcard: always matches, execute body
+            cg_compileStatement(arm.body)
+        } else {
+            // Compile pattern expression
+            let patternReg = cg_compileExpression(arm.pattern)
+            // Compare value == pattern
+            let eqReg = cg_allocReg()
+            cg_emit(OP_EQ, [eqReg, valueReg, patternReg])
+            // If not equal, jump to next arm (or end)
+            let jmpFalseIdx = arrays.length(cg_instructions)
+            cg_emit(OP_JMP_IF_FALSE, [eqReg, -1])
+            // Execute body
+            cg_compileStatement(arm.body)
+            // Jump to end of match
+            let jmpEndIdx = arrays.length(cg_instructions)
+            cg_emit(OP_JMP, [-1])
+            arrays.push(endJumpList, jmpEndIdx)
+            // Patch the false jump to here (next arm)
+            cg_patchJump(jmpFalseIdx)
+        }
+        i = i + 1
+    }
+    // Patch all end jumps to current position
+    let j = 0
+    while j < arrays.length(endJumpList) {
+        cg_patchJump(arrays.get(endJumpList, j))
+        j = j + 1
     }
 }
 
@@ -988,6 +1107,7 @@ fn cg_compileTry(stmt: map) -> void {
 
     // Catch block
     if stmt.catchBlock != null {
+        cg_emit(OP_CATCH_ENTER, [])
         if stmt.catchParam != null && stmt.catchParam != "" {
             let errVarIdx = cg_getOrCreateVar(stmt.catchParam)
             cg_emit(OP_STORE_VAR, [errVarIdx, 0])
@@ -1010,6 +1130,8 @@ fn cg_compileTry(stmt: map) -> void {
         }
         // Compile finally body
         cg_compileBlock(stmt.finallyBlock)
+        // Mark end of finally: rethrow if exception is pending
+        cg_emit(OP_FINALLY_END, [])
         // If there was a pending return from try body, execute it now
         if cg_pendingReturnReg >= 0 {
             cg_emit(OP_RET, [cg_pendingReturnReg])
@@ -1024,8 +1146,87 @@ fn cg_compileTry(stmt: map) -> void {
     cg_tryFinallyPatches = oldPatches
 }
 
+fn cg_compileForRange(stmt: map) -> void {
+    // for x in start..end { body } or for x in start..=end { body }
+    let range = stmt.iterable
+    let startVar = cg_getOrCreateVar("__for_start_" + convert.toString(cg_labelCounter))
+    let endVar = cg_getOrCreateVar("__for_end_" + convert.toString(cg_labelCounter))
+    cg_labelCounter = cg_labelCounter + 1
+    // Compile start and end
+    let startReg = cg_compileExpression(range.start)
+    cg_emit(OP_STORE_VAR, [startVar, startReg])
+    let endReg = cg_compileExpression(range.end)
+    cg_emit(OP_STORE_VAR, [endVar, endReg])
+    // Save loop context
+    let oldBreak = cg_currentBreakLabel
+    let oldContinue = cg_currentContinueLabel
+    let oldBreakPatchList = cg_breakPatchList
+    let oldContinuePatchList = cg_continuePatchList
+    let startIdx = arrays.length(cg_instructions)
+    cg_currentContinueLabel = -2
+    cg_breakPatchList = []
+    cg_continuePatchList = []
+    // Condition: idx < end (exclusive) or idx <= end (inclusive)
+    let idxReg = cg_allocReg()
+    cg_emit(OP_LOAD_VAR, [idxReg, startVar])
+    let endLoadReg = cg_allocReg()
+    cg_emit(OP_LOAD_VAR, [endLoadReg, endVar])
+    let cmpReg = cg_allocReg()
+    if range.inclusive == true {
+        cg_emit(OP_LE, [cmpReg, idxReg, endLoadReg])
+    } else {
+        cg_emit(OP_LT, [cmpReg, idxReg, endLoadReg])
+    }
+    let jmpEndIdx = arrays.length(cg_instructions)
+    cg_emit(OP_JMP_IF_FALSE, [cmpReg, -1])
+    // Set loop variable: x = idx
+    let loopVar = cg_getOrCreateVar(stmt.variable)
+    cg_emit(OP_STORE_VAR, [loopVar, idxReg])
+    // Compile body
+    cg_compileBlock(stmt.body)
+    // Patch continue statements to increment point
+    let incIdx = arrays.length(cg_instructions)
+    let ci = 0
+    while ci < arrays.length(cg_continuePatchList) {
+        let patchIdx = arrays.get(cg_continuePatchList, ci)
+        let inst = arrays.get(cg_instructions, patchIdx)
+        inst.operands = [incIdx]
+        ci = ci + 1
+    }
+    // Increment: idx = idx + 1
+    let idxLoadReg = cg_allocReg()
+    cg_emit(OP_LOAD_VAR, [idxLoadReg, startVar])
+    let oneReg = cg_allocReg()
+    cg_emit(OP_LOAD_CONST, [oneReg, cg_addConstant(1)])
+    let addReg = cg_allocReg()
+    cg_emit(OP_ADD, [addReg, idxLoadReg, oneReg])
+    cg_emit(OP_STORE_VAR, [startVar, addReg])
+    // Jump back to condition
+    cg_emit(OP_JMP, [startIdx])
+    // Patch break statements
+    let endIdx = arrays.length(cg_instructions)
+    let bi = 0
+    while bi < arrays.length(cg_breakPatchList) {
+        let patchIdx = arrays.get(cg_breakPatchList, bi)
+        let inst = arrays.get(cg_instructions, patchIdx)
+        inst.operands = [endIdx]
+        bi = bi + 1
+    }
+    cg_patchJump(jmpEndIdx)
+    // Restore loop context
+    cg_currentBreakLabel = oldBreak
+    cg_currentContinueLabel = oldContinue
+    cg_breakPatchList = oldBreakPatchList
+    cg_continuePatchList = oldContinuePatchList
+}
+
 fn cg_compileFor(stmt: map) -> void {
     // for x in iterable { body }
+    // Special case: Range iteration (for x in start..end)
+    if stmt.iterable.kind == "Range" {
+        cg_compileForRange(stmt)
+        return
+    }
     // Compile iterable to array
     let iterReg = cg_compileExpression(stmt.iterable)
     // Allocate index and length variables
@@ -1045,8 +1246,12 @@ fn cg_compileFor(stmt: map) -> void {
     // Save loop context
     let oldBreak = cg_currentBreakLabel
     let oldContinue = cg_currentContinueLabel
+    let oldBreakPatchList = cg_breakPatchList
+    let oldContinuePatchList = cg_continuePatchList
     let startIdx = arrays.length(cg_instructions)
-    cg_currentContinueLabel = startIdx
+    cg_currentContinueLabel = -2  // forward reference: patched at increment point
+    cg_breakPatchList = []
+    cg_continuePatchList = []
     // Condition: idx < len
     let idxReg = cg_allocReg()
     cg_emit(OP_LOAD_VAR, [idxReg, idxVar])
@@ -1066,6 +1271,15 @@ fn cg_compileFor(stmt: map) -> void {
     cg_emit(OP_STORE_VAR, [loopVar, elemReg])
     // Compile body
     cg_compileBlock(stmt.body)
+    // Patch all continue statements to jump to increment point
+    let continueTarget = arrays.length(cg_instructions)
+    let ci = 0
+    while ci < arrays.length(cg_continuePatchList) {
+        let contIdx = arrays.get(cg_continuePatchList, ci)
+        let inst = arrays.get(cg_instructions, contIdx)
+        inst.operands = [continueTarget]
+        ci = ci + 1
+    }
     // Increment index
     let idxLoadReg = cg_allocReg()
     cg_emit(OP_LOAD_VAR, [idxLoadReg, idxVar])
@@ -1074,12 +1288,23 @@ fn cg_compileFor(stmt: map) -> void {
     let addReg = cg_allocReg()
     cg_emit(OP_ADD, [addReg, idxLoadReg, oneReg])
     cg_emit(OP_STORE_VAR, [idxVar, addReg])
+    // Patch all break statements to jump to after the loop
+    let breakTarget = arrays.length(cg_instructions) + 1
+    let bi = 0
+    while bi < arrays.length(cg_breakPatchList) {
+        let breakIdx = arrays.get(cg_breakPatchList, bi)
+        let inst = arrays.get(cg_instructions, breakIdx)
+        inst.operands = [breakTarget]
+        bi = bi + 1
+    }
     // Jump back to start
     cg_emit(OP_JMP, [startIdx])
     // Patch end
     cg_patchJump(jmpEndIdx)
     cg_currentBreakLabel = oldBreak
     cg_currentContinueLabel = oldContinue
+    cg_breakPatchList = oldBreakPatchList
+    cg_continuePatchList = oldContinuePatchList
 }
 
 fn cg_compileWhile(stmt: map) -> void {
@@ -1156,17 +1381,26 @@ fn cg_compileExpression(expr: map) -> int {
     if kind == "Ident" { return cg_compileIdent(expr) }
     if kind == "Binary" { return cg_compileBinary(expr) }
     if kind == "Unary" { return cg_compileUnary(expr) }
+    if kind == "UpdateExpr" { return cg_compileUpdateExpr(expr) }
+    if kind == "Ternary" { return cg_compileTernary(expr) }
     if kind == "Call" { return cg_compileCall(expr) }
     if kind == "Member" {
-        // Enum variant access: Color.Red -> constant integer value
+        // Enum variant access: Color.Red -> constant integer value (no payload)
+        // For ADT variants with payload, return tag string for constructor detection
         if expr.object["kind"] == "Ident" {
             let enumName = expr.object["name"]
             if cg_enumMap[enumName] != null {
                 let variantMap = cg_enumMap[enumName]
-                let variantValue = variantMap[expr.property]
-                if variantValue != null {
+                let variantInfo = variantMap[expr.property]
+                if variantInfo != null {
                     let reg = cg_allocReg()
-                    cg_emit(OP_LOAD_CONST, [reg, cg_addConstant(variantValue)])
+                    if variantInfo.hasPayload == true {
+                        // ADT constructor: return special marker string "EnumName.Variant"
+                        cg_emit(OP_LOAD_CONST, [reg, cg_addConstant(enumName + "." + expr.property)])
+                    } else {
+                        // Simple enum: return integer value
+                        cg_emit(OP_LOAD_CONST, [reg, cg_addConstant(variantInfo.value)])
+                    }
                     return reg
                 }
             }
@@ -1188,8 +1422,23 @@ fn cg_compileExpression(expr: map) -> int {
             return reg
         }
         let objReg = cg_compileExpression(expr.object)
+        let propStr = expr.property
+        // Numeric property: p.0 -> arrays.get(p, 0)
+        let isNumeric = true
+        let npi = 0
+        while npi < strings.length(propStr) {
+            let npc = strings.charAt(propStr, npi)
+            if npc < "0" || npc > "9" { isNumeric = false; npi = strings.length(propStr) }
+            npi = npi + 1
+        }
         let reg = cg_allocReg()
-        cg_emit(OP_MEMBER_GET, [reg, objReg, cg_addConstant(expr.property)])
+        if isNumeric && strings.length(propStr) > 0 {
+            let idxReg = cg_allocReg()
+            cg_emit(OP_LOAD_CONST, [idxReg, cg_addConstant(convert.toInt(propStr))])
+            cg_emit(OP_INDEX_GET, [reg, objReg, idxReg])
+        } else {
+            cg_emit(OP_MEMBER_GET, [reg, objReg, cg_addConstant(expr.property)])
+        }
         return reg
     }
     if kind == "Index" {
@@ -1200,6 +1449,7 @@ fn cg_compileExpression(expr: map) -> int {
         return reg
     }
     if kind == "Array" { return cg_compileArray(expr) }
+    if kind == "Tuple" { return cg_compileArray(expr) }
     if kind == "Map" { return cg_compileMap(expr) }
     if kind == "StructLiteral" {
         // Struct literal: TypeName { field: value, ... }
@@ -1358,7 +1608,66 @@ fn cg_compileBinary(expr: map) -> int {
         cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
         return resultReg
     }
+    // Compound assignment: +=, -=, *=, /=, %=, &=, |=, ^=, <<=, >>=
+    if op == "+=" || op == "-=" || op == "*=" || op == "/=" || op == "%=" || op == "&=" || op == "|=" || op == "^=" || op == "<<=" || op == ">>=" {
+        let leftKind = expr.left["kind"]
+        if leftKind == "Ident" {
+            let varName = expr.left["name"]
+            let resolved = cg_resolveVar(varName)
+            let leftReg = cg_allocReg()
+            if resolved.isGlobal { cg_emit(OP_LOAD_GLOBAL, [leftReg, resolved.index]) }
+            else { cg_emit(OP_LOAD_VAR, [leftReg, resolved.index]) }
+            let rightReg = cg_compileExpression(expr.right)
+            let resultReg = cg_allocReg()
+            if op == "+=" { cg_emit(OP_ADD, [resultReg, leftReg, rightReg]) }
+            else if op == "-=" { cg_emit(OP_SUB, [resultReg, leftReg, rightReg]) }
+            else if op == "*=" { cg_emit(OP_MUL, [resultReg, leftReg, rightReg]) }
+            else if op == "/=" { cg_emit(OP_DIV, [resultReg, leftReg, rightReg]) }
+            else if op == "%=" { cg_emit(OP_MOD, [resultReg, leftReg, rightReg]) }
+            else if op == "&=" { cg_emit(OP_BAND, [resultReg, leftReg, rightReg]) }
+            else if op == "|=" { cg_emit(OP_BOR, [resultReg, leftReg, rightReg]) }
+            else if op == "^=" { cg_emit(OP_BXOR, [resultReg, leftReg, rightReg]) }
+            else if op == "<<=" { cg_emit(OP_SHL, [resultReg, leftReg, rightReg]) }
+            else if op == ">>=" { cg_emit(OP_SHR, [resultReg, leftReg, rightReg]) }
+            if resolved.isGlobal { cg_emit(OP_STORE_GLOBAL, [resolved.index, resultReg]) }
+            else { cg_emit(OP_STORE_VAR, [resolved.index, resultReg]) }
+            return resultReg
+        }
+    }
     let leftReg = cg_compileExpression(expr.left)
+    // Short-circuit AND/OR: handle before right operand compilation
+    if op == "&&" {
+        let scResultReg = cg_allocReg()
+        let scJmpFalseIdx = arrays.length(cg_instructions)
+        cg_emit(OP_JMP_IF_FALSE, [leftReg, -1])
+        let scRightReg = cg_compileExpression(expr.right)
+        cg_emit(OP_MOV, [scResultReg, scRightReg])
+        let scJmpEndIdx = arrays.length(cg_instructions)
+        cg_emit(OP_JMP, [-1])
+        cg_patchJump(scJmpFalseIdx)
+        let scFalseReg = cg_allocReg()
+        cg_emit(OP_LOAD_CONST, [scFalseReg, cg_addConstant(false)])
+        cg_emit(OP_MOV, [scResultReg, scFalseReg])
+        cg_patchJump(scJmpEndIdx)
+        return scResultReg
+    }
+    if op == "||" {
+        let scResultReg = cg_allocReg()
+        let scNotReg = cg_allocReg()
+        cg_emit(OP_NOT, [scNotReg, leftReg])
+        let scJmpFalseIdx = arrays.length(cg_instructions)
+        cg_emit(OP_JMP_IF_FALSE, [scNotReg, -1])
+        let scRightReg = cg_compileExpression(expr.right)
+        cg_emit(OP_MOV, [scResultReg, scRightReg])
+        let scJmpEndIdx = arrays.length(cg_instructions)
+        cg_emit(OP_JMP, [-1])
+        cg_patchJump(scJmpFalseIdx)
+        let scTrueReg = cg_allocReg()
+        cg_emit(OP_LOAD_CONST, [scTrueReg, cg_addConstant(true)])
+        cg_emit(OP_MOV, [scResultReg, scTrueReg])
+        cg_patchJump(scJmpEndIdx)
+        return scResultReg
+    }
     let rightReg = cg_compileExpression(expr.right)
     let resultReg = cg_allocReg()
 
@@ -1396,6 +1705,42 @@ fn cg_compileUnary(expr: map) -> int {
     else if op == "~" { cg_emit(OP_BNOT, [resultReg, operandReg]) }
     else { cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)]) }
     return resultReg
+}
+
+fn cg_compileUpdateExpr(expr: map) -> int {
+    // ++i, --i (prefix) or i++, i-- (postfix)
+    let isInc = expr.operator == "++"
+    let isPrefix = expr.prefix == true
+    if expr.argument.kind == "Ident" {
+        let varName = expr.argument.name
+        let resolved = cg_resolveVar(varName)
+        let oldValReg = cg_allocReg()
+        if resolved.isGlobal {
+            cg_emit(OP_LOAD_GLOBAL, [oldValReg, resolved.index])
+        } else {
+            cg_emit(OP_LOAD_VAR, [oldValReg, resolved.index])
+        }
+        let oneReg = cg_allocReg()
+        cg_emit(OP_LOAD_CONST, [oneReg, cg_addConstant(1)])
+        let newValReg = cg_allocReg()
+        if isInc {
+            cg_emit(OP_ADD, [newValReg, oldValReg, oneReg])
+        } else {
+            cg_emit(OP_SUB, [newValReg, oldValReg, oneReg])
+        }
+        if resolved.isGlobal {
+            cg_emit(OP_STORE_GLOBAL, [resolved.index, newValReg])
+        } else {
+            cg_emit(OP_STORE_VAR, [resolved.index, newValReg])
+        }
+        if isPrefix {
+            return newValReg
+        } else {
+            return oldValReg
+        }
+    }
+    let argReg = cg_compileExpression(expr.argument)
+    return argReg
 }
 
 fn cg_compileCall(expr: map) -> int {
@@ -1515,6 +1860,62 @@ fn cg_compileCall(expr: map) -> int {
             cg_emit(OP_LOAD_BUILTIN, [fnReg, builtinIdx])
             cg_emit(OP_CALL, [resultReg, fnReg + 100000, arrays.length(args)])
             return resultReg
+        }
+    }
+
+    // ADT constructor call: Result.Ok(42) -> { tag: "Ok", value: 42, __enum: "Result" }
+    if callee["kind"] == "Member" && callee.object["kind"] == "Ident" {
+        let adtEnumName = callee.object["name"]
+        let adtVariantName = callee["property"]
+        if cg_enumMap[adtEnumName] != null {
+            let adtVariantMap = cg_enumMap[adtEnumName]
+            let adtVariantInfo = adtVariantMap[adtVariantName]
+            if adtVariantInfo != null && adtVariantInfo.hasPayload == true {
+                // Compile payload args
+                let payloadRegs = []
+                let ai = 0
+                while ai < arrays.length(args) {
+                    let argReg = cg_compileExpression(arrays.get(args, ai))
+                    arrays.push(payloadRegs, argReg)
+                    ai = ai + 1
+                }
+                // Create map: { tag: "Variant", value: payload, __enum: "Enum" }
+                // Use OP_MAKE_MAP with entries pushed as key, value pairs
+                let tagKeyReg = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [tagKeyReg, cg_addConstant("tag")])
+                let tagValReg = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [tagValReg, cg_addConstant(adtVariantName)])
+                cg_emit(OP_PUSH, [tagKeyReg])
+                cg_emit(OP_PUSH, [tagValReg])
+                let valueKeyReg = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [valueKeyReg, cg_addConstant("value")])
+                cg_emit(OP_PUSH, [valueKeyReg])
+                if arrays.length(payloadRegs) == 1 {
+                    cg_emit(OP_PUSH, [arrays.get(payloadRegs, 0)])
+                } else if arrays.length(payloadRegs) > 1 {
+                    // Multiple payload: wrap in array
+                    let pi = 0
+                    while pi < arrays.length(payloadRegs) {
+                        cg_emit(OP_PUSH, [arrays.get(payloadRegs, pi)])
+                        pi = pi + 1
+                    }
+                    let tupleReg = cg_allocReg()
+                    cg_emit(OP_MAKE_ARRAY, [tupleReg, arrays.length(payloadRegs)])
+                    cg_emit(OP_PUSH, [tupleReg])
+                } else {
+                    let nullReg = cg_allocReg()
+                    cg_emit(OP_LOAD_CONST, [nullReg, cg_addConstant(null)])
+                    cg_emit(OP_PUSH, [nullReg])
+                }
+                let enumKeyReg = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [enumKeyReg, cg_addConstant("__enum")])
+                let enumValReg = cg_allocReg()
+                cg_emit(OP_LOAD_CONST, [enumValReg, cg_addConstant(adtEnumName)])
+                cg_emit(OP_PUSH, [enumKeyReg])
+                cg_emit(OP_PUSH, [enumValReg])
+                cg_emit(OP_MAKE_MAP, [resultReg, 3])
+                return resultReg
+            }
         }
     }
 

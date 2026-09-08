@@ -1,0 +1,104 @@
+// P0-COMPILER-06 BUGFIX-02 Regression: try/catch/finally closure capture
+// Verifies that variables referenced inside try/catch/finally blocks
+// are correctly captured by nested closures/coroutines.
+
+io.println("=== Regression: try/catch/finally closure capture ===")
+
+// Test 1: try body writes external variable
+fn testTryWrite() {
+    let result = "initial"
+    fn worker() {
+        try {
+            result = "try-written"
+        } catch e {
+            result = "catch-written"
+        }
+    }
+    coroutine.spawn(worker)
+    coroutine.yield()
+    coroutine.yield()
+    return result
+}
+let r1 = testTryWrite()
+io.println("Test 1 (try write): " + r1)
+if r1 == "try-written" { io.println("PASS") } else { io.println("FAIL: expected 'try-written', got '" + r1 + "'") }
+
+// Test 2: catch body writes external variable
+fn testCatchWrite() {
+    let result = "initial"
+    fn worker() {
+        try {
+            throw "test error"
+        } catch e {
+            result = "catch-written"
+        }
+    }
+    coroutine.spawn(worker)
+    coroutine.yield()
+    coroutine.yield()
+    return result
+}
+let r2 = testCatchWrite()
+io.println("Test 2 (catch write): " + r2)
+if r2 == "catch-written" { io.println("PASS") } else { io.println("FAIL: expected 'catch-written', got '" + r2 + "'") }
+
+// Test 3: try body reads external variable
+fn testTryRead() {
+    let source = "source-value"
+    let result = ""
+    fn worker() {
+        try {
+            result = source
+        } catch e {
+            result = "error"
+        }
+    }
+    coroutine.spawn(worker)
+    coroutine.yield()
+    coroutine.yield()
+    return result
+}
+let r3 = testTryRead()
+io.println("Test 3 (try read): " + r3)
+if r3 == "source-value" { io.println("PASS") } else { io.println("FAIL: expected 'source-value', got '" + r3 + "'") }
+
+// Test 4: nested try/catch with multiple captured variables
+fn testMultipleCaptured() {
+    let counter = 0
+    let status = "pending"
+    fn worker() {
+        try {
+            counter = counter + 1
+            status = "running"
+            throw "oops"
+        } catch e {
+            counter = counter + 1
+            status = "recovered"
+        }
+    }
+    coroutine.spawn(worker)
+    coroutine.yield()
+    coroutine.yield()
+    return "counter=" + convert.toString(counter) + " status=" + status
+}
+let r4 = testMultipleCaptured()
+io.println("Test 4 (multiple captured): " + r4)
+if r4 == "counter=2 status=recovered" { io.println("PASS") } else { io.println("FAIL: expected 'counter=2 status=recovered', got '" + r4 + "'") }
+
+// Test 5: module-level try/catch closure capture (should still work)
+let moduleResult = "initial"
+fn moduleWorker() {
+    try {
+        throw "module error"
+    } catch e {
+        moduleResult = "module-catch"
+    }
+}
+coroutine.spawn(moduleWorker)
+coroutine.yield()
+coroutine.yield()
+io.println("Test 5 (module-level): " + moduleResult)
+if moduleResult == "module-catch" { io.println("PASS") } else { io.println("FAIL: expected 'module-catch', got '" + moduleResult + "'") }
+
+io.println("")
+io.println("=== Regression Complete ===")

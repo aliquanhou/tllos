@@ -1,0 +1,7 @@
+// Module G: duplicate import test
+from "./module_a" import addA
+from "./module_a" import multiplyA
+
+export fn duplicateImportTest() {
+    return addA(1, 2) + multiplyA(3, 4)
+}

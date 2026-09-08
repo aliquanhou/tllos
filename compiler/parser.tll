@@ -102,6 +102,7 @@ fn parseStatement() -> map {
     if stmtType == "CONTINUE" { return parseContinueStatement() }
     if stmtType == "TRY" { return parseTryStatement() }
     if stmtType == "THROW" { return parseThrowStatement() }
+    if stmtType == "MATCH" { return parseMatchStatement() }
     if stmtType == "IMPORT" { return parseImportStatement() }
     if stmtType == "FROM" { return parseFromImportStatement() }
     if stmtType == "EXPORT" { return parseExportStatement() }
@@ -113,6 +114,26 @@ fn parseStatement() -> map {
 
 fn parseLetStatement() -> map {
     let t = parse_advance() // let/mut
+    // Check for destructuring: let (a, b, c) = ...
+    if parse_check("LPAREN") {
+        parse_advance() // consume (
+        let names = []
+        while true {
+            let nameTok = parse_expect("IDENT", "variable name in destructuring")
+            arrays.push(names, nameTok.tkValue)
+            if parse_match("COMMA") == false { break }
+        }
+        parse_expect("RPAREN", "')'")
+        parse_expect("EQ", "'='")
+        let value = parseExpression()
+        let node = makeNode("Let", t.line, t.column)
+        node.name = ""
+        node.names = names
+        node.value = value
+        node.isConst = false
+        node.isDestructuring = true
+        return node
+    }
     let nameTok = parse_expect("IDENT", "variable name")
     let name = nameTok.tkValue
     let typeAnnotation: map = null
@@ -149,6 +170,16 @@ fn parseFnDeclaration() -> map {
     let t = parse_advance() // fn
     let nameTok = parse_expect("IDENT", "function name")
     let name = nameTok.tkValue
+    // Generic parameters: fn name<T, U>(...)
+    let typeParams: list = []
+    if parse_match("LT") {
+        while true {
+            let tpTok = parse_expect("IDENT", "type parameter name")
+            arrays.push(typeParams, tpTok.tkValue)
+            if parse_match("COMMA") == false { break }
+        }
+        parse_expect("GT", "'>'")
+    }
     parse_expect("LPAREN", "'('")
     let params = parseParams()
     parse_expect("RPAREN", "')'")
@@ -159,6 +190,7 @@ fn parseFnDeclaration() -> map {
     let body = parseBlockStatement()
     let node = makeNode("Fn", t.line, t.column)
     node.name = name
+    node.typeParams = typeParams
     node.params = params
     node.returnType = returnType
     node.body = body
@@ -195,16 +227,38 @@ fn parseEnumDeclaration() -> map {
     let t = parse_advance() // enum
     let nameTok = parse_expect("IDENT", "enum name")
     let name = nameTok.tkValue
+    // Generic enum: enum Result<T> { ... }
+    let typeParams: list = []
+    if parse_match("LT") {
+        while true {
+            let tpTok = parse_expect("IDENT", "type parameter name")
+            arrays.push(typeParams, tpTok.tkValue)
+            if parse_match("COMMA") == false { break }
+        }
+        parse_expect("GT", "'>'")
+    }
     parse_expect("LBRACE", "'{'")
     let variants: list = []
     while !parse_check("RBRACE") && !parse_isAtEnd() {
         let variantNameTok = parse_expect("IDENT", "variant name")
         let variantName = variantNameTok.tkValue
         let variantValue: map = null
-        if parse_match("EQ") {
+        let variantPayload: list = null
+        // ADT variant with payload: Ok(T), Rectangle(float, float)
+        if parse_match("LPAREN") {
+            variantPayload = []
+            if parse_check("RPAREN") == false {
+                while true {
+                    let payloadType = parseType()
+                    arrays.push(variantPayload, payloadType)
+                    if parse_match("COMMA") == false { break }
+                }
+            }
+            parse_expect("RPAREN", "')'")
+        } else if parse_match("EQ") {
             variantValue = parseExpression()
         }
-        arrays.push(variants, { name: variantName, value: variantValue })
+        arrays.push(variants, { name: variantName, value: variantValue, payload: variantPayload })
         if !parse_match("COMMA") {
             if parse_check("RBRACE") { break }
         }
@@ -212,6 +266,7 @@ fn parseEnumDeclaration() -> map {
     parse_expect("RBRACE", "'}'")
     let node = makeNode("Enum", t.line, t.column)
     node.name = name
+    node.typeParams = typeParams
     node.variants = variants
     return node
 }
@@ -322,6 +377,36 @@ fn parseTryStatement() -> map {
     node.catchParam = catchParam
     node.catchBlock = catchBlock
     node.finallyBlock = finallyBlock
+    return node
+}
+
+fn parseMatchStatement() -> map {
+    let t = parse_advance() // match
+    let value = parseExpression()
+    parse_expect("LBRACE", "'{' after match expression")
+    let arms: list = []
+    while !parse_check("RBRACE") && !parse_isAtEnd() {
+        // Parse pattern: literal, identifier, member access, or _ (wildcard)
+        let pattern: map = null
+        let patternType = "expression"
+        if parse_check("IDENT") && parse_peek().tkValue == "_" {
+            parse_advance()
+            patternType = "wildcard"
+        } else {
+            pattern = parseExpression()
+            patternType = "expression"
+        }
+        parse_expect("FAT_ARROW", "'=>' in match arm")
+        let body = parseStatement()
+        arrays.push(arms, { pattern: pattern, patternType: patternType, body: body })
+        if !parse_match("COMMA") {
+            if parse_check("RBRACE") { break }
+        }
+    }
+    parse_expect("RBRACE", "'}' to close match")
+    let node = makeNode("Match", t.line, t.column)
+    node.value = value
+    node.arms = arms
     return node
 }
 
@@ -445,6 +530,17 @@ fn parsePrimaryType() -> map {
         let nt = parse_advance()
         let node = makeNode("TypeRef", t.line, t.column)
         node.name = nt.tkValue
+        // Generic type: List<int>, Map<string, int>
+        if parse_match("LT") {
+            let typeArgs = []
+            while true {
+                let ta = parseType()
+                arrays.push(typeArgs, ta)
+                if parse_match("COMMA") == false { break }
+            }
+            parse_expect("GT", "'>'")
+            node.typeArgs = typeArgs
+        }
         return node
     }
     if parse_match("LPAREN") {
@@ -497,7 +593,7 @@ fn parseTernary() -> map {
 
 fn parseAssignment() -> map {
     let left = parseTernary()
-    if parse_match("EQ") || parse_match("PLUSEQ") || parse_match("MINUSEQ") || parse_match("STAREQ") || parse_match("SLASHEQ") || parse_match("PERCENTEQ") {
+    if parse_match("EQ") || parse_match("PLUS_EQ") || parse_match("MINUS_EQ") || parse_match("STAR_EQ") || parse_match("SLASH_EQ") || parse_match("PERCENT_EQ") || parse_match("BAND_EQ") || parse_match("BOR_EQ") || parse_match("BXOR_EQ") || parse_match("SHL_EQ") || parse_match("SHR_EQ") {
         let t = parse_previous()
         let op = t.tkValue
         let right = parseAssignment()
@@ -615,9 +711,9 @@ fn parseComparison() -> map {
 
 fn parseRange() -> map {
     let left = parseAddition()
-    if parse_match("RANGE") || parse_match("RANGEINCLUSIVE") {
+    if parse_match("RANGE") || parse_match("RANGE_INCLUSIVE") {
         let t = parse_previous()
-        let inclusive = t.tkType == "RANGEINCLUSIVE"
+        let inclusive = t.tkType == "RANGE_INCLUSIVE"
         let right = parseAddition()
         let node = makeNode("Range", t.line, t.column)
         node.start = left
@@ -698,6 +794,16 @@ fn parseUnary() -> map {
         node.operand = operand
         return node
     }
+    if parse_match("PLUSPLUS") || parse_match("MINUSMINUS") {
+        let t = parse_previous()
+        let op = t.tkValue
+        let operand = parseUnary()
+        let node = makeNode("UpdateExpr", t.line, t.column)
+        node.operator = op
+        node.argument = operand
+        node.prefix = true
+        return node
+    }
     return parsePostfix()
 }
 
@@ -749,6 +855,31 @@ fn parsePostfix() -> map {
                 continue
             }
         }
+        // Generic call: name<Type>(args)
+        let typeArgs: list = null
+        if expr.kind == "Ident" && parse_check("LT") {
+            // Look ahead: < IDENT , or < IDENT >
+            let savedPos = parse_pos
+            parse_advance() // consume LT
+            if parse_check("IDENT") {
+                let maybeTypeArgs = []
+                let isValid = true
+                while true {
+                    if parse_check("IDENT") == false { isValid = false; break }
+                    let taTok = parse_advance()
+                    arrays.push(maybeTypeArgs, taTok.tkValue)
+                    if parse_match("COMMA") { continue }
+                    break
+                }
+                if isValid && parse_match("GT") {
+                    typeArgs = maybeTypeArgs
+                } else {
+                    parse_pos = savedPos // not a generic call, restore
+                }
+            } else {
+                parse_pos = savedPos // not a generic call, restore
+            }
+        }
         if parse_match("LPAREN") {
             let t = parse_previous()
             let args = parseArgs()
@@ -756,6 +887,7 @@ fn parsePostfix() -> map {
             let node = makeNode("Call", t.line, t.column)
             node.callee = expr
             node.args = args
+            if typeArgs != null { node.typeArgs = typeArgs }
             expr = node
         } else if parse_match("DOT") {
             let t = parse_previous()
@@ -772,6 +904,14 @@ fn parsePostfix() -> map {
             let node = makeNode("Index", t.line, t.column)
             node.object = expr
             node.index = index
+            expr = node
+        } else if parse_match("PLUSPLUS") || parse_match("MINUSMINUS") {
+            let t = parse_previous()
+            let op = t.tkValue
+            let node = makeNode("UpdateExpr", t.line, t.column)
+            node.operator = op
+            node.argument = expr
+            node.prefix = false
             expr = node
         } else {
             break
@@ -833,19 +973,23 @@ fn parsePrimary() -> map {
         return node
     }
     if parse_match("LPAREN") {
-        // Could be parenthesized expression OR arrow function (params) => body
-        let expr = parseExpression()
-        // Check if this was actually an arrow function params list
-        // We detect by: after parsing expression, if next is RPAREN then FAT_ARROW
-        if parse_check("RPAREN") {
-            // Look ahead: is it ) => ?
-            // We need to handle this differently - parse as arrow function
-            // For now, treat as parenthesized expression
+        // Could be parenthesized expression, Tuple, or arrow function params
+        let firstExpr = parseExpression()
+        if parse_match("COMMA") {
+            // Tuple: (expr1, expr2, ...)
+            let elements = [firstExpr]
+            while true {
+                let elem = parseExpression()
+                arrays.push(elements, elem)
+                if parse_match("COMMA") == false { break }
+            }
             parse_expect("RPAREN", "')'")
-            return expr
+            let node = makeNode("Tuple", t.line, t.column)
+            node.elements = elements
+            return node
         }
         parse_expect("RPAREN", "')'")
-        return expr
+        return firstExpr
     }
     if parse_match("FN") {
         // Anonymous function: fn(params) -> type { body }
@@ -903,7 +1047,7 @@ fn parseMapLiteral() -> map {
         while true {
             let keyTok = parse_peek()
             let keyStr = ""
-            if parse_check("IDENT") || parse_check("STRING") || parse_check("TYPE") || parse_check("STRUCT") || parse_check("ENUM") || parse_check("ASYNC") || parse_check("AWAIT") {
+            if parse_check("IDENT") || parse_check("STRING") || parse_check("STRUCT") || parse_check("ENUM") {
                 let kt = parse_advance()
                 keyStr = kt.tkValue
             } else {

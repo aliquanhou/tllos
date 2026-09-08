@@ -1,0 +1,6 @@
+// Module H: nested module in subdirectory
+export fn nestedFunc() {
+    return "nested module works"
+}
+
+export const NESTED_CONST = 999

@@ -1,0 +1,177 @@
+// TLL Standard Library - Path Utilities
+// Cross-platform path manipulation for TLL OS
+// P0-COMPILER-07: IO / Network / Database Capability Implementation
+
+// Join path components with the platform separator
+fn path_join(parts: list) -> string {
+    let result = ""
+    let i = 0
+    let sep = path_separator()
+    while i < arrays.length(parts) {
+        let part = convert.toString(arrays.get(parts, i))
+        if i > 0 {
+            // Remove trailing separator from previous part
+            if strings.endsWith(result, sep) {
+                result = strings.substring(result, 0, arrays.length(result) - 1)
+            }
+            // Remove leading separator from current part
+            if strings.startsWith(part, sep) {
+                part = strings.substring(part, 1, arrays.length(part))
+            }
+            result = result + sep + part
+        } else {
+            result = part
+        }
+        i = i + 1
+    }
+    return result
+}
+
+// Get the platform path separator
+fn path_separator() -> string {
+    if process.platform() == "windows" {
+        return "\\"
+    }
+    return "/"
+}
+
+// Get the basename (last component) of a path
+fn path_basename(p: string) -> string {
+    let sep = path_separator()
+    let altSep = "/"
+    if sep == "\\" {
+        altSep = "/"
+    } else {
+        altSep = "\\"
+    }
+
+    // Find last separator (either platform or alternate)
+    let lastSep = -1
+    let i = 0
+    while i < arrays.length(p) {
+        let c = strings.charAt(p, i)
+        if c == sep || c == altSep {
+            lastSep = i
+        }
+        i = i + 1
+    }
+
+    if lastSep == -1 {
+        return p
+    }
+    return strings.substring(p, lastSep + 1, arrays.length(p))
+}
+
+// Get the directory name of a path
+fn path_dirname(p: string) -> string {
+    let sep = path_separator()
+    let altSep = "/"
+    if sep == "\\" {
+        altSep = "/"
+    } else {
+        altSep = "\\"
+    }
+
+    let lastSep = -1
+    let i = 0
+    while i < arrays.length(p) {
+        let c = strings.charAt(p, i)
+        if c == sep || c == altSep {
+            lastSep = i
+        }
+        i = i + 1
+    }
+
+    if lastSep == -1 {
+        return "."
+    }
+    if lastSep == 0 {
+        return sep
+    }
+    return strings.substring(p, 0, lastSep)
+}
+
+// Get the file extension (including the dot)
+fn path_extension(p: string) -> string {
+    let base = path_basename(p)
+    let lastDot = -1
+    let i = 0
+    while i < arrays.length(base) {
+        if strings.charAt(base, i) == "." {
+            lastDot = i
+        }
+        i = i + 1
+    }
+    if lastDot == -1 || lastDot == 0 {
+        return ""
+    }
+    return strings.substring(base, lastDot, arrays.length(base))
+}
+
+// Check if path is absolute
+fn path_isAbsolute(p: string) -> bool {
+    if arrays.length(p) == 0 {
+        return false
+    }
+    let first = strings.charAt(p, 0)
+    if first == "/" {
+        return true
+    }
+    // Windows: C:\ or C:/
+    if process.platform() == "windows" {
+        if arrays.length(p) >= 2 {
+            let second = strings.charAt(p, 1)
+            if second == ":" {
+                return true
+            }
+        }
+        if first == "\\" {
+            return true
+        }
+    }
+    return false
+}
+
+// Normalize a path (resolve . and ..)
+fn path_normalize(p: string) -> string {
+    let sep = path_separator()
+    let parts = strings.split(p, sep)
+    let result: list = []
+    let i = 0
+    while i < arrays.length(parts) {
+        let part = convert.toString(arrays.get(parts, i))
+        if part == "." || part == "" {
+            // skip
+        } else if part == ".." {
+            if arrays.length(result) > 0 {
+                // pop last
+                let newResult: list = []
+                let j = 0
+                while j < arrays.length(result) - 1 {
+                    arrays.push(newResult, arrays.get(result, j))
+                    j = j + 1
+                }
+                result = newResult
+            }
+        } else {
+            arrays.push(result, part)
+        }
+        i = i + 1
+    }
+
+    if path_isAbsolute(p) {
+        return sep + path_join(result)
+    }
+    if arrays.length(result) == 0 {
+        return "."
+    }
+    return path_join(result)
+}
+
+// Get absolute path (resolve relative to cwd)
+fn path_absolute(p: string) -> string {
+    if path_isAbsolute(p) {
+        return path_normalize(p)
+    }
+    return path_normalize(path_join([process.cwd(), p]))
+}
