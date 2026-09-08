@@ -114,6 +114,33 @@ static int pop_try(TLLFrame *frame) {
     return frame->tryStack[--frame->tryStackSize];
 }
 
+/* TLL-017: xorshift64* PRNG seeded from OS CSPRNG, replaces predictable rand() */
+unsigned long long tll_rng_state = 0x9E3779B97F4A7C15ULL;
+int tll_rng_seeded = 0;
+void tll_rng_seed(void) {
+    if (tll_rng_seeded) return;
+    tll_rng_seeded = 1;
+#ifdef _WIN32
+    unsigned long long seed = 0;
+    /* Use BCryptGenRandom (already linked via bcrypt.lib) */
+    BCryptGenRandom(NULL, (PUCHAR)&seed, sizeof(seed), BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+#else
+    unsigned long long seed = 0;
+    FILE *f = fopen("/dev/urandom", "rb");
+    if (f) { fread(&seed, sizeof(seed), 1, f); fclose(f); }
+#endif
+    if (seed == 0) seed = 0x9E3779B97F4A7C15ULL ^ (unsigned long long)time(NULL);
+    tll_rng_state = seed;
+}
+unsigned long long tll_rng_next(void) {
+    unsigned long long x = tll_rng_state;
+    x ^= x >> 12;
+    x ^= x << 25;
+    x ^= x >> 27;
+    tll_rng_state = x;
+    return x * 0x2545F4914F6CDD1DULL;
+}
+
 /* Forward declarations for coroutine support */
 static TLLFrame *create_frame(TLLFunction *fn, int returnReg, TLLClosureEnv *env);
 static void free_frame(TLLFrame *frame);
@@ -493,6 +520,9 @@ static void free_frame(TLLFrame *frame) {
     frame_pool_release(frame);
 }
 
+/* TLL-013: default to hard-exit on uncaught; set to 0 for long-running processes */
+int tll_exit_on_uncaught = 1;
+
 static void throw_exception(TLLVM *vm, TLLFrame *frame, TLLValue error) {
     tll_value_incref(error);
     frame->exception_pending = 1;
@@ -528,13 +558,19 @@ static void throw_exception(TLLVM *vm, TLLFrame *frame, TLLValue error) {
     }
     free(msg);
     tll_value_free(error);
-    exit(1);
+    if (tll_exit_on_uncaught) {
+        exit(1);
+    } else {
+        tll_should_exit = 1;
+        tll_exit_code = 1;
+    }
 }
 
 /* Forward declaration */
 TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount);
 
 static void do_call(TLLVM *vm, TLLFrame *frame, int resultReg, int fnIdx, int argCount) {
+    if (argCount > 4096) argCount = 4096;  /* TLL-024: prevent stack overflow from alloca */
     TLLValue *args = (TLLValue*)alloca(argCount * sizeof(TLLValue));
     for (int i = argCount - 1; i >= 0; i--) args[i] = pop_arg(frame);
 

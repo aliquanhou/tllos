@@ -271,6 +271,12 @@ TLLValue map_get(TLLMap *map, const char *key);
 int map_has(TLLMap *map, const char *key);
 
 /* JSON parser */
+/* TLL-013: control whether uncaught exceptions hard-exit (default 1) */
+extern int tll_exit_on_uncaught;
+/* TLL-017: xorshift64* PRNG seeded from OS CSPRNG */
+void tll_rng_seed(void);
+unsigned long long tll_rng_next(void);
+
 TLLProgram *tll_load_program(const char *filename);
 TLLValue tll_parse_json(const char **json);
 
