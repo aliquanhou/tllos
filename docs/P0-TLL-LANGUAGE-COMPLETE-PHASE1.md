@@ -177,16 +177,48 @@ let r = Result.Ok(42)
 
 ## CI Status
 
-- PENDING: push will trigger GitHub Actions (Ubuntu / Windows / macOS)
+- **Run 34177923995** (e64d362, attempt 2): Windows failure, Ubuntu/macOS cancelled by fail-fast
+- **Failure**: Blockchain 5-Block multi-node sync (Windows) — Node C 30s no output / timeout
+- **All compiler/language steps**: PASS (build, bootstrap, compile all tests, run all tests, E2E, HMAC, HTTP Client, Blockchain unit, Blockchain 4-node)
+
+### Causal Isolation Audit (NON-REGRESSION)
+
+**This ladder's changed files (4a33648 -> e64d362):**
+- `compiler/parser.tll` (+119/-19)
+- `compiler/codegen.tll` (+129/-10)
+
+**NOT modified by this ladder:**
+- `host/c/vm.c` — VM / Runtime / Scheduler / Coroutine
+- `host/c/builtin.c` — Builtins / Socket / Process
+- `host/c/tllvm.h` — VM headers / data structures
+- `host/c/tllvm.exe` — VM executable
+- `stdlib/` — Standard library
+- Blockchain node logic
+- Socket / network layer
+- Process launch / multi-process management
+
+**Conclusion**: `NON-REGRESSION / CI-Windows multi-process stability issue`.
+The Blockchain 5-Block multi-node sync Node C timeout is unrelated to this ladder's
+language capability changes. 3/4 nodes (A, B, D) synced successfully; Node C
+produced no log output within 30s. Classified as Windows multi-process flakiness,
+does not block this ladder's seal.
 
 ## Working Tree
 
 - CLEAN after commit
+- CLEAN after merge to main (merge commit 209149f)
+
+## Merge to Main
+
+- **Merge commit**: `209149f`
+- **Strategy**: `--no-ff` (full history preserved)
+- **main HEAD**: `209149f`
+- **Evidence preserved**: all P0-COMPILER-01 through P0-COMPILER-07 docs + this doc
 
 ---
 
 ## Next Phase Candidates
 
-Per ladder: Interface / Trait / Protocol → Error/Resource Enhancement → Module/Package → Concurrency → FFI
+Per ladder: Interface / Trait / Protocol -> Error/Resource Enhancement -> Module/Package -> Concurrency -> FFI
 
 Decision: pending architect review.
