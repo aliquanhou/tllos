@@ -2318,6 +2318,13 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
         if fnName == "postJson" { return 208 }
         if fnName == "options" { return 209 }
     }
+    if modName == "ffi" {
+        if fnName == "load" { return 210 }
+        if fnName == "symbol" { return 211 }
+        if fnName == "call" { return 212 }
+        if fnName == "cstring" { return 213 }
+        if fnName == "string" { return 214 }
+    }
     return -1
 }
 

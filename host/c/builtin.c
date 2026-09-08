@@ -493,6 +493,10 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
     if (idx >= 200 && idx < 210) {
         return httpc_builtin_invoke(vm, idx, args, argCount);
     }
+    /* FFI builtin binding (index 210-219) */
+    if (idx >= 210 && idx < 220) {
+        return ffi_builtin_invoke(vm, idx, args, argCount);
+    }
     /* io (0-2) */
     if (idx == 0) { /* println */
         if (argCount > 0) { char *s = tll_to_string(args[0]); puts(s); free(s); }

@@ -1,0 +1,75 @@
+// P0-TLL-LANGUAGE-COMPLETE Phase 5: FFI / Native Interop Test Suite
+// All tests use real assertions, not just println.
+
+let passCount = 0
+let failCount = 0
+
+fn assert(cond: bool, name: string) -> void {
+    if cond {
+        passCount = passCount + 1
+        io.println("PASS: " + name)
+    } else {
+        failCount = failCount + 1
+        io.println("FAIL: " + name)
+    }
+}
+
+// === FFI-01: Load real library ===
+let lib = ffi.load("msvcrt.dll")
+assert(lib != 0, "FFI-01 load msvcrt.dll returns non-null handle")
+
+// === FFI-02: Resolve real symbol ===
+let strlenPtr = ffi.symbol(lib, "strlen")
+assert(strlenPtr != 0, "FFI-02 resolve strlen symbol returns non-null pointer")
+
+// === FFI-03: Call strlen (cstring arg, int64 return) ===
+let argTypes = [7]  // 7 = cstring
+let args = ["hello world"]
+let len = ffi.call(strlenPtr, 2, argTypes, args)  // 2 = int64 return
+assert(len == 11, "FFI-03 strlen(\"hello world\") == 11, got " + convert.toString(len))
+
+// === FFI-04: Call atoi (cstring arg, int32 return) ===
+let atoiPtr = ffi.symbol(lib, "atoi")
+assert(atoiPtr != 0, "FFI-04 resolve atoi symbol")
+let atoiArgs = ["42"]
+let atoiResult = ffi.call(atoiPtr, 1, argTypes, atoiArgs)  // 1 = int32 return
+assert(atoiResult == 42, "FFI-04 atoi(\"42\") == 42, got " + convert.toString(atoiResult))
+
+// === FFI-05: Call strcmp (two cstring args, int32 return) ===
+let strcmpPtr = ffi.symbol(lib, "strcmp")
+assert(strcmpPtr != 0, "FFI-05 resolve strcmp symbol")
+let strcmpArgTypes = [7, 7]  // two cstrings
+let strcmpArgs1 = ["abc", "abc"]
+let cmp1 = ffi.call(strcmpPtr, 1, strcmpArgTypes, strcmpArgs1)
+assert(cmp1 == 0, "FFI-05 strcmp(\"abc\",\"abc\") == 0, got " + convert.toString(cmp1))
+let strcmpArgs2 = ["abc", "abd"]
+let cmp2 = ffi.call(strcmpPtr, 1, strcmpArgTypes, strcmpArgs2)
+assert(cmp2 < 0, "FFI-05 strcmp(\"abc\",\"abd\") < 0, got " + convert.toString(cmp2))
+
+// === FFI-06: ffi.cstring and ffi.string boundary ===
+let testStr = "boundary test"
+let cstrPtr = ffi.cstring(testStr)
+assert(cstrPtr != 0, "FFI-06 ffi.cstring returns non-null pointer")
+let recovered = ffi.string(cstrPtr)
+assert(recovered == testStr, "FFI-06 ffi.string(ffi.cstring(s)) == s, got \"" + recovered + "\"")
+
+// === FFI-N01: Invalid library returns 0 (no crash) ===
+let badLib = ffi.load("nonexistent_library_xyz123.dll")
+assert(badLib == 0, "FFI-N01 invalid library returns 0 handle")
+
+// === FFI-N02: Invalid symbol returns 0 (no crash) ===
+let badSym = ffi.symbol(lib, "nonexistent_function_xyz789")
+assert(badSym == 0, "FFI-N02 invalid symbol returns 0 pointer")
+
+// === Summary ===
+io.println("")
+io.println("=== FFI Test Summary ===")
+io.println("PASS: " + convert.toString(passCount))
+io.println("FAIL: " + convert.toString(failCount))
+io.println("TOTAL: " + convert.toString(passCount + failCount))
+
+if failCount == 0 {
+    io.println("ALL FFI TESTS PASSED")
+} else {
+    io.println("SOME FFI TESTS FAILED")
+}
