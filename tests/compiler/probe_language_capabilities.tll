@@ -1,0 +1,62 @@
+// P0-TLL-LANGUAGE-COMPLETE: Generic + ADT + Tuple + Destructuring regression
+// This file persists the language capability probes for CI.
+
+fn identity<T>(x: T) -> T {
+    return x
+}
+
+fn pair<T, U>(x: T, y: U) {
+    return (x, y)
+}
+
+enum Result<T> {
+    Ok(T),
+    Err(string)
+}
+
+enum Shape {
+    Circle(float),
+    Rectangle(float, float)
+}
+
+// Generic function
+let a = identity<int>(10)
+if a != 10 { io.println("FAIL: generic identity int"); return }
+
+let b = identity<string>("hello")
+if b != "hello" { io.println("FAIL: generic identity string"); return }
+
+// Generic + Tuple
+let p = pair<int, string>(1, "one")
+if p.0 != 1 { io.println("FAIL: pair.0"); return }
+if p.1 != "one" { io.println("FAIL: pair.1"); return }
+
+// Destructuring
+let (x, y) = pair<int, string>(42, "answer")
+if x != 42 { io.println("FAIL: destruct x"); return }
+if y != "answer" { io.println("FAIL: destruct y"); return }
+
+// ADT with payload
+let r1 = Result.Ok(42)
+if r1.tag != "Ok" { io.println("FAIL: ADT Ok tag"); return }
+if r1.value != 42 { io.println("FAIL: ADT Ok value"); return }
+if r1.__enum != "Result" { io.println("FAIL: ADT __enum"); return }
+
+let r2 = Result.Err("failed")
+if r2.tag != "Err" { io.println("FAIL: ADT Err tag"); return }
+if r2.value != "failed" { io.println("FAIL: ADT Err value"); return }
+
+// ADT multi-payload
+let s = Shape.Rectangle(10, 20)
+if s.tag != "Rectangle" { io.println("FAIL: ADT Rectangle tag"); return }
+if s.value[0] != 10 { io.println("FAIL: ADT Rectangle value[0]"); return }
+if s.value[1] != 20 { io.println("FAIL: ADT Rectangle value[1]"); return }
+
+// ADT + match
+match r1.tag {
+    "Ok" => io.println("ADT match Ok: " + convert.toString(r1.value)),
+    "Err" => io.println("ADT match Err"),
+    _ => io.println("ADT match unknown")
+}
+
+io.println("ALL LANGUAGE CAPABILITY TESTS PASSED")
