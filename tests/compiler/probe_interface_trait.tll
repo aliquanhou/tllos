@@ -1,0 +1,102 @@
+// P0-TLL-LANGUAGE-COMPLETE Phase 2: Interface / Trait / Protocol
+// Persistent regression probe
+// Tests: interface declaration, struct impl, method dispatch, interface param, multi-type
+
+interface Printable {
+    fn print(self) -> string
+}
+
+interface Describable {
+    fn describe(self) -> string
+}
+
+struct User {
+    name: string
+    age: int
+}
+
+impl Printable for User {
+    fn print(self) -> string {
+        return "User(" + self.name + ", age=" + convert.toString(self.age) + ")"
+    }
+}
+
+impl Describable for User {
+    fn describe(self) -> string {
+        return "A user named " + self.name
+    }
+}
+
+struct Product {
+    title: string
+    price: int
+}
+
+impl Printable for Product {
+    fn print(self) -> string {
+        return "Product(" + self.title + ", $" + convert.toString(self.price) + ")"
+    }
+}
+
+fn show(x) -> string {
+    return x.print()
+}
+
+fn printAll(items) {
+    let i = 0
+    while i < arrays.length(items) {
+        io.println("  " + arrays.get(items, i).print())
+        i = i + 1
+    }
+}
+
+io.println("=== Interface / Trait / Protocol Probe ===")
+
+let u = User { name: "Alice", age: 30 }
+let p = Product { title: "Book", price: 29 }
+
+// Test 1: direct method call
+let r1 = u.print()
+if r1 == "User(Alice, age=30)" {
+    io.println("PASS: User.print() = " + r1)
+} else {
+    io.println("FAIL: User.print() expected 'User(Alice, age=30)', got '" + r1 + "'")
+}
+
+// Test 2: Product method call
+let r2 = p.print()
+if r2 == "Product(Book, $29)" {
+    io.println("PASS: Product.print() = " + r2)
+} else {
+    io.println("FAIL: Product.print() expected 'Product(Book, $29)', got '" + r2 + "'")
+}
+
+// Test 3: interface parameter
+let r3 = show(u)
+if r3 == "User(Alice, age=30)" {
+    io.println("PASS: show(User) = " + r3)
+} else {
+    io.println("FAIL: show(User) expected 'User(Alice, age=30)', got '" + r3 + "'")
+}
+
+let r4 = show(p)
+if r4 == "Product(Book, $29)" {
+    io.println("PASS: show(Product) = " + r4)
+} else {
+    io.println("FAIL: show(Product) expected 'Product(Book, $29)', got '" + r4 + "'")
+}
+
+// Test 4: multiple interfaces on same type
+let r5 = u.describe()
+if r5 == "A user named Alice" {
+    io.println("PASS: User.describe() = " + r5)
+} else {
+    io.println("FAIL: User.describe() expected 'A user named Alice', got '" + r5 + "'")
+}
+
+// Test 5: collection of interface types
+let list = [u, p]
+io.println("PASS: printAll collection:")
+printAll(list)
+
+io.println("=== Interface / Trait Probe Complete ===")
