@@ -165,6 +165,8 @@ for f in "$REPO_ROOT/tests/scope/"*.tll; do
         FAILED=$((FAILED + 1))
         continue
     fi
+    echo "  DEBUG: compile_rc=$compile_rc out=$out exists=$([ -f "$out" ] && echo yes || echo no)"
+    cat "$TMPFILE"
     # Run
     set +e
     if [ -n "$TIMEOUT_CMD" ]; then
