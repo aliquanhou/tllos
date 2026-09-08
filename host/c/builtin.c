@@ -860,8 +860,16 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
                 if (arr) {
                     for (int i = 0; i < arr->length-1; i++)
                         for (int j = 0; j < arr->length-1-i; j++) {
-                            double a = (arr->items[j].type==TLL_INT)?(double)arr->items[j].as.integer:arr->items[j].as.floating;
-                            double b = (arr->items[j+1].type==TLL_INT)?(double)arr->items[j+1].as.integer:arr->items[j+1].as.floating;
+                            /* TLL-012: type check - only sort numeric elements */
+                            int ta = arr->items[j].type;
+                            int tb = arr->items[j+1].type;
+                            if ((ta != TLL_INT && ta != TLL_FLOAT) || (tb != TLL_INT && tb != TLL_FLOAT)) {
+                                /* Non-numeric: sort by type id, then by string representation */
+                                if (ta > tb) { TLLValue t=arr->items[j]; arr->items[j]=arr->items[j+1]; arr->items[j+1]=t; }
+                                continue;
+                            }
+                            double a = (ta==TLL_INT)?(double)arr->items[j].as.integer:arr->items[j].as.floating;
+                            double b = (tb==TLL_INT)?(double)arr->items[j+1].as.integer:arr->items[j+1].as.floating;
                             if (a > b) { TLLValue t=arr->items[j]; arr->items[j]=arr->items[j+1]; arr->items[j+1]=t; }
                         }
                 }
@@ -1204,22 +1212,17 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
             TLLValue result = tll_map();
             HINTERNET hSession = WinHttpOpen(L"TLLOS/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
             if (!hSession) { map_set(result.as.map, "ok", tll_bool(0)); map_set(result.as.map, "error", tll_string("WinHttpOpen failed")); return result; }
-            HINTERNET hConnect = WinHttpConnect(hSession, (WCHAR*)host, (INTERNET_PORT)port, 0);
-            /* Note: host is ANSI; WinHttpConnect expects wide. Convert properly below. */
-            /* Re-do with wide char conversion */
-            if (hConnect) WinHttpCloseHandle(hConnect);
+            /* TLL-019: convert host to wide char before calling WinHttpConnect */
             WCHAR wideHost[256];
             MultiByteToWideChar(CP_UTF8, 0, host, -1, wideHost, 256);
-            hConnect = WinHttpConnect(hSession, wideHost, (INTERNET_PORT)port, 0);
+            HINTERNET hConnect = WinHttpConnect(hSession, wideHost, (INTERNET_PORT)port, 0);
             if (!hConnect) { WinHttpCloseHandle(hSession); map_set(result.as.map, "ok", tll_bool(0)); map_set(result.as.map, "error", tll_string("WinHttpConnect failed")); return result; }
             DWORD flags = isHttps ? WINHTTP_FLAG_SECURE : 0;
-            HINTERNET hRequest = WinHttpOpenRequest(hConnect, (WCHAR*)method, (WCHAR*)path, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
-            /* Convert method and path to wide */
-            if (hRequest) WinHttpCloseHandle(hRequest);
+            /* TLL-019: convert method/path to wide char before WinHttpOpenRequest */
             WCHAR wideMethod[16], widePath[1024];
             MultiByteToWideChar(CP_UTF8, 0, method, -1, wideMethod, 16);
             MultiByteToWideChar(CP_UTF8, 0, path, -1, widePath, 1024);
-            hRequest = WinHttpOpenRequest(hConnect, wideMethod, widePath, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+            HINTERNET hRequest = WinHttpOpenRequest(hConnect, wideMethod, widePath, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
             if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); map_set(result.as.map, "ok", tll_bool(0)); map_set(result.as.map, "error", tll_string("WinHttpOpenRequest failed")); return result; }
 
             BOOL sendOk;

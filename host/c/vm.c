@@ -534,6 +534,7 @@ static void throw_exception(TLLVM *vm, TLLFrame *frame, TLLValue error) {
 TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount);
 
 static void do_call(TLLVM *vm, TLLFrame *frame, int resultReg, int fnIdx, int argCount) {
+    if (argCount > 4096) argCount = 4096;  /* TLL-024: prevent stack overflow from alloca */
     TLLValue *args = (TLLValue*)alloca(argCount * sizeof(TLLValue));
     for (int i = argCount - 1; i >= 0; i--) args[i] = pop_arg(frame);
 
