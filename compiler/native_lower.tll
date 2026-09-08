@@ -83,9 +83,22 @@ fn nl_lowerExpression(expr: map) -> string {
 
     // 二元运算
     if kind == "Binary" {
+        let op = expr.operator
+        // B.9 FIX: Assignment is Binary(operator="="), not a separate Assignment node
+        if op == "=" {
+            let left = nl_lowerExpression(expr.left)
+            let right = nl_lowerExpression(expr.right)
+            // Array index assignment: arr[0] = value -> array_set(arr.as.array, 0, value)
+            if expr.left.kind == "Index" {
+                let idxObj = nl_lowerExpression(expr.left.object)
+                let idxVal = nl_lowerExpression(expr.left.index)
+                return "(array_set(" + idxObj + ".as.array, " + idxVal + ".as.integer, " + right + "), " + right + ")"
+            }
+            // Normal variable assignment
+            return "(" + left + " = " + right + ")"
+        }
         let left = nl_lowerExpression(expr.left)
         let right = nl_lowerExpression(expr.right)
-        let op = expr.operator
         // TLL 动态类型运算 → TLLValue 运算函数
         if op == "+" { return "tll_add(" + left + ", " + right + ")" }
         if op == "-" { return "tll_sub(" + left + ", " + right + ")" }
@@ -135,16 +148,26 @@ fn nl_lowerExpression(expr: map) -> string {
         // io.println → tll_io_println
         if obj == "io" && name == "println" { return "tll_io_println" }
         if obj == "io" && name == "print" { return "tll_io_print" }
+        // B.9: Array length property (int -> TLLValue)
+        if name == "length" { return "tll_int(" + obj + ".as.array->length)" }
         // 默认：obj_name（C 中没有成员访问，用函数名拼接）
         return obj + "_" + name
     }
 
-    // 数组字面量
-    if kind == "Array" {
-        return "NULL /* array literal */"
+    // B.9: 数组索引访问（读）arr[0] -> array_get(arr.as.array, 0)
+    if kind == "Index" {
+        let obj = nl_lowerExpression(expr.object)
+        let idx = nl_lowerExpression(expr.index)
+        return "array_get(" + obj + ".as.array, " + idx + ".as.integer)"
     }
 
-    // Map 字面量
+    // B.9: Array literal - only supported in Let/Const statements
+    // (MSVC doesn't support C99 compound literals, so handled in nl_lowerStatement)
+    if kind == "Array" {
+        return "NULL /* array literal only in let/const */"
+    }
+
+    // Map 字面量（暂不支持）
     if kind == "Map" {
         return "NULL /* map literal */"
     }
@@ -162,6 +185,18 @@ fn nl_lowerStatement(stmt: map) -> void {
         let varType = "TLLValue"
         if stmt.type != null && stmt.type != "" {
             varType = nl_convertType(stmt.type)
+        }
+        // B.9: Array literal special handling - create empty array then push elements
+        // (MSVC doesn't support C99 compound literals (TLLValue[]){...})
+        if stmt.value != null && stmt.value.kind == "Array" {
+            nl_emit(varType + " " + stmt.name + " = tll_array();")
+            let ai = 0
+            while ai < arrays.length(stmt.value.elements) {
+                let elem = nl_lowerExpression(arrays.get(stmt.value.elements, ai))
+                nl_emit("array_push(" + stmt.name + ".as.array, " + elem + ");")
+                ai = ai + 1
+            }
+            return
         }
         let initExpr = ""
         if stmt.value != null {

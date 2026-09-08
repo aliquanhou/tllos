@@ -1,0 +1,41 @@
+// Cross-Target Conformance Case 05: Array
+// 覆盖: array literal, index read, index assign, length, iteration
+
+fn main() {
+    // array literal
+    let arr = [10, 20, 30];
+    io.println(arr.length);
+
+    // index read
+    io.println(arr[0]);
+    io.println(arr[1]);
+    io.println(arr[2]);
+
+    // index assign
+    arr[0] = 100;
+    arr[1] = 200;
+    io.println(arr[0]);
+    io.println(arr[1]);
+
+    // iterate array with while
+    let i = 0;
+    let sum = 0;
+    while i < arr.length {
+        sum = sum + arr[i];
+        i = i + 1;
+    }
+    io.println(sum);
+
+    // empty array
+    let empty = [];
+    io.println(empty.length);
+
+    // single element
+    let single = [42];
+    io.println(single.length);
+    io.println(single[0]);
+
+    return 0;
+}
+
+main()
