@@ -496,6 +496,7 @@ static void free_frame(TLLFrame *frame) {
 static void throw_exception(TLLVM *vm, TLLFrame *frame, TLLValue error) {
     tll_value_incref(error);
     frame->exception_pending = 1;
+    tll_value_incref(error);  /* extra ref for pending_exception (avoids double-free in free_frame) */
     frame->pending_exception = error;
     /* Search current frame's try stack first */
     while (frame->tryStackSize > 0) {
