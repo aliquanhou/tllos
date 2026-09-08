@@ -1,0 +1,116 @@
+// P2-01-B.11-R1 Ownership Conformance Test 12: Argument Return
+// Verifies: argument ownership when returned from function (retain before cleanup, no double-free)
+// Covers: return arg directly, return transformed arg, caller stores returned arg,
+//         arg used in container before return, multiple calls/aliases
+// Both Bytecode and Native must produce identical output
+
+fn return_string(s) {
+    return s;
+}
+
+fn return_array(arr) {
+    return arr;
+}
+
+fn return_map(m) {
+    return m;
+}
+
+fn return_transformed_string(s) {
+    return s + " transformed";
+}
+
+fn return_first_element(arr) {
+    return arr[0];
+}
+
+fn return_map_value(m) {
+    return m["key"];
+}
+
+fn return_arg_in_container(s) {
+    let result = [s];
+    return result;
+}
+
+fn test_return_string_directly() {
+    let original = "direct return";
+    let returned = return_string(original);
+    io.println(original);
+    io.println(returned);
+}
+
+fn test_return_array_directly() {
+    let original = [1, 2, 3];
+    let returned = return_array(original);
+    io.println(original[0]);
+    io.println(returned[0]);
+    io.println(returned.length);
+}
+
+fn test_return_map_directly() {
+    let original = {"key": "value"};
+    let returned = return_map(original);
+    io.println(original["key"]);
+    io.println(returned["key"]);
+}
+
+fn test_return_transformed_string() {
+    let original = "original";
+    let transformed = return_transformed_string(original);
+    io.println(original);
+    io.println(transformed);
+}
+
+fn test_return_element() {
+    let arr = [100, 200, 300];
+    let elem = return_first_element(arr);
+    io.println(arr[0]);
+    io.println(elem);
+}
+
+fn test_return_map_value() {
+    let m = {"key": 42};
+    let val = return_map_value(m);
+    io.println(m["key"]);
+    io.println(val);
+}
+
+fn test_return_arg_in_container() {
+    let s = "inside array";
+    let result = return_arg_in_container(s);
+    io.println(s);
+    io.println(result[0]);
+    io.println(result.length);
+}
+
+fn test_multiple_returns() {
+    let a = return_string("first");
+    let b = return_string("second");
+    let c = return_string("third");
+    io.println(a);
+    io.println(b);
+    io.println(c);
+}
+
+fn test_nested_return() {
+    let result = return_string(return_transformed_string("nested"));
+    io.println(result);
+}
+
+fn main() {
+    io.println("=== ownership_argument_return ===");
+    test_return_string_directly();
+    test_return_array_directly();
+    test_return_map_directly();
+    test_return_transformed_string();
+    test_return_element();
+    test_return_map_value();
+    test_return_arg_in_container();
+    test_multiple_returns();
+    test_nested_return();
+    io.println("=== done ===");
+    return 0;
+}
+
+main()

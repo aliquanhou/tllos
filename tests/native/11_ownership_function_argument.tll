@@ -1,0 +1,94 @@
+// P2-01-B.11-R1 Ownership Conformance Test 11: Function Argument
+// Verifies: function parameter ownership lifecycle (caller retains, callee releases exactly once)
+// Covers: string arg, array arg, map arg, multiple args, repeated calls with same source value
+// Both Bytecode and Native must produce identical output
+
+fn take_string(s) {
+    io.println(s);
+    io.println(s);
+}
+
+fn take_array(arr) {
+    io.println(arr.length);
+    io.println(arr[0]);
+    io.println(arr[1]);
+    io.println(arr[2]);
+}
+
+fn take_map(m) {
+    io.println(m["a"]);
+    io.println(m["b"]);
+    io.println(m["c"]);
+}
+
+fn take_multiple(a, b, c) {
+    io.println(a);
+    io.println(b);
+    io.println(c);
+}
+
+fn take_and_modify_string(s) {
+    io.println(s);
+    s = "modified inside";
+    io.println(s);
+}
+
+fn take_and_modify_array(arr) {
+    io.println(arr[0]);
+    arr[0] = 999;
+    io.println(arr[0]);
+}
+
+fn test_string_argument() {
+    let s = "hello world";
+    take_string(s);
+    take_string(s);
+    io.println(s);
+}
+
+fn test_array_argument() {
+    let arr = [10, 20, 30];
+    take_array(arr);
+    take_array(arr);
+    io.println(arr[0]);
+}
+
+fn test_map_argument() {
+    let m = {"a": 1, "b": 2, "c": 3};
+    take_map(m);
+    take_map(m);
+    io.println(m["a"]);
+}
+
+fn test_multiple_arguments() {
+    take_multiple(42, "multiple", true);
+    take_multiple(100, "args", false);
+}
+
+fn test_modify_parameter() {
+    let s = "original";
+    take_and_modify_string(s);
+    io.println(s);
+    let arr = [1, 2, 3];
+    take_and_modify_array(arr);
+    io.println(arr[0]);
+}
+
+fn test_nested_call() {
+    let s = "nested";
+    take_string(s + " argument");
+}
+
+fn main() {
+    io.println("=== ownership_function_argument ===");
+    test_string_argument();
+    test_array_argument();
+    test_map_argument();
+    test_multiple_arguments();
+    test_modify_parameter();
+    test_nested_call();
+    io.println("=== done ===");
+    return 0;
+}
+
+main()
