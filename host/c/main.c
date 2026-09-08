@@ -43,15 +43,24 @@ int main(int argc, char *argv[]) {
 
     TLLVM *vm = tll_vm_create(prog);
 
-    /* Seed random number generator */
+    /* Seed random number generator (TLL-017: xorshift seeded from CSPRNG in vm.c) */
     srand((unsigned int)time(NULL));
+    /* TLL-013: allow disabling hard-exit on uncaught exception for long-running processes */
+    if (getenv("TLL_NO_EXIT_ON_UNCAUGHT")) tll_exit_on_uncaught = 0;
 
     tll_vm_run(vm);
 
     tll_vm_free(vm);
-    /* Note: program and constants are intentionally not freed to avoid
-     * double-free issues with shared constant references. In a long-running
-     * process this would need proper ownership tracking. */
+    /* TLL-027: free program and its resources */
+    if (prog) {
+        for (int fi = 0; fi < prog->functionCount; fi++) {
+            if (prog->functions[fi].name) free(prog->functions[fi].name);
+            if (prog->functions[fi].instructions) free(prog->functions[fi].instructions);
+        }
+        if (prog->functions) free(prog->functions);
+        if (prog->constants) free(prog->constants);
+        free(prog);
+    }
 
     return tll_exit_code;
 }

@@ -25,9 +25,32 @@ static char *parse_json_string(const char **p) {
                 case '"': c = '"'; break;
                 case '/': c = '/'; break;
                 case 'u': {
-                    /* Simple unicode: skip 4 hex chars, output '?' */
+                    /* TLL-025: parse \uXXXX and encode as UTF-8 */
+                    unsigned int cp = 0;
+                    int valid = 1;
+                    for (int h = 0; h < 4; h++) {
+                        char hc = (*p)[h];
+                        unsigned int hv;
+                        if (hc >= '0' && hc <= '9') hv = hc - '0';
+                        else if (hc >= 'a' && hc <= 'f') hv = hc - 'a' + 10;
+                        else if (hc >= 'A' && hc <= 'F') hv = hc - 'A' + 10;
+                        else { valid = 0; break; }
+                        cp = (cp << 4) | hv;
+                    }
                     (*p) += 4;
-                    c = '?';
+                    if (!valid || cp == 0) { c = '?'; break; }
+                    if (cp < 0x80) {
+                        c = (char)cp;
+                    } else if (cp < 0x800) {
+                        if (len + 2 >= cap) { cap *= 2; buf = (char*)realloc(buf, cap); }
+                        buf[len++] = (char)(0xC0 | (cp >> 6));
+                        c = (char)(0x80 | (cp & 0x3F));
+                    } else {
+                        if (len + 3 >= cap) { cap *= 2; buf = (char*)realloc(buf, cap); }
+                        buf[len++] = (char)(0xE0 | (cp >> 12));
+                        buf[len++] = (char)(0x80 | ((cp >> 6) & 0x3F));
+                        c = (char)(0x80 | (cp & 0x3F));
+                    }
                     break;
                 }
                 default: break;

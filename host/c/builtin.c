@@ -554,13 +554,13 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
             case 19: return tll_float(exp(x));
             case 20: return tll_float(3.14159265358979323846);
             case 21: return tll_float(2.71828182845904523536);
-            case 22: return tll_float((double)rand() / RAND_MAX);
+            case 22: { tll_rng_seed(); return tll_float((double)(tll_rng_next() >> 11) / (double)(1ULL << 53)); }
             case 23: {
                 int mn = (int)x, mx = (int)y;
                 if (mx < mn) { int t = mn; mn = mx; mx = t; }
                 unsigned int range = (unsigned int)(mx - mn + 1);
                 if (range == 0) return tll_int(mn);
-                return tll_int(mn + (int)(rand() % range));
+                return tll_int(mn + (int)(tll_rng_next() % range));
             }
         }
     }
@@ -1565,6 +1565,15 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
                 /* Windows env vars are case-insensitive; normalize to uppercase */
                 for (int j = 0; j < klen; j++) key[j] = (char)toupper((unsigned char)key[j]);
 #endif
+                /* TLL-014: filter sensitive environment variables */
+                {
+                    static const char *sensNames[] = {"PASSWORD","SECRET","TOKEN","APIKEY","API_KEY","PRIVATE","CREDENTIAL","ACCESS_KEY","SESSION","AUTH","BEARER"};
+                    int isSens = 0;
+                    for (int s = 0; s < (int)(sizeof(sensNames)/sizeof(sensNames[0])); s++) {
+                        if (strstr(key, sensNames[s])) { isSens = 1; break; }
+                    }
+                    if (isSens) { free(key); continue; }
+                }
                 map_set(envMap.as.map, key, tll_string(eq + 1));
                 free(key);
             }
