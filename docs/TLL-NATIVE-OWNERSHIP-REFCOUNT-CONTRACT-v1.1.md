@@ -87,15 +87,23 @@ frame->locals[a] = regs[b];         // store
 ```
 Bytecode VM 中 old（locals[a]）和 new（regs[b]）位于不同存储位置，不存在 alias 风险，因此可以先 free old。
 
-**Native Target 实现**（B.11-R1 修正）:
+**Native Target 实现**（B.11-R1-R2 修正：使用 `tll_assign` 辅助函数）:
 ```c
-(tll_value_incref(v),  // retain new FIRST (safe for x=x alias case)
- tll_value_free(x),    // release old
- x = v)                 // store
+// Native lowering generates: tll_assign(&x, v)
+// tll_assign implementation (runtime/value.c):
+TLLValue tll_assign(TLLValue *target, TLLValue new_value) {
+    tll_value_incref(new_value);  // retain new FIRST (safe for x=x self-assignment)
+    tll_value_free(*target);       // release old
+    *target = new_value;           // store
+    return new_value;              // return for expression use
+}
 ```
-Native Target 中 old 和 new 可能是同一变量（如 `x = x`），因此必须先 incref new，再 free old，避免 use-after-free。
+Native Target 使用 `tll_assign()` 辅助函数，确保：
+1. **RHS 只求值一次**：`new_value` 作为参数传入，不会被重复计算（避免函数调用被执行两次导致的 use-after-free）
+2. **安全顺序**：先 incref(new)，再 free(old)，安全处理 `x = x` 自赋值
+3. **统一入口**：所有普通变量赋值都通过 `tll_assign`，保证所有权语义一致
 
-**两种实现的语义等价性**: 两种顺序最终都达到相同的语义结果——old 被 release，new 被 retain，变量存储 new。区别仅在于执行顺序，Native Target 的顺序更安全，因为它不假设 old 和 new 不 alias。
+**两种实现的语义等价性**: 两种顺序最终都达到相同的语义结果——old 被 release，new 被 retain，变量存储 new。Native Target 使用 `tll_assign` 辅助函数额外保证了 RHS 只求值一次，避免了函数调用作为 RHS 时的 double-evaluation 问题。
 
 **注意**: 对于值类型（null/bool/int/float/builtin），tll_value_free 和 tll_value_incref 是 no-op，所以可以安全调用。
 

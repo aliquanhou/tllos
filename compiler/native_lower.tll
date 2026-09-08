@@ -106,9 +106,10 @@ fn nl_lowerExpression(expr: map) -> string {
                 return "(tll_value_incref(" + right + "), array_set(" + idxObj + ".as.array, " + idxVal + ".as.integer, " + right + "), " + right + ")"
             }
             // Normal variable assignment
-            // B.11: Ownership - retain new, release old, then assign
-            // Order: incref(right) first, then free(left), to avoid use-after-free when x=x
-            return "(tll_value_incref(" + right + "), tll_value_free(" + left + "), " + left + " = " + right + ")"
+            // P2-01-B11-R1-R2: Use tll_assign() helper for ownership-safe assignment.
+            // tll_assign: incref(new) FIRST -> free(old) -> store, safe for x=x self-assignment.
+            // RHS evaluated exactly once (passed as argument), no double-evaluation of function calls.
+            return "tll_assign(&" + left + ", " + right + ")"
         }
         let left = nl_lowerExpression(expr.left)
         let right = nl_lowerExpression(expr.right)
@@ -270,7 +271,8 @@ fn nl_lowerStatement(stmt: map) -> void {
     if kind == "Assignment" {
         let target = nl_lowerExpression(stmt.target)
         let value = nl_lowerExpression(stmt.value)
-        nl_emit(target + " = " + value + ";")
+        // P2-01-B11-R1-R2: Use tll_assign() for ownership-safe assignment
+        nl_emit("tll_assign(&" + target + ", " + value + ");")
         return
     }
 

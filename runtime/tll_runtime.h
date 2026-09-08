@@ -147,6 +147,14 @@ void tll_value_free(TLLValue v);
 int tll_truthy(TLLValue v);
 int tll_equals(TLLValue a, TLLValue b);
 
+/* === Assignment Ownership (P2-01-B11-R1-R2) ===
+ * Ownership-safe assignment: retain new, release old, store.
+ * Order: incref(new) FIRST, then free(old), to avoid use-after-free when x=x.
+ * RHS is evaluated exactly once by the caller (passed as new_value).
+ * Returns new_value for expression-context use.
+ */
+TLLValue tll_assign(TLLValue *target, TLLValue new_value);
+
 /* === String Conversion === */
 char *tll_to_string(TLLValue v);
 char *tll_to_json(TLLValue v);

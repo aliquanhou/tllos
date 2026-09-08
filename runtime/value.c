@@ -238,6 +238,19 @@ int tll_equals(TLLValue a, TLLValue b) {
     }
 }
 
+/* === Assignment Ownership (P2-01-B11-R1-R2) ===
+ * Ownership-safe assignment: retain new, release old, store.
+ * Order: incref(new) FIRST, then free(old), to avoid use-after-free when x=x.
+ * RHS is evaluated exactly once by the caller (passed as new_value).
+ * Returns new_value for expression-context use.
+ */
+TLLValue tll_assign(TLLValue *target, TLLValue new_value) {
+    tll_value_incref(new_value);  /* retain new FIRST (safe for self-assignment x=x) */
+    tll_value_free(*target);       /* release old */
+    *target = new_value;           /* store */
+    return new_value;              /* return for expression use */
+}
+
 /* === String Conversion (internal helpers) === */
 
 static char *int_to_string(long long v) {

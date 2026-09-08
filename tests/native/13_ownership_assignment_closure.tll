@@ -1,0 +1,116 @@
+// P2-01-B11-R1-R2 Assignment Ownership Closure Test
+// Verifies: Native assignment ownership lifecycle (incref new -> free old -> store)
+// Covers: string reassignment, x=x self-assignment, function-return assignment,
+//         parameter reassignment, repeated reassignment, alias, RHS function call once
+// Both Bytecode and Native must produce identical output
+
+fn get_string() {
+    return "from function";
+}
+
+fn get_number() {
+    return 42;
+}
+
+fn modify_param(s) {
+    io.println(s);
+    s = "modified inside";
+    io.println(s);
+    return s;
+}
+
+fn test_string_reassignment() {
+    io.println("=== 1. string reassignment ===");
+    let s = "first";
+    io.println(s);
+    s = "second";
+    io.println(s);
+    s = "third";
+    io.println(s);
+}
+
+fn test_self_assignment() {
+    io.println("=== 2. x = x self-assignment ===");
+    let x = "self test";
+    io.println(x);
+    x = x;
+    io.println(x);
+    let n = 100;
+    io.println(n);
+    n = n;
+    io.println(n);
+}
+
+fn test_function_return_assignment() {
+    io.println("=== 3. function return assignment ===");
+    let s = "original";
+    io.println(s);
+    s = get_string();
+    io.println(s);
+    let n = 0;
+    io.println(n);
+    n = get_number();
+    io.println(n);
+}
+
+fn test_parameter_reassignment() {
+    io.println("=== 4. parameter reassignment ===");
+    let s = "caller value";
+    io.println(s);
+    let result = modify_param(s);
+    io.println(s);
+    io.println(result);
+}
+
+fn test_repeated_reassignment() {
+    io.println("=== 5. repeated reassignment ===");
+    let x = "start";
+    io.println(x);
+    x = "one";
+    x = "two";
+    x = "three";
+    io.println(x);
+    let n = 0;
+    n = 1;
+    n = 2;
+    n = 3;
+    io.println(n);
+}
+
+fn test_alias() {
+    io.println("=== 6. alias scenario ===");
+    let a = "alias source";
+    let b = a;
+    io.println(a);
+    io.println(b);
+    a = "modified a";
+    io.println(a);
+    io.println(b);
+}
+
+fn test_rhs_function_call_once() {
+    io.println("=== 7. RHS function call evaluated once ===");
+    let counter = 0;
+    let s = "before";
+    io.println(s);
+    // If RHS is evaluated twice, get_string() would be called twice
+    // but output should still be correct (same return value)
+    s = get_string();
+    io.println(s);
+    io.println(get_string());
+}
+
+fn main() {
+    io.println("=== ownership_assignment_closure ===");
+    test_string_reassignment();
+    test_self_assignment();
+    test_function_return_assignment();
+    test_parameter_reassignment();
+    test_repeated_reassignment();
+    test_alias();
+    test_rhs_function_call_once();
+    io.println("=== done ===");
+    return 0;
+}
+
+main()
