@@ -1,8 +1,8 @@
-name: CI
+﻿name: CI
 
 on:
   push:
-    branches: [main, develop, feature/*]
+    branches: [main, develop, feature/*, p0-language-*]
   pull_request:
     branches: [main, develop]
 
@@ -460,7 +460,7 @@ jobs:
         run: scripts\run-bc-network-test.ps1 bc_invalid
 
       # === P0-15.18.3: Blockchain High-Message Stress Test ===
-      # 4 Node real TCP, 120 high-frequency transactions (fee闂傚倷绶￠崑鍛暜閹烘?triggers mempool capacity=50 overflow),
+      # 4 Node real TCP, 120 high-frequency transactions (fee闂傚倸鍊风欢锟犲磻閸涱垱鏆滈柟鐑橆樄?triggers mempool capacity=50 overflow),
       # transaction propagation, block propagation, final 4-node consistency.
       # No Runtime changes 闂?if this fails, Runtime/P2P/Blockchain has a real bug.
       - name: Blockchain high-message stress 120 txs (Linux/macOS)
@@ -697,3 +697,4 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "perf_blockchain run failed" }
           if ((Get-Content perf_blockchain.log -Raw) -notmatch "PERF_BLOCKCHAIN_PASS") { throw "perf_blockchain did not PASS" }
           Write-Output "=== Performance Benchmark PASSED ==="
+
