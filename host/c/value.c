@@ -210,7 +210,9 @@ static char *float_to_string(double v) {
     return strdup(buf);
 }
 
-char *tll_to_string(TLLValue v) {
+/* TLL-028: depth-limited to prevent stack overflow from circular references */
+static char *tll_to_string_depth(TLLValue v, int depth) {
+    if (depth > 32) return strdup("[Circular]");
     switch (v.type) {
         case TLL_NULL: return strdup("");
         case TLL_BOOL: return strdup(v.as.boolean ? "true" : "false");
@@ -218,11 +220,10 @@ char *tll_to_string(TLLValue v) {
         case TLL_FLOAT: return float_to_string(v.as.floating);
         case TLL_STRING: return strdup(v.as.string);
         case TLL_ARRAY: {
-            /* Build array string */
             char *result = strdup("[");
             for (int i = 0; i < v.as.array->length; i++) {
                 if (i > 0) { char *t = result; result = (char*)malloc(strlen(t) + 3); strcpy(result, t); strcat(result, ", "); free(t); }
-                char *elem = tll_to_string(v.as.array->items[i]);
+                char *elem = tll_to_string_depth(v.as.array->items[i], depth + 1);
                 char *t = result;
                 result = (char*)malloc(strlen(result) + strlen(elem) + 1);
                 strcpy(result, t);
@@ -238,7 +239,6 @@ char *tll_to_string(TLLValue v) {
             return result;
         }
         case TLL_MAP: {
-            /* Simple JSON-like representation */
             char *result = strdup("{");
             int first = 1;
             for (int b = 0; b < v.as.map->bucketCount; b++) {
@@ -246,7 +246,7 @@ char *tll_to_string(TLLValue v) {
                 while (e) {
                     if (!first) { char *t = result; result = (char*)malloc(strlen(t) + 3); strcpy(result, t); strcat(result, ", "); free(t); }
                     first = 0;
-                    char *val = tll_to_string(e->value);
+                    char *val = tll_to_string_depth(e->value, depth + 1);
                     char *tmp = (char*)malloc(strlen(result) + strlen(e->key) + strlen(val) + 8);
                     sprintf(tmp, "%s\"%s\":%s", result, e->key, val);
                     free(result);
@@ -269,6 +269,10 @@ char *tll_to_string(TLLValue v) {
         }
         default: return strdup("?");
     }
+}
+
+char *tll_to_string(TLLValue v) {
+    return tll_to_string_depth(v, 0);
 }
 
 /* JSON serialization: strings get quotes, null becomes "null" */
