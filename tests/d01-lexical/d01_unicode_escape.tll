@@ -1,0 +1,7 @@
+// D01 Negative/Boundary Test 4: Unicode escape \u
+// lexer 只实现了 \x，未实现 \uXXXX
+fn main() -> void {
+    let s = "\u4e2d\u6587"
+    io.println(s)
+}
+main()

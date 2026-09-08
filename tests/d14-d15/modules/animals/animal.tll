@@ -1,0 +1,7 @@
+// D14 Module Test: Animal Interface Definition
+
+export interface Animal {
+    fn speak() -> str
+    fn name() -> str
+    fn legs() -> int
+}

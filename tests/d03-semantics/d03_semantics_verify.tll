@@ -1,0 +1,133 @@
+// D03 Semantics Verification Test
+// 验证：作用域、闭包、递归、变量遮蔽、一等函数、高阶函数、求值顺序、短路求值
+
+fn make_counter() {
+    let count = 0
+    return fn() {
+        count = count + 1
+        return count
+    }
+}
+
+fn make_adder2(x) {
+    return fn(y) { return x + y }
+}
+
+fn fibonacci(n) {
+    if n <= 1 { return n }
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+fn compose(f, g) {
+    return fn(x) { return f(g(x)) }
+}
+
+fn main() -> void {
+    // === 1. Lexical Scope (词法作用域) ===
+    let outer_var = 10
+    fn scope_test() {
+        let inner_var = 20
+        return outer_var + inner_var
+    }
+    if scope_test() != 30 { throw "lexical scope fail" }
+
+    // === 2. Variable Scope (变量作用域) ===
+    // TLL uses function-level scope, NOT block-level scope
+    let scope_var = 1
+    if true {
+        let scope_var = 2
+        if scope_var != 2 { throw "inner scope fail" }
+    }
+    // Function-level scope: inner assignment persists
+    if scope_var != 2 { throw "function scope fail" }
+
+    // Function-level scope verification via separate function
+    fn scope_test_fn() {
+        let fn_local = 10
+        if true {
+            let fn_local = 20
+        }
+        return fn_local  // Should be 20 due to function-level scope
+    }
+    if scope_test_fn() != 20 { throw "function scope 2 fail" }
+
+    // === 3. Closure Capture (闭包捕获) ===
+    let add10 = make_adder2(10)
+    if add10(5) != 15 { throw "closure capture fail" }
+    let add20 = make_adder2(20)
+    if add20(5) != 25 { throw "closure independent fail" }
+
+    // === 4. Mutable Closure State (可变闭包状态) ===
+    let counter = make_counter()
+    if counter() != 1 { throw "counter 1 fail" }
+    if counter() != 2 { throw "counter 2 fail" }
+    if counter() != 3 { throw "counter 3 fail" }
+    let counter2 = make_counter()
+    if counter2() != 1 { throw "counter2 independent fail" }
+
+    // === 5. Recursion (递归) ===
+    if fibonacci(0) != 0 { throw "fib 0 fail" }
+    if fibonacci(1) != 1 { throw "fib 1 fail" }
+    if fibonacci(10) != 55 { throw "fib 10 fail" }
+
+    // === 6. First-class Functions (一等函数) ===
+    let fn_ref = make_adder2
+    let add3 = fn_ref(3)
+    if add3(4) != 7 { throw "first-class fn fail" }
+
+    // === 7. Higher-order Functions (高阶函数) ===
+    let inc = fn(x) { return x + 1 }
+    let dbl = fn(x) { return x * 2 }
+    let inc_then_dbl = compose(dbl, inc)
+    if inc_then_dbl(5) != 12 { throw "hof compose fail" }
+
+    // === 8. Short-circuit Evaluation (短路求值) ===
+    let sc_eval = 0
+    fn side_effect() {
+        sc_eval = 1
+        return true
+    }
+    // false && side_effect() should NOT call side_effect
+    let result1 = false && side_effect()
+    if sc_eval != 0 { throw "short-circuit && fail" }
+    // true || side_effect() should NOT call side_effect
+    let result2 = true || side_effect()
+    if sc_eval != 0 { throw "short-circuit || fail" }
+    // true && side_effect() SHOULD call side_effect
+    let result3 = true && side_effect()
+    if sc_eval != 1 { throw "non-short-circuit && fail" }
+
+    // === 9. Evaluation Order (求值顺序) ===
+    let eval_order = []
+    fn eval_a() { arrays.push(eval_order, "a"); return 1 }
+    fn eval_b() { arrays.push(eval_order, "b"); return 2 }
+    let eo_result = eval_a() + eval_b()
+    if eo_result != 3 { throw "eval order result fail" }
+    // Left-to-right evaluation: a then b
+    if eval_order[0] != "a" { throw "eval order left fail" }
+    if eval_order[1] != "b" { throw "eval order right fail" }
+
+    // === 10. Nested Function Scope (嵌套函数作用域) ===
+    fn outer_fn() {
+        let outer_local = 100
+        fn inner_fn() {
+            return outer_local
+        }
+        return inner_fn()
+    }
+    if outer_fn() != 100 { throw "nested fn scope fail" }
+
+    // === 11. Return Semantics (return 语义) ===
+    fn early_return(x) {
+        if x > 10 { return "big" }
+        return "small"
+    }
+    if early_return(20) != "big" { throw "early return big fail" }
+    if early_return(5) != "small" { throw "early return small fail" }
+
+    // === 12. Default Parameter Values (if supported) ===
+    // TLL may not support default params - test only if syntax works
+
+    io.println("D03-SEMANTICS-ALL-PASS")
+}
+main()

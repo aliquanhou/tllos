@@ -1,0 +1,42 @@
+// D13 Module Test: User Module
+// 验证：export 公共 API、模块隔离（private 不导出）、跨模块类型
+
+// 模块内部状态（不 export，应该是 private）
+let userCount = 0
+let internalSecret = "secret_data"
+
+// 导出的类型
+export struct User {
+    id: int
+    name: str
+    email: str
+}
+
+// 导出的函数：创建用户
+export fn createUser(name, email) {
+    userCount = userCount + 1
+    return {
+        "id": userCount,
+        "name": name,
+        "email": email
+    }
+}
+
+// 导出的函数：用户登录
+export fn login(user, password) {
+    // 简化的登录逻辑
+    if user["email"] != "" && password != "" {
+        return true
+    }
+    return false
+}
+
+// 导出的函数：获取用户数量
+export fn getUserCount() {
+    return userCount
+}
+
+// 不导出的内部函数（应该是 private）
+fn internalHelper() {
+    return internalSecret
+}

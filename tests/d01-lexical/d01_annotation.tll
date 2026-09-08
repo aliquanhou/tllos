@@ -1,0 +1,7 @@
+// D01 Test: annotation/decorator syntax @
+fn main() -> void {
+    @decorator
+    let x = 1
+    io.println(x)
+}
+main()

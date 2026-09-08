@@ -1,0 +1,326 @@
+// D10 Reference & Ownership + D11 Data Structures Comprehensive Verification
+// 含 Reference/Ownership Matrix 验证
+
+// 顶层函数（避免前向引用问题）
+fn d10_return_array() {
+    let local = [1, 2, 3]
+    return local
+}
+
+fn d10_return_closure() {
+    let local_val = 100
+    return fn() { return local_val }
+}
+
+fn d10_take_array_param(arr) {
+    arr[0] = 999  // 修改参数
+    return arr
+}
+
+fn main() -> void {
+    // ============================================
+    // D10: Reference & Ownership
+    // ============================================
+
+    // --- 1. primitive assignment: value copy ---
+    let p1 = 42
+    let p2 = p1
+    p1 = 100
+    if p2 != 42 { throw "D10: primitive assignment not copy" }
+
+    // --- 2. array assignment: reference share ---
+    let a1 = [1, 2, 3]
+    let a2 = a1
+    a2[0] = 99
+    if a1[0] != 99 { throw "D10: array assignment not reference" }
+
+    // --- 3. map assignment: reference share ---
+    let m1 = {"x": 1}
+    let m2 = m1
+    m2["x"] = 99
+    if m1["x"] != 99 { throw "D10: map assignment not reference" }
+
+    // --- 4. function assignment: reference ---
+    fn f1() { return 1 }
+    let f2 = f1
+    if f2() != 1 { throw "D10: function assignment fail" }
+
+    // --- 5. closure capture: reference, mutable ---
+    fn make_counter_d10() {
+        let count = 0
+        return {
+            "inc": fn() { count = count + 1; return count },
+            "get": fn() { return count }
+        }
+    }
+    // 验证闭包持有可变引用
+    // (TLL map 中函数调用可能需要特殊语法，记录实际行为)
+
+    // --- 6. closure capture simple ---
+    fn make_adder_d10(x) {
+        return fn(y) { return x + y }
+    }
+    let add5 = make_adder_d10(5)
+    if add5(3) != 8 { throw "D10: closure capture fail" }
+
+    // --- 7. function return array: reference escape ---
+    let ra = d10_return_array()
+    if ra[0] != 1 { throw "D10: return array value fail" }
+    ra[0] = 999
+    if ra[0] != 999 { throw "D10: return array mutation fail" }
+    // 返回的数组是引用，调用者拥有它
+
+    // --- 8. function return closure: capture escape ---
+    let rc = d10_return_closure()
+    if rc() != 100 { throw "D10: return closure capture fail" }
+    // 闭包持有已退出函数的变量，变量生命周期延长
+
+    // --- 9. function parameter: array passed by reference ---
+    let pa = [1, 2, 3]
+    d10_take_array_param(pa)
+    if pa[0] != 999 { throw "D10: array param not by reference" }
+    // 函数参数中的数组是引用，函数内修改影响调用者
+
+    // --- 10. container -> element reference ---
+    let nested = [[1, 2], [3, 4]]
+    let inner = nested[0]
+    inner[0] = 99
+    if nested[0][0] != 99 { throw "D10: container element not reference" }
+    // 从容器中取出的元素仍然是引用
+
+    // --- 11. nested reference ---
+    let deep = {"a": {"b": [1, 2, 3]}}
+    let deep_arr = deep["a"]["b"]
+    deep_arr[0] = 99
+    if deep["a"]["b"][0] != 99 { throw "D10: nested reference fail" }
+
+    // --- 12. multiple aliases ---
+    let orig = [1, 2, 3]
+    let alias1 = orig
+    let alias2 = alias1
+    let alias3 = orig
+    alias2[1] = 88
+    if orig[1] != 88 { throw "D10: multiple alias orig fail" }
+    if alias1[1] != 88 { throw "D10: multiple alias1 fail" }
+    if alias3[1] != 88 { throw "D10: multiple alias3 fail" }
+
+    // --- 13. array element overwrite ---
+    let ow = [1, 2, 3]
+    ow[0] = [10, 20]  // 用新数组覆盖元素
+    if ow[0][0] != 10 { throw "D10: element overwrite fail" }
+
+    // --- 14. closure independent state ---
+    fn make_independent() {
+        let x = 0
+        return fn() { x = x + 1; return x }
+    }
+    let ctr1 = make_independent()
+    let ctr2 = make_independent()
+    ctr1()
+    ctr1()
+    ctr2()
+    if ctr1() != 3 { throw "D10: closure independent ctr1 fail" }
+    if ctr2() != 2 { throw "D10: closure independent ctr2 fail" }
+
+    // ============================================
+    // D11: Data Structures
+    // ============================================
+
+    // --- array: 原生 ---
+    let ds_arr = [1, 2, 3, 4, 5]
+    if ds_arr.length != 5 { throw "D11: array length fail" }
+    if ds_arr[0] != 1 { throw "D11: array index fail" }
+    arrays.push(ds_arr, 6)
+    if ds_arr.length != 6 { throw "D11: array push fail" }
+
+    // --- map: 原生 ---
+    let ds_map = {"a": 1, "b": 2, "c": 3}
+    if ds_map["a"] != 1 { throw "D11: map index fail" }
+    ds_map["d"] = 4
+    if ds_map["d"] != 4 { throw "D11: map insert fail" }
+
+    // --- tuple: 原生（编译为数组）---
+    let ds_tup = (1, "two", 3.0)
+    // tuple 访问通过索引
+    // (TLL tuple 可能编译为数组，记录实际行为)
+
+    // --- set: 用 map 模拟 ---
+    let ds_set = {}
+    ds_set["apple"] = true
+    ds_set["banana"] = true
+    ds_set["apple"] = true  // 重复插入
+    // 检查成员
+    if ds_set["apple"] != true { throw "D11: set membership fail" }
+    // 删除成员
+    ds_set["banana"] = null
+    // set 不是原生，用 map 模拟
+
+    // --- stack: 用 array 模拟 ---
+    let ds_stack = []
+    arrays.push(ds_stack, 1)
+    arrays.push(ds_stack, 2)
+    arrays.push(ds_stack, 3)
+    // pop (TLL 可能没有内置 pop，用索引+长度模拟)
+    let stack_top = ds_stack[ds_stack.length - 1]
+    if stack_top != 3 { throw "D11: stack top fail" }
+    // stack 不是原生，用 array 模拟
+
+    // --- queue: 用 array 模拟 ---
+    let ds_queue = []
+    arrays.push(ds_queue, 1)
+    arrays.push(ds_queue, 2)
+    arrays.push(ds_queue, 3)
+    // dequeue (TLL 可能没有内置 shift，记录实际行为)
+    let queue_front = ds_queue[0]
+    if queue_front != 1 { throw "D11: queue front fail" }
+    // queue 不是原生，用 array 模拟
+
+    // --- linked list: 用 map/struct 模拟 ---
+    // TLL 可能没有原生 linked list，用 map 模拟节点
+    let node3 = {"value": 3, "next": null}
+    let node2 = {"value": 2, "next": node3}
+    let node1 = {"value": 1, "next": node2}
+    // 遍历
+    let ll_values = []
+    let current = node1
+    while current != null {
+        arrays.push(ll_values, current["value"])
+        current = current["next"]
+    }
+    if ll_values.length != 3 { throw "D11: linked list length fail" }
+    if ll_values[0] != 1 { throw "D11: linked list value 0 fail" }
+    if ll_values[2] != 3 { throw "D11: linked list value 2 fail" }
+    // linked list 不是原生，用 map 模拟
+
+    // --- tree: 用 map/struct 模拟 ---
+    let tree_root = {
+        "value": 1,
+        "left": {"value": 2, "left": null, "right": null},
+        "right": {"value": 3, "left": null, "right": null}
+    }
+    if tree_root["value"] != 1 { throw "D11: tree root fail" }
+    if tree_root["left"]["value"] != 2 { throw "D11: tree left fail" }
+    if tree_root["right"]["value"] != 3 { throw "D11: tree right fail" }
+    // tree 不是原生，用 map 模拟
+
+    // --- graph: 用 map 模拟邻接表 ---
+    let graph = {
+        "A": ["B", "C"],
+        "B": ["A", "D"],
+        "C": ["A", "D"],
+        "D": ["B", "C"]
+    }
+    if graph["A"].length != 2 { throw "D11: graph adjacency fail" }
+    if graph["D"][0] != "B" { throw "D11: graph edge fail" }
+    // graph 不是原生，用 map 模拟
+
+    // --- iterator: 用 for...in + while ---
+    let iter_values = []
+    for v in [10, 20, 30] {
+        arrays.push(iter_values, v)
+    }
+    if iter_values.length != 3 { throw "D11: iterator for-in fail" }
+    if iter_values[1] != 20 { throw "D11: iterator value fail" }
+
+    // --- collection operations ---
+    // map (transform)
+    let col_orig = [1, 2, 3]
+    let col_mapped = []
+    for cv in col_orig {
+        arrays.push(col_mapped, cv * 2)
+    }
+    if col_mapped[1] != 4 { throw "D11: collection map fail" }
+
+    // filter
+    let col_filtered = []
+    for cv in [1, 2, 3, 4, 5] {
+        if cv % 2 == 0 {
+            arrays.push(col_filtered, cv)
+        }
+    }
+    if col_filtered.length != 2 { throw "D11: collection filter fail" }
+
+    // reduce
+    let col_sum = 0
+    for cv in [1, 2, 3, 4, 5] {
+        col_sum = col_sum + cv
+    }
+    if col_sum != 15 { throw "D11: collection reduce fail" }
+
+    // find
+    let found = null
+    for cv in [1, 2, 3, 4, 5] {
+        if cv == 3 {
+            found = cv
+        }
+    }
+    if found != 3 { throw "D11: collection find fail" }
+
+    // sort (bubble sort, 无内置 sort)
+    let to_sort = [3, 1, 4, 1, 5, 9, 2, 6]
+    let si = 0
+    while si < to_sort.length {
+        let sj = 0
+        while sj < to_sort.length - 1 {
+            if to_sort[sj] > to_sort[sj + 1] {
+                let tmp = to_sort[sj]
+                to_sort[sj] = to_sort[sj + 1]
+                to_sort[sj + 1] = tmp
+            }
+            sj = sj + 1
+        }
+        si = si + 1
+    }
+    if to_sort[0] != 1 { throw "D11: sort fail" }
+    if to_sort[to_sort.length - 1] != 9 { throw "D11: sort last fail" }
+
+    // search (linear)
+    let search_target = 5
+    let search_found = false
+    for sv in to_sort {
+        if sv == search_target {
+            search_found = true
+        }
+    }
+    if !search_found { throw "D11: search fail" }
+
+    // insert
+    let insert_arr = [1, 2, 4]
+    arrays.push(insert_arr, 5)  // append
+    if insert_arr.length != 4 { throw "D11: insert append fail" }
+
+    // delete (用 filter 模拟)
+    let delete_arr = [1, 2, 3, 4, 5]
+    let after_delete = []
+    for dv in delete_arr {
+        if dv != 3 {
+            arrays.push(after_delete, dv)
+        }
+    }
+    if after_delete.length != 4 { throw "D11: delete length fail" }
+    if after_delete[2] != 4 { throw "D11: delete value fail" }
+
+    // lookup
+    let lookup_map = {"key1": "value1", "key2": "value2"}
+    if lookup_map["key1"] != "value1" { throw "D11: lookup fail" }
+
+    // traversal
+    let trav_sum = 0
+    for tv in [1, 2, 3, 4, 5] {
+        trav_sum = trav_sum + tv
+    }
+    if trav_sum != 15 { throw "D11: traversal fail" }
+
+    // nested data structures
+    let matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    if matrix[1][1] != 5 { throw "D11: nested matrix fail" }
+
+    let list_of_maps = [{"id": 1}, {"id": 2}, {"id": 3}]
+    if list_of_maps[1]["id"] != 2 { throw "D11: list of maps fail" }
+
+    let map_of_lists = {"even": [2, 4, 6], "odd": [1, 3, 5]}
+    if map_of_lists["even"][1] != 4 { throw "D11: map of lists fail" }
+
+    io.println("D10-D11-ALL-PASS")
+}
+main()

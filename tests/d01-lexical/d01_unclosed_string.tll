@@ -1,0 +1,6 @@
+// D01 Test: unclosed string (malformed token)
+fn main() -> void {
+    let s = "unclosed string
+    io.println(s)
+}
+main()

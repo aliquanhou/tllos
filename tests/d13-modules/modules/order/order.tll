@@ -1,0 +1,42 @@
+// D13 Module Test: Order Module
+// 验证：跨模块依赖（order → user）、跨模块类型使用
+
+from "../user/user.tll" import User, createUser, getUserCount
+
+// 模块内部状态
+let orderCount = 0
+
+// 导出的类型
+export struct Order {
+    id: int
+    userId: int
+    items: list
+    total: float
+    status: str
+}
+
+// 导出的函数：创建订单
+export fn createOrder(user, items, total) {
+    orderCount = orderCount + 1
+    return {
+        "id": orderCount,
+        "userId": user["id"],
+        "items": items,
+        "total": total,
+        "status": "pending"
+    }
+}
+
+// 导出的函数：获取订单数量
+export fn getOrderCount() {
+    return orderCount
+}
+
+// 导出的函数：计算订单总价
+export fn calculateTotal(items) {
+    let total = 0
+    for item in items {
+        total = total + item["price"] * item["qty"]
+    }
+    return total
+}

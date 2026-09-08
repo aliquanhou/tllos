@@ -1698,6 +1698,27 @@ fn cg_compileBinary(expr: map) -> int {
         cg_patchJump(scJmpEndIdx)
         return scResultReg
     }
+    // Null coalescing ??: if left is not null, return left; else return right
+    if op == "??" {
+        let ncResultReg = cg_allocReg()
+        let ncNullReg = cg_allocReg()
+        cg_emit(OP_LOAD_CONST, [ncNullReg, cg_addConstant(null)])
+        let ncEqReg = cg_allocReg()
+        cg_emit(OP_EQ, [ncEqReg, leftReg, ncNullReg])
+        // ncEqReg true means left IS null; if false (not null), jump to return left
+        let ncJmpNotNullIdx = arrays.length(cg_instructions)
+        cg_emit(OP_JMP_IF_FALSE, [ncEqReg, -1])
+        // left IS null: compile and return right
+        let ncRightReg = cg_compileExpression(expr.right)
+        cg_emit(OP_MOV, [ncResultReg, ncRightReg])
+        let ncJmpEndIdx = arrays.length(cg_instructions)
+        cg_emit(OP_JMP, [-1])
+        // left is NOT null: return left
+        cg_patchJump(ncJmpNotNullIdx)
+        cg_emit(OP_MOV, [ncResultReg, leftReg])
+        cg_patchJump(ncJmpEndIdx)
+        return ncResultReg
+    }
     let rightReg = cg_compileExpression(expr.right)
     let resultReg = cg_allocReg()
 

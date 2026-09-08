@@ -1,0 +1,6 @@
+// D01 Test: invalid character $
+fn main() -> void {
+    let $x = 1
+    io.println($x)
+}
+main()

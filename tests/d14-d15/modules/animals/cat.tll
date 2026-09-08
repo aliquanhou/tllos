@@ -1,0 +1,23 @@
+// D14 Module Test: Cat Implementation
+
+from "./animal.tll" import Animal
+
+export struct Cat {
+    catName: str
+}
+
+impl Animal for Cat {
+    fn speak() {
+        return "Meow!"
+    }
+    fn name() {
+        return this.catName
+    }
+    fn legs() {
+        return 4
+    }
+}
+
+export fn createCat(catName) {
+    return {"catName": catName, "__type": "Cat"}
+}

@@ -1,0 +1,7 @@
+// D01 Negative/Boundary Test 1: Block Comment /* */
+// spec/SYNTAX.md 声明了块注释，但 lexer 未实现
+fn main() -> void {
+    /* this is a block comment */
+    io.println("block comment ok")
+}
+main()

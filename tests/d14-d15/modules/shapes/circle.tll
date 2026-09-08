@@ -1,0 +1,24 @@
+// D14 Module Test: Circle Implementation
+// 验证：struct 定义、impl Interface for Type、跨模块实现
+
+from "./shape.tll" import Shape
+
+export struct Circle {
+    radius: float
+}
+
+impl Shape for Circle {
+    fn area() {
+        return 3.14159 * this.radius * this.radius
+    }
+    fn perimeter() {
+        return 2 * 3.14159 * this.radius
+    }
+    fn name() {
+        return "Circle"
+    }
+}
+
+export fn createCircle(radius) {
+    return {"radius": radius, "__type": "Circle"}
+}

@@ -637,7 +637,7 @@ fn parsePipe() -> map {
 }
 
 fn parseTernary() -> map {
-    let cond = parseOr()
+    let cond = parseNullCoalescing()
     if parse_match("QUESTION") {
         let t = parse_previous()
         let consequent = parseAssignment()
@@ -663,6 +663,20 @@ fn parseAssignment() -> map {
         node.left = left
         node.right = right
         return node
+    }
+    return left
+}
+
+fn parseNullCoalescing() -> map {
+    let left = parseOr()
+    while parse_match("NULL_COALESCING") {
+        let t = parse_previous()
+        let right = parseOr()
+        let node = makeNode("Binary", t.line, t.column)
+        node.operator = "??"
+        node.left = left
+        node.right = right
+        left = node
     }
     return left
 }
@@ -1013,7 +1027,7 @@ fn parsePrimary() -> map {
         node.value = t.tkValue
         return node
     }
-    if parse_match("RAWSTRING") {
+    if parse_match("RAW_STRING") {
         let node = makeNode("String", t.line, t.column)
         node.value = t.tkValue
         node.raw = true

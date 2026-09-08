@@ -1,0 +1,23 @@
+// D14 Module Test: Dog Implementation
+
+from "./animal.tll" import Animal
+
+export struct Dog {
+    dogName: str
+}
+
+impl Animal for Dog {
+    fn speak() {
+        return "Woof!"
+    }
+    fn name() {
+        return this.dogName
+    }
+    fn legs() {
+        return 4
+    }
+}
+
+export fn createDog(dogName) {
+    return {"dogName": dogName, "__type": "Dog"}
+}

@@ -1,0 +1,41 @@
+// D20 Self-Compiling Bootstrap Entry
+// 这个入口编译它自身，用于自举闭环验证
+// 运行后生成 d20_selfcompile_output.tllbc（下一代编译器）
+// 然后可以用下一代再运行，比较产物是否收敛
+
+from "./lexer" import tokenize
+from "./parser" import parse
+from "./typechecker" import check
+from "./codegen" import compile
+from "./linker" import linkAndCompile
+
+fn main() -> void {
+    io.println("=== D20 Self-Compile Bootstrap ===")
+    io.println("Compiling: d20_selfcompile_entry.tll")
+    io.println("Output: d20_selfcompile_output.tllbc")
+
+    let startTime = time.nowMs()
+
+    // 编译自身
+    let bytecode = linkAndCompile("./d20_selfcompile_entry.tll")
+    if bytecode.hasError == true {
+        io.println("COMPILATION FAILED: " + bytecode.error)
+        return
+    }
+
+    let compileTime = time.nowMs() - startTime
+
+    let bytecodeJson = json.stringify(bytecode)
+    fs.writeFile("./d20_selfcompile_output.tllbc", bytecodeJson)
+
+    let totalTime = time.nowMs() - startTime
+
+    io.println("SUCCESS: self-compiled output generated")
+    io.println("  Functions: " + convert.toString(arrays.length(bytecode.functions)))
+    io.println("  Constants: " + convert.toString(arrays.length(bytecode.constants)))
+    io.println("  Bytecode size: " + convert.toString(strings.length(bytecodeJson)) + " bytes")
+    io.println("  Compile time: " + convert.toString(compileTime) + " ms")
+    io.println("  Total time: " + convert.toString(totalTime) + " ms")
+    io.println("=== D20 SELF-COMPILE DONE ===")
+}
+main()

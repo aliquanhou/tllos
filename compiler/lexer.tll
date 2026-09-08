@@ -96,6 +96,7 @@ let TK_PIPE = "PIPE"
 let TK_AT = "AT"
 let TK_HASH = "HASH"
 let TK_QUESTION = "QUESTION"
+let TK_NULLISH = "NULLISH"
 let TK_RANGE = "RANGE"
 let TK_RANGE_INCLUSIVE = "RANGE_INCLUSIVE"
 let TK_PLUSPLUS = "PLUSPLUS"
@@ -105,6 +106,7 @@ let TK_MINUS_EQ = "MINUS_EQ"
 let TK_STAR_EQ = "STAR_EQ"
 let TK_SLASH_EQ = "SLASH_EQ"
 let TK_PERCENT_EQ = "PERCENT_EQ"
+let TK_NULL_COALESCING = "NULL_COALESCING"
 let TK_EOF = "EOF"
 // Bitwise operators (P0-15: blockchain stress test exposed gap)
 let TK_BAND = "BAND"
@@ -172,6 +174,12 @@ fn getKeywordType(word: string) -> string {
     if word == "match" { return TK_MATCH }
     if word == "interface" { return TK_INTERFACE }
     if word == "impl" { return TK_IMPL }
+    if word == "super" { return TK_SUPER }
+    if word == "package" { return TK_PACKAGE }
+    if word == "undefined" { return TK_UNDEFINED }
+    if word == "module" { return TK_MODULE }
+    if word == "option" { return TK_OPTION }
+    if word == "intent" { return TK_INTENT }
     return ""
 }
 
@@ -194,6 +202,23 @@ export fn tokenize(input: string) -> list {
                     pos = pos + 1
                     column = column + 1
                 }
+            } else if ch == "/" && pos + 1 < inputLen && strings.charAt(input, pos + 1) == "*" {
+                // block comment /* ... */
+                let bcLine = line
+                let bcCol = column
+                pos = pos + 2; column = column + 2
+                let blockClosed = false
+                while pos + 1 < inputLen {
+                    if strings.charAt(input, pos) == "*" && strings.charAt(input, pos + 1) == "/" {
+                        pos = pos + 2; column = column + 2
+                        blockClosed = true
+                        break
+                    }
+                    let bc = strings.charAt(input, pos)
+                    pos = pos + 1; column = column + 1
+                    if bc == "\n" { line = line + 1; column = 1 }
+                }
+                if !blockClosed { throw "TLL-E001 Lexer error at line " + convert.toString(bcLine) + " column " + convert.toString(bcCol) + ": unterminated block comment" }
             } else if ch == "#" {
                 // # single-line comment (TLL lexical feature)
                 while pos < inputLen && strings.charAt(input, pos) != "\n" {
@@ -225,18 +250,21 @@ export fn tokenize(input: string) -> list {
                 if mc == "\n" { line = line + 1; column = 1 }
                 mvalue = mvalue + mc
             }
+            if pos + 2 >= inputLen { throw "TLL-E001 Lexer error at line " + convert.toString(startLine) + " column " + convert.toString(startCol) + ": unterminated multiline string literal" }
             continue
         }
         if ch == "\"" {
             // read string (inlined)
             pos = pos + 1; column = column + 1
             let value = ""
+            let dclosed = false
             while pos < inputLen {
                 let c = strings.charAt(input, pos)
                 pos = pos + 1; column = column + 1
                 if c == "\n" { line = line + 1; column = 1 }
                 if c == "\"" {
                     arrays.push(tokens, { tkType: TK_STRING, tkValue: value, line: startLine, column: startCol })
+                    dclosed = true
                     break
                 } else if c == "\\" {
                     if pos < inputLen {
@@ -266,28 +294,100 @@ export fn tokenize(input: string) -> list {
                             } else {
                                 value = value + "x"
                             }
+                        }                        else if next == "u" {
+                            let uVal = 0
+                            let uCount = 0
+                            while uCount < 4 && pos < inputLen {
+                                let uh = strings.charAt(input, pos)
+                                if isHexDigit(uh) {
+                                    uVal = uVal * 16 + hexDigitValue(uh)
+                                    pos = pos + 1; column = column + 1
+                                    uCount = uCount + 1
+                                } else {
+                                    break
+                                }
+                            }
+                            if uCount > 0 {
+                                value = value + convert.toChar(uVal)
+                            } else {
+                                value = value + "u"
+                            }
                         }
+
                         else { value = value + next }
                     }
                 } else {
                     value = value + c
                 }
             }
+            if !dclosed { throw "TLL-E001 Lexer error at line " + convert.toString(startLine) + " column " + convert.toString(startCol) + ": unterminated string literal" }
         } else if ch == "r" && pos + 1 < inputLen && strings.charAt(input, pos + 1) == "\"" {
             // read raw string (inlined)
             pos = pos + 1; column = column + 1
             pos = pos + 1; column = column + 1
             let value = ""
+            let rclosed = false
             while pos < inputLen {
                 let c = strings.charAt(input, pos)
                 pos = pos + 1; column = column + 1
                 if c == "\n" { line = line + 1; column = 1 }
                 if c == "\"" {
                     arrays.push(tokens, { tkType: TK_RAW_STRING, tkValue: value, line: startLine, column: startCol })
+                    rclosed = true
                     break
                 }
                 value = value + c
             }
+            if !rclosed { throw "TLL-E001 Lexer error at line " + convert.toString(startLine) + " column " + convert.toString(startCol) + ": unterminated raw string literal" }
+        } else if ch == "'" {
+            // read single-quoted string
+            pos = pos + 1; column = column + 1
+            let svalue = ""
+            let sclosed = false
+            while pos < inputLen {
+                let sc = strings.charAt(input, pos)
+                pos = pos + 1; column = column + 1
+                if sc == "\n" { line = line + 1; column = 1 }
+                if sc == "'" {
+                    arrays.push(tokens, { tkType: TK_STRING, tkValue: svalue, line: startLine, column: startCol })
+                    sclosed = true
+                    break
+                } else if sc == "\\" {
+                    if pos < inputLen {
+                        let snext = strings.charAt(input, pos)
+                        pos = pos + 1; column = column + 1
+                        if snext == "n" { svalue = svalue + "\n" }
+                        else if snext == "t" { svalue = svalue + "\t" }
+                        else if snext == "r" { svalue = svalue + "\r" }
+                        else if snext == "\\" { svalue = svalue + "\\" }
+                        else if snext == "'" { svalue = svalue + "'" }
+                        else if snext == "0" { svalue = svalue + "\0" }
+                        else if snext == "x" {
+                            let shexVal = 0
+                            let shexCount = 0
+                            while shexCount < 2 && pos < inputLen {
+                                let shc = strings.charAt(input, pos)
+                                if isHexDigit(shc) {
+                                    shexVal = shexVal * 16 + hexDigitValue(shc)
+                                    pos = pos + 1; column = column + 1
+                                    shexCount = shexCount + 1
+                                } else {
+                                    break
+                                }
+                            }
+                            if shexCount > 0 {
+                                svalue = svalue + convert.toChar(shexVal)
+                            } else {
+                                svalue = svalue + "x"
+                            }
+                        }
+                        else { svalue = svalue + snext }
+                    }
+                } else {
+                    svalue = svalue + sc
+                }
+            }
+            if !sclosed { throw "TLL-E001 Lexer error at line " + convert.toString(startLine) + " column " + convert.toString(startCol) + ": unterminated string literal" }
         } else if isDigit(ch) {
             // read number (inlined)
             let value = ""
@@ -391,6 +491,7 @@ export fn tokenize(input: string) -> list {
             else if twoChar == "/=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SLASH_EQ, tkValue: "/=", line: startLine, column: startCol }); matched = true }
             else if twoChar == "%=" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_PERCENT_EQ, tkValue: "%=", line: startLine, column: startCol }); matched = true }
             else if twoChar == "**" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_POWER, tkValue: "**", line: startLine, column: startCol }); matched = true }
+            else if twoChar == "??" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_NULL_COALESCING, tkValue: "??", line: startLine, column: startCol }); matched = true }
             else if threeChar == "<<=" { pos = pos + 1; column = column + 1; pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SHL_EQ, tkValue: "<<=", line: startLine, column: startCol }); matched = true }
             else if threeChar == ">>=" { pos = pos + 1; column = column + 1; pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SHR_EQ, tkValue: ">>=", line: startLine, column: startCol }); matched = true }
             else if twoChar == "<<" { pos = pos + 1; column = column + 1; arrays.push(tokens, { tkType: TK_SHL, tkValue: "<<", line: startLine, column: startCol }); matched = true }

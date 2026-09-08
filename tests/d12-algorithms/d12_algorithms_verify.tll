@@ -1,0 +1,382 @@
+// D12 Algorithms Comprehensive Verification
+// 验证：排序、搜索、递归、迭代、动态规划、分治、贪心、图算法
+
+// 顶层递归函数
+fn d12_factorial(n) {
+    if n <= 1 { return 1 }
+    return n * d12_factorial(n - 1)
+}
+
+fn d12_fibonacci(n) {
+    if n <= 1 { return n }
+    return d12_fibonacci(n - 1) + d12_fibonacci(n - 2)
+}
+
+// 顶层递归函数（main 内部递归有前向引用问题）
+let d12_hanoiMoves = []
+fn d12_hanoi(n, src, dst, via) {
+    if n == 1 {
+        arrays.push(d12_hanoiMoves, src + "->" + dst)
+        return
+    }
+    d12_hanoi(n - 1, src, via, dst)
+    arrays.push(d12_hanoiMoves, src + "->" + dst)
+    d12_hanoi(n - 1, via, dst, src)
+}
+
+fn main() -> void {
+    io.println("=== D12 Algorithms Test ===")
+
+    // ============================================
+    // 1. 排序算法
+    // ============================================
+
+    // Bubble Sort
+    fn bubbleSort(arr) {
+        let n = arr.length
+        let i = 0
+        while i < n {
+            let j = 0
+            while j < n - 1 {
+                if arr[j] > arr[j + 1] {
+                    let tmp = arr[j]
+                    arr[j] = arr[j + 1]
+                    arr[j + 1] = tmp
+                }
+                j = j + 1
+            }
+            i = i + 1
+        }
+        return arr
+    }
+
+    let unsorted1 = [64, 34, 25, 12, 22, 11, 90]
+    let sorted1 = bubbleSort(unsorted1)
+    if sorted1[0] != 11 { throw "D12: bubble sort first fail" }
+    if sorted1[sorted1.length - 1] != 90 { throw "D12: bubble sort last fail" }
+    io.println("  1.1 Bubble Sort: PASS")
+
+    // Insertion Sort
+    fn insertionSort(arr) {
+        let i = 1
+        while i < arr.length {
+            let key = arr[i]
+            let j = i - 1
+            while j >= 0 && arr[j] > key {
+                arr[j + 1] = arr[j]
+                j = j - 1
+            }
+            arr[j + 1] = key
+            i = i + 1
+        }
+        return arr
+    }
+
+    let unsorted2 = [12, 11, 13, 5, 6]
+    let sorted2 = insertionSort(unsorted2)
+    if sorted2[0] != 5 { throw "D12: insertion sort first fail" }
+    io.println("  1.2 Insertion Sort: PASS")
+
+    // Quick Sort (simplified)
+    fn quickSort(arr, low, high) {
+        if low < high {
+            let pivot = arr[high]
+            let i = low - 1
+            let j = low
+            while j < high {
+                if arr[j] <= pivot {
+                    i = i + 1
+                    let tmp = arr[i]
+                    arr[i] = arr[j]
+                    arr[j] = tmp
+                }
+                j = j + 1
+            }
+            let tmp2 = arr[i + 1]
+            arr[i + 1] = arr[high]
+            arr[high] = tmp2
+            let pi = i + 1
+            quickSort(arr, low, pi - 1)
+            quickSort(arr, pi + 1, high)
+        }
+        return arr
+    }
+
+    let unsorted3 = [10, 7, 8, 9, 1, 5]
+    let sorted3 = quickSort(unsorted3, 0, unsorted3.length - 1)
+    if sorted3[0] != 1 { throw "D12: quick sort first fail" }
+    if sorted3[sorted3.length - 1] != 10 { throw "D12: quick sort last fail" }
+    io.println("  1.3 Quick Sort: PASS")
+
+    // ============================================
+    // 2. 搜索算法
+    // ============================================
+
+    // Linear Search
+    fn linearSearch(arr, target) {
+        let i = 0
+        while i < arr.length {
+            if arr[i] == target { return i }
+            i = i + 1
+        }
+        return -1
+    }
+
+    let searchArr = [2, 3, 4, 10, 40]
+    if linearSearch(searchArr, 10) != 3 { throw "D12: linear search found fail" }
+    if linearSearch(searchArr, 99) != -1 { throw "D12: linear search not found fail" }
+    io.println("  2.1 Linear Search: PASS")
+
+    // Binary Search
+    fn binarySearch(arr, target) {
+        let low = 0
+        let high = arr.length - 1
+        while low <= high {
+            let mid = convert.toInt((low + high) / 2)
+            if arr[mid] == target { return mid }
+            if arr[mid] < target { low = mid + 1 }
+            else { high = mid - 1 }
+        }
+        return -1
+    }
+
+    let sortedArr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    if binarySearch(sortedArr, 7) != 6 { throw "D12: binary search found fail" }
+    if binarySearch(sortedArr, 99) != -1 { throw "D12: binary search not found fail" }
+    io.println("  2.2 Binary Search: PASS")
+
+    // ============================================
+    // 3. 递归算法
+    // ============================================
+
+    if d12_factorial(5) != 120 { throw "D12: factorial fail" }
+    if d12_factorial(0) != 1 { throw "D12: factorial 0 fail" }
+    io.println("  3.1 Factorial: PASS")
+
+    if d12_fibonacci(10) != 55 { throw "D12: fibonacci fail" }
+    if d12_fibonacci(0) != 0 { throw "D12: fibonacci 0 fail" }
+    io.println("  3.2 Fibonacci: PASS")
+
+    // Tower of Hanoi
+    d12_hanoiMoves = []
+    d12_hanoi(3, "A", "C", "B")
+    if d12_hanoiMoves.length != 7 { throw "D12: hanoi moves count fail" }
+    io.println("  3.3 Tower of Hanoi: PASS")
+
+    // ============================================
+    // 4. 动态规划
+    // ============================================
+
+    // Fibonacci DP (iterative)
+    fn fibonacciDP(n) {
+        if n <= 1 { return n }
+        let prev = 0
+        let curr = 1
+        let i = 2
+        while i <= n {
+            let next = prev + curr
+            prev = curr
+            curr = next
+            i = i + 1
+        }
+        return curr
+    }
+    if fibonacciDP(10) != 55 { throw "D12: fibonacci DP fail" }
+    io.println("  4.1 Fibonacci DP: PASS")
+
+    // Knapsack (simplified 0/1)
+    fn knapsack(weights, values, capacity) {
+        let n = weights.length
+        // dp[i][w] = max value with first i items and capacity w
+        // Simplified: use 1D array
+        let dp = []
+        let w = 0
+        while w <= capacity {
+            arrays.push(dp, 0)
+            w = w + 1
+        }
+        let i = 0
+        while i < n {
+            let c = capacity
+            while c >= weights[i] {
+                let val1 = dp[c]
+                let val2 = dp[c - weights[i]] + values[i]
+                if val2 > val1 { dp[c] = val2 }
+                c = c - 1
+            }
+            i = i + 1
+        }
+        return dp[capacity]
+    }
+
+    let ksWeights = [1, 2, 3]
+    let ksValues = [10, 15, 40]
+    let ksCapacity = 5
+    if knapsack(ksWeights, ksValues, ksCapacity) != 55 { throw "D12: knapsack fail" }
+    io.println("  4.2 Knapsack DP: PASS")
+
+    // ============================================
+    // 5. 分治算法
+    // ============================================
+
+    // Merge Sort
+    fn merge(arr, left, mid, right) {
+        let n1 = mid - left + 1
+        let n2 = right - mid
+        let L = []
+        let R = []
+        let i = 0
+        while i < n1 { arrays.push(L, arr[left + i]); i = i + 1 }
+        let j = 0
+        while j < n2 { arrays.push(R, arr[mid + 1 + j]); j = j + 1 }
+        i = 0
+        j = 0
+        let k = left
+        while i < n1 && j < n2 {
+            if L[i] <= R[j] { arr[k] = L[i]; i = i + 1 }
+            else { arr[k] = R[j]; j = j + 1 }
+            k = k + 1
+        }
+        while i < n1 { arr[k] = L[i]; i = i + 1; k = k + 1 }
+        while j < n2 { arr[k] = R[j]; j = j + 1; k = k + 1 }
+    }
+
+    fn mergeSort(arr, left, right) {
+        if left < right {
+            let mid = convert.toInt((left + right) / 2)
+            mergeSort(arr, left, mid)
+            mergeSort(arr, mid + 1, right)
+            merge(arr, left, mid, right)
+        }
+        return arr
+    }
+
+    let msArr = [12, 11, 13, 5, 6, 7]
+    mergeSort(msArr, 0, msArr.length - 1)
+    if msArr[0] != 5 { throw "D12: merge sort first fail" }
+    if msArr[msArr.length - 1] != 13 { throw "D12: merge sort last fail" }
+    io.println("  5.1 Merge Sort (Divide & Conquer): PASS")
+
+    // ============================================
+    // 6. 贪心算法
+    // ============================================
+
+    // Coin Change (greedy)
+    fn coinChangeGreedy(coins, amount) {
+        let result = []
+        let remaining = amount
+        let i = 0
+        while i < coins.length && remaining > 0 {
+            while coins[i] <= remaining {
+                arrays.push(result, coins[i])
+                remaining = remaining - coins[i]
+            }
+            i = i + 1
+        }
+        return result
+    }
+
+    let coins = [25, 10, 5, 1]
+    let change = coinChangeGreedy(coins, 67)
+    let changeSum = 0
+    for c in change { changeSum = changeSum + c }
+    if changeSum != 67 { throw "D12: coin change sum fail" }
+    if change.length != 6 { throw "D12: coin change count fail" }  // 25+25+10+5+1+1
+    io.println("  6.1 Coin Change (Greedy): PASS")
+
+    // ============================================
+    // 7. 图算法
+    // ============================================
+
+    // BFS (Breadth-First Search)
+    fn bfs(graph, start) {
+        let visited = {}
+        let queue = [start]
+        visited[start] = true
+        let result = []
+        while queue.length > 0 {
+            let node = queue[0]
+            // shift (remove first)
+            let newQueue = []
+            let qi = 1
+            while qi < queue.length {
+                arrays.push(newQueue, queue[qi])
+                qi = qi + 1
+            }
+            queue = newQueue
+            arrays.push(result, node)
+            let neighbors = graph[node]
+            if neighbors != null {
+                for neighbor in neighbors {
+                    if visited[neighbor] != true {
+                        visited[neighbor] = true
+                        arrays.push(queue, neighbor)
+                    }
+                }
+            }
+        }
+        return result
+    }
+
+    let graph = {
+        "A": ["B", "C"],
+        "B": ["A", "D", "E"],
+        "C": ["A", "F"],
+        "D": ["B"],
+        "E": ["B", "F"],
+        "F": ["C", "E"]
+    }
+    let bfsResult = bfs(graph, "A")
+    if bfsResult[0] != "A" { throw "D12: BFS start fail" }
+    if bfsResult.length != 6 { throw "D12: BFS visited all fail" }
+    io.println("  7.1 BFS: PASS")
+
+    // DFS (Depth-First Search)
+    fn dfs(graph, start, visited, result) {
+        visited[start] = true
+        arrays.push(result, start)
+        let neighbors = graph[start]
+        if neighbors != null {
+            for neighbor in neighbors {
+                if visited[neighbor] != true {
+                    dfs(graph, neighbor, visited, result)
+                }
+            }
+        }
+        return result
+    }
+
+    let dfsVisited = {}
+    let dfsResult = []
+    dfs(graph, "A", dfsVisited, dfsResult)
+    if dfsResult[0] != "A" { throw "D12: DFS start fail" }
+    if dfsResult.length != 6 { throw "D12: DFS visited all fail" }
+    io.println("  7.2 DFS: PASS")
+
+    // ============================================
+    // 8. 迭代模式
+    // ============================================
+
+    // Map/Transform
+    let numbers = [1, 2, 3, 4, 5]
+    let doubled = []
+    for n in numbers { arrays.push(doubled, n * 2) }
+    if doubled[2] != 6 { throw "D12: map/transform fail" }
+
+    // Filter
+    let evens = []
+    for n in numbers {
+        if n % 2 == 0 { arrays.push(evens, n) }
+    }
+    if evens.length != 2 { throw "D12: filter fail" }
+
+    // Reduce
+    let sum = 0
+    for n in numbers { sum = sum + n }
+    if sum != 15 { throw "D12: reduce fail" }
+
+    io.println("  8. Iteration Patterns (Map/Filter/Reduce): PASS")
+
+    io.println("=== D12-ALGORITHMS-ALL-PASS ===")
+}
+main()

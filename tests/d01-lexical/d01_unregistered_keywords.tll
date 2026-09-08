@@ -1,0 +1,14 @@
+// D01 Test: unregistered keywords (async/await/type/move/mut/pub/priv/defer)
+// lexer.tll 顶部定义了这些 TK_ 常量，但 getKeywordType() 未注册
+fn main() -> void {
+    let async = 1
+    let await = 2
+    let type = 3
+    let move = 4
+    let mut = 5
+    let pub = 6
+    let priv = 7
+    let defer = 8
+    io.println(async + await + type + move + mut + pub + priv + defer)
+}
+main()

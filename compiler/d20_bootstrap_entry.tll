@@ -1,0 +1,40 @@
+// D20 Bootstrap Verification Entry
+// 编译编译器自身，用于自举闭环验证
+// 用法: tllvm.exe this_entry.tllbc
+// 输出: compiler_bootstrap_output.tllbc
+
+from "./lexer" import tokenize
+from "./parser" import parse
+from "./typechecker" import check
+from "./codegen" import compile
+from "./linker" import linkAndCompile
+
+fn main() -> void {
+    io.println("=== D20 Bootstrap: Compiling compiler itself ===")
+    io.println("Source: ../tools/TLLC/main.tll")
+    io.println("Output: ../compiler/d20_bootstrap_output.tllbc")
+
+    let startTime = time.nowMs()
+
+    let bytecode = linkAndCompile("../tools/TLLC/main.tll")
+    if bytecode.hasError == true {
+        io.println("COMPILATION FAILED: " + bytecode.error)
+        return
+    }
+
+    let compileTime = time.nowMs() - startTime
+
+    let bytecodeJson = json.stringify(bytecode)
+    fs.writeFile("../compiler/d20_bootstrap_output.tllbc", bytecodeJson)
+
+    let totalTime = time.nowMs() - startTime
+
+    io.println("SUCCESS: d20_bootstrap_output.tllbc generated")
+    io.println("  Functions: " + convert.toString(arrays.length(bytecode.functions)))
+    io.println("  Constants: " + convert.toString(arrays.length(bytecode.constants)))
+    io.println("  Bytecode size: " + convert.toString(strings.length(bytecodeJson)) + " bytes")
+    io.println("  Compile time: " + convert.toString(compileTime) + " ms")
+    io.println("  Total time: " + convert.toString(totalTime) + " ms")
+    io.println("=== D20 BOOTSTRAP DONE ===")
+}
+main()

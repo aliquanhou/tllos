@@ -1,0 +1,8 @@
+// D01 Test: number suffix (u32, f64, etc.)
+fn main() -> void {
+    let a = 100u32
+    let b = 1.5f64
+    let c = 42i64
+    io.println(a)
+}
+main()

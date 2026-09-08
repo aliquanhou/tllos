@@ -1,0 +1,7 @@
+// D01 Negative/Boundary Test 2: Single-quote string '...'
+// spec/SYNTAX.md 声明了 'world'，但 lexer 未实现
+fn main() -> void {
+    let s = 'single quote'
+    io.println(s)
+}
+main()

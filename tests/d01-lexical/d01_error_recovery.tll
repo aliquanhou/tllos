@@ -1,0 +1,9 @@
+// D01 Test: lexical error recovery - multiple errors in one file
+// 验证 lexer 遇到第一个错误后是否继续报告后续错误
+fn main() -> void {
+    let $bad = 1
+    let #also = 2
+    let @third = 3
+    io.println("done")
+}
+main()

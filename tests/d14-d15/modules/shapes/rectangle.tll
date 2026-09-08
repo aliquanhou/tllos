@@ -1,0 +1,25 @@
+// D14 Module Test: Rectangle Implementation
+// 验证：struct 定义、impl Interface for Type、跨模块实现
+
+from "./shape.tll" import Shape
+
+export struct Rectangle {
+    width: float
+    height: float
+}
+
+impl Shape for Rectangle {
+    fn area() {
+        return this.width * this.height
+    }
+    fn perimeter() {
+        return 2 * (this.width + this.height)
+    }
+    fn name() {
+        return "Rectangle"
+    }
+}
+
+export fn createRectangle(width, height) {
+    return {"width": width, "height": height, "__type": "Rectangle"}
+}

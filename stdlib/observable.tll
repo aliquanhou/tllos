@@ -1,4 +1,4 @@
-﻿// TLL Observable / Watch - Stdlib implementation
+// TLL Observable / Watch - Stdlib implementation
 // P0-11: Verify if Stdlib observable is sufficient, or if language-level observe is needed
 
 struct Observable {

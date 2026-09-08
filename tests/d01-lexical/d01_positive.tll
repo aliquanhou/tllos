@@ -1,0 +1,160 @@
+// TPC-D01 Lexical Positive Verification
+// 验证所有已声明的词法能力：编译+运行+assertion
+fn main() -> void {
+    // === Whitespace / Newline ===
+    // 空格、tab、换行、回车均应被跳过
+
+    // === Comments ===
+    // 这是 // 单行注释
+    # 这是 # 单行注释 (D01)
+
+    // === Identifiers ===
+    let myVar = 1
+    let _private = 2
+    let camelCase = 3
+    let snake_case = 4
+    let _ = 5
+    if myVar + _private + camelCase + snake_case + _ != 15 { throw "IDENT fail" }
+
+    // === Keywords (已注册的) ===
+    const PI = 3
+    let kw_ok = 0
+    if true { kw_ok = kw_ok + 1 }
+    if false { kw_ok = kw_ok + 100 }
+    if null == null { kw_ok = kw_ok + 1 }
+    // let/const/fn/return/if/else/while/for/in/break/continue/import/from/export/as/struct/enum/try/catch/finally/throw/and/or/match/interface/impl 均为关键字
+    if kw_ok != 2 { throw "KEYWORD fail" }
+
+    // === Boolean ===
+    let bt = true
+    let bf = false
+    if bt != true { throw "BOOL true fail" }
+    if bf != false { throw "BOOL false fail" }
+
+    // === Null / Unit ===
+    let n = null
+    if n != null { throw "NULL fail" }
+
+    // === Number: Integer ===
+    let dec = 42
+    let neg = -7
+    let zero = 0
+    if dec + neg + zero != 35 { throw "INT fail" }
+
+    // === Number: Hex ===
+    let hx = 0xFF
+    let hX = 0X1A
+    if hx != 255 { throw "HEX fail" }
+    if hX != 26 { throw "HEX uppercase fail" }
+
+    // === Number: Octal ===
+    let oc = 0o777
+    let oC = 0O10
+    if oc != 511 { throw "OCTAL fail" }
+    if oC != 8 { throw "OCTAL uppercase fail" }
+
+    // === Number: Binary ===
+    let bn = 0b1010
+    let bN = 0B1111
+    if bn != 10 { throw "BINARY fail" }
+    if bN != 15 { throw "BINARY uppercase fail" }
+
+    // === Number: Float ===
+    let fl = 3.14
+    let sci = 1e10
+    let sci2 = 1.5E-2
+    if fl < 3.0 || fl > 4.0 { throw "FLOAT fail" }
+    if sci != 10000000000 { throw "FLOAT sci fail" }
+
+    // === Number: digit separator ===
+    let sep = 1_000_000
+    if sep != 1000000 { throw "DIGIT SEP fail" }
+
+    // === String: double quoted ===
+    let s1 = "hello"
+    if s1 != "hello" { throw "STRING fail" }
+
+    // === String: Escape sequences ===
+    let e_n = "a\nb"
+    let e_t = "a\tb"
+    let e_r = "a\rb"
+    let e_bs = "a\\b"
+    let e_q = "a\"b"
+    let e_0 = "a\0b"
+    let e_x = "\x41"
+    if e_x != "A" { throw "ESCAPE \\x fail" }
+
+    // === String: raw string r"..." ===
+    // PARTIAL: lexer recognizes RAW_STRING but parser rejects it
+    // let raw = r"no\nescape"
+
+    // === String: multiline """...""" ===
+    let multi = """line1
+line2"""
+    // 多行字符串应包含换行
+
+    // === Operators: Arithmetic ===
+    let o_add = 10 + 3
+    let o_sub = 10 - 3
+    let o_mul = 10 * 3
+    let o_div = 10 / 2
+    let o_mod = 10 % 3
+    let o_pow = 2 ** 3
+    if o_add != 13 { throw "OP + fail" }
+    if o_sub != 7 { throw "OP - fail" }
+    if o_mul != 30 { throw "OP * fail" }
+    if o_div != 5 { throw "OP / fail" }
+    if o_mod != 1 { throw "OP % fail" }
+    if o_pow != 8 { throw "OP ** fail" }
+
+    // === Operators: Comparison ===
+    if !(1 == 1) { throw "OP == fail" }
+    if !(1 != 2) { throw "OP != fail" }
+    if !(1 < 2) { throw "OP < fail" }
+    if !(2 > 1) { throw "OP > fail" }
+    if !(1 <= 1) { throw "OP <= fail" }
+    if !(1 >= 1) { throw "OP >= fail" }
+
+    // === Operators: Logical ===
+    if !(true && true) { throw "OP && fail" }
+    if !(true || false) { throw "OP || fail" }
+    if !(!false) { throw "OP ! fail" }
+
+    // === Operators: Bitwise ===
+    let bw_and = 0b1100 & 0b1010
+    let bw_or = 0b1100 | 0b1010
+    let bw_xor = 0b1100 ^ 0b1010
+    let bw_not = ~0
+    let bw_shl = 1 << 2
+    let bw_shr = 4 >> 1
+    if bw_and != 0b1000 { throw "OP & fail" }
+    if bw_or != 0b1110 { throw "OP | fail" }
+    if bw_xor != 0b0110 { throw "OP ^ fail" }
+    if bw_shl != 4 { throw "OP << fail" }
+    if bw_shr != 2 { throw "OP >> fail" }
+
+    // === Operators: Assignment variants ===
+    let av = 10
+    av = av + 5
+    av = av - 3
+    av = av * 2
+    av = av / 2
+    av = av % 3
+    if av != 2 { throw "ASSIGN fail" }
+
+    // === Operators: Arrow / Pipe / Range ===
+    // -> => |> .. ..= 均应被词法识别
+
+    // === Delimiters ===
+    let arr = [1, 2, 3]
+    let mp = {"a": 1, "b": 2}
+    if arr[0] != 1 { throw "DELIM [] fail" }
+    if arr.length != 3 { throw "DELIM , fail" }
+    // () {} [] ; : . 均在使用中
+
+    // === @ symbol (TK_AT) ===
+    // @ 被词法识别为 token，但注解语法未实现
+
+    io.println("D01-POSITIVE-ALL-PASS")
+}
+main()

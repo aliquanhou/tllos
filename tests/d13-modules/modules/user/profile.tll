@@ -1,0 +1,19 @@
+// D13 Module Test: User Profile Module
+// 验证：同目录模块、依赖 user 模块
+
+from "../user/user.tll" import User, createUser
+
+// 导出的函数：获取用户资料
+export fn getProfile(user) {
+    return {
+        "displayName": user["name"],
+        "contact": user["email"],
+        "memberSince": "2026-01-01"
+    }
+}
+
+// 导出的函数：更新用户资料
+export fn updateProfile(user, newName) {
+    user["name"] = newName
+    return user
+}

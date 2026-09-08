@@ -1,0 +1,7 @@
+// D01 Negative/Boundary Test 3: Unicode identifier
+// isAlpha 只检查 a-z A-Z，不支持 Unicode
+fn main() -> void {
+    let 变量 = 42
+    io.println(变量)
+}
+main()

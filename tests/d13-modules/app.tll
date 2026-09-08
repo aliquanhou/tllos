@@ -1,0 +1,137 @@
+// D13 Module Test: Main Application
+// 验证：跨模块函数调用、跨模块数据、跨模块类型、依赖图、组件组合、模块隔离
+
+from "./modules/user/user.tll" import createUser, login, getUserCount, User
+from "./modules/user/profile.tll" import getProfile, updateProfile
+from "./modules/order/order.tll" import createOrder, getOrderCount, calculateTotal, Order
+from "./components/Button.tll" import createButton, clickButton, getButtonCount
+from "./components/Form.tll" import createForm, setFieldValue, getFieldValue, validateForm, getFormCount
+
+fn main() -> void {
+    io.println("=== D13 Modules & Components Test ===")
+
+    // ============================================
+    // ① 跨模块函数调用
+    // ============================================
+    let user1 = createUser("Alice", "alice@example.com")
+    if user1["name"] != "Alice" { throw "D13: createUser name fail" }
+    if user1["email"] != "alice@example.com" { throw "D13: createUser email fail" }
+    if user1["id"] != 1 { throw "D13: createUser id fail" }
+
+    let loginResult = login(user1, "password123")
+    if loginResult != true { throw "D13: login fail" }
+
+    let count = getUserCount()
+    if count != 1 { throw "D13: getUserCount fail" }
+
+    io.println("  ① 跨模块函数调用: PASS")
+
+    // ============================================
+    // ② 跨模块数据传递
+    // ============================================
+    let profile = getProfile(user1)
+    if profile["displayName"] != "Alice" { throw "D13: getProfile displayName fail" }
+    if profile["contact"] != "alice@example.com" { throw "D13: getProfile contact fail" }
+
+    updateProfile(user1, "Alice Updated")
+    if user1["name"] != "Alice Updated" { throw "D13: updateProfile fail" }
+
+    io.println("  ② 跨模块数据传递: PASS")
+
+    // ============================================
+    // ③ 跨模块类型使用
+    // ============================================
+    // User 和 Order 类型已通过 import 引入
+    // 创建订单，使用用户数据
+    let items = [
+        {"name": "Book", "price": 10, "qty": 2},
+        {"name": "Pen", "price": 2, "qty": 5}
+    ]
+    let total = calculateTotal(items)
+    if total != 30 { throw "D13: calculateTotal fail" }
+
+    let order1 = createOrder(user1, items, total)
+    if order1["userId"] != user1["id"] { throw "D13: createOrder userId fail" }
+    if order1["total"] != 30 { throw "D13: createOrder total fail" }
+    if order1["status"] != "pending" { throw "D13: createOrder status fail" }
+
+    let orderCount = getOrderCount()
+    if orderCount != 1 { throw "D13: getOrderCount fail" }
+
+    io.println("  ③ 跨模块类型使用: PASS")
+
+    // ============================================
+    // ④ 依赖图验证
+    // ============================================
+    // app → user → profile (profile 依赖 user)
+    // app → order → user (order 依赖 user)
+    // app → Form → Button (Form 依赖 Button)
+    // 所有依赖都已正确解析和调用
+
+    // 创建第二个用户和订单，验证依赖链
+    let user2 = createUser("Bob", "bob@example.com")
+    let order2 = createOrder(user2, [{"name": "Mouse", "price": 25, "qty": 1}], 25)
+    if getUserCount() != 2 { throw "D13: dependency user count fail" }
+    if getOrderCount() != 2 { throw "D13: dependency order count fail" }
+
+    io.println("  ④ 依赖图验证: PASS")
+
+    // ============================================
+    // ⑤ 组件组合
+    // ============================================
+    // Button 组件
+    let btnClicked = false
+    let btn = createButton("Click Me", fn() { btnClicked = true })
+    if btn["label"] != "Click Me" { throw "D13: button label fail" }
+    if getButtonCount() != 1 { throw "D13: button count fail" }
+
+    clickButton(btn)
+    if btnClicked != true { throw "D13: button click fail" }
+
+    // Form 组件（依赖 Button）
+    let fields = [
+        {"name": "username", "required": true},
+        {"name": "email", "required": true},
+        {"name": "phone", "required": false}
+    ]
+    let form = createForm("Registration", fields)
+    if form["title"] != "Registration" { throw "D13: form title fail" }
+    if getFormCount() != 1 { throw "D13: form count fail" }
+
+    // Form 内部创建了 Button，所以 Button 总数应该是 2
+    if getButtonCount() != 2 { throw "D13: form creates button fail" }
+
+    // 设置表单值
+    setFieldValue(form, "username", "testuser")
+    setFieldValue(form, "email", "test@example.com")
+    if getFieldValue(form, "username") != "testuser" { throw "D13: form field value fail" }
+
+    // 验证表单
+    let isValid = validateForm(form)
+    if isValid != true { throw "D13: form validation fail" }
+
+    io.println("  ⑤ 组件组合: PASS")
+
+    // ============================================
+    // ⑥ 模块隔离验证
+    // ============================================
+    // userCount 和 internalSecret 没有 export，应该不能直接访问
+    // 但 TLL 可能没有严格的 private 机制，记录实际行为
+    // 尝试访问未导出的内部状态（应该失败或不可访问）
+    // 这里我们验证：通过 getUserCount() 间接访问，而不是直接访问
+
+    // 验证模块状态隔离：每个模块维护独立的计数器
+    let userC = getUserCount()  // 2
+    let orderC = getOrderCount()  // 2
+    let buttonC = getButtonCount()  // 2
+    let formC = getFormCount()  // 1
+    if userC != 2 { throw "D13: isolation user fail" }
+    if orderC != 2 { throw "D13: isolation order fail" }
+    if buttonC != 2 { throw "D13: isolation button fail" }
+    if formC != 1 { throw "D13: isolation form fail" }
+
+    io.println("  ⑥ 模块隔离验证: PASS")
+
+    io.println("=== D13-MODULES-ALL-PASS ===")
+}
+main()

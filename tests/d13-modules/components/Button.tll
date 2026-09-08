@@ -1,0 +1,36 @@
+// D13 Module Test: Button Component
+// 验证：组件作为独立模块、导出组件 API
+
+// 组件内部状态
+let buttonCount = 0
+
+// 导出的组件创建函数
+export fn createButton(label, onClick) {
+    buttonCount = buttonCount + 1
+    return {
+        "id": "btn_" + convert.toString(buttonCount),
+        "label": label,
+        "onClick": onClick,
+        "disabled": false
+    }
+}
+
+// 导出的组件方法：点击按钮
+export fn clickButton(button) {
+    if button["disabled"] != true && button["onClick"] != null {
+        button["onClick"]()
+        return true
+    }
+    return false
+}
+
+// 导出的组件方法：禁用按钮
+export fn disableButton(button) {
+    button["disabled"] = true
+    return button
+}
+
+// 导出的函数：获取按钮数量
+export fn getButtonCount() {
+    return buttonCount
+}
