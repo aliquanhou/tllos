@@ -35,7 +35,7 @@ if not exist "%TCC_EXE%" (
 REM Step 2: Build tllvm.exe
 echo [2/3] Building tllvm.exe...
 cd /d "%HOST_C%"
-"%TCC_EXE%" -O2 -std=c99 -D_WIN32 "-Wl,-stack=0x4000000" -o tllvm.exe main.c vm.c value.c json.c builtin.c "%SystemRoot%\System32\winhttp.dll" "%SystemRoot%\System32\ws2_32.dll"
+"%TCC_EXE%" -O2 -std=c99 -D_WIN32 "-Wl,-stack=0x4000000" -o tllvm.exe main.c vm.c value.c json.c builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c "%SystemRoot%\System32\winhttp.dll" "%SystemRoot%\System32\ws2_32.dll" "%SystemRoot%\System32\bcrypt.dll"
 if errorlevel 1 (
     echo ERROR: Build failed
     exit /b 1

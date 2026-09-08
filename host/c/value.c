@@ -152,6 +152,7 @@ TLLValue array_get(TLLArray *arr, int idx) {
 }
 
 void array_set(TLLArray *arr, int idx, TLLValue v) {
+    if (idx < 0 || idx > 10000000) return;
     while (arr->length <= idx) array_push(arr, tll_null());
     tll_value_free(arr->items[idx]);
     arr->items[idx] = v;

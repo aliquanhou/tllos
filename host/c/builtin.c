@@ -438,9 +438,11 @@ static void http_process_task(HttpTask *data) {
         for (int b = 0; b < respHeaders.as.map->bucketCount; b++) {
             TLLMapEntry *e = respHeaders.as.map->buckets[b];
             while (e) {
-                if (e->value.type == TLL_STRING) {
-                    hdr_len += snprintf(resp_buf + hdr_len, sizeof(resp_buf) - hdr_len,
-                        "%s: %s\r\n", e->key, e->value.as.string);
+                if (e->value.type == TLL_STRING && hdr_len < (int)sizeof(resp_buf) - 4) {
+                    int remaining = (int)sizeof(resp_buf) - hdr_len - 1;
+                    int w = snprintf(resp_buf + hdr_len, remaining, "%s: %s\r\n", e->key, e->value.as.string);
+                    if (w > 0 && w < remaining) hdr_len += w;
+                    else hdr_len = (int)sizeof(resp_buf) - 1;
                 }
                 e = e->next;
             }
@@ -448,7 +450,7 @@ static void http_process_task(HttpTask *data) {
     }
     hdr_len += snprintf(resp_buf + hdr_len, sizeof(resp_buf) - hdr_len, "\r\n");
     resp_len = hdr_len + (int)strlen(body);
-    if (resp_len < (int)sizeof(resp_buf)) {
+    if (hdr_len + (int)strlen(body) < (int)sizeof(resp_buf) - 1) {
         memcpy(resp_buf + hdr_len, body, strlen(body));
     }
     send(client_fd, resp_buf, resp_len, 0);
@@ -555,7 +557,10 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
             case 22: return tll_float((double)rand() / RAND_MAX);
             case 23: {
                 int mn = (int)x, mx = (int)y;
-                return tll_int(mn + rand() % (mx - mn + 1));
+                if (mx < mn) { int t = mn; mn = mx; mx = t; }
+                unsigned int range = (unsigned int)(mx - mn + 1);
+                if (range == 0) return tll_int(mn);
+                return tll_int(mn + (int)(rand() % range));
             }
         }
     }
@@ -797,7 +802,7 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
                     int n = argCount - 1;
                     while (arr->length + n > arr->capacity) { arr->capacity *= 2; arr->items = realloc(arr->items, arr->capacity * sizeof(TLLValue)); }
                     memmove(arr->items + n, arr->items, arr->length * sizeof(TLLValue));
-                    for (int i = 0; i < n; i++) arr->items[i] = args[n - i];
+                    for (int i = 0; i < n; i++) arr->items[i] = args[1 + i];
                     arr->length += n;
                 }
                 return tll_int(arr ? arr->length : 0);
@@ -1055,7 +1060,10 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
                 fseek(f, 0, SEEK_END);
                 long sz = ftell(f);
                 fseek(f, 0, SEEK_SET);
+                if (sz < 0) { fclose(f); return tll_string(""); }
+                if (sz > 268435456) { fclose(f); return tll_string(""); }
                 char *buf = (char*)malloc(sz + 1);
+                if (!buf) { fclose(f); return tll_string(""); }
                 fread(buf, 1, sz, f);
                 buf[sz] = '\0';
                 fclose(f);
@@ -1319,10 +1327,15 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
                 int client_len = sizeof(client_addr);
                 SOCKET client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
                 if (client_fd == INVALID_SOCKET) continue;
+                {
+                    DWORD _rcvto = 15000;
+                    setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&_rcvto, sizeof(_rcvto));
+                }
                 HttpTask *task = (HttpTask*)malloc(sizeof(HttpTask));
                 task->client_fd = (unsigned int)client_fd;
                 task->vm = vm;
                 task->handler_fn = args[1];
+    tll_value_incref(task->handler_fn);
                 enqueue_task(task);
             }
             closesocket(server_fd);
@@ -1721,6 +1734,8 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
         if (argCount > 0 && args[0].type == TLL_INT) {
             SOCKET s = (SOCKET)args[0].as.integer;
             int maxBytes = (argCount > 1 && args[1].type == TLL_INT) ? (int)args[1].as.integer : 65536;
+            if (maxBytes < 1) maxBytes = 4096;
+            if (maxBytes > 1048576) maxBytes = 1048576;
             char *buf = (char*)malloc(maxBytes + 1);
             int received = recv(s, buf, maxBytes, 0);
             if (received <= 0) { free(buf); return tll_string(""); }

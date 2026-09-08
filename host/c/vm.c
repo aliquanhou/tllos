@@ -241,7 +241,7 @@ static long long current_time_ms(void) {
 static int coroutine_is_runnable(TLLCoroutine *co) {
     if (!co || co->state == 2) return 0;  /* dead */
     if (co->wakeTime > 0) return 0;         /* sleeping */
-    if (co->waitingFd > 0) return 0;        /* waiting on IO */
+    if (co->waitingFd >= 0) return 0;        /* waiting on IO */
     if (co->waitingChannel != NULL) return 0; /* waiting on channel */
     return 1;
 }
@@ -759,29 +759,29 @@ static void tll_vm_exec(TLLVM *vm) {
             case OP_SHL: {
                 long long x = (regs[b].type==TLL_INT)?regs[b].as.integer:(long long)regs[b].as.floating;
                 long long y = (regs[c].type==TLL_INT)?regs[c].as.integer:(long long)regs[c].as.floating;
-                regs[a] = tll_int(x << y);
+                regs[a] = tll_int(x << (y & 63));
                 break;
             }
             case OP_SHR: {
                 long long x = (regs[b].type==TLL_INT)?regs[b].as.integer:(long long)regs[b].as.floating;
                 long long y = (regs[c].type==TLL_INT)?regs[c].as.integer:(long long)regs[c].as.floating;
-                regs[a] = tll_int((unsigned long long)x >> y);
+                regs[a] = tll_int((long long)((unsigned long long)x >> (y & 63)));
                 break;
             }
             case OP_ROTR: {
                 long long x = (regs[b].type==TLL_INT)?regs[b].as.integer:(long long)regs[b].as.floating;
                 long long y = (regs[c].type==TLL_INT)?regs[c].as.integer:(long long)regs[c].as.floating;
-                unsigned int ux = (unsigned int)x;
-                unsigned int uy = (unsigned int)(y & 31);
-                regs[a] = tll_int((long long)((ux >> uy) | (ux << (32 - uy))));
+                unsigned long long ux = (unsigned long long)x;
+                unsigned long long uy = (unsigned long long)(y & 63);
+                regs[a] = tll_int((long long)((ux >> uy) | (ux << (64 - uy))));
                 break;
             }
             case OP_ROTL: {
                 long long x = (regs[b].type==TLL_INT)?regs[b].as.integer:(long long)regs[b].as.floating;
                 long long y = (regs[c].type==TLL_INT)?regs[c].as.integer:(long long)regs[c].as.floating;
-                unsigned int ux = (unsigned int)x;
-                unsigned int uy = (unsigned int)(y & 31);
-                regs[a] = tll_int((long long)((ux << uy) | (ux >> (32 - uy))));
+                unsigned long long ux = (unsigned long long)x;
+                unsigned long long uy = (unsigned long long)(y & 63);
+                regs[a] = tll_int((long long)((ux << uy) | (ux >> (64 - uy))));
                 break;
             }
             case OP_ADD: {
@@ -836,6 +836,8 @@ static void tll_vm_exec(TLLVM *vm) {
                     if (n <= 0) { regs[a] = tll_string(""); }
                     else {
                         int len = (int)strlen(s);
+                        if (n > 1000000) n = 1000000;
+                        if (len > 0 && n > 2147483647 / len) { throw_exception(vm, frame, tll_string("string multiplication overflow")); break; }
                         char *buf = (char*)malloc(sizeof(int) + len * n + 1);
                         *(int*)buf = 1;
                         for (int i = 0; i < n; i++) memcpy(buf + sizeof(int) + i * len, s, len);
@@ -849,6 +851,8 @@ static void tll_vm_exec(TLLVM *vm) {
                     if (n <= 0) { regs[a] = tll_string(""); }
                     else {
                         int len = (int)strlen(s);
+                        if (n > 1000000) n = 1000000;
+                        if (len > 0 && n > 2147483647 / len) { throw_exception(vm, frame, tll_string("string multiplication overflow")); break; }
                         char *buf = (char*)malloc(sizeof(int) + len * n + 1);
                         *(int*)buf = 1;
                         for (int i = 0; i < n; i++) memcpy(buf + sizeof(int) + i * len, s, len);
@@ -871,6 +875,10 @@ static void tll_vm_exec(TLLVM *vm) {
                 break;
             }
             case OP_MOD:
+                if (regs[c].as.integer == 0) {
+                    throw_exception(vm, frame, tll_string("modulo by zero"));
+                    break;
+                }
                 regs[a] = tll_int(regs[b].as.integer % regs[c].as.integer);
                 break;
             case OP_POW: {
@@ -1079,13 +1087,14 @@ static void tll_vm_exec(TLLVM *vm) {
                 }
                 if (fnIdx >= 0 && fnIdx < vm->program->functionCount) {
                     TLLFunction *fn = &vm->program->functions[fnIdx];
+                    if (argCount > 16) argCount = 16;
                     TLLValue args[16];
                     int i;
-                    for (i = 0; i < argCount && i < 16; i++) {
+                    for (i = 0; i < argCount; i++) {
                         args[i] = pop_arg(frame);
                     }
                     /* Reverse args */
-                    for (i = 0; i < argCount / 2 && i < 16; i++) {
+                    for (i = 0; i < argCount / 2; i++) {
                         TLLValue tmp = args[i];
                         args[i] = args[argCount - 1 - i];
                         args[argCount - 1 - i] = tmp;

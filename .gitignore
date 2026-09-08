@@ -1,10 +1,21 @@
-# TLL Mall - Git Ignore
+# TLL OS - Git Ignore
+
+# Compiled native objects and binaries
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+host/c/tllvm
+host/c/tllvm.exe
+host/c/tcc/
+host/c/tcc.zip
 
 # Database files
 *.db
 *.db-wal
 *.db-shm
-mall/data/
 
 # Compiled bytecode
 *.tllbc
@@ -23,7 +34,7 @@ test_*.db-shm
 Thumbs.db
 .DS_Store
 
-# Temporary debug/fix scripts (P1-04 macOS debugging cleanup)
+# Temporary debug/fix scripts
 fix_*.py
 debug_*.py
 check_*.py
@@ -48,7 +59,6 @@ login.json
 *_screenshot.png
 
 # Temporary archives and extracted dirs
-*.zip
 *.tar.gz
 *_extracted/
 deploy_package/
@@ -60,7 +70,7 @@ tests/net/debug_*.tll
 tests/net/diag_*.tll
 tests/net/simple_req.tll
 
-# Temporary shell scripts (keep setup_*.sh)
+# Temporary shell scripts
 build_ci.sh
 check_db*.sh
 check_nginx*.sh
@@ -79,3 +89,10 @@ restart_test.sh
 test_login*.sh
 test_nginx*.sh
 verify_sha256.sh
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
