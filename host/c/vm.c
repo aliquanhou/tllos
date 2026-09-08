@@ -241,7 +241,7 @@ static long long current_time_ms(void) {
 static int coroutine_is_runnable(TLLCoroutine *co) {
     if (!co || co->state == 2) return 0;  /* dead */
     if (co->wakeTime > 0) return 0;         /* sleeping */
-    if (co->waitingFd >= 0) return 0;        /* waiting on IO */
+    if (co->waitingFd > 0) return 0;         /* waiting on IO */
     if (co->waitingChannel != NULL) return 0; /* waiting on channel */
     return 1;
 }
