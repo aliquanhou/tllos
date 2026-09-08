@@ -1974,8 +1974,15 @@ fn cg_compileCall(expr: map) -> int {
                 cg_patchJump(jmpFalseIdx)
                 ti = ti + 1
             }
-            // Fallback: no type matched
-            cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
+            // Fallback: no type matched - try normal member access (for map/other types)
+            let fnReg = cg_allocReg()
+            cg_emit(OP_MEMBER_GET, [fnReg, selfReg, cg_addConstant(propName)])
+            let pi2 = 0
+            while pi2 < arrays.length(argRegs) {
+                cg_emit(OP_PUSH, [arrays.get(argRegs, pi2)])
+                pi2 = pi2 + 1
+            }
+            cg_emit(OP_CALL, [resultReg, fnReg + 100000, arrays.length(args)])
             // Patch all end jumps to here
             let ei = 0
             while ei < arrays.length(endJumpIdxs) {
