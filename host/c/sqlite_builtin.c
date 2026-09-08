@@ -189,6 +189,13 @@ TLLValue sqlite_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount)
             TLLValue cols = tll_array();
             if (!db || !table) { result = cols; goto cleanup; }
             char sql[512];
+            /* Validate table name to prevent SQL injection */
+            int tlen = (int)strlen(table);
+            if (tlen > 200) { result = cols; goto cleanup; }
+            for (int ti = 0; ti < tlen; ti++) {
+                char c = table[ti];
+                if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_')) { result = cols; goto cleanup; }
+            }
             snprintf(sql, sizeof(sql), "PRAGMA table_info(%s)", table);
             sqlite3_stmt *stmt = NULL;
             if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) == SQLITE_OK) {

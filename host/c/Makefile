@@ -9,7 +9,7 @@ LDFLAGS = -lm
 ifeq ($(OS),Windows_NT)
     EXE = tllvm.exe
     CFLAGS += -D_WIN32
-    LDFLAGS += -lbcrypt
+    LDFLAGS += -lbcrypt -lwinhttp -lws2_32
 else
     EXE = tllvm
 endif
