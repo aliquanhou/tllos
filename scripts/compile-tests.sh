@@ -56,7 +56,7 @@ done
 echo "  Regression: $COUNT files, $FAILED failures"
 
 # Compile regression test directories
-echo "[4/4] Compiling regression test directories..."
+echo "[4/5] Compiling regression test directories..."
 for d in "$REG_DIR"/*/; do
     [ -d "$d" ] || continue
     if [ -f "$d/main.tll" ]; then
@@ -68,6 +68,24 @@ for d in "$REG_DIR"/*/; do
         fi
     fi
 done
+
+# Compile scope semantics tests
+echo "[5/5] Compiling scope semantics tests..."
+SCOPE_DIR="$REPO_ROOT/tests/scope"
+COUNT=0
+FAILED=0
+for f in "$SCOPE_DIR"/*.tll; do
+    [ -f "$f" ] || continue
+    COUNT=$((COUNT + 1))
+    out="${f%.tll}.tllbc"
+    if "$TLLVM_EXE" "$TLLC_BC" compile "$f" -o "$out" >/dev/null 2>&1; then
+        echo "  OK:   $(basename "$f")"
+    else
+        echo "  FAIL: $(basename "$f")"
+        FAILED=$((FAILED + 1))
+    fi
+done
+echo "  Scope: $COUNT files, $FAILED failures"
 
 echo ""
 echo "=== Test Compilation Complete ==="
