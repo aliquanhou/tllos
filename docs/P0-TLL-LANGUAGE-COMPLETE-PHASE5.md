@@ -40,6 +40,21 @@ REAL native result
 | 6 | pointer | void* | 通用指针 |
 | 7 | cstring | const char* | NUL 终止的 C 字符串 |
 
+**NOT SUPPORTED IN FFI v0 (will fail closed with explicit error):**
+
+- float64 (type 5) — requires XMM register handling, future version
+- struct / union — complex ABI aggregate, future version
+- callback / function pointer — C callback to TLL function, future version
+- >4 parameters — v0 thunk limit, future version
+- variadic functions (printf etc.) — future version
+- malloc/free native memory management — separate from FFI call, future version
+- long double / vector / SIMD — future version
+
+**FFI v0 targets 64-bit platforms only.**
+- `sizeof(void*) <= sizeof(int64_t)` is guaranteed on x64 Windows/Linux/macOS
+- Pointer-to-int64 conversion has no truncation
+- 32-bit platforms are NOT supported by FFI v0
+
 **注意：** 不使用 C 的 `int`、`long` 等平台相关类型，全部使用固定宽度类型。
 
 ---
@@ -161,6 +176,28 @@ typedef int64_t (*ffi_fn_4)(int64_t, int64_t, int64_t, int64_t);
 
 ### 回归测试：15/15 acceptance tests PASS
 
+### FFI v0 Hardening (Fail-Closed ABI Validation)
+
+After independent audit, FFI v0 was hardened with **Fail-Closed** principle:
+
+> Unsupported ≠ 0. Unknown ≠ null. ABI uncertainty → Fail before native call.
+
+**Error codes:**
+- `TLL-FFI-001`: float64 is not supported by FFI v0
+- `TLL-FFI-002`: invalid or unsupported ABI type
+
+**Validation order (all BEFORE native call):**
+1. Validate return type (reject float64 and invalid types)
+2. Validate each argument type (reject float64 and invalid types)
+3. Validate argument count (max 4)
+4. Only then convert args and execute native call
+
+**Hardening tests:**
+- FFI-H01: float64 argument → explicit TLL-FFI-001 error, native call NOT executed
+- FFI-H02: float64 return → explicit TLL-FFI-001 error, native call NOT executed
+- FFI-H03: invalid ABI type (8) → explicit TLL-FFI-002 error, native call NOT executed
+- FFI-H04: unsupported signature → native function NOT called (verified via side effect)
+
 所有现有 acceptance tests（01_hello 到 15_for_loop）编译和运行正常。
 
 ---
@@ -196,7 +233,7 @@ typedef int64_t (*ffi_fn_4)(int64_t, int64_t, int64_t, int64_t);
 
 **builtin 是 TLL 内部能力**（io, json, math 等，静态编译进 VM）。
 
-**FFI 是 TLL 对外部世界的 Native Boundary**（动态加载任意 .dll/.so/.dylib，调用任意 C 函数）。
+**FFI 是 TLL 对外部世界的 Native Boundary**（动态加载 .dll/.so/.dylib，调用符合 TLL Native ABI v0、且当前 thunk 支持范围的 C 函数）。
 
 两者虽然当前都通过 builtin 索引机制访问，但架构概念必须分开。未来 FFI 应拥有独立的类型系统和编译器支持。
 

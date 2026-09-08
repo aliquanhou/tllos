@@ -200,6 +200,32 @@ TLLValue builtin_ffi_call(TLLVM *vm, TLLValue *args, int argCount) {
         return tll_null();
     }
 
+    /* === Fail-Closed ABI Validation (must complete BEFORE native call) === */
+    /* Supported return types in FFI v0: void(0), int32(1), int64(2), uint32(3), uint64(4), pointer(6), cstring(7) */
+    /* Unsupported: float64(5), and any type >= 8 */
+    if (retType == FFI_FLOAT64) {
+        fprintf(stderr, "TLL-FFI-001: float64 return type is not supported by FFI v0 (use int64 or upgrade FFI)\n");
+        return tll_null();
+    }
+    if (retType < 0 || retType > 7 || retType == FFI_FLOAT64) {
+        fprintf(stderr, "TLL-FFI-002: invalid or unsupported return type %d (FFI v0 supports: void,int32,int64,uint32,uint64,pointer,cstring)\n", retType);
+        return tll_null();
+    }
+
+    /* Validate each argument type before any conversion */
+    for (int i = 0; i < nArgs; i++) {
+        int atype = (int)argTypes->items[i].as.integer;
+        if (atype == FFI_FLOAT64) {
+            fprintf(stderr, "TLL-FFI-001: float64 argument at position %d is not supported by FFI v0\n", i);
+            return tll_null();
+        }
+        if (atype < 0 || atype > 7 || atype == FFI_FLOAT64) {
+            fprintf(stderr, "TLL-FFI-002: invalid or unsupported argument type %d at position %d (FFI v0 supports: int32,int64,uint32,uint64,pointer,cstring)\n", atype, i);
+            return tll_null();
+        }
+    }
+    /* ABI validation passed — all types are supported, safe to proceed */
+
     /* Convert args to int64 */
     int64_t iargs[4] = {0, 0, 0, 0};
     for (int i = 0; i < nArgs; i++) {

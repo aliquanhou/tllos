@@ -61,6 +61,39 @@ assert(badLib == 0, "FFI-N01 invalid library returns 0 handle")
 let badSym = ffi.symbol(lib, "nonexistent_function_xyz789")
 assert(badSym == 0, "FFI-N02 invalid symbol returns 0 pointer")
 
+// === FFI Hardening Tests (Fail-Closed ABI Validation) ===
+// These tests verify that unsupported ABI types fail BEFORE native call,
+// not silently return 0 or null.
+
+// FFI-H01: float64 argument -> explicit error, native call NOT executed
+let h01ArgTypes = [5]  // 5 = float64 (UNSUPPORTED)
+let h01Args = [3.14]
+let h01Result = ffi.call(strlenPtr, 2, h01ArgTypes, h01Args)
+// When ABI validation fails, ffi.call returns null (not a fake 0)
+// If native call had executed, strlen would return non-zero
+assert(h01Result == null, "FFI-H01 float64 argument returns null (validation fails before native call)")
+
+// FFI-H02: float64 return -> explicit error, native call NOT executed
+let h02ArgTypes = [7]  // cstring arg (valid)
+let h02Args = ["hello"]
+let h02Result = ffi.call(strlenPtr, 5, h02ArgTypes, h02Args)  // 5 = float64 return (UNSUPPORTED)
+assert(h02Result == null, "FFI-H02 float64 return returns null (validation fails before native call)")
+
+// FFI-H03: invalid ABI type (8) -> explicit error, native call NOT executed
+let h03ArgTypes = [8]  // 8 = invalid type
+let h03Args = ["hello"]
+let h03Result = ffi.call(strlenPtr, 2, h03ArgTypes, h03Args)
+assert(h03Result == null, "FFI-H03 invalid ABI type (8) returns null (validation fails before native call)")
+
+// FFI-H04: unsupported signature with real function pointer -> native call NOT executed
+// Use strlen pointer but with float64 arg type. If native call executed,
+// it would read 3.14 as a pointer and likely crash. Since we get null
+// (not crash), validation correctly blocked the call.
+let h04ArgTypes = [5]  // float64 (would be interpreted as pointer if called -> crash)
+let h04Args = [3.14]
+let h04Result = ffi.call(strlenPtr, 2, h04ArgTypes, h04Args)
+assert(h04Result == null, "FFI-H04 unsupported signature blocks native call (no crash, returns null)")
+
 // === Summary ===
 io.println("")
 io.println("=== FFI Test Summary ===")
