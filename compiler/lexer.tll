@@ -418,7 +418,7 @@ export fn tokenize(input: string) -> list {
                 else if opCh == "|" { arrays.push(tokens, { tkType: TK_BOR, tkValue: "|", line: startLine, column: startCol }) }
                 else if opCh == "^" { arrays.push(tokens, { tkType: TK_BXOR, tkValue: "^", line: startLine, column: startCol }) }
                 else if opCh == "~" { arrays.push(tokens, { tkType: TK_BNOT, tkValue: "~", line: startLine, column: startCol }) }
-                else { throw "Lexer error: unexpected char '" + opCh + "'" }
+                else { throw "TLL-E001 Lexer error at line " + convert.toString(startLine) + " column " + convert.toString(startCol) + ": unexpected char '" + opCh + "'" }
             }
         }
     }
