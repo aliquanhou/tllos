@@ -48,6 +48,34 @@ fn nl_convertType(tllType: string) -> string {
     return "TLLValue"
 }
 
+// ============ Ownership Helpers ============
+// P2-01-B11-R1-R2-FIX3: Recursively determine if an expression (including nested assignment)
+// carries a temporary reference that must be released when the expression is consumed.
+//
+// Returns true if the expression creates/owns a temporary refcounted reference:
+//   - String/Array/Map literals, Call, Binary(non-assignment), Unary -> temporary ref
+//   - Ident -> variable reference, NO temporary ref
+//   - Int/Float/Bool/Null -> value types, no refcount
+//   - Binary(operator="=") -> recursively check RHS of the assignment
+fn nl_exprHasTemporaryRef(expr: map) -> bool {
+    let kind = expr.kind
+    // Value types: no refcount
+    if kind == "Int" || kind == "Float" || kind == "Bool" || kind == "Null" {
+        return false
+    }
+    // Ident: variable reference, no temporary ref
+    if kind == "Ident" {
+        return false
+    }
+    // Assignment expression: recursively check RHS
+    if kind == "Binary" && expr.operator == "=" {
+        return nl_exprHasTemporaryRef(expr.right)
+    }
+    // All other expressions (String, Array, Map, Call, Binary non-assign, Unary, Member, Index):
+    // may create or carry a temporary reference
+    return true
+}
+
 // ============ Expression Lowering ============
 fn nl_lowerExpression(expr: map) -> string {
     let kind = expr.kind
@@ -264,6 +292,12 @@ fn nl_lowerStatement(stmt: map) -> void {
             initExpr = " = " + nl_lowerExpression(stmt.value)
         }
         nl_emit(varType + " " + stmt.name + initExpr + ";")
+        // P2-01-B11-R1-R2-FIX3: If init expression is assignment with Ident RHS (no temporary ref),
+        // the variable holds a borrow, not an owned ref. Increment refcount to give it
+        // independent ownership so function-exit free() is correct (avoids double-free).
+        if stmt.value != null && stmt.value.kind == "Binary" && stmt.value.operator == "=" && !nl_exprHasTemporaryRef(stmt.value) {
+            nl_emit("tll_value_incref(" + stmt.name + ");")
+        }
         return
     }
 
@@ -375,15 +409,14 @@ fn nl_lowerStatement(stmt: map) -> void {
         // so we must NOT release it (would cause UAF for x=x self-assignment).
         if innerExpr.kind == "Binary" && innerExpr.operator == "=" {
             let assignExpr = nl_lowerExpression(innerExpr)
-            if innerExpr.right.kind == "Ident" {
-                // RHS is variable reference: return value is borrow, do not release
-                nl_emit(assignExpr + ";")
-            } else {
-                // RHS is temporary expression: return value owns reference, must release
+            // P2-01-B11-R1-R2-FIX3: recursively check if assignment carries temporary ref
+            if nl_exprHasTemporaryRef(innerExpr) {
                 nl_emit("{")
                 nl_emit("    TLLValue __tll_assign_result = " + assignExpr + ";")
                 nl_emit("    tll_value_free(__tll_assign_result);")
                 nl_emit("}")
+            } else {
+                nl_emit(assignExpr + ";")
             }
         } else {
             let expr = nl_lowerExpression(innerExpr)

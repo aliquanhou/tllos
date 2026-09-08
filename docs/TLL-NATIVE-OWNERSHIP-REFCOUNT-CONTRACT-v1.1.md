@@ -166,6 +166,22 @@ ownership 链：
 
 **关键**：inner assignment 的临时引用"附着"在 y 上，函数退出时 `free(y)` 释放这个临时引用。如果 y 被后续重新赋值，`free(y 旧值)` 也会释放这个临时引用。
 
+**P2-01-B11-R1-R2-FIX3 修正 — RHS 是变量引用（Ident）的情况**：
+
+当 RHS 是变量引用时（如 `let y = (x = z)`），assignment expression 的返回值是纯粹的 borrow，不附着临时引用。此时 let 变量必须通过 `tll_value_incref()` 获得独立所有权，否则函数退出时 `free(y)` 会导致 double-free。
+
+生成代码：
+```c
+// RHS 是临时表达式：y 持有 inner 的临时引用，不 incref
+TLLValue y = tll_assign(&x, tll_string("temp"));
+
+// RHS 是变量引用：y 必须 incref 获得独立所有权，避免 double-free
+TLLValue y = tll_assign(&x, z);
+tll_value_incref(y);
+```
+
+判断逻辑：通过 `nl_exprHasTemporaryRef(expr)` 递归判断 assignment expression 是否附着临时引用。如果最终 RHS 是 Ident/值类型，则不附着临时引用，let 变量必须 incref。
+
 ##### Q6: `y = (x = rhs)` 如何消费 inner result？
 
 ```tll
