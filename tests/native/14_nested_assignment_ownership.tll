@@ -1,0 +1,75 @@
+// P2-01-B11-R1-R2-FIX2: Nested Assignment Ownership Test
+// Verifies: nested assignment expression ownership (y = (x = "a"), let y = (x = "a"))
+
+fn get_with_marker() {
+    io.println("MARKER_CALL");
+    return 42;
+}
+
+fn test_nested_assignment_let() {
+    io.println("=== 1. let y = nested assignment ===");
+    let x = "before_x";
+    let y = (x = "nested");
+    io.println(x);
+    io.println(y);
+}
+
+fn test_nested_assignment_stmt() {
+    io.println("=== 2. y = nested assignment ===");
+    let x = "before_x";
+    let y = "before_y";
+    y = (x = "nested2");
+    io.println(x);
+    io.println(y);
+}
+
+fn test_self_assignment() {
+    io.println("=== 3. x = x ===");
+    let x = "self test";
+    io.println(x);
+    x = x;
+    io.println(x);
+}
+
+fn test_var_assignment() {
+    io.println("=== 4. x = y ===");
+    let x = "x_value";
+    let y = "y_value";
+    io.println(x);
+    io.println(y);
+    x = y;
+    io.println(x);
+    io.println(y);
+}
+
+fn test_function_call_assignment() {
+    io.println("=== 5. x = get_with_marker() ===");
+    let x = 0;
+    x = get_with_marker();
+    io.println(x);
+}
+
+fn test_two_level_nested() {
+    io.println("=== 6. two level nested assignment ===");
+    let x = "before_x";
+    let y = "before_y";
+    let z = "before_z";
+    z = (y = (x = "deep"));
+    io.println(x);
+    io.println(y);
+    io.println(z);
+}
+
+fn main() {
+    io.println("=== nested_assignment_ownership ===");
+    test_nested_assignment_let();
+    test_nested_assignment_stmt();
+    test_self_assignment();
+    test_var_assignment();
+    test_function_call_assignment();
+    test_two_level_nested();
+    io.println("=== done ===");
+    return 0;
+}
+
+main()
