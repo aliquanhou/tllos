@@ -1,5 +1,33 @@
-/* TLL Value system - dynamic typing for the bootstrap VM */
-#include "tllvm.h"
+/*
+ * TLL Runtime Core - Value System
+ *
+ * Shared Runtime Core 的值系统实现。
+ * 从 host/c/value.c 提取，移除 VM 依赖，供 Bytecode 和 Native Target 共享。
+ *
+ * 原则：这是 TLL 值语义的唯一权威实现。
+ * Bytecode VM 和 Native Target 都必须调用此处的函数，
+ * 确保两个 Target 的值行为完全一致。
+ *
+ * Phase 2-01-B.4 Shared Runtime Core Convergence
+ */
+
+#include "tll_runtime.h"
+
+/* === String allocation with refCount header ===
+ * 布局: [int refCount][char data...]
+ * v.as.string 指向 data 部分（跳过 refCount header）
+ */
+static char *alloc_string_rc(const char *s, int len) {
+    char *buf = (char*)malloc(sizeof(int) + len + 1);
+    *(int*)buf = 1;
+    memcpy(buf + sizeof(int), s, len);
+    buf[sizeof(int) + len] = '\0';
+    return buf + sizeof(int);
+}
+
+static int *str_rc(char *s) { return (int*)(s - sizeof(int)); }
+
+/* === Value Creation === */
 
 TLLValue tll_null(void) {
     TLLValue v;
@@ -28,17 +56,6 @@ TLLValue tll_float(double val) {
     v.as.floating = val;
     return v;
 }
-
-/* String allocation with refCount header: [int refCount][char data...] */
-static char *alloc_string_rc(const char *s, int len) {
-    char *buf = (char*)malloc(sizeof(int) + len + 1);
-    *(int*)buf = 1;
-    memcpy(buf + sizeof(int), s, len);
-    buf[sizeof(int) + len] = '\0';
-    return buf + sizeof(int);
-}
-
-static int *str_rc(char *s) { return (int*)(s - sizeof(int)); }
 
 TLLValue tll_string(const char *s) {
     TLLValue v;
@@ -91,13 +108,14 @@ TLLValue tll_builtin(int idx) {
     return v;
 }
 
+/* === Map internal: hash & rehash === */
+
 static unsigned int hash_string(const char *s) {
     unsigned int h = 5381;
     while (*s) h = ((h << 5) + h) + (unsigned char)*s++;
     return h;
 }
 
-/* TLL-020: dynamic rehash when load factor exceeds threshold */
 static void map_rehash(TLLMap *map) {
     int newCount = map->bucketCount * 2;
     if (newCount < 16) newCount = 16;
@@ -118,6 +136,28 @@ static void map_rehash(TLLMap *map) {
     map->bucketCount = newCount;
 }
 
+/* === Array/Map Operations === */
+
+void array_push(TLLArray *arr, TLLValue v) {
+    if (arr->length >= arr->capacity) {
+        arr->capacity *= 2;
+        arr->items = (TLLValue*)realloc(arr->items, arr->capacity * sizeof(TLLValue));
+    }
+    arr->items[arr->length++] = v;
+}
+
+TLLValue array_get(TLLArray *arr, int idx) {
+    if (idx < 0 || idx >= arr->length) return tll_null();
+    return arr->items[idx];
+}
+
+void array_set(TLLArray *arr, int idx, TLLValue v) {
+    if (idx < 0 || idx > 10000000) return;
+    while (arr->length <= idx) array_push(arr, tll_null());
+    tll_value_free(arr->items[idx]);
+    arr->items[idx] = v;
+}
+
 void map_set(TLLMap *map, const char *key, TLLValue value) {
     unsigned int h = hash_string(key) % map->bucketCount;
     TLLMapEntry *e = map->buckets[h];
@@ -135,7 +175,6 @@ void map_set(TLLMap *map, const char *key, TLLValue value) {
     e->next = map->buckets[h];
     map->buckets[h] = e;
     map->size++;
-    /* TLL-020: rehash when load factor > 2 */
     if (map->size > map->bucketCount * 2) map_rehash(map);
 }
 
@@ -161,25 +200,7 @@ int map_has(TLLMap *map, const char *key) {
     return 0;
 }
 
-void array_push(TLLArray *arr, TLLValue v) {
-    if (arr->length >= arr->capacity) {
-        arr->capacity *= 2;
-        arr->items = (TLLValue*)realloc(arr->items, arr->capacity * sizeof(TLLValue));
-    }
-    arr->items[arr->length++] = v;
-}
-
-TLLValue array_get(TLLArray *arr, int idx) {
-    if (idx < 0 || idx >= arr->length) return tll_null();
-    return arr->items[idx];
-}
-
-void array_set(TLLArray *arr, int idx, TLLValue v) {
-    if (idx < 0 || idx > 10000000) return;
-    while (arr->length <= idx) array_push(arr, tll_null());
-    tll_value_free(arr->items[idx]);
-    arr->items[idx] = v;
-}
+/* === Truth & Equality === */
 
 int tll_truthy(TLLValue v) {
     switch (v.type) {
@@ -217,6 +238,8 @@ int tll_equals(TLLValue a, TLLValue b) {
     }
 }
 
+/* === String Conversion (internal helpers) === */
+
 static char *int_to_string(long long v) {
     char buf[32];
     snprintf(buf, sizeof(buf), "%lld", v);
@@ -233,7 +256,7 @@ static char *float_to_string(double v) {
     return strdup(buf);
 }
 
-/* TLL-028: depth-limited to prevent stack overflow from circular references */
+/* depth-limited to prevent stack overflow from circular references */
 static char *tll_to_string_depth(TLLValue v, int depth) {
     if (depth > 32) return strdup("[Circular]");
     switch (v.type) {
@@ -298,7 +321,8 @@ char *tll_to_string(TLLValue v) {
     return tll_to_string_depth(v, 0);
 }
 
-/* JSON serialization: strings get quotes, null becomes "null" */
+/* === JSON Serialization === */
+
 static char *json_escape_string(const char *s) {
     int len = (int)strlen(s);
     char *out = (char*)malloc(len * 2 + 3);
@@ -377,6 +401,8 @@ char *tll_to_json(TLLValue v) {
         default: return strdup("null");
     }
 }
+
+/* === Reference Counting === */
 
 void tll_value_incref(TLLValue v) {
     switch (v.type) {

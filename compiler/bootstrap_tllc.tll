@@ -15,7 +15,7 @@ export fn compileSource(source: string) -> string {
     io.println("[Phase 1] Lexer: done, tokens=" + convert.toString(arrays.length(tokens)))
 
     io.println("[Phase 2] Parser: parsing...")
-    let ast = parse(tokens)
+    let ast = parseTokens(tokens)
     io.println("[Phase 2] Parser: done")
 
     io.println("[Phase 3] TypeChecker: checking...")

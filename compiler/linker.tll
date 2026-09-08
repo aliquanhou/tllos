@@ -1003,7 +1003,7 @@ export fn linkAndCompile(entryFile: string) -> map {
         let rawSource = fs.readFile(filePath)
         let source = stripExports(rawSource)
         let tokens = tokenize(source)
-        let ast = parse(tokens)
+        let ast = parseTokens(tokens)
         arrays.push(moduleASTs, ast)
         arrays.push(modulePaths, filePath)
         i = i + 1

@@ -1,0 +1,34 @@
+// Cross-Target Conformance Case 01: Basic
+// 覆盖: arithmetic, comparison, boolean, let, return, io.println
+
+fn main() {
+    // arithmetic
+    let a = 10 + 5;
+    io.println(a);
+    let b = 20 - 8;
+    io.println(b);
+    let c = 3 * 4;
+    io.println(c);
+    let d = 100 / 10;
+    io.println(d);
+
+    // comparison
+    let e = 10 > 5;
+    io.println(e);
+    let f = 5 < 10;
+    io.println(f);
+    let g = 10 == 10;
+    io.println(g);
+
+    // boolean logic
+    let h = true && false;
+    io.println(h);
+    let i = true || false;
+    io.println(i);
+    let j = !true;
+    io.println(j);
+
+    return 0;
+}
+
+main()

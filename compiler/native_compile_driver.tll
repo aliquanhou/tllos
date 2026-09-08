@@ -1,0 +1,77 @@
+// Native Target Compilation Driver (Parameterized)
+// 使用 TLL Compiler 的 compileNative 正式编译 TLL 源码为 C 代码
+//
+// Usage:
+//   tllvm native_compile_driver.tllbc [input.tll] [output.c]
+//
+// Default:
+//   input:  tests/native/cross_target_minimal.tll
+//   output: tests/native/cross_target_minimal.c
+
+from "./lexer" import tokenize
+from "./parser" import parse
+from "./typechecker" import check
+from "./native_lower" import lowerToC
+
+fn main() -> void {
+    io.println("=== TLL Native Target Compiler ===")
+
+    // 解析命令行参数
+    // argv[0]=tllvm, argv[1]=native_compile_driver.tllbc, argv[2+]=args
+    let argv = process.argv
+    let argc = arrays.length(argv)
+
+    // 默认输入/输出文件
+    let inputFile = "tests/native/cross_target_minimal.tll"
+    let outputFile = "tests/native/cross_target_minimal.c"
+
+    // 如果提供了输入文件参数
+    if argc > 2 {
+        inputFile = convert.toString(arrays.get(argv, 2))
+        // 自动推导输出文件名：将 .tll 替换为 .c
+        outputFile = strings.replace(inputFile, ".tll", ".c")
+    }
+
+    // 如果提供了输出文件参数
+    if argc > 3 {
+        outputFile = convert.toString(arrays.get(argv, 3))
+    }
+
+    io.println("Input:  " + inputFile)
+    io.println("Output: " + outputFile)
+    io.println("")
+
+    io.println("Reading: " + inputFile)
+    let source = fs.readFile(inputFile)
+    io.println("Source length: " + convert.toString(strings.length(source)))
+
+    // Phase 1: Lexer
+    io.println("[Phase 1] Lexer...")
+    let tokens = tokenize(source)
+    io.println("[Phase 1] done, tokens=" + convert.toString(arrays.length(tokens)))
+
+    // Phase 2: Parser
+    io.println("[Phase 2] Parser...")
+    let ast = parseTokens(tokens)
+    io.println("[Phase 2] done, statements=" + convert.toString(arrays.length(ast.statements)))
+
+    // Phase 3: TypeChecker
+    io.println("[Phase 3] TypeChecker...")
+    let errors = check(ast)
+    io.println("[Phase 3] done, errors=" + convert.toString(arrays.length(errors)))
+
+    // Phase 4: Native Lowering
+    io.println("[Phase 4] Native Lowering (C code generation)...")
+    let cSource = lowerToC(ast)
+    io.println("[Phase 4] done, C code length=" + convert.toString(strings.length(cSource)))
+
+    // 写入 C 代码
+    io.println("Writing: " + outputFile)
+    fs.writeFile(outputFile, cSource)
+    io.println("C code written successfully")
+
+    io.println("")
+    io.println("=== Native Target Compilation Complete ===")
+}
+
+main()

@@ -1,0 +1,18 @@
+// Cross-Target Conformance Minimal Test
+// 同一份 TLL 源码，分别通过 Bytecode 和 Native 两条路径编译执行
+// 验证输出和退出码一致
+
+fn add(a, b) {
+    return a + b;
+}
+
+fn main() {
+    let x = add(40, 2);
+    io.println(x);
+    let y = add(10, 5);
+    io.println(y);
+    io.println("hello");
+    return x;
+}
+
+main()

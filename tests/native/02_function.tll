@@ -1,0 +1,38 @@
+// Cross-Target Conformance Case 02: Function
+// 覆盖: function declaration, parameters, nested call, return, let, io.println
+
+fn add(a, b) {
+    return a + b;
+}
+
+fn multiply(a, b) {
+    return a * b;
+}
+
+fn compute(x, y) {
+    let sum = add(x, y);
+    let product = multiply(x, y);
+    return add(sum, product);
+}
+
+fn main() {
+    // basic function call
+    let r1 = add(3, 4);
+    io.println(r1);
+
+    // another function
+    let r2 = multiply(5, 6);
+    io.println(r2);
+
+    // nested function call (function calls another function)
+    let r3 = compute(2, 3);
+    io.println(r3);
+
+    // multiple parameters
+    let r4 = add(100, 200);
+    io.println(r4);
+
+    return 0;
+}
+
+main()

@@ -7,6 +7,7 @@ from "./parser" import parse
 from "./typechecker" import check
 from "./codegen" import compile
 from "./linker" import linkAndCompile
+from "./native_lower" import lowerToC
 
 // Main compile function: source string -> bytecode program (as JSON string)
 export fn compileSource(source: string) -> string {
@@ -17,7 +18,7 @@ export fn compileSource(source: string) -> string {
 
     io.println("[Phase 2] Parser: parsing...")
     // Phase 2: Parser
-    let ast = parse(tokens)
+    let ast = parseTokens(tokens)
     io.println("[Phase 2] Parser: done")
 
     io.println("[Phase 3] TypeChecker: checking...")
@@ -35,6 +36,34 @@ export fn compileSource(source: string) -> string {
     let result = json.stringify(program)
     io.println("[Phase 5] Serialization: done, length=" + convert.toString(strings.length(result)))
     return result
+}
+
+// Native compile function: source string -> C source code
+// This is the formal Native Target of TLL Compiler.
+// It shares the same frontend (Lexer/Parser/TypeChecker) with Bytecode Target,
+// but uses native_lower to generate C code instead of bytecode.
+export fn compileNative(source: string) -> string {
+    io.println("[Native Phase 1] Lexer: tokenizing...")
+    // Phase 1: Lexer (shared with Bytecode Target)
+    let tokens = tokenize(source)
+    io.println("[Native Phase 1] Lexer: done, tokens=" + convert.toString(arrays.length(tokens)))
+
+    io.println("[Native Phase 2] Parser: parsing...")
+    // Phase 2: Parser (shared with Bytecode Target)
+    let ast = parseTokens(tokens)
+    io.println("[Native Phase 2] Parser: done")
+
+    io.println("[Native Phase 3] TypeChecker: checking...")
+    // Phase 3: Type Checker (shared with Bytecode Target)
+    let errors = check(ast)
+    io.println("[Native Phase 3] TypeChecker: done, errors=" + convert.toString(arrays.length(errors)))
+
+    io.println("[Native Phase 4] Native Lowering: generating C code...")
+    // Phase 4: Native Lowering (Native Target specific)
+    let cSource = lowerToC(ast)
+    io.println("[Native Phase 4] Native Lowering: done, length=" + convert.toString(strings.length(cSource)))
+
+    return cSource
 }
 
 // Self-hosting verification: compile compiler.tll itself

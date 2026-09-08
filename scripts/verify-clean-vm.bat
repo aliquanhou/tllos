@@ -5,6 +5,11 @@ REM Usage: scripts\verify-clean-vm.bat
 REM
 REM This script verifies that TLL can be built and tested from
 REM source in a clean environment.
+REM
+REM P2-01-B.6 Build & Source Convergence:
+REM   Bytecode VM now uses Shared TLL Runtime Core (runtime/) instead of
+REM   the old host/c/value.c. Bytecode and Native targets share the exact
+REM   same value semantics, reference counting, and arithmetic implementations.
 REM ============================================================
 
 setlocal enabledelayedexpansion
@@ -12,6 +17,7 @@ setlocal enabledelayedexpansion
 set "SCRIPT_DIR=%~dp0"
 set "REPO_ROOT=%SCRIPT_DIR%.."
 set "HOST_C=%REPO_ROOT%\host\c"
+set "RUNTIME_CORE=%REPO_ROOT%\runtime"
 set "TOOLS_TLLC=%REPO_ROOT%\tools\TLLC"
 
 set PASS_COUNT=0
@@ -20,6 +26,7 @@ set WARN_COUNT=0
 
 echo ============================================================
 echo TLL Clean VM Canonical Verification (Windows)
+echo Shared Runtime Core: %RUNTIME_CORE%
 echo ============================================================
 echo.
 
@@ -69,7 +76,11 @@ echo --- STEP 2: Native Build ---
 
 cd /d "%HOST_C%"
 
-set TLL_C_SOURCES=main.c vm.c value.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c
+REM Shared Runtime Core replaces old host/c/value.c:
+REM   runtime\value.c      - value creation, refcount, truthy, equals, Array/Map
+REM   runtime\arithmetic.c - arithmetic and comparison operations
+REM   runtime\io.c         - basic IO and runtime lifecycle
+set TLL_C_SOURCES=main.c vm.c ..\..\runtime\value.c ..\..\runtime\arithmetic.c ..\..\runtime\io.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c
 
 REM Verify all source files exist
 set MISSING=0
@@ -81,15 +92,15 @@ for %%f in (%TLL_C_SOURCES%) do (
     )
 )
 if %MISSING%==0 (
-    echo [PASS] All 12 canonical C source files present
+    echo [PASS] All 14 canonical C source files present (with Shared Runtime Core)
     set /a PASS_COUNT+=1
 )
 
 REM Build
 where cl.exe >nul 2>&1
 if %ERRORLEVEL%==0 (
-    echo [INFO] Building tllvm.exe with MSVC...
-    cl /O2 /D_CRT_SECURE_NO_WARNINGS /Fe:tllvm.exe %TLL_C_SOURCES% /link ws2_32.lib user32.lib advapi32.lib bcrypt.lib winhttp.lib >nul 2>&1
+    echo [INFO] Building tllvm.exe with MSVC (Shared Runtime Core)...
+    cl /O2 /D_CRT_SECURE_NO_WARNINGS /I..\..\runtime /Fe:tllvm.exe %TLL_C_SOURCES% /link ws2_32.lib user32.lib advapi32.lib bcrypt.lib winhttp.lib >nul 2>&1
     if %ERRORLEVEL%==0 (
         echo [PASS] Native build successful
         set /a PASS_COUNT+=1
@@ -99,8 +110,8 @@ if %ERRORLEVEL%==0 (
     )
 ) else (
     if defined TCC_EXE (
-        echo [INFO] Building tllvm.exe with TCC...
-        "%TCC_EXE%" -O2 -std=c99 -D_WIN32 "-Wl,-stack=0x4000000" -o tllvm.exe %TLL_C_SOURCES% "%SystemRoot%\System32\winhttp.dll" "%SystemRoot%\System32\ws2_32.dll" "%SystemRoot%\System32\bcrypt.dll" >nul 2>&1
+        echo [INFO] Building tllvm.exe with TCC (Shared Runtime Core)...
+        "%TCC_EXE%" -O2 -std=c99 -D_WIN32 -I..\..\runtime "-Wl,-stack=0x4000000" -o tllvm.exe %TLL_C_SOURCES% "%SystemRoot%\System32\winhttp.dll" "%SystemRoot%\System32\ws2_32.dll" "%SystemRoot%\System32\bcrypt.dll" >nul 2>&1
         if %ERRORLEVEL%==0 (
             echo [PASS] Native build successful
             set /a PASS_COUNT+=1

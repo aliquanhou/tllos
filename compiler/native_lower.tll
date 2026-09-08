@@ -1,0 +1,399 @@
+// TLL Native Lowering - AST to C Code Generator
+//
+// 这是 TLL Compiler 的正式 Native Target 模块。
+// 将 TLL AST 转换为 C 代码，然后由 MSVC/GCC/Clang 编译为 Native Executable。
+//
+// Architecture:
+//   TLL Source
+//       ↓ Lexer → Parser → TypeChecker (共享前端)
+//   AST
+//       ├── Bytecode Target (codegen.tll) → 字节码 → VM
+//       └── Native Target (native_lower.tll) → C → MSVC/GCC → Native EXE
+//
+// 与 Bytecode Target 共享相同的 AST 和语言语义。
+
+// ============ Lowering State ============
+let nl_output: list = []
+let nl_indent = 0
+let nl_functionCount = 0
+
+// ============ Helpers ============
+fn nl_emit(line: string) -> void {
+    let prefix = ""
+    let i = 0
+    while i < nl_indent {
+        prefix = prefix + "    "
+        i = i + 1
+    }
+    arrays.push(nl_output, prefix + line)
+}
+
+fn nl_join(lines: list, sep: string) -> string {
+    let result = ""
+    let i = 0
+    while i < arrays.length(lines) {
+        if i > 0 { result = result + sep }
+        result = result + arrays.get(lines, i)
+        i = i + 1
+    }
+    return result
+}
+
+// ============ Type Conversion ============
+fn nl_convertType(tllType: string) -> string {
+    // Native Target 统一使用 TLLValue（动态类型），与 Bytecode Target 保持语义一致
+    // 类型标注仅用于类型检查，不改变生成的 C 代码类型
+    return "TLLValue"
+}
+
+// ============ Expression Lowering ============
+fn nl_lowerExpression(expr: map) -> string {
+    let kind = expr.kind
+
+    // 整数常量
+    if kind == "Int" {
+        return "tll_int(" + expr.value + ")"
+    }
+
+    // 浮点数常量
+    if kind == "Float" {
+        return "tll_float(" + expr.value + ")"
+    }
+
+    // 字符串常量
+    if kind == "String" {
+        return "tll_string(\"" + expr.value + "\")"
+    }
+
+    // 布尔常量
+    if kind == "Bool" {
+        if expr.value == "true" { return "tll_bool(1)" }
+        return "tll_bool(0)"
+    }
+
+    // null
+    if kind == "Null" {
+        return "tll_null()"
+    }
+
+    // 变量引用
+    if kind == "Ident" {
+        return expr.name
+    }
+
+    // 二元运算
+    if kind == "Binary" {
+        let left = nl_lowerExpression(expr.left)
+        let right = nl_lowerExpression(expr.right)
+        let op = expr.operator
+        // TLL 动态类型运算 → TLLValue 运算函数
+        if op == "+" { return "tll_add(" + left + ", " + right + ")" }
+        if op == "-" { return "tll_sub(" + left + ", " + right + ")" }
+        if op == "*" { return "tll_mul(" + left + ", " + right + ")" }
+        if op == "/" { return "tll_div(" + left + ", " + right + ")" }
+        if op == "%" { return "tll_mod(" + left + ", " + right + ")" }
+        if op == "==" { return "tll_eq(" + left + ", " + right + ")" }
+        if op == "!=" { return "tll_neq(" + left + ", " + right + ")" }
+        if op == "<" { return "tll_lt(" + left + ", " + right + ")" }
+        if op == ">" { return "tll_gt(" + left + ", " + right + ")" }
+        if op == "<=" { return "tll_le(" + left + ", " + right + ")" }
+        if op == ">=" { return "tll_ge(" + left + ", " + right + ")" }
+        // 逻辑运算
+        if op == "&&" { return "tll_bool(tll_truthy(" + left + ") && tll_truthy(" + right + "))" }
+        if op == "||" { return "tll_bool(tll_truthy(" + left + ") || tll_truthy(" + right + "))" }
+        // 默认直接透传（C 语法兼容）
+        return left + " " + op + " " + right
+    }
+
+    // 一元运算
+    if kind == "Unary" {
+        let operand = nl_lowerExpression(expr.operand)
+        let op = expr.operator
+        if op == "!" { return "tll_bool(!tll_truthy(" + operand + "))" }
+        if op == "-" { return "tll_int(-" + operand + ".as.integer)" }
+        return op + operand
+    }
+
+    // 函数调用
+    if kind == "Call" {
+        let callee = nl_lowerExpression(expr.callee)
+        let args: list = []
+        let i = 0
+        // B7-01 FIX: AST Call 节点参数字段名是 args，不是 arguments
+        while i < arrays.length(expr.args) {
+            arrays.push(args, nl_lowerExpression(arrays.get(expr.args, i)))
+            i = i + 1
+        }
+        return callee + "(" + nl_join(args, ", ") + ")"
+    }
+
+    // 成员访问（io.println 等）
+    if kind == "Member" {
+        let obj = nl_lowerExpression(expr.object)
+        // B7-02 FIX: AST Member 节点属性字段名是 property，不是 name
+        let name = expr.property
+        // io.println → tll_io_println
+        if obj == "io" && name == "println" { return "tll_io_println" }
+        if obj == "io" && name == "print" { return "tll_io_print" }
+        // 默认：obj_name（C 中没有成员访问，用函数名拼接）
+        return obj + "_" + name
+    }
+
+    // 数组字面量
+    if kind == "Array" {
+        return "NULL /* array literal */"
+    }
+
+    // Map 字面量
+    if kind == "Map" {
+        return "NULL /* map literal */"
+    }
+
+    // 默认：返回空
+    return "NULL /* unknown expr: " + kind + " */"
+}
+
+// ============ Statement Lowering ============
+fn nl_lowerStatement(stmt: map) -> void {
+    let kind = stmt.kind
+
+    // let / const 声明
+    if kind == "Let" || kind == "Const" {
+        let varType = "TLLValue"
+        if stmt.type != null && stmt.type != "" {
+            varType = nl_convertType(stmt.type)
+        }
+        let initExpr = ""
+        if stmt.value != null {
+            initExpr = " = " + nl_lowerExpression(stmt.value)
+        }
+        nl_emit(varType + " " + stmt.name + initExpr + ";")
+        return
+    }
+
+    // 赋值
+    if kind == "Assignment" {
+        let target = nl_lowerExpression(stmt.target)
+        let value = nl_lowerExpression(stmt.value)
+        nl_emit(target + " = " + value + ";")
+        return
+    }
+
+    // return
+    if kind == "Return" {
+        if stmt.value != null {
+            let value = nl_lowerExpression(stmt.value)
+            nl_emit("return " + value + ";")
+        } else {
+            nl_emit("return;")
+        }
+        return
+    }
+
+    // if
+    if kind == "If" {
+        let cond = nl_lowerExpression(stmt.condition)
+        nl_emit("if (tll_truthy(" + cond + ")) {")
+        nl_indent = nl_indent + 1
+        // consequent 可能是 Block 节点或单个语句
+        if stmt.consequent.kind == "Block" {
+            let ci = 0
+            while ci < arrays.length(stmt.consequent.statements) {
+                nl_lowerStatement(arrays.get(stmt.consequent.statements, ci))
+                ci = ci + 1
+            }
+        } else {
+            nl_lowerStatement(stmt.consequent)
+        }
+        nl_indent = nl_indent - 1
+        nl_emit("}")
+        if stmt.alternate != null {
+            nl_emit("else {")
+            nl_indent = nl_indent + 1
+            if stmt.alternate.kind == "Block" {
+                let cj = 0
+                while cj < arrays.length(stmt.alternate.statements) {
+                    nl_lowerStatement(arrays.get(stmt.alternate.statements, cj))
+                    cj = cj + 1
+                }
+            } else {
+                nl_lowerStatement(stmt.alternate)
+            }
+            nl_indent = nl_indent - 1
+            nl_emit("}")
+        }
+        return
+    }
+
+    // while
+    if kind == "While" {
+        let cond = nl_lowerExpression(stmt.condition)
+        nl_emit("while (tll_truthy(" + cond + ")) {")
+        nl_indent = nl_indent + 1
+        // body 可能是 Block 节点或单个语句
+        if stmt.body.kind == "Block" {
+            let wi = 0
+            while wi < arrays.length(stmt.body.statements) {
+                nl_lowerStatement(arrays.get(stmt.body.statements, wi))
+                wi = wi + 1
+            }
+        } else {
+            nl_lowerStatement(stmt.body)
+        }
+        nl_indent = nl_indent - 1
+        nl_emit("}")
+        return
+    }
+
+    // 表达式语句
+    if kind == "ExpressionStatement" {
+        let expr = nl_lowerExpression(stmt.expression)
+        nl_emit(expr + ";")
+        return
+    }
+
+    // 函数声明（顶层函数在 lowerFunction 中处理）
+    if kind == "Fn" {
+        return
+    }
+
+    // 默认：注释
+    nl_emit("/* unknown stmt: " + kind + " */")
+}
+
+// ============ Function Lowering ============
+fn nl_lowerFunction(fnDecl: map) -> void {
+    let fnName = fnDecl.name
+    if fnName == "main" { fnName = "tll_main" }
+
+    // 返回类型（TypeRef 节点，取 .name）
+    let returnType = "TLLValue"
+    if fnDecl.returnType != null && fnDecl.returnType.name != null {
+        returnType = nl_convertType(fnDecl.returnType.name)
+    }
+
+    // 参数（param.type 是 TypeRef 节点，取 .name）
+    let params: list = []
+    let i = 0
+    while i < arrays.length(fnDecl.params) {
+        let param = arrays.get(fnDecl.params, i)
+        let paramType = "TLLValue"
+        if param.type != null && param.type.name != null {
+            paramType = nl_convertType(param.type.name)
+        }
+        arrays.push(params, paramType + " " + param.name)
+        i = i + 1
+    }
+    if arrays.length(params) == 0 {
+        arrays.push(params, "void")
+    }
+
+    // 函数签名
+    nl_emit(returnType + " " + fnName + "(" + nl_join(params, ", ") + ") {")
+    nl_indent = nl_indent + 1
+
+    // 函数体（可能是 Block 节点，也可能直接是语句列表）
+    let body = fnDecl.body
+    let bodyStmts: list = []
+    if body != null {
+        if body.kind == "Block" {
+            bodyStmts = body.statements
+        } else {
+            // 假设直接是语句列表
+            bodyStmts = body
+        }
+    }
+    let i = 0
+    while i < arrays.length(bodyStmts) {
+        nl_lowerStatement(arrays.get(bodyStmts, i))
+        i = i + 1
+    }
+
+    nl_indent = nl_indent - 1
+    nl_emit("}")
+    nl_emit("")
+
+    nl_functionCount = nl_functionCount + 1
+}
+
+// ============ Main Lowering Entry ============
+export fn lowerToC(ast: map) -> string {
+    nl_output = []
+    nl_indent = 0
+    nl_functionCount = 0
+
+    // 头文件
+    nl_emit("#include <stdio.h>")
+    nl_emit("#include <stdlib.h>")
+    nl_emit("#include <string.h>")
+    nl_emit("#include \"tll_native.h\"")
+    nl_emit("")
+
+    // 前向声明
+    nl_emit("/* Forward declarations */")
+    let stmts = ast.statements
+    let i = 0
+    while i < arrays.length(stmts) {
+        let stmt = arrays.get(stmts, i)
+        if stmt.kind == "Fn" {
+            let fnName = stmt.name
+            if fnName == "main" { fnName = "tll_main" }
+            let returnType = "TLLValue"
+            if stmt.returnType != null && stmt.returnType.name != null {
+                returnType = nl_convertType(stmt.returnType.name)
+            }
+            // 参数
+            let paramStr = "void"
+            if arrays.length(stmt.params) > 0 {
+                let plist: list = []
+                let pi = 0
+                while pi < arrays.length(stmt.params) {
+                    let p = arrays.get(stmt.params, pi)
+                    let ptype = "TLLValue"
+                    if p.type != null && p.type.name != null {
+                        ptype = nl_convertType(p.type.name)
+                    }
+                    arrays.push(plist, ptype + " " + p.name)
+                    pi = pi + 1
+                }
+                paramStr = nl_join(plist, ", ")
+            }
+            nl_emit(returnType + " " + fnName + "(" + paramStr + ");")
+        }
+        i = i + 1
+    }
+    nl_emit("")
+
+    // 函数定义
+    i = 0
+    while i < arrays.length(stmts) {
+        let stmt = arrays.get(stmts, i)
+        if stmt.kind == "Fn" {
+            nl_lowerFunction(stmt)
+        }
+        i = i + 1
+    }
+
+    // C main 函数（调用 TLL main）
+    // B7 语义对齐：TLL main 的返回值不作为进程 exit code（与 Bytecode VM 一致）
+    // 进程 exit code 应由 process.exit() 控制，当前 Native Target 暂不支持
+    nl_emit("/* C entry point */")
+    nl_emit("int main(int argc, char *argv[]) {")
+    nl_indent = nl_indent + 1
+    nl_emit("tll_native_init();")
+    nl_emit("tll_main();")
+    nl_emit("tll_native_cleanup();")
+    nl_emit("return 0;")
+    nl_indent = nl_indent - 1
+    nl_emit("}")
+
+    // 连接输出
+    let result = ""
+    i = 0
+    while i < arrays.length(nl_output) {
+        result = result + arrays.get(nl_output, i) + "\n"
+        i = i + 1
+    }
+
+    return result
+}

@@ -18,8 +18,9 @@ Write-Output ""
 if (-not (Test-Path $TLLVM)) {
     Write-Output "[1/4] tllvm.exe not found, building with MSVC..."
     $vcvars = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
-    $srcs = "main.c vm.c value.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c"
-    $cmd = "`"$vcvars`" >nul 2>&1 && cd /d `"$HOST_C`" && cl /O2 /std:c11 /D_WIN32 /D_CRT_SECURE_NO_WARNINGS /Fe:tllvm.exe $srcs /link winhttp.lib ws2_32.lib bcrypt.lib >nul 2>&1"
+    # P2-01-B.6: Shared TLL Runtime Core replaces old host/c/value.c
+    $srcs = "main.c vm.c ..\..\runtime\value.c ..\..\runtime\arithmetic.c ..\..\runtime\io.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c"
+    $cmd = "`"$vcvars`" >nul 2>&1 && cd /d `"$HOST_C`" && cl /O2 /std:c11 /D_WIN32 /D_CRT_SECURE_NO_WARNINGS /I..\..\runtime /Fe:tllvm.exe $srcs /link winhttp.lib ws2_32.lib bcrypt.lib >nul 2>&1"
     cmd /c $cmd
     if (-not (Test-Path $TLLVM)) {
         Write-Output "ERROR: Failed to build tllvm.exe"

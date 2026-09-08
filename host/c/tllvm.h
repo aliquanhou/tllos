@@ -1,4 +1,4 @@
-﻿/*
+/*
  * TLL Native Launcher (tllvm)
  * Bootstrap/Host layer only - NOT TLL Language Core.
  *
@@ -14,6 +14,11 @@
  *
  * This is the "first match" that lights the TLL VM.
  * Architecture: tllvm -> vm_run.tllbc -> TLL VM (vm.tll) -> user program
+ *
+ * P2-01-B.5 Host Runtime Convergence:
+ *   核心数据结构和值操作函数现在来自 Shared Runtime Core (runtime/tll_runtime.h)。
+ *   此文件仅保留 VM 专用定义（Bytecode 结构、Frame、Coroutine、VM、操作码、
+ *   JSON/VM/Builtin/Host ABI/Process API 函数声明）。
  */
 
 #ifndef TLLVM_H
@@ -24,73 +29,12 @@
 #include <string.h>
 #include <math.h>
 
-/* === TLL Value Types === */
-typedef enum {
-    TLL_NULL,
-    TLL_BOOL,
-    TLL_INT,
-    TLL_FLOAT,
-    TLL_STRING,
-    TLL_ARRAY,
-    TLL_MAP,
-    TLL_FUNCTION,  /* {__fn:true, fnIdx, env} */
-    TLL_BUILTIN,   /* {__builtin:true, idx} */
-    TLL_UPVALUE    /* {value: TLLValue} */
-} TLLType;
-
-typedef struct TLLValue TLLValue;
-typedef struct TLLArray TLLArray;
-typedef struct TLLMap TLLMap;
-typedef struct TLLMapEntry TLLMapEntry;
-typedef struct TLLClosureEnv TLLClosureEnv;
-typedef struct TLLUpvalue TLLUpvalue;
-
-struct TLLValue {
-    TLLType type;
-    union {
-        int boolean;
-        long long integer;
-        double floating;
-        char *string;
-        TLLArray *array;
-        TLLMap *map;
-        struct { int fnIdx; TLLClosureEnv *env; } func;
-        struct { int idx; } builtin;
-        TLLUpvalue *upvalue;
-    } as;
-};
-
-struct TLLArray {
-    TLLValue *items;
-    int length;
-    int capacity;
-    int refCount;
-};
-
-struct TLLMapEntry {
-    char *key;
-    TLLValue value;
-    TLLMapEntry *next;
-};
-
-struct TLLMap {
-    TLLMapEntry **buckets;
-    int bucketCount;
-    int size;
-    int refCount;
-};
-
-struct TLLUpvalue {
-    TLLValue value;
-    int refCount;
-};
-
-struct TLLClosureEnv {
-    TLLUpvalue **upvalues;
-    int count;
-    int capacity;
-    int refCount;
-};
+/* === Shared TLL Runtime Core ===
+ * 提供: TLLValue/TLLArray/TLLMap/TLLClosureEnv/TLLUpvalue 数据结构,
+ *       值创建/引用计数/truthy/equals/toString/Array/Map 操作函数。
+ * Binary Compatibility: 与原 tllvm.h 定义完全一致（字段顺序、类型、大小）。
+ */
+#include "../../runtime/tll_runtime.h"
 
 /* === Bytecode structures === */
 typedef struct {
@@ -242,34 +186,6 @@ enum {
 
 /* === Function declarations === */
 
-/* Value operations */
-TLLValue tll_null(void);
-TLLValue tll_bool(int b);
-TLLValue tll_int(long long v);
-TLLValue tll_float(double v);
-TLLValue tll_string(const char *s);
-TLLValue tll_string_n(const char *s, int len);
-TLLValue tll_array(void);
-TLLValue tll_map(void);
-TLLValue tll_function(int fnIdx, TLLClosureEnv *env);
-TLLValue tll_builtin(int idx);
-void tll_value_incref(TLLValue v);
-void tll_value_free(TLLValue v);
-char *tll_to_string(TLLValue v);
-char *tll_to_json(TLLValue v);
-int tll_truthy(TLLValue v);
-int tll_equals(TLLValue a, TLLValue b);
-
-/* Array operations */
-void array_push(TLLArray *arr, TLLValue v);
-TLLValue array_get(TLLArray *arr, int idx);
-void array_set(TLLArray *arr, int idx, TLLValue v);
-
-/* Map operations */
-void map_set(TLLMap *map, const char *key, TLLValue v);
-TLLValue map_get(TLLMap *map, const char *key);
-int map_has(TLLMap *map, const char *key);
-
 /* JSON parser */
 /* TLL-013: control whether uncaught exceptions hard-exit (default 1) */
 extern int tll_exit_on_uncaught;
@@ -323,5 +239,3 @@ extern int tll_exit_code;
 extern int tll_should_exit;
 
 #endif /* TLLVM_H */
-
-

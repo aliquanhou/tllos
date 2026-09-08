@@ -1,0 +1,37 @@
+// Cross-Target Conformance Case 03: IO
+// 覆盖: string, io.println, mixed output, let, arithmetic, return
+
+fn main() {
+    // string literals
+    io.println("hello");
+    io.println("world");
+
+    // string concatenation
+    let greeting = "hello" + " " + "world";
+    io.println(greeting);
+
+    // mixed output: strings and numbers
+    io.println("the answer is");
+    let answer = 40 + 2;
+    io.println(answer);
+
+    // multiple lines
+    io.println("line 1");
+    io.println("line 2");
+    io.println("line 3");
+
+    // empty string
+    io.println("");
+
+    // numbers and strings interleaved
+    let x = 10;
+    io.println("x =");
+    io.println(x);
+    let y = x + 5;
+    io.println("y =");
+    io.println(y);
+
+    return 0;
+}
+
+main()

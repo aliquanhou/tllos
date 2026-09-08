@@ -7,6 +7,11 @@
 # source in a clean environment. It is the Canonical Truth
 # for TLL engineering verification.
 #
+# P2-01-B.6 Build & Source Convergence:
+#   Bytecode VM now uses Shared TLL Runtime Core (runtime/) instead of
+#   the old host/c/value.c. Bytecode and Native targets share the exact
+#   same value semantics, reference counting, and arithmetic implementations.
+#
 # Exit codes:
 #   0 = ALL CHECKS PASSED
 #   1 = ONE OR MORE CHECKS FAILED
@@ -17,6 +22,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$SCRIPT_DIR/.."
 HOST_C="$REPO_ROOT/host/c"
+RUNTIME_CORE="$REPO_ROOT/runtime"
 TOOLS_TLLC="$REPO_ROOT/tools/TLLC"
 
 PASS_COUNT=0
@@ -50,6 +56,7 @@ log_info() {
 
 echo "============================================================"
 echo "TLL Clean VM Canonical Verification"
+echo "Shared Runtime Core: $RUNTIME_CORE"
 echo "============================================================"
 echo ""
 
@@ -96,7 +103,11 @@ echo "--- STEP 2: Native Build ---"
 cd "$HOST_C"
 
 # Canonical C source list — must match build-native.sh, build-native.bat, and CI
-TLL_C_SOURCES="main.c vm.c value.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c"
+# Shared Runtime Core replaces old host/c/value.c:
+#   runtime/value.c      - value creation, refcount, truthy, equals, Array/Map
+#   runtime/arithmetic.c - arithmetic and comparison operations
+#   runtime/io.c         - basic IO and runtime lifecycle
+TLL_C_SOURCES="main.c vm.c ../../runtime/value.c ../../runtime/arithmetic.c ../../runtime/io.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c"
 
 # Verify all source files exist
 MISSING_SOURCES=0
@@ -108,17 +119,17 @@ for src in $TLL_C_SOURCES; do
 done
 
 if [ $MISSING_SOURCES -eq 0 ]; then
-    log_pass "All 12 canonical C source files present"
+    log_pass "All 14 canonical C source files present (with Shared Runtime Core)"
 fi
 
 # Build
 if [ "$UNAME" = "Darwin" ]; then
-    BUILD_CMD="$CC -O2 -std=gnu99 -D_DARWIN_C_SOURCE -o tllvm $TLL_C_SOURCES -lm -lpthread -framework Security -framework CoreFoundation"
+    BUILD_CMD="$CC -O2 -std=gnu99 -D_DARWIN_C_SOURCE -I../../runtime -o tllvm $TLL_C_SOURCES -lm -lpthread -framework Security -framework CoreFoundation"
 else
-    BUILD_CMD="$CC -O2 -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm $TLL_C_SOURCES -lm -lpthread -ldl -lssl -lcrypto"
+    BUILD_CMD="$CC -O2 -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -I../../runtime -o tllvm $TLL_C_SOURCES -lm -lpthread -ldl -lssl -lcrypto"
 fi
 
-log_info "Building tllvm..."
+log_info "Building tllvm (with Shared Runtime Core)..."
 if eval $BUILD_CMD 2> /tmp/tll_build_errors.log; then
     log_pass "Native build successful"
     if [ -f tllvm ]; then

@@ -67,7 +67,7 @@ fn makeNode(nodeKind: string, nodeLine: int, nodeColumn: int) -> map {
 
 // ============ Entry point ============
 
-export fn parse(tokens: list) -> map {
+export fn parseTokens(tokens: list) -> map {
     parse_tokens = tokens
     parse_pos = 0
     let statements: list = []
