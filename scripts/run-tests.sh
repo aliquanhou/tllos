@@ -48,6 +48,9 @@ run_test() {
     if [[ "$basename" == exit* ]]; then
         expected="${basename#exit}"
     fi
+    # DEBUG: check compiled file
+    if [ ! -f "$out" ]; then echo "  DEBUG: $out does not exist after compile"; cat "$TMPFILE"; fi
+    if [ -f "$out" ]; then echo "  DEBUG: $out size=$(stat -c%s "$out" 2>/dev/null || stat -f%z "$out" 2>/dev/null)"; fi
     # Run test with optional timeout (prevents infinite loops from hanging CI)
     set +e
     if [ -n "$TIMEOUT_CMD" ]; then
