@@ -97,6 +97,27 @@ static unsigned int hash_string(const char *s) {
     return h;
 }
 
+/* TLL-020: dynamic rehash when load factor exceeds threshold */
+static void map_rehash(TLLMap *map) {
+    int newCount = map->bucketCount * 2;
+    if (newCount < 16) newCount = 16;
+    TLLMapEntry **newBuckets = (TLLMapEntry**)calloc(newCount, sizeof(TLLMapEntry*));
+    if (!newBuckets) return;
+    for (int b = 0; b < map->bucketCount; b++) {
+        TLLMapEntry *e = map->buckets[b];
+        while (e) {
+            TLLMapEntry *next = e->next;
+            unsigned int h = hash_string(e->key) % newCount;
+            e->next = newBuckets[h];
+            newBuckets[h] = e;
+            e = next;
+        }
+    }
+    free(map->buckets);
+    map->buckets = newBuckets;
+    map->bucketCount = newCount;
+}
+
 void map_set(TLLMap *map, const char *key, TLLValue value) {
     unsigned int h = hash_string(key) % map->bucketCount;
     TLLMapEntry *e = map->buckets[h];
@@ -114,6 +135,8 @@ void map_set(TLLMap *map, const char *key, TLLValue value) {
     e->next = map->buckets[h];
     map->buckets[h] = e;
     map->size++;
+    /* TLL-020: rehash when load factor > 2 */
+    if (map->size > map->bucketCount * 2) map_rehash(map);
 }
 
 TLLValue map_get(TLLMap *map, const char *key) {
