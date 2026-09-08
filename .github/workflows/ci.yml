@@ -100,8 +100,10 @@ jobs:
       # The bootstrap-tllc.sh two-stage process was producing a defective compiler
       # (318 type warnings, undefined identifiers) causing scope test compilation
       # to silently fail (exit 0 but no .tllbc output).
-      - name: Verify tracked tllc exists
-        run: test -f tools/TLLC/tllc.tllbc
+      - name: Verify tracked tllc exists and set script permissions
+        run: |
+          chmod +x scripts/*.sh
+          test -f tools/TLLC/tllc.tllbc
 
       - name: Compile all tests (Linux/macOS)
         if: runner.os != 'Windows'
