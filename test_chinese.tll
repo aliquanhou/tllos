@@ -1,5 +1,0 @@
-fn main() {
-    let s = "你好世界"
-    io.println(s)
-}
-main()
