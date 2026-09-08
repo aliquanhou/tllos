@@ -296,6 +296,9 @@ TLLValue password_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCoun
 TLLValue hmac_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount);
 TLLValue httpc_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount);
 
+/* FFI builtin binding (ffi_builtin.c) - index range 210-219 */
+TLLValue ffi_builtin_invoke(TLLVM *vm, int idx, TLLValue *args, int argCount);
+
 /* P0-15.16 IO-aware scheduler: wake all coroutines waiting on a specific channel.
  * Called from builtin coroutine.wakeChannel(channelMap). Returns number woken. */
 int coroutine_wake_channel(TLLVM *vm, void *channelPtr);

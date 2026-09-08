@@ -113,7 +113,7 @@ fn tc_registerBuiltins() -> void {
     tc_defineType("any", typeAuto())
 
     // Stdlib modules as variables with auto type
-    let modules = ["io", "json", "math", "strings", "arrays", "convert", "fs", "http", "agent", "workflow", "sqlite"]
+    let modules = ["io", "json", "math", "strings", "arrays", "convert", "fs", "http", "agent", "workflow", "sqlite", "ffi"]
     let i = 0
     while i < arrays.length(modules) {
         let modName = arrays.get(modules, i)

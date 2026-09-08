@@ -159,6 +159,13 @@ for f in "$REPO_ROOT/tests/scope/"*.tll; do
         FAILED=$((FAILED + 1))
         continue
     fi
+    # Verify output file actually exists (defense against silent compiler failures)
+    if [ ! -f "$out" ]; then
+        echo "  FAIL: $display (compiler returned 0 but no .tllbc generated)"
+        cat "$TMPFILE"
+        FAILED=$((FAILED + 1))
+        continue
+    fi
     # Run
     set +e
     if [ -n "$TIMEOUT_CMD" ]; then
