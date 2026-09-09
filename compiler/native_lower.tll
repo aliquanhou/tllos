@@ -181,12 +181,10 @@ fn nl_lowerExpression(expr: map) -> string {
         }
         // B.11: Ownership - caller retains arguments for user-defined functions
         // Built-in functions (tll_ prefix) are C functions, do not follow TLL refcount rules
-        // B.11-R1 fix: strings.hasPrefix doesn't exist in TLL stdlib, use char index access
+        // B.11-R1-R2 fix: direct name check for known builtin C functions
         let isBuiltin = false
-        if callee.length >= 4 {
-            if callee[0] == "t" && callee[1] == "l" && callee[2] == "l" && callee[3] == "_" {
-                isBuiltin = true
-            }
+        if callee == "tll_assign" || callee == "tll_debug_print_refcount" || callee == "tll_debug_refcount" || callee == "tll_value_incref" || callee == "tll_value_free" || callee == "tll_int" || callee == "tll_string" || callee == "tll_array" || callee == "tll_map" || callee == "tll_truthy" || callee == "tll_equals" || callee == "tll_add" || callee == "tll_sub" || callee == "tll_mul" || callee == "tll_div" || callee == "tll_mod" || callee == "tll_array_push" || callee == "tll_array_get" || callee == "tll_array_set" || callee == "tll_map_get" || callee == "tll_map_set" {
+            isBuiltin = true
         }
         if isBuiltin == false && arrays.length(args) > 0 {
             let increfExprs: list = []

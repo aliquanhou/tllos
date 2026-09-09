@@ -1,0 +1,52 @@
+// P2-01-B11-R1-R2: Assignment Expression as Return Consumer
+// 验证 Assignment Expression 作为 return value 的消费者场景
+//
+// 场景：
+//   1. return (x = "new") — 简单 assignment 作为 return value
+//   2. return (y = (x = "new")) — 嵌套 assignment 作为 return value
+//   3. return (x = y) — Ident RHS assignment 作为 return value
+//
+// 注意：已知 Function Return Ownership 存在 GAP（09_ownership_return ASan 失败）
+// 本测试用于验证 Assignment Expression → Return Consumer 的交互
+// 如果被 Function Return GAP 阻断，如实标红，不宣称闭包。
+
+fn test_return_simple_assignment() {
+    io.println("=== Test 1: return (x = new_value) ===");
+    let x = "old";
+    return (x = "new_value");
+}
+
+fn test_return_nested_assignment() {
+    io.println("=== Test 2: return (y = (x = new_value)) ===");
+    let x = "old_x";
+    let y = "old_y";
+    return (y = (x = "nested_new_value"));
+}
+
+fn test_return_ident_rhs_assignment() {
+    io.println("=== Test 3: return (x = y) Ident RHS ===");
+    let x = "old_x";
+    let y = "source_y";
+    return (x = y);
+}
+
+fn main() {
+    io.println("=== Assignment Expression as Return Consumer ===");
+
+    let r1 = test_return_simple_assignment();
+    io.println("r1=");
+    io.println(r1);
+
+    let r2 = test_return_nested_assignment();
+    io.println("r2=");
+    io.println(r2);
+
+    let r3 = test_return_ident_rhs_assignment();
+    io.println("r3=");
+    io.println(r3);
+
+    io.println("=== done ===");
+    return 0;
+}
+
+main()

@@ -1,0 +1,91 @@
+// P2-01-B11-R1-R2: Machine-Verifiable Refcount Transition Evidence
+// 使用 tll_debug_print_refcount() 读取真实对象 refcount，建立机器可验证的证据
+//
+// 场景：
+//   1. 创建字符串后 refcount = 1
+//   2. 赋值给另一个变量后 refcount = 2
+//   3. 自赋值 x = x 后 refcount 不变（仍为 1）
+//   4. 嵌套赋值 y = (x = "new") 后 refcount = 2
+//   5. let z = (x = "temp") 后 refcount = 2
+//
+// 注意：tll_debug_print_refcount 是 test-only 函数，不属于正式 ABI。
+// 本测试仅用于 ownership/lifetime 验证。
+
+fn test_create_refcount() {
+    io.println("=== Test 1: create string refcount=1 ===");
+    let s = "hello";
+    tll_debug_print_refcount(1, s);
+    // expected: rc=1
+}
+
+fn test_assign_refcount() {
+    io.println("=== Test 2: assign to another var refcount=2 ===");
+    let x = "source";
+    let y = "old_y";
+    tll_debug_print_refcount(10, x);
+    // expected: rc=1
+    y = x;
+    tll_debug_print_refcount(11, x);
+    // expected: rc=2 (x and y both reference)
+    tll_debug_print_refcount(12, y);
+    // expected: rc=2
+}
+
+fn test_self_assign_refcount() {
+    io.println("=== Test 3: self-assign x=x refcount unchanged ===");
+    let x = "self_value";
+    tll_debug_print_refcount(20, x);
+    // expected: rc=1
+    x = x;
+    tll_debug_print_refcount(21, x);
+    // expected: rc=1 (incref then free, net zero)
+}
+
+fn test_nested_assign_temp_refcount() {
+    io.println("=== Test 4: nested assign y=(x=temp) refcount=2 ===");
+    let x = "old_x";
+    let y = "old_y";
+    y = (x = "nested_value");
+    tll_debug_print_refcount(30, x);
+    // expected: rc=2 (x and y both reference nested_value)
+    tll_debug_print_refcount(31, y);
+    // expected: rc=2
+}
+
+fn test_let_nested_assign_temp_refcount() {
+    io.println("=== Test 5: let z=(x=temp) refcount=2 ===");
+    let x = "old_x";
+    let z = (x = "let_nested_value");
+    tll_debug_print_refcount(40, x);
+    // expected: rc=2 (x and z both reference)
+    tll_debug_print_refcount(41, z);
+    // expected: rc=2
+}
+
+fn test_nested_assign_ident_refcount() {
+    io.println("=== Test 6: nested assign y=(x=z) Ident RHS refcount=3 ===");
+    let x = "old_x";
+    let y = "old_y";
+    let z = "source_z";
+    y = (x = z);
+    tll_debug_print_refcount(50, x);
+    // expected: rc=3 (x, y, z all reference source_z)
+    tll_debug_print_refcount(51, y);
+    // expected: rc=3
+    tll_debug_print_refcount(52, z);
+    // expected: rc=3
+}
+
+fn main() {
+    io.println("=== Machine-Verifiable Refcount Transition Evidence ===");
+    test_create_refcount();
+    test_assign_refcount();
+    test_self_assign_refcount();
+    test_nested_assign_temp_refcount();
+    test_let_nested_assign_temp_refcount();
+    test_nested_assign_ident_refcount();
+    io.println("=== done ===");
+    return 0;
+}
+
+main()

@@ -143,6 +143,17 @@ TLLValue tll_builtin(int idx);
 void tll_value_incref(TLLValue v);
 void tll_value_free(TLLValue v);
 
+/* === Test-Only Refcount Query (NOT part of public ABI) ===
+ * Returns the current refcount of a heap-allocated TLLValue.
+ * For value types (int/float/bool/null), returns -1.
+ * This function exists ONLY for ownership/lifetime verification tests.
+ * It MUST NOT be used in production code or exposed as a stable API.
+ */
+int tll_debug_refcount(TLLValue v);
+
+/* Test-only: print refcount with numeric checkpoint for machine-verifiable evidence */
+void tll_debug_print_refcount(TLLValue checkpoint, TLLValue v);
+
 /* === Truth & Equality === */
 int tll_truthy(TLLValue v);
 int tll_equals(TLLValue a, TLLValue b);

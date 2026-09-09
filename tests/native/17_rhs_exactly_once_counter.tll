@@ -6,7 +6,7 @@
 //   2. 嵌套赋值 y = (x = get_with_counter(log)) — 内层 RHS 应执行恰好一次
 //   3. let 初始化嵌套赋值 let z = (x = get_with_counter(log)) — 内层 RHS 应执行恰好一次
 //   4. 自赋值 x = x — 不应执行任何函数（无 RHS 函数调用）
-//   5. 复合表达式 x = get_with_counter(log) + 1 — RHS 函数应执行恰好一次
+//   5. 两层嵌套赋值 z = (y = (x = get_with_counter(log))) — 最内层 RHS 应执行恰好一次
 
 fn get_with_counter(log) {
     log[0] = log[0] + 1;

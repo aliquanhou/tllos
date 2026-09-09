@@ -478,3 +478,22 @@ void tll_value_free(TLLValue v) {
         default: break;
     }
 }
+
+/* === Test-Only Refcount Query (NOT part of public ABI) ===
+ * Returns current refcount for heap-allocated values; -1 for value types.
+ * EXISTS ONLY for ownership/lifetime verification tests. DO NOT use in production.
+ */
+int tll_debug_refcount(TLLValue v) {
+    switch (v.type) {
+        case TLL_STRING: return *str_rc(v.as.string);
+        case TLL_ARRAY: return v.as.array->refCount;
+        case TLL_MAP: return v.as.map->refCount;
+        case TLL_FUNCTION: return (v.as.func.env) ? v.as.func.env->refCount : 0;
+        default: return -1; /* value types: no refcount */
+    }
+}
+
+/* Test-only: print refcount with numeric checkpoint for machine-verifiable evidence */
+void tll_debug_print_refcount(TLLValue checkpoint, TLLValue v) {
+    printf("[REFCOUNT checkpoint=%d] rc=%d\n", (int)checkpoint.as.integer, tll_debug_refcount(v));
+}

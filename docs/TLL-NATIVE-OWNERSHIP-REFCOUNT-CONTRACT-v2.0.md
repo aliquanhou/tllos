@@ -1,10 +1,28 @@
-# TLL Native Ownership & Refcount Contract v1.1
+# TLL Native Ownership & Refcount Contract v2.0
 
-**版本**: 1.1
-**阶段**: Phase 2-01-B.11
+**版本**: 2.0
+**阶段**: Phase 2-01-B.11-R1-R2 (Assignment Expression Ownership Closure)
 **状态**: FROZEN / 待架构师验收
 **日期**: 2026-09-09
-**前序版本**: v1.0 (P2-01-B.10)
+**前序版本**: v1.1 (P2-01-B.11, Function Argument & Container Ownership)
+**Canonical Status**: 本文件为 TLL Native Ownership 的唯一 Canonical Contract。v1.1 已被本版本取代。
+
+---
+
+## 版本变更记录
+
+### v1.0 → v1.1 (P2-01-B.11)
+- 新增 Function Argument Ownership（调用者 retain，被调用者 release）
+- 新增 Container Element Ownership（调用者 retain，容器 release）
+- 新增 Function Return Ownership（Borrow → Return Retain）
+
+### v1.1 → v2.0 (P2-01-B.11-R1-R2)
+- **新增 Assignment Expression Ownership Protocol**：统一处理 `x = rhs`、`y = (x = rhs)`、`let y = (x = rhs)` 等所有嵌套场景
+- **引入 Ownership Provenance 模型**：通过 `nl_exprHasTemporaryRef()` 递归判断表达式是否附着临时引用，替代特判式实现
+- **明确 tll_assign() 语义**：incref(new) FIRST → free(old) → store → return borrow，安全处理自赋值 `x = x`
+- **明确四种消费场景**：ExpressionStatement (temp/Ident)、let (temp/Ident)
+- **RHS Exactly Once 保证**：RHS 作为 tll_assign 参数传递，保证恰好求值一次
+- **已知 GAP（不在 v2.0 修复范围）**：Function Return Ownership 存在两个已有 bug（临时表达式 return 多一次 incref 导致泄漏、branch return 存在 double-free），将在后续版本修复
 
 ---
 
@@ -16,7 +34,7 @@
 
 **模型来源**: 本 Contract 基于对 Bytecode VM（host/c/vm.c）实际引用计数行为的完整调查，确保 Native Target 与 Bytecode Target 拥有完全一致的语义。
 
-**冻结声明**: 本版本 v1.1 为 TLL Native Ownership Model 的正式冻结版本。后续修改必须通过架构师裁决，并升级版本号。
+**冻结声明**: 本版本 v2.0 为 TLL Native Ownership Model 的正式冻结版本。后续修改必须通过架构师裁决，并升级版本号。
 
 ---
 
