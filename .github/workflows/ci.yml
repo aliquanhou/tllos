@@ -697,26 +697,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Setup C compiler (Linux)
-        if: runner.os == "Linux"
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y gcc libssl-dev
       - name: Setup C compiler (macOS)
-        if: runner.os == "macOS"
+        if: runner.os == 'macOS'
         run: brew install gcc
       - name: Setup MSVC (Windows)
-        if: runner.os == "Windows"
+        if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
       - name: Build (Linux)
-        if: runner.os == "Linux"
+        if: runner.os == 'Linux'
         run: cd host/c && gcc -O2 -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c ../../runtime/value.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread -ldl -lssl -lcrypto
       - name: Build (macOS)
-        if: runner.os == "macOS"
+        if: runner.os == 'macOS'
         run: cd host/c && gcc -O2 -std=gnu99 -D_DARWIN_C_SOURCE -o tllvm main.c vm.c ../../runtime/value.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread -framework Security -framework CoreFoundation
       - name: Build (Windows)
-        if: runner.os == "Windows"
+        if: runner.os == 'Windows'
         shell: cmd
         run: cd host\c && cl /O2 /D_CRT_SECURE_NO_WARNINGS /Fe:tllvm.exe main.c vm.c ..\..\runtime\value.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c ws2_32.lib winhttp.lib bcrypt.lib
       - name: Coroutine Test (Linux/macOS)
-        if: runner.os != "Windows"
+        if: runner.os != 'Windows'
         timeout-minutes: 20
         run: |
           host/c/tllvm tools/TLLC/tllc.tllbc compile tests/coroutine_stress_test.tll -o tests/coroutine_stress_test.tllbc
@@ -728,7 +728,7 @@ jobs:
           ! grep -q "FAIL" /tmp/cs.log
           grep -q "Stress Tests Done" /tmp/cs.log
       - name: Coroutine Test (Windows)
-        if: runner.os == "Windows"
+        if: runner.os == 'Windows'
         timeout-minutes: 20
         shell: powershell
         run: |
