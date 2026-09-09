@@ -1,0 +1,77 @@
+// P2-01-B11-R1-R2: Assignment Expression Ownership Refcount Transition Evidence
+// 6 个关键场景，用于生成真实 C 代码并建立 refcount transition proof
+//
+// 场景 A: x = "a"           — 简单赋值，RHS 是临时表达式（String）
+// 场景 B: x = y             — 简单赋值，RHS 是变量引用（Ident）
+// 场景 C: y = (x = "a")     — 嵌套赋值语句，RHS 是临时表达式
+// 场景 D: let y = (x = "a") — let 初始化嵌套赋值，RHS 是临时表达式
+// 场景 E: y = (x = z)       — 嵌套赋值语句，RHS 是变量引用
+// 场景 F: let y = (x = z)   — let 初始化嵌套赋值，RHS 是变量引用
+
+fn scenario_a() {
+    io.println("=== A: x = temp_string ===");
+    let x = "old";
+    x = "new_value";
+    io.println(x);
+}
+
+fn scenario_b() {
+    io.println("=== B: x = y (Ident RHS) ===");
+    let x = "old_x";
+    let y = "source_y";
+    x = y;
+    io.println(x);
+    io.println(y);
+}
+
+fn scenario_c() {
+    io.println("=== C: y = (x = temp_string) ===");
+    let x = "old_x";
+    let y = "old_y";
+    y = (x = "nested_value");
+    io.println(x);
+    io.println(y);
+}
+
+fn scenario_d() {
+    io.println("=== D: let y = (x = temp_string) ===");
+    let x = "old_x";
+    let y = (x = "let_nested_value");
+    io.println(x);
+    io.println(y);
+}
+
+fn scenario_e() {
+    io.println("=== E: y = (x = z) (Ident RHS) ===");
+    let x = "old_x";
+    let y = "old_y";
+    let z = "source_z";
+    y = (x = z);
+    io.println(x);
+    io.println(y);
+    io.println(z);
+}
+
+fn scenario_f() {
+    io.println("=== F: let y = (x = z) (Ident RHS) ===");
+    let x = "old_x";
+    let z = "source_z";
+    let y = (x = z);
+    io.println(x);
+    io.println(y);
+    io.println(z);
+}
+
+fn main() {
+    io.println("=== Assignment Expression Ownership Refcount Evidence ===");
+    scenario_a();
+    scenario_b();
+    scenario_c();
+    scenario_d();
+    scenario_e();
+    scenario_f();
+    io.println("=== done ===");
+    return 0;
+}
+
+main()
