@@ -1,4 +1,4 @@
-﻿/* TLL Bootstrap VM - executes bytecode opcodes.
+/* TLL Bootstrap VM - executes bytecode opcodes.
  * This is the Host/Bootstrap layer. Language semantics live in runtime/vm.tll.
  */
 #include "tllvm.h"
@@ -478,11 +478,21 @@ static void push_frame(TLLVM *vm, TLLFrame *frame) {
         vm->callStack = (TLLFrame**)realloc(vm->callStack, vm->callStackCapacity * sizeof(TLLFrame*));
     }
     vm->callStack[vm->callStackSize++] = frame;
+    /* P0-RUNTIME-07-R2: Sync current coroutine callStackSize with vm->callStackSize.
+     * Prevents double-free: coroutine_destroy() must not re-free frames already
+     * freed by OP_RET / natural return. */
+    if (vm->coroutineCount > 0 && vm->currentCoroutine >= 0 && vm->currentCoroutine < vm->coroutineCount) {
+        vm->coroutines[vm->currentCoroutine]->callStackSize = vm->callStackSize;
+    }
 }
 
 static TLLFrame *pop_frame(TLLVM *vm) {
     if (vm->callStackSize <= 0) return NULL;
     TLLFrame *f = vm->callStack[--vm->callStackSize];
+    /* P0-RUNTIME-07-R2: Sync current coroutine callStackSize after pop. */
+    if (vm->coroutineCount > 0 && vm->currentCoroutine >= 0 && vm->currentCoroutine < vm->coroutineCount) {
+        vm->coroutines[vm->currentCoroutine]->callStackSize = vm->callStackSize;
+    }
     return f;
 }
 
