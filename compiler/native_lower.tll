@@ -20,20 +20,32 @@ let nl_functionCount = 0
 let nl_localVars: list = []
 
 // ============ Builtin Function Registry (Canonical) ============
-// P2-01-B11-R1-R2-R3-FINAL: Canonical Language-Callable Builtin Registry.
+// P2-01-B11-R1-R2-R3-FINAL-R1: Three-tier semantic classification.
 //
-// SEMANTIC CLASSIFICATION:
-//   - Language-Callable Builtin: functions that may be invoked from TLL source
-//     (directly or via lowering of operators/methods). These are the only entries
-//     in nl_builtinFunctions.
-//   - Runtime-Internal / Lifecycle API: compiler-generated lifecycle calls
-//     (tll_native_init/cleanup, tll_runtime_init/cleanup). These are NOT
-//     language-callable and must NOT enter nl_builtinFunctions. They are listed
-//     separately in nl_runtimeInternalFunctions for validator exclusion only.
+// ARCHITECTURE DECISION (Phase 2-01 B11):
+//   Native Target has NO runtime builtin dispatcher/registry.
+//   native_lower.tll generates DIRECT C function calls to Shared Runtime Core.
+//   Therefore "builtin binding" = "C-callable semantic surface used by lowering",
+//   NOT a runtime dispatch table.
 //
-// Canonical source of truth: runtime/tll_runtime.h + native/runtime/tll_native.h
-// This list is the lowering-side mirror of C language-callable builtin functions.
-// Machine-verification gate: scripts/verify-builtin-registry.ps1 (bidirectional).
+// THREE-TIER CLASSIFICATION:
+//   1. Language-Callable Builtins (nl_builtinFunctions):
+//      Stable API invocable from TLL source (directly or via operator/method lowering).
+//      These are the ONLY entries checked by nl_isBuiltinFunction().
+//   2. Runtime-Internal / Lifecycle APIs (nl_runtimeInternalFunctions):
+//      Compiler-generated lifecycle calls (init/cleanup). NOT language-callable.
+//      Listed for validator exclusion only.
+//   3. Test-only Verification APIs (nl_testOnlyFunctions):
+//      Compiler/runtime instrumentation for ownership/lifetime tests ONLY.
+//      Marked "NOT part of public ABI" in runtime header.
+//      NOT stable language-callable builtins. Listed for validator exclusion.
+//
+// Runtime Header (runtime/tll_runtime.h + native/runtime/tll_native.h):
+//   = Native ABI declaration surface, NOT a builtin registry.
+//   Contains all three tiers above. Validator must classify, not assume all = builtins.
+//
+// Canonical source of truth for each tier: the lists in this file.
+// Machine-verification gate: scripts/verify-builtin-registry.ps1 (bidirectional, tier-aware).
 let nl_builtinFunctions: list = [
     // Value creation
     "tll_null",
@@ -51,9 +63,6 @@ let nl_builtinFunctions: list = [
     // Reference counting (lowering-internal but language-visible via semantics)
     "tll_value_incref",
     "tll_value_free",
-    // Test-only debug instrumentation (not part of stable language API)
-    "tll_debug_refcount",
-    "tll_debug_print_refcount",
     // Truth / equality
     "tll_truthy",
     "tll_equals",
@@ -96,6 +105,15 @@ let nl_runtimeInternalFunctions: list = [
     "tll_runtime_cleanup",
     "tll_native_init",
     "tll_native_cleanup"
+]
+
+// Test-only Verification API (NOT stable language-callable builtins).
+// Marked "NOT part of public ABI / ONLY for ownership/lifetime verification tests"
+// in runtime/tll_runtime.h. Must NOT be used in production code or exposed as stable API.
+// Listed here for validator exclusion; they must NOT appear in nl_builtinFunctions.
+let nl_testOnlyFunctions: list = [
+    "tll_debug_refcount",
+    "tll_debug_print_refcount"
 ]
 
 fn nl_isBuiltinFunction(name: string) -> bool {
