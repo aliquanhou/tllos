@@ -222,7 +222,53 @@ cmd /c scripts\bootstrap-tllc.bat
 
 ---
 
-## 9. Conclusion
+## 9. CI Status and Causal Isolation (Acceptance Closure)
+
+### 9.1 Real GitHub CI Status
+
+**Commit**: `2b1aff7`
+**CI Run**: #444, Run ID: `34314962153`
+**Branch**: `feature/P2-01-B11-R1-ownership-closure`
+**Overall CI Result**: **FAILURE**
+
+**Failure point**: macOS Native Build/Test Job → Coroutine 100K Stress Test
+
+**All other steps PASS**:
+- Native Build/Compile ✅
+- Native ABI Tests ✅
+- Bootstrap ✅
+- Blockchain/P2P Tests ✅
+- Scope Tests (incl. scope_10) ✅
+- (All other CI steps not related to Coroutine 100K) ✅
+
+### 9.2 Causal Isolation: Coroutine 100K Failure ≠ B11 R1 Regression
+
+**Formal evidence that the Coroutine 100K Stress Test failure has NO causal relationship with B11 R1 changes:**
+
+| Evidence Item | Fact |
+|---------------|------|
+| **B11 R1 modification scope** | Only 3 files: `compiler/native_lower.tll`, `scripts/verify-builtin-registry.ps1`, `docs/...evidence.md` |
+| **Coroutine/worker runtime files touched?** | **NO** — B11 R1 did not modify any coroutine, worker, scheduler, or VM runtime code |
+| **`tests/coroutine_stress_test.tll` modified?** | **NO** — Not in B11 R1 diff (`8379bc4..2b1aff7`) |
+| **Last modification of coroutine_stress_test.tll** | `e3ea92a` ("P0-15.15: Unified Runtime Scheduler...") — long before B11 R1 |
+| **Pre-existing issue registration** | Issue #7: "Coroutine 100K Stress Test fails on Ubuntu 24.04 and macOS CI" — registered as independent GAP before B11 R1 |
+| **CI workflow annotation** | ci.yml line 467: "No Runtime code modifications — if this fails, Runtime has a real bug." |
+| **Test nature** | Pure Runtime/coroutine stability test (100K immediate-return + 10K x10 yield + 1K sleep coroutines). Tests VM scheduler/worker lifecycle, completely unrelated to Native lowering builtin classification. |
+
+### 9.3 Conclusion on CI Gate
+
+- **B11 R1 Semantic Classification**: PASS (all targeted/static verification)
+- **Full CI**: FAIL due to pre-existing independent Coroutine 100K GAP (Issue #7)
+- **Causal relationship**: NONE — Coroutine 100K failure is not introduced or affected by B11 R1
+- **B11 SEAL status**: NOT SEALED (pending architect's final decision on CI gate acceptance)
+
+**Per established engineering principle**: "开发阶段允许局部红；核心 Gate 必须有真实证据。不要为了 CI 的颜色牺牲开发进度，更不能为了绿色篡改工程真相。"
+
+The Coroutine 100K failure is an **independently registered, pre-existing Runtime GAP** (Issue #7), not a B11 R1 regression. It should be tracked and fixed in its own independent track, not block B11 semantic classification closure.
+
+---
+
+## 10. Conclusion
 
 **P2-01-B11-R1-R2-R3-FINAL-R1 Builtin Semantic Classification Closure: 施工完成。**
 
@@ -236,6 +282,7 @@ cmd /c scripts\bootstrap-tllc.bat
 - Validator PASS: 36↔36 language-callable, 4↔4 runtime-internal, 2↔2 test-only, 0 unclassified
 - All B11 ownership fixes preserved
 - Native 21/21, ASan 9/9, Bootstrap PASS, Scope 10/10
+- CI: Full CI FAIL due to pre-existing independent Coroutine 100K GAP (Issue #7); causal isolation proven — NOT a B11 R1 regression
 
 **施工完成，等待架构师独立审查与最终验收。**
 
