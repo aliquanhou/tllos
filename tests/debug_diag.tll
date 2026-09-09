@@ -1,0 +1,56 @@
+// Diagnostic test: verify N dead + 1000 sleep workers with explicit synchronization
+io.println("=== Diagnostic Test: Dead + Sleep Synchronization ===")
+
+fn runScenario(deadCount, scenarioName) {
+    io.println("--- Scenario: " + scenarioName + " (" + convert.toString(deadCount) + " dead + 1000 sleep) ---")
+
+    let completed1 = 0
+    fn quickWorker() {
+        completed1 = completed1 + 1
+    }
+    let i = 0
+    while i < deadCount {
+        coroutine.spawn(quickWorker)
+        i = i + 1
+    }
+    let guard = 0
+    while completed1 < deadCount && guard < 1000000 {
+        coroutine.yield()
+        guard = guard + 1
+    }
+    if completed1 != deadCount {
+        io.println("FAIL: dead workers not completed: completed1=" + convert.toString(completed1))
+        return
+    }
+
+    let completed2 = 0
+    fn sleepWorker() {
+        coroutine.sleep(10)
+        completed2 = completed2 + 1
+    }
+    let start = time.nowMs()
+    i = 0
+    while i < 1000 {
+        coroutine.spawn(sleepWorker)
+        i = i + 1
+    }
+    // Explicit synchronization: wait until all sleep workers complete, with bounded timeout
+    let timeoutMs = 10000
+    guard = 0
+    while completed2 < 1000 && (time.nowMs() - start) < timeoutMs && guard < 1000000 {
+        coroutine.yield()
+        guard = guard + 1
+    }
+    let elapsed = time.nowMs() - start
+    if completed2 == 1000 {
+        io.println("PASS: " + scenarioName + " completed in " + convert.toString(elapsed) + "ms")
+    } else {
+        io.println("FAIL: " + scenarioName + " completed2=" + convert.toString(completed2) + " elapsed=" + convert.toString(elapsed) + "ms guard=" + convert.toString(guard))
+    }
+}
+
+runScenario(32768, "32768-dead")
+runScenario(35000, "35000-dead")
+runScenario(40000, "40000-dead")
+
+io.println("=== Diagnostic Test Done ===")

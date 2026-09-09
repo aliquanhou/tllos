@@ -69,13 +69,18 @@ while i < 1000 {
     coroutine.spawn(sleepWorker)
     i = i + 1
 }
-// Main sleeps to let workers finish
-coroutine.sleep(200)
+// Explicit synchronization: wait until all workers complete, with bounded timeout
+let test3TimeoutMs = 10000
+guard = 0
+while completed3 < 1000 && (time.nowMs() - start3) < test3TimeoutMs && guard < 1000000 {
+    coroutine.yield()
+    guard = guard + 1
+}
 let elapsed3 = time.nowMs() - start3
 if completed3 == 1000 {
     io.println("Test 3 PASS: 1000 sleep coroutines completed in " + convert.toString(elapsed3) + "ms")
 } else {
-    io.println("Test 3 FAIL: completed=" + convert.toString(completed3))
+    io.println("Test 3 FAIL: completed=" + convert.toString(completed3) + " elapsed=" + convert.toString(elapsed3) + "ms guard=" + convert.toString(guard))
 }
 
 io.println("=== Stress Tests Done ===")

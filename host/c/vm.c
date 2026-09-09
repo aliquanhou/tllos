@@ -2,6 +2,185 @@
  * This is the Host/Bootstrap layer. Language semantics live in runtime/vm.tll.
  */
 #include "tllvm.h"
+#include <stdint.h>
+
+/* Debug counters for Heisenbug diagnosis */
+static long long dbg_yield_calls = 0;
+static long long dbg_pass0_no_runnable = 0;
+static long long dbg_pass1_no_runnable = 0;
+static long long dbg_timer_wait_sleepers = 0;
+static long long dbg_timer_wait_no_sleepers = 0;
+static long long dbg_wake_expired = 0;
+static long long dbg_restore_self = 0;
+
+/* === Scheduler Timer First-Fault Trace (R3-DIAG-2) ===
+ * Fixed-size in-memory ring buffer. Only writes memory, no printf/fprintf,
+ * no malloc, no sleep, does not change scheduler behavior.
+ * Dumped at program exit if TLL_SCHED_TRACE=1.
+ */
+#define SCHED_TRACE_SIZE 65536
+typedef enum {
+    TRACE_COROUTINE_SLEEP = 1,
+    TRACE_SCHED_SCAN = 2,
+    TRACE_TIMER_WAIT = 3,
+    TRACE_WAKE = 4,
+    TRACE_SELECT = 5,
+    TRACE_RESUME = 6,
+    TRACE_NO_RUNNABLE = 7,
+    TRACE_RESTORE_SELF = 8,
+    TRACE_OPCODE = 9,
+    TRACE_SAVE = 10,
+    TRACE_RETURN = 11,
+    TRACE_LOAD_GLOBAL = 12,
+    TRACE_STORE_GLOBAL = 13
+} TraceEventType;
+
+typedef struct {
+    unsigned long long seq;
+    int eventType;
+    int currentCoroutine;
+    int selectedCoroutine;
+    int pass;
+    int coroutineCount;
+    int sleepCount;
+    int runnableCount;
+    int deadCount;
+    unsigned long long now;
+    unsigned long long minWake;
+    unsigned long long wakeTime;
+    int state;
+} SchedulerTraceEntry;
+
+static SchedulerTraceEntry g_schedTrace[SCHED_TRACE_SIZE];
+static volatile unsigned long long g_schedTraceSeq = 0;
+static volatile int g_schedTraceIdx = 0;
+static int g_schedTraceEnabled = -1; /* -1 = not checked yet */
+static int g_traceTargetCo = 40001; /* Hardcoded for diagnosis */
+static int g_traceTargetChecked = 0;
+
+/* Forward declaration */
+void sched_trace_dump(void);
+
+static void sched_trace_record(int eventType, int current, int selected,
+                                int pass, int count, int sleepCount,
+                                int runnableCount, int deadCount,
+                                unsigned long long now, unsigned long long minWake,
+                                unsigned long long wakeTime, int state) {
+    if (g_schedTraceEnabled < 0) {
+        const char *env = getenv("TLL_SCHED_TRACE");
+        g_schedTraceEnabled = (env && env[0] == '1') ? 1 : 0;
+        if (g_schedTraceEnabled) {
+            atexit(sched_trace_dump);
+            /* Target hardcoded to 40001 for diagnosis */
+        }
+    }
+    if (!g_schedTraceEnabled) return;
+    /* Filter by target coroutine if specified, but skip filter for global events and main (co=0) */
+    if (g_traceTargetCo >= 0 &&
+        eventType != TRACE_STORE_GLOBAL && eventType != TRACE_LOAD_GLOBAL &&
+        current != 0 && selected != 0) {
+        if (current != g_traceTargetCo && selected != g_traceTargetCo) {
+            return;
+        }
+    }
+    int idx = g_schedTraceIdx;
+    SchedulerTraceEntry *e = &g_schedTrace[idx];
+    e->seq = g_schedTraceSeq++;
+    e->eventType = eventType;
+    e->currentCoroutine = current;
+    e->selectedCoroutine = selected;
+    e->pass = pass;
+    e->coroutineCount = count;
+    e->sleepCount = sleepCount;
+    e->runnableCount = runnableCount;
+    e->deadCount = deadCount;
+    e->now = now;
+    e->minWake = minWake;
+    e->wakeTime = wakeTime;
+    e->state = state;
+    g_schedTraceIdx = (idx + 1) % SCHED_TRACE_SIZE;
+}
+
+/* Opcode-level trace for a specific coroutine */
+static void sched_trace_opcode(int co, int frameIdx, const char *funcName,
+                                int pc, int opcode, int hasClosureEnv, int upvalueIdx) {
+    if (!g_schedTraceEnabled) return;
+    if (g_traceTargetCo >= 0 && co != g_traceTargetCo) return;
+    int idx = g_schedTraceIdx;
+    SchedulerTraceEntry *e = &g_schedTrace[idx];
+    e->seq = g_schedTraceSeq++;
+    e->eventType = TRACE_OPCODE;
+    e->currentCoroutine = co;
+    e->selectedCoroutine = frameIdx;
+    e->pass = pc;
+    e->coroutineCount = opcode;
+    e->sleepCount = hasClosureEnv;
+    e->runnableCount = upvalueIdx;
+    e->deadCount = 0;
+    e->now = 0;
+    e->minWake = 0;
+    e->wakeTime = 0;
+    e->state = 0;
+    g_schedTraceIdx = (idx + 1) % SCHED_TRACE_SIZE;
+}
+
+void sched_trace_dump(void) {
+    if (g_schedTraceEnabled <= 0) return;
+    FILE *f = fopen("sched_trace.log", "w");
+    if (!f) return;
+    int i;
+    int start = g_schedTraceIdx;
+    for (i = 0; i < SCHED_TRACE_SIZE; i++) {
+        int idx = (start + i) % SCHED_TRACE_SIZE;
+        SchedulerTraceEntry *e = &g_schedTrace[idx];
+        if (e->seq == 0 && i > 0) continue; /* skip empty entries */
+        const char *typeName = "UNKNOWN";
+        switch (e->eventType) {
+            case TRACE_COROUTINE_SLEEP: typeName = "SLEEP"; break;
+            case TRACE_SCHED_SCAN: typeName = "SCAN"; break;
+            case TRACE_TIMER_WAIT: typeName = "TIMER_WAIT"; break;
+            case TRACE_WAKE: typeName = "WAKE"; break;
+            case TRACE_SELECT: typeName = "SELECT"; break;
+            case TRACE_RESUME: typeName = "RESUME"; break;
+            case TRACE_NO_RUNNABLE: typeName = "NO_RUNNABLE"; break;
+            case TRACE_RESTORE_SELF: typeName = "RESTORE_SELF"; break;
+            case TRACE_OPCODE: typeName = "OPCODE"; break;
+            case TRACE_SAVE: typeName = "SAVE"; break;
+            case TRACE_RETURN: typeName = "RETURN"; break;
+            case TRACE_LOAD_GLOBAL: typeName = "LOAD_GLOBAL"; break;
+            case TRACE_STORE_GLOBAL: typeName = "STORE_GLOBAL"; break;
+        }
+        if (e->eventType == TRACE_OPCODE) {
+            fprintf(f, "[%llu] %s co=%d frame=%d pc=%d op=%d hasEnv=%d upIdx=%d\n",
+                    (unsigned long long)e->seq, typeName, e->currentCoroutine,
+                    e->selectedCoroutine, e->pass, e->coroutineCount,
+                    e->sleepCount, e->runnableCount);
+        } else if (e->eventType == TRACE_STORE_GLOBAL) {
+            fprintf(f, "[%llu] %s co=%d idx=%d old=%d new=%d vm=0x%llx globals=0x%llx type=%d\n",
+                    (unsigned long long)e->seq, typeName, e->currentCoroutine,
+                    e->selectedCoroutine, e->pass, e->coroutineCount,
+                    (unsigned long long)e->now, (unsigned long long)e->minWake, e->state);
+        } else if (e->eventType == TRACE_LOAD_GLOBAL) {
+            fprintf(f, "[%llu] %s co=%d idx=%d val=%d vm=0x%llx globals=0x%llx type=%d\n",
+                    (unsigned long long)e->seq, typeName, e->currentCoroutine,
+                    e->selectedCoroutine, e->pass,
+                    (unsigned long long)e->now, (unsigned long long)e->minWake, e->state);
+        } else if (e->eventType == TRACE_SAVE || e->eventType == TRACE_RESUME) {
+            fprintf(f, "[%llu] %s co=%d stackSize=%d pc=%d\n",
+                    (unsigned long long)e->seq, typeName,
+                    (e->eventType == TRACE_SAVE) ? e->currentCoroutine : e->selectedCoroutine,
+                    e->pass, e->state);
+        } else {
+            fprintf(f, "[%llu] %s cur=%d sel=%d pass=%d count=%d sleep=%d run=%d dead=%d now=%llu minWake=%llu wake=%llu state=%d\n",
+                    (unsigned long long)e->seq, typeName, e->currentCoroutine,
+                    e->selectedCoroutine, e->pass, e->coroutineCount,
+                    e->sleepCount, e->runnableCount, e->deadCount,
+                    (unsigned long long)e->now, (unsigned long long)e->minWake,
+                    (unsigned long long)e->wakeTime, e->state);
+        }
+    }
+    fclose(f);
+}
 #ifdef _WIN32
 #include <malloc.h>  /* MSVC alloca */
 #ifdef _MSC_VER
@@ -234,6 +413,12 @@ static void coroutine_save_current(TLLVM *vm) {
     co->callStackSize = vm->callStackSize;
     co->callStackCapacity = vm->callStackCapacity;
     co->invokeTargetStackSize = vm->invokeTargetStackSize;
+    /* Trace save */
+    if (g_schedTraceEnabled && (g_traceTargetCo < 0 || vm->currentCoroutine == g_traceTargetCo)) {
+        int pc = (vm->callStackSize > 0) ? vm->callStack[vm->callStackSize - 1]->pc : -1;
+        sched_trace_record(TRACE_SAVE, vm->currentCoroutine, -1, -1,
+                vm->coroutineCount, 0, 0, 0, 0, 0, 0, pc);
+    }
 }
 
 static void coroutine_restore(TLLVM *vm, int idx) {
@@ -245,6 +430,16 @@ static void coroutine_restore(TLLVM *vm, int idx) {
     vm->callStackCapacity = co->callStackCapacity;
     vm->invokeTargetStackSize = co->invokeTargetStackSize;
     vm->currentCoroutine = idx;
+    /* Trace restore */
+    if (g_schedTraceEnabled && (g_traceTargetCo < 0 || idx == g_traceTargetCo)) {
+        int pc = -1;
+        int stackSize = vm->callStackSize;
+        if (stackSize > 0 && vm->callStack[stackSize - 1]) {
+            pc = vm->callStack[stackSize - 1]->pc;
+        }
+        sched_trace_record(TRACE_RESUME, -1, idx, stackSize,
+                vm->coroutineCount, 0, 0, 0, 0, 0, 0, pc);
+    }
 }
 
 /* Get current time in milliseconds (unix epoch).
@@ -297,6 +492,7 @@ int coroutine_wake_channel(TLLVM *vm, void *channelPtr) {
 static void coroutine_yield(TLLVM *vm) {
     int old = vm->currentCoroutine;
     int selfDead = 0;
+    dbg_yield_calls++;
 
     /* Save current coroutine state */
     coroutine_save_current(vm);
@@ -318,34 +514,55 @@ static void coroutine_yield(TLLVM *vm) {
         /* Wake expired sleepers */
         long long now = current_time_ms();
         int i;
+        int wokeCount = 0;
         for (i = 0; i < vm->coroutineCount; i++) {
             TLLCoroutine *co = vm->coroutines[i];
             if (co && co->wakeTime > 0 && co->wakeTime <= now) {
                 co->wakeTime = 0;
+                wokeCount++;
             }
+        }
+        if (wokeCount > 0) {
+            sched_trace_record(TRACE_WAKE, old, -1, pass,
+                    vm->coroutineCount, 0, 0, 0,
+                    (unsigned long long)now, 0, 0, -1);
         }
 
         /* Find next runnable coroutine */
         int next = -1;
+        int runnableCount = 0, deadCount = 0, sleepingCount = 0;
         for (i = 0; i < vm->coroutineCount; i++) {
             int idx = (old + 1 + i) % vm->coroutineCount;
+            TLLCoroutine *co = vm->coroutines[idx];
+            if (!co || co->state == 2) { deadCount++; continue; }
+            if (co->wakeTime > 0) { sleepingCount++; continue; }
+            if (co->waitingFd > 0 || co->waitingChannel != NULL) continue;
+            runnableCount++;
             /* P0-COMPILER-06 BUG-A: in pass 0, exclude self so that
              * yield() with no other runnable coroutine enters timer/IO wait
              * instead of immediately selecting itself. */
             if (pass == 0 && !selfDead && idx == old) continue;
-            if (coroutine_is_runnable(vm->coroutines[idx])) {
-                next = idx;
-                break;
-            }
+            if (next < 0) next = idx;
         }
 
+        sched_trace_record(TRACE_SCHED_SCAN, old, next, pass,
+                vm->coroutineCount, sleepingCount, runnableCount, deadCount,
+                (unsigned long long)now, 0, 0, -1);
+
         if (next >= 0) {
+            sched_trace_record(TRACE_SELECT, old, next, pass,
+                    vm->coroutineCount, sleepingCount, runnableCount, deadCount,
+                    (unsigned long long)now, 0, 0, -1);
             coroutine_restore(vm, next);
+            sched_trace_record(TRACE_RESUME, old, next, pass,
+                    vm->coroutineCount, sleepingCount, runnableCount, deadCount,
+                    (unsigned long long)now, 0, 0, -1);
             return;
         }
 
         /* No runnable. On first pass, wait for IO or timers. */
         if (pass == 0) {
+            dbg_pass0_no_runnable++;
             fd_set readfds, writefds, exceptfds;
             FD_ZERO(&readfds);
             FD_ZERO(&writefds);
@@ -374,9 +591,18 @@ static void coroutine_yield(TLLVM *vm) {
 
             /* Nothing to wait on (only channel-waiters) -> restore self */
             if (ioCount == 0 && sleepCount == 0) {
+                dbg_timer_wait_no_sleepers++;
+                sched_trace_record(TRACE_RESTORE_SELF, old, old, pass,
+                        vm->coroutineCount, 0, 0, 0,
+                        (unsigned long long)now, 0, 0, -1);
                 coroutine_restore(vm, old);
+                dbg_restore_self++;
                 return;
             }
+
+            sched_trace_record(TRACE_TIMER_WAIT, old, -1, pass,
+                    vm->coroutineCount, sleepCount, 0, 0,
+                    (unsigned long long)now, (unsigned long long)minWake, 0, -1);
 
             if (ioCount > 0) {
                 struct timeval tv, *ptv = NULL;
@@ -419,7 +645,28 @@ static void coroutine_yield(TLLVM *vm) {
             }
             /* loop back to wake expired sleepers and find runnable */
         } else {
-            /* Second pass still no runnable - restore first alive to avoid crash */
+            sched_trace_record(TRACE_NO_RUNNABLE, old, -1, pass,
+                    vm->coroutineCount, 0, 0, 0,
+                    (unsigned long long)now, 0, 0, -1);
+
+        /* P0-RUNTIME-07-R3: If there are still sleepers or IO waiters,
+             * the timer wait returned early (usleep/select interrupted).
+             * Loop back and wait again instead of restoring a sleeping coroutine. */
+            int hasSleepers = 0;
+            int hasIO = 0;
+            for (i = 0; i < vm->coroutineCount; i++) {
+                TLLCoroutine *co = vm->coroutines[i];
+                if (!co || co->state == 2) continue;
+                if (co->wakeTime > 0) hasSleepers = 1;
+                if (co->waitingFd > 0) hasIO = 1;
+            }
+            if (hasSleepers || hasIO) {
+                /* Set pass = -1 so pass++ makes it 0, looping back to
+                 * pass 0 which will do another timer wait. */
+                pass = -1;
+                continue;
+            }
+            /* No sleepers and no IO - restore first alive to avoid crash */
             for (i = 0; i < vm->coroutineCount; i++) {
                 if (vm->coroutines[i] && vm->coroutines[i]->state != 2) {
                     coroutine_restore(vm, i);
@@ -697,12 +944,22 @@ static void tll_vm_exec(TLLVM *vm) {
         }
 
         TLLInstruction *inst = &frame->function->instructions[frame->pc];
+        int execPc = frame->pc;
         frame->pc++;
         int a = inst->operandCount > 0 ? inst->operands[0] : 0;
         int b = inst->operandCount > 1 ? inst->operands[1] : 0;
         int c = inst->operandCount > 2 ? inst->operands[2] : 0;
         TLLValue *regs = frame->registers;
         TLLValue *consts = vm->program->constants;
+
+        /* Opcode trace for target coroutine */
+        if (g_schedTraceEnabled && (g_traceTargetCo < 0 || vm->currentCoroutine == g_traceTargetCo)) {
+            int hasEnv = frame->closureEnv ? 1 : 0;
+            int upIdx = -1;
+            if (inst->op == 40 || inst->op == 41) upIdx = a; /* OP_LOAD_VAR / OP_STORE_VAR */
+            sched_trace_opcode(vm->currentCoroutine, vm->callStackSize - 1,
+                    frame->function->name, execPc, inst->op, hasEnv, upIdx);
+        }
 
         switch (inst->op) {
             case OP_LOAD_CONST:
@@ -718,15 +975,37 @@ static void tll_vm_exec(TLLVM *vm) {
                 tll_value_incref(regs[b]);
                 frame->locals[a] = regs[b];
                 break;
-            case OP_LOAD_GLOBAL:
+            case OP_LOAD_GLOBAL: {
                 tll_value_incref(vm->globals[b]);
                 regs[a] = vm->globals[b];
+                /* Trace all global loads */
+                if (g_schedTraceEnabled) {
+                    int valInt = (vm->globals[b].type == TLL_INT) ? (int)vm->globals[b].as.integer : -999999;
+                    sched_trace_record(TRACE_LOAD_GLOBAL, vm->currentCoroutine, b,
+                            valInt, 0, 0, 0, 0,
+                            (unsigned long long)(uintptr_t)vm,
+                            (unsigned long long)(uintptr_t)vm->globals, 0,
+                            vm->globals[b].type);
+                }
                 break;
-            case OP_STORE_GLOBAL:
+            }
+            case OP_STORE_GLOBAL: {
+                TLLValue oldVal = vm->globals[a];
                 tll_value_free(vm->globals[a]);
                 tll_value_incref(regs[b]);
                 vm->globals[a] = regs[b];
+                /* Trace all global stores */
+                if (g_schedTraceEnabled) {
+                    int oldInt = (oldVal.type == TLL_INT) ? (int)oldVal.as.integer : -999999;
+                    int newInt = (regs[b].type == TLL_INT) ? (int)regs[b].as.integer : -999999;
+                    sched_trace_record(TRACE_STORE_GLOBAL, vm->currentCoroutine, a,
+                            oldInt, newInt, 0, 0, 0,
+                            (unsigned long long)(uintptr_t)vm,
+                            (unsigned long long)(uintptr_t)vm->globals, 0,
+                            regs[b].type);
+                }
                 break;
+            }
             case OP_BOX_LOCAL: {
                 if (!frame->closureEnv) {
                     frame->closureEnv = (TLLClosureEnv*)calloc(1, sizeof(TLLClosureEnv));
@@ -1180,7 +1459,13 @@ static void tll_vm_exec(TLLVM *vm) {
                 if (vm->coroutineCount > 0 && vm->currentCoroutine < vm->coroutineCount) {
                     TLLCoroutine *co = vm->coroutines[vm->currentCoroutine];
                     if (co) {
-                        co->wakeTime = current_time_ms() + sleepMs;
+                        long long now = current_time_ms();
+                        co->wakeTime = now + sleepMs;
+                        sched_trace_record(TRACE_COROUTINE_SLEEP,
+                                vm->currentCoroutine, -1, -1,
+                                vm->coroutineCount, 0, 0, 0,
+                                (unsigned long long)now, 0, (unsigned long long)co->wakeTime,
+                                co ? co->state : -1);
                     }
                 }
                 coroutine_yield(vm);
