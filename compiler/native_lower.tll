@@ -19,52 +19,79 @@ let nl_functionCount = 0
 // B.10: Track local variables for refcount management
 let nl_localVars: list = []
 
-// ============ Builtin Function Registry ============
+// ============ Builtin Function Registry (Canonical) ============
+// P2-01-B11-R1-R2-R3-FINAL: Canonical Language-Callable Builtin Registry.
+//
+// SEMANTIC CLASSIFICATION:
+//   - Language-Callable Builtin: functions that may be invoked from TLL source
+//     (directly or via lowering of operators/methods). These are the only entries
+//     in nl_builtinFunctions.
+//   - Runtime-Internal / Lifecycle API: compiler-generated lifecycle calls
+//     (tll_native_init/cleanup, tll_runtime_init/cleanup). These are NOT
+//     language-callable and must NOT enter nl_builtinFunctions. They are listed
+//     separately in nl_runtimeInternalFunctions for validator exclusion only.
+//
 // Canonical source of truth: runtime/tll_runtime.h + native/runtime/tll_native.h
-// This list is the lowering-side mirror of C builtin functions.
-// When adding a new tll_* C function, add it here AND to the runtime header.
-// Machine-verification gate: tests/native/builtin_registry_check ensures no drift.
+// This list is the lowering-side mirror of C language-callable builtin functions.
+// Machine-verification gate: scripts/verify-builtin-registry.ps1 (bidirectional).
 let nl_builtinFunctions: list = [
-    "tll_assign",
-    "tll_debug_refcount",
-    "tll_debug_print_refcount",
-    "tll_value_incref",
-    "tll_value_free",
+    // Value creation
+    "tll_null",
+    "tll_bool",
     "tll_int",
     "tll_float",
-    "tll_bool",
-    "tll_null",
     "tll_string",
     "tll_string_n",
+    // Container creation
     "tll_array",
-    "tll_array_from",
-    "tll_array_push",
-    "tll_array_get",
-    "tll_array_set",
     "tll_map",
-    "tll_map_get",
-    "tll_map_set",
+    // Function/builtin creation
     "tll_function",
     "tll_builtin",
+    // Reference counting (lowering-internal but language-visible via semantics)
+    "tll_value_incref",
+    "tll_value_free",
+    // Test-only debug instrumentation (not part of stable language API)
+    "tll_debug_refcount",
+    "tll_debug_print_refcount",
+    // Truth / equality
     "tll_truthy",
     "tll_equals",
+    // Assignment
+    "tll_assign",
+    // Conversion
+    "tll_to_string",
+    "tll_to_json",
+    // Arithmetic
     "tll_add",
     "tll_sub",
     "tll_mul",
     "tll_div",
     "tll_mod",
-    "tll_neg",
-    "tll_not",
-    "tll_to_string",
-    "tll_to_json",
-    "tll_io_print",
-    "tll_io_println",
+    // Comparison
     "tll_eq",
     "tll_neq",
     "tll_lt",
     "tll_gt",
     "tll_le",
     "tll_ge",
+    // Array operations (non-tll_ prefix, but language-callable via index/method)
+    "array_push",
+    "array_get",
+    "array_set",
+    // Map operations (non-tll_ prefix, but language-callable via index/method)
+    "map_set",
+    "map_get",
+    "map_has",
+    // IO
+    "tll_io_print",
+    "tll_io_println"
+]
+
+// Runtime-Internal / Lifecycle API (NOT language-callable builtins).
+// These are compiler-generated lifecycle calls only. Listed here for
+// validator exclusion; they must NOT appear in nl_builtinFunctions.
+let nl_runtimeInternalFunctions: list = [
     "tll_runtime_init",
     "tll_runtime_cleanup",
     "tll_native_init",
