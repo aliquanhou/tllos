@@ -1,30 +1,23 @@
-// P2-01-B11-R1-R2: Assignment Expression as Return Consumer
-// 验证 Assignment Expression 作为 return value 的消费者场景
+// P2-01-B11-R1-R2-R3: Assignment Expression as Return Consumer
+// Machine-verifiable success criteria: explicit assertions, exit code != 0 on failure.
 //
-// 场景：
-//   1. return (x = "new") — 简单 assignment 作为 return value
-//   2. return (y = (x = "new")) — 嵌套 assignment 作为 return value
-//   3. return (x = y) — Ident RHS assignment 作为 return value
-//
-// 注意：已知 Function Return Ownership 存在 GAP（09_ownership_return ASan 失败）
-// 本测试用于验证 Assignment Expression → Return Consumer 的交互
-// 如果被 Function Return GAP 阻断，如实标红，不宣称闭包。
+// Scenarios:
+//   1. return (x = "new_value")
+//   2. return (y = (x = "nested_new_value"))
+//   3. return (x = y)
 
-fn test_return_simple_assignment() {
-    io.println("=== Test 1: return (x = new_value) ===");
+fn test_return_simple_assignment() -> string {
     let x = "old";
     return (x = "new_value");
 }
 
-fn test_return_nested_assignment() {
-    io.println("=== Test 2: return (y = (x = new_value)) ===");
+fn test_return_nested_assignment() -> string {
     let x = "old_x";
     let y = "old_y";
     return (y = (x = "nested_new_value"));
 }
 
-fn test_return_ident_rhs_assignment() {
-    io.println("=== Test 3: return (x = y) Ident RHS ===");
+fn test_return_ident_rhs_assignment() -> string {
     let x = "old_x";
     let y = "source_y";
     return (x = y);
@@ -33,19 +26,43 @@ fn test_return_ident_rhs_assignment() {
 fn main() {
     io.println("=== Assignment Expression as Return Consumer ===");
 
+    // Test 1
     let r1 = test_return_simple_assignment();
-    io.println("r1=");
-    io.println(r1);
+    if r1 == "new_value" {
+        io.println("PASS: return (x = new_value)");
+    } else {
+        io.println("FAIL: return (x = new_value)");
+        io.println("  expected: new_value");
+        io.println("  actual: ");
+        io.println(r1);
+        return 1;
+    }
 
+    // Test 2
     let r2 = test_return_nested_assignment();
-    io.println("r2=");
-    io.println(r2);
+    if r2 == "nested_new_value" {
+        io.println("PASS: return (y = (x = nested_new_value))");
+    } else {
+        io.println("FAIL: return (y = (x = nested_new_value))");
+        io.println("  expected: nested_new_value");
+        io.println("  actual: ");
+        io.println(r2);
+        return 1;
+    }
 
+    // Test 3
     let r3 = test_return_ident_rhs_assignment();
-    io.println("r3=");
-    io.println(r3);
+    if r3 == "source_y" {
+        io.println("PASS: return (x = y)");
+    } else {
+        io.println("FAIL: return (x = y)");
+        io.println("  expected: source_y");
+        io.println("  actual: ");
+        io.println(r3);
+        return 1;
+    }
 
-    io.println("=== done ===");
+    io.println("=== ALL 3 ASSERTIONS PASSED ===");
     return 0;
 }
 

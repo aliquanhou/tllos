@@ -19,6 +19,69 @@ let nl_functionCount = 0
 // B.10: Track local variables for refcount management
 let nl_localVars: list = []
 
+// ============ Builtin Function Registry ============
+// Canonical source of truth: runtime/tll_runtime.h + native/runtime/tll_native.h
+// This list is the lowering-side mirror of C builtin functions.
+// When adding a new tll_* C function, add it here AND to the runtime header.
+// Machine-verification gate: tests/native/builtin_registry_check ensures no drift.
+let nl_builtinFunctions: list = [
+    "tll_assign",
+    "tll_debug_refcount",
+    "tll_debug_print_refcount",
+    "tll_value_incref",
+    "tll_value_free",
+    "tll_int",
+    "tll_float",
+    "tll_bool",
+    "tll_null",
+    "tll_string",
+    "tll_string_n",
+    "tll_array",
+    "tll_array_from",
+    "tll_array_push",
+    "tll_array_get",
+    "tll_array_set",
+    "tll_map",
+    "tll_map_get",
+    "tll_map_set",
+    "tll_function",
+    "tll_builtin",
+    "tll_truthy",
+    "tll_equals",
+    "tll_add",
+    "tll_sub",
+    "tll_mul",
+    "tll_div",
+    "tll_mod",
+    "tll_neg",
+    "tll_not",
+    "tll_to_string",
+    "tll_to_json",
+    "tll_io_print",
+    "tll_io_println",
+    "tll_eq",
+    "tll_neq",
+    "tll_lt",
+    "tll_gt",
+    "tll_le",
+    "tll_ge",
+    "tll_runtime_init",
+    "tll_runtime_cleanup",
+    "tll_native_init",
+    "tll_native_cleanup"
+]
+
+fn nl_isBuiltinFunction(name: string) -> bool {
+    let i = 0
+    while i < arrays.length(nl_builtinFunctions) {
+        if arrays.get(nl_builtinFunctions, i) == name {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
 // ============ Helpers ============
 fn nl_emit(line: string) -> void {
     let prefix = ""
@@ -181,11 +244,8 @@ fn nl_lowerExpression(expr: map) -> string {
         }
         // B.11: Ownership - caller retains arguments for user-defined functions
         // Built-in functions (tll_ prefix) are C functions, do not follow TLL refcount rules
-        // B.11-R1-R2 fix: direct name check for known builtin C functions
-        let isBuiltin = false
-        if callee == "tll_assign" || callee == "tll_debug_print_refcount" || callee == "tll_debug_refcount" || callee == "tll_value_incref" || callee == "tll_value_free" || callee == "tll_int" || callee == "tll_string" || callee == "tll_array" || callee == "tll_map" || callee == "tll_truthy" || callee == "tll_equals" || callee == "tll_add" || callee == "tll_sub" || callee == "tll_mul" || callee == "tll_div" || callee == "tll_mod" || callee == "tll_array_push" || callee == "tll_array_get" || callee == "tll_array_set" || callee == "tll_map_get" || callee == "tll_map_set" {
-            isBuiltin = true
-        }
+        // B.11-R1-R2-R3: Use extensible builtin registry instead of hardcoded || chain
+        let isBuiltin = nl_isBuiltinFunction(callee)
         if isBuiltin == false && arrays.length(args) > 0 {
             let increfExprs: list = []
             let ai = 0
@@ -294,6 +354,12 @@ fn nl_lowerStatement(stmt: map) -> void {
         // the variable holds a borrow, not an owned ref. Increment refcount to give it
         // independent ownership so function-exit free() is correct (avoids double-free).
         if stmt.value != null && stmt.value.kind == "Binary" && stmt.value.operator == "=" && !nl_exprHasTemporaryRef(stmt.value) {
+            nl_emit("tll_value_incref(" + stmt.name + ");")
+        }
+        // P2-01-B11-R1-R2-R3: If init expression is Ident (variable reference),
+        // the new variable shares the same object. Increment refcount so both
+        // variables hold independent ownership (avoids use-after-free when one is reassigned).
+        if stmt.value != null && stmt.value.kind == "Ident" {
             nl_emit("tll_value_incref(" + stmt.name + ");")
         }
         return
