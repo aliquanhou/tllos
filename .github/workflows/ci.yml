@@ -692,7 +692,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: \${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -721,7 +721,7 @@ jobs:
         run: |
           host/c/tllvm tools/TLLC/tllc.tllbc compile tests/coroutine_stress_test.tll -o tests/coroutine_stress_test.tllbc
           host/c/tllvm tests/coroutine_stress_test.tllbc 2>&1 | tee /tmp/cs.log
-          test \${PIPESTATUS[0]} -eq 0
+          test ${PIPESTATUS[0]} -eq 0
           grep -q "Test 1 PASS" /tmp/cs.log
           grep -q "Test 2 PASS" /tmp/cs.log
           grep -q "Test 3 PASS" /tmp/cs.log
@@ -733,12 +733,12 @@ jobs:
         shell: powershell
         run: |
           host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tests\coroutine_stress_test.tll -o tests\coroutine_stress_test.tllbc
-          if (\$LASTEXITCODE -ne 0) { throw "Compile failed" }
+          if ($LASTEXITCODE -ne 0) { throw "Compile failed" }
           & host\c\tllvm.exe tests\coroutine_stress_test.tllbc 2>&1 | Tee-Object cs.log
-          if (\$LASTEXITCODE -ne 0) { throw "Run failed" }
-          \$log = Get-Content cs.log -Raw
-          if (\$log -notmatch "Test 1 PASS") { throw "Test1 fail" }
-          if (\$log -notmatch "Test 2 PASS") { throw "Test2 fail" }
-          if (\$log -notmatch "Test 3 PASS") { throw "Test3 fail" }
-          if (\$log -match "FAIL") { throw "Has FAIL" }
-          if (\$log -notmatch "Stress Tests Done") { throw "Not done" }
+          if ($LASTEXITCODE -ne 0) { throw "Run failed" }
+          $log = Get-Content cs.log -Raw
+          if ($log -notmatch "Test 1 PASS") { throw "Test1 fail" }
+          if ($log -notmatch "Test 2 PASS") { throw "Test2 fail" }
+          if ($log -notmatch "Test 3 PASS") { throw "Test3 fail" }
+          if ($log -match "FAIL") { throw "Has FAIL" }
+          if ($log -notmatch "Stress Tests Done") { throw "Not done" }
