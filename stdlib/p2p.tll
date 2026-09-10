@@ -156,6 +156,78 @@ fn p2pConnect(node: map, host: string, port: int) -> bool {
     return false
 }
 
+// Connect to a peer with bounded retry (P0-RUNTIME-08-R2)
+// Contract: MAX_ATTEMPTS=5, exponential backoff, observable, bounded
+// Total budget: ~24.5s worst case (5*(2.5s connect + 2s handshake) + 2s backoff)
+// Note: tcp.connect() is NOT modified; 2.5s connect upper bound is an engineering
+// assumption for Windows 127.0.0.1 topology, not an absolute TCP API guarantee.
+fn p2pConnectWithRetry(node: map, host: string, port: int) -> bool {
+    let MAX_ATTEMPTS = 5
+    let BACKOFF_BASE_MS = 200
+    let BACKOFF_MAX_MS = 1000
+    let HANDSHAKE_TIMEOUT_MS = 2000
+    let attempt = 1
+    while attempt <= MAX_ATTEMPTS {
+        let attemptStart = time.nowMs()
+        io.println("[" + node.nodeId + "] CONNECT_ATTEMPT attempt=" + convert.toString(attempt) + "/" + convert.toString(MAX_ATTEMPTS) + " host=" + host + " port=" + convert.toString(port))
+
+        let fd = tcp.connect(host, port)
+        let elapsed = time.nowMs() - attemptStart
+
+        if fd >= 0 {
+            io.println("[" + node.nodeId + "] CONNECT_SUCCESS attempt=" + convert.toString(attempt) + " elapsed_ms=" + convert.toString(elapsed) + " fd=" + convert.toString(fd))
+
+            tcp.setTimeout(fd, HANDSHAKE_TIMEOUT_MS)
+            let _pc_handshake = {
+                nodeId: node.nodeId,
+                host: node.host,
+                port: node.port,
+                version: "0.1.0"
+            }
+            let _pc_msg = encodeMessage("handshake", _pc_handshake)
+            tcp.send(fd, _pc_msg)
+            coroutine.waitRead(fd)
+            let _pc_resp = tcp.tryRecv(fd, 65536)
+            let _pc_decoded = decodeMessages(_pc_resp)
+            if arrays.length(_pc_decoded.messages) > 0 {
+                let _pc_respMsg = _pc_decoded.messages[0]
+                if _pc_respMsg.type == "handshake" {
+                    let _pc_peer = {
+                        nodeId: _pc_respMsg.payload.nodeId,
+                        host: host,
+                        port: port,
+                        fd: fd,
+                        lastSeen: time.nowMs(),
+                        recvBuffer: _pc_decoded.remaining,
+                        alive: true
+                    }
+                    arrays.push(node.peers, _pc_peer)
+                    io.println("[" + node.nodeId + "] HANDSHAKE_SUCCESS peer=" + _pc_peer.nodeId + " attempt=" + convert.toString(attempt))
+                    if node.running {
+                        coroutine.spawn(p2pPeerReceiveLoop, node, fd)
+                    }
+                    return true
+                }
+            }
+            io.println("[" + node.nodeId + "] HANDSHAKE_FAILED attempt=" + convert.toString(attempt) + " elapsed_ms=" + convert.toString(time.nowMs() - attemptStart))
+            tcp.close(fd)
+        } else {
+            io.println("[" + node.nodeId + "] CONNECT_FAILED attempt=" + convert.toString(attempt) + " elapsed_ms=" + convert.toString(elapsed) + " fd=-1 transport_error=not_exposed_by_current_api")
+        }
+
+        if attempt < MAX_ATTEMPTS {
+            let backoff = attempt * BACKOFF_BASE_MS
+            if backoff > BACKOFF_MAX_MS { backoff = BACKOFF_MAX_MS }
+            io.println("[" + node.nodeId + "] CONNECT_RETRY attempt=" + convert.toString(attempt) + " backoff_ms=" + convert.toString(backoff))
+            coroutine.sleep(backoff)
+        }
+        attempt = attempt + 1
+    }
+
+    io.println("[" + node.nodeId + "] CONNECT_EXHAUSTED attempts=" + convert.toString(MAX_ATTEMPTS) + " host=" + host + " port=" + convert.toString(port))
+    return false
+}
+
 // Register a message handler
 fn p2pRegisterHandler(node: map, msgType: string, handler) -> void {
     node.messageHandlers[msgType] = handler

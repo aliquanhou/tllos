@@ -4,7 +4,7 @@
 
 from "../../stdlib/blockchain" import createBlockchain, createTransaction, signTransaction, validateTransaction, verifyTransactionSignature, transactionHash, blockHash, merkleRoot, mineBlock, isValidBlock, getLatestBlock, minePendingTransactions, isChainValid, createGenesisBlock, createBlock
 from "../../stdlib/mempool" import createMempool, mempoolAdd, mempoolContains, mempoolRemove, mempoolSize, getPendingForMining, clearMempool
-from "../../stdlib/p2p" import createP2PNode, p2pListen, p2pConnect, p2pStart, p2pStop, p2pBroadcast, p2pSendToPeer, p2pRegisterHandler, p2pPeerCount, p2pFindPeer, p2pDisconnect, p2pReconnect
+from "../../stdlib/p2p" import createP2PNode, p2pListen, p2pConnect, p2pConnectWithRetry, p2pStart, p2pStop, p2pBroadcast, p2pSendToPeer, p2pRegisterHandler, p2pPeerCount, p2pFindPeer, p2pDisconnect, p2pReconnect
 
 // Create a blockchain node
 fn createBlockchainNode(nodeId: string, host: string, port: int, difficulty: int, miningReward: int) -> map {
@@ -62,7 +62,8 @@ fn stopNode(node: map) -> void {
 
 // Connect to a peer and auto-sync chain if behind
 fn connectToPeer(node: map, host: string, port: int) -> bool {
-    let ok = p2pConnect(node.p2p, host, port)
+    // P0-RUNTIME-08-R2: use bounded retry instead of single connect
+    let ok = p2pConnectWithRetry(node.p2p, host, port)
     if ok {
         // Spawn auto-sync: wait for handshake, then request missing blocks
         coroutine.spawn(autoSyncOnConnect, node)

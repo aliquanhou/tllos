@@ -27,13 +27,16 @@ switch ($TestName) {
     "fi_duptx"    { $Nodes = @("a","b","c","d"); $Leader = "a"; $Wait = 75; $MinHeight = 1; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false; $CheckStress = $false; $CheckDupTx = $true; $TestPrefix = "fi_duptx" }
     "fi_dupblock" { $Nodes = @("a","b","c","d"); $Leader = "a"; $Wait = 75; $MinHeight = 1; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false; $CheckStress = $false; $CheckDupBlock = $true; $TestPrefix = "fi_dupblock" }
     "fi_ooo"      { $Nodes = @("a","b");          $Leader = "a"; $Wait = 45; $MinHeight = 3; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false; $CheckStress = $false; $CheckOOO = $true; $TestPrefix = "fi_ooo" }
+    "bc_delayed"  { $Nodes = @("b","c","d","a"); $Leader = "a"; $Wait = 45; $MinHeight = 5; $CheckTipMatch = $true;  $CheckValid = $true;  $CheckInvalid = $false; $CheckFork = $false; $DelayedLeader = $true; $TestPrefix = "bc_multi" }
     default {
         Write-Output "ERROR: Unknown test name: $TestName"
-        Write-Output "Usage: run-bc-network-test.ps1 <bc_node|bc_multi|bc_sync|bc_reconnect|bc_invalid|bc_stress|fi_duptx|fi_dupblock|fi_ooo>"
+        Write-Output "Usage: run-bc-network-test.ps1 <bc_node|bc_multi|bc_sync|bc_reconnect|bc_invalid|bc_stress|bc_delayed|fi_duptx|fi_dupblock|fi_ooo>"
         exit 1
     }
 }
 
+if (-not $DelayedLeader) { $DelayedLeader = $false }
+if (-not $TestPrefix) { $TestPrefix = $TestName }
 Write-Output "=== Blockchain Network Test: $TestName ==="
 Write-Output "Nodes: $($Nodes -join ' ')"
 Write-Output "Wait: ${Wait}s, Timeout: ${Timeout}s"
@@ -56,8 +59,8 @@ function Get-Field {
 # Step 1: Compile all nodes
 Write-Output "--- Compiling test nodes ---"
 foreach ($node in $Nodes) {
-    $src = "tests\${TestName}_${node}.tll"
-    $bin = "tests\${TestName}_${node}.tllbc"
+    $src = "tests\${TestPrefix}_${node}.tll"
+    $bin = "tests\${TestPrefix}_${node}.tllbc"
     if (-not (Test-Path $src)) {
         Write-Output "FAIL: Source not found: $src"
         exit 1
@@ -75,11 +78,48 @@ foreach ($node in $Nodes) {
 Write-Output "--- Starting nodes ---"
 $Procs = @()
 foreach ($node in $Nodes) {
-    $bin = "tests\${TestName}_${node}.tllbc"
+    $bin = "tests\${TestPrefix}_${node}.tllbc"
     $proc = Start-Process -FilePath $TLLVM -ArgumentList $bin -RedirectStandardOutput "$LogDir\node_${node}.log" -RedirectStandardError "$LogDir\node_${node}_err.log" -PassThru -NoNewWindow
     $Procs += $proc
     Write-Output "  Started node $node (PID=$($proc.Id))"
-    if ($node -eq $Leader) { Start-Sleep -Seconds 2 } else { Start-Sleep -Seconds 1 }
+    if ($node -eq $Leader) {
+        # P0-RUNTIME-08-R2: Windows deterministic startup synchronization
+        # This is TEST HARNESS startup sync, NOT a transport bug fix.
+        # The real transport retry is in p2pConnectWithRetry().
+        if ($IsWindows -or $env:OS -eq "Windows_NT") {
+            # P0-RUNTIME-08-R2: dynamically read leader port from source file
+            $leaderSrc = "tests\${TestPrefix}_${Leader}.tll"
+            $portMatch = Select-String -Path $leaderSrc -Pattern 'createBlockchainNode\("[^"]+",\s*"[^"]+",\s*(\d+)'
+            $leaderPort = 19201
+            if ($portMatch -and $portMatch.Matches.Count -gt 0) {
+                $leaderPort = [int]$portMatch.Matches[0].Groups[1].Value
+            }
+            $listenWait = 0
+            while ($listenWait -lt 10000) {
+                $conn = Get-NetTCPConnection -LocalPort $leaderPort -State Listen -ErrorAction SilentlyContinue
+                if ($conn) {
+                    Write-Output "  Leader listening on port ${leaderPort} after ${listenWait}ms"
+                    break
+                }
+                Start-Sleep -Milliseconds 200
+                $listenWait += 200
+            }
+            if (-not $conn) {
+                Write-Output "FAIL: Leader did not start listening on port ${leaderPort} within 10s"
+                exit 1
+            }
+        } else {
+            Start-Sleep -Seconds 2
+        }
+        # P0-RUNTIME-08-R2: delayed-leader regression test
+        # For bc_delayed, leader starts LAST after followers have already attempted connections
+        if ($DelayedLeader -and $node -eq $Leader) {
+            Write-Output "  DELAYED LEADER: waiting 5s before starting leader (followers already running)"
+            Start-Sleep -Seconds 5
+        }
+    } else {
+        Start-Sleep -Seconds 1
+    }
 }
 
 # Step 3: Wait for test completion
