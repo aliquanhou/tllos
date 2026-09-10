@@ -178,6 +178,15 @@
         {"name": "eprint", "index": 129, "params": ["any"], "return": "void"},
         {"name": "eprintln", "index": 130, "params": ["any"], "return": "void"}
       ]
+    },
+    "tcp": {
+      "category": "host_abi",
+      "status": "p0_runtime_08_extension",
+      "note": "P0-RUNTIME-08 transport hardening. Non-blocking connect and socket error query for bounded connect timeout (used by coroutine.waitWriteWithTimeout). Not part of Genesis frozen ABI.",
+      "functions": [
+        {"name": "connectNonBlocking", "index": 221, "params": ["string", "int"], "return": "int"},
+        {"name": "getSocketError", "index": 222, "params": ["int"], "return": "int"}
+      ]
     }
   },
   "reserved": {
