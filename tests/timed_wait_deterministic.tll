@@ -1,0 +1,97 @@
+// P0-RUNTIME-08-R2: Deterministic waitReadWithTimeout regression test
+// Verifies that coroutine.waitReadWithTimeout(fd, T) truly has a time boundary:
+// when no data arrives, the coroutine resumes after approximately T ms, not infinite block.
+
+io.println("=== Timed-Wait Deterministic Regression Test ===")
+
+let TEST_PORT = 19360
+let TIMEOUT_MS = 2000
+let LOWER_BOUND = 1500
+let UPPER_BOUND = 5000
+
+let serverReady = false
+let serverFd = -1
+let clientConnected = false
+
+// Server coroutine: wait for connection, accept, then exit (do NOT send data)
+fn serverWorker() {
+    let srv = tcp.listen("127.0.0.1", TEST_PORT)
+    serverFd = srv
+    serverReady = true
+    io.println("[server] listening on port " + convert.toString(TEST_PORT))
+    // Wait for incoming connection (non-blocking, yields coroutine)
+    coroutine.waitRead(srv)
+    // Accept (should not block because connection is pending)
+    let clientFd = tcp.accept(srv)
+    clientConnected = true
+    io.println("[server] accepted connection fd=" + convert.toString(clientFd) + ", deliberately sending NO data")
+    // Do NOT send data. Keep connection open but exit this coroutine.
+    // The client's waitReadWithTimeout will fire after TIMEOUT_MS.
+    // Close server fd to clean up.
+    tcp.close(srv)
+    io.println("[server] exiting")
+}
+
+// Start server in a coroutine
+coroutine.spawn(serverWorker)
+
+// Wait for server to be ready
+let guard = 0
+while !serverReady && guard < 100 {
+    coroutine.yield()
+    guard = guard + 1
+}
+
+if !serverReady {
+    io.println("FAIL: server did not become ready")
+    io.println("TEST_RESULT: FAIL")
+    return
+}
+
+io.println("[main] server ready, connecting...")
+
+// Connect to server
+let fd = tcp.connect("127.0.0.1", TEST_PORT)
+if fd < 0 {
+    io.println("FAIL: tcp.connect failed")
+    io.println("TEST_RESULT: FAIL")
+    return
+}
+io.println("[main] connected, fd=" + convert.toString(fd))
+
+// Record wait start
+let waitStart = time.nowMs()
+io.println("[main] WAIT_START at " + convert.toString(waitStart) + "ms")
+
+// KEY TEST: wait for data with timeout. No data will ever arrive.
+// This should resume after ~2000ms, not block forever.
+coroutine.waitReadWithTimeout(fd, TIMEOUT_MS)
+
+// Record wait end
+let waitEnd = time.nowMs()
+io.println("[main] WAIT_END at " + convert.toString(waitEnd) + "ms")
+
+// Calculate elapsed
+let elapsed = waitEnd - waitStart
+io.println("[main] ELAPSED_MS = " + convert.toString(elapsed))
+
+// Verify bounds
+let pass = true
+if elapsed < LOWER_BOUND {
+    io.println("FAIL: elapsed " + convert.toString(elapsed) + "ms < LOWER_BOUND " + convert.toString(LOWER_BOUND) + "ms (timeout did not actually wait)")
+    pass = false
+}
+if elapsed > UPPER_BOUND {
+    io.println("FAIL: elapsed " + convert.toString(elapsed) + "ms > UPPER_BOUND " + convert.toString(UPPER_BOUND) + "ms (timeout did not bound the wait)")
+    pass = false
+}
+
+// Cleanup
+tcp.close(fd)
+
+if pass {
+    io.println("PASS: waitReadWithTimeout correctly bounded wait to " + convert.toString(elapsed) + "ms (expected ~" + convert.toString(TIMEOUT_MS) + "ms)")
+    io.println("TEST_RESULT: PASS")
+} else {
+    io.println("TEST_RESULT: FAIL")
+}
