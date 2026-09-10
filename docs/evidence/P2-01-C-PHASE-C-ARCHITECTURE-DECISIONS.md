@@ -26,7 +26,7 @@
 | tryStack | Initial capacity 16, grows dynamically (unchanged) |
 | locals | Dynamic allocation based on function localCount (unchanged) |
 | Frame Pool | Retain pooled frames; if pooled frame's registerCount < required maxRegister, reallocate registers |
-| INVOKE_RET_REG | Change from fixed 4095 to `fn->maxRegister` (compiler guarantees maxRegister includes return reg) |
+| INVOKE_RET_REG | **PENDING SEMANTIC PROOF** — current fixed 4095; cannot change to maxRegister until proven: (a) all return paths use which register; (b) compiler guarantees maxRegister covers it; (c) parent frame always has it allocated. Forbidden to implement 4095→maxRegister before proof complete. |
 
 **Rejected alternatives:**
 - Fixed 4096: rejected — 10-50x memory waste for typical functions
@@ -67,7 +67,7 @@
 | Frame with 4096 registers (registers only) | 4096 × 24 = **98,304 bytes = 96 KB** |
 | Full frame (struct + 4096 regs + argStack 64 + tryStack 16) | 120 + 98304 + 1536 + 64 = **100,024 bytes ≈ 97.7 KB** |
 | 100K frames × 4096 registers | 100,000 × 96 KB = **9,375 MB = 9.15 GB** |
-| 100K frames × 64 registers (typical small function) | 100,000 × 64 × 24 = **146.5 MB** |
+| 100K frames × 64 registers (ASSUMPTION: typical small function — PENDING corpus measurement) | 100,000 × 64 × 24 = **146.5 MB** |
 | 100K frames × 256 registers (medium function) | 100,000 × 256 × 24 = **585.9 MB** |
 | 100K coroutine metadata (struct only) | 100,000 × 96 = **9.16 MB** |
 | 100K frame structs (no registers) | 100,000 × 120 = **11.44 MB** |
@@ -112,7 +112,7 @@ Total Runtime Memory =
 | 100K coroutines, 10 frames each, medium | 1M | 128 (avg) | 2.93 GB | 9.2 MB | ~500 MB | ~3.5 GB | ⚠️ Near 4GB reference |
 | 100K coroutines, 10 frames each, 4096 fixed | 1M | 4096 (fixed) | 93.75 GB | 9.2 MB | ~500 MB | ~94 GB | ❌ Way over (fixed frame is the problem) |
 
-**Key insight:** Dynamic frame sizing (C1) is the primary memory optimization. With fixed 4096 registers, 100K coroutines × 10 frames = 94 GB — clearly infeasible. With dynamic sizing (avg 128 registers), same scenario = ~3.5 GB — within reasonable range.
+**Key insight:** Dynamic frame sizing (C1) is the primary memory optimization. With fixed 4096 registers, 100K coroutines × 10 frames = 94 GB — clearly infeasible. With dynamic sizing (ASSUMPTION: avg 128 registers — PENDING corpus measurement), same scenario = ~3.5 GB — within reasonable range.
 
 **Safety margin:** If 4GB reference budget is to be respected, design should target <3.5 GB worst-case (12-15% margin). But this is an optimization target, not a correctness gate.
 
@@ -455,7 +455,7 @@ Total Runtime Memory =
 | Risk | Impact | Mitigation |
 |------|--------|-----------|
 | TLLValue struct size change (24 bytes) | Binary compatibility | NO change to struct layout — 24 bytes is current measured size, not a change |
-| Frame register sizing change (4096 → maxRegister) | INVOKE_RET_REG must change; frame pool reuse logic | Compiler guarantees maxRegister includes return reg; full test suite; debug assertions |
+| Frame register sizing change (4096 → maxRegister) | INVOKE_RET_REG semantics; frame pool reuse logic | **PENDING SEMANTIC PROOF** — must prove return-register coverage before implementation; full test suite; debug assertions |
 | g_vm_lock removal | Shared state data races | Fine-grained sync (C5-C8); full concurrency stress tests; ThreadSanitizer |
 | Atomic refcount overhead | Single-worker performance regression | Measure overhead; target <10% regression; relaxed incref minimizes overhead |
 | Global state stripe mutex | Contention at high concurrency | 16 stripes reduces contention; can optimize to per-element atomic if needed |

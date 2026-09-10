@@ -76,7 +76,7 @@ function only uses 3.
 **Rationale:**
 1. `TLLFunction.maxRegister` already exists and is computed by the compiler — zero compiler change needed
 2. Single `calloc(maxRegister + 1, sizeof(TLLValue))` replaces fixed `calloc(4096, ...)` — minimal VM change
-3. **Measured `sizeof(TLLValue) = 24 bytes`** (MSVC 2022 x64). Fixed 4096-register frame = 96 KB; 100K frames = 9.15 GB. Dynamic sizing avg 64-128 registers = 1.5-3 MB per 100K frames — massive reduction.
+3. **Measured `sizeof(TLLValue) = 24 bytes`** (MSVC 2022 x64). Fixed 4096-register frame = 96 KB; 100K frames = 9.15 GB. Dynamic sizing: 100K × 64 regs × 24B = 146.5 MiB; 100K × 128 regs × 24B = 293.0 MiB (64-128 avg is ASSUMPTION / PENDING MEASUREMENT from real TLL program corpus).
 4. No spill logic, no size-class management, no complex lifecycle — simple and maintainable
 5. Preserves all existing semantics — register indexing unchanged, only allocation size changes
 6. Frame Pool can retain pooled frames but should reset `registerCount` and potentially reallocate if pooled frame's registerCount < required maxRegister (or simply free and reallocate on mismatch)
