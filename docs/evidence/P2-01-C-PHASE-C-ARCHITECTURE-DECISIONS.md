@@ -185,7 +185,7 @@ Total Runtime Memory =
 
 ## 6. Heap Ownership / Atomicity Model
 
-**Decision: Atomic RefCount with relaxed increment and acq-rel decrement.**
+**Recommended Baseline: Atomic RefCount (candidate memory ordering: relaxed incref, acq_rel decref — PENDING ThreadSanitizer + microbenchmark validation).**
 
 | Aspect | Decision |
 |--------|----------|
@@ -241,14 +241,14 @@ Total Runtime Memory =
 
 ## 8. Scheduler / IO / Wakeup Model
 
-**Decision: Per-worker local runnable queue + global queue + work stealing + shared IO reactor.**
+**Decision: Per-worker local runnable queue + global queue (D-1/D-2 required) + work stealing (D-3 optimization, PENDING) + shared IO reactor.**
 
 | Aspect | Decision |
 |--------|----------|
 | Runnable queue ownership | Per-worker local queue (LIFO/deque) + global queue |
 | Worker local queue | Yes — lock-free, only owner accesses |
 | Global queue | Yes — for coroutines spawned from non-worker context; low-contention MPMC or mutex |
-| Work stealing | Yes — when local+global empty, steal from random other worker's queue tail |
+| Work stealing | Phase D-3 optimization (PENDING) — when local+global empty, steal from random other worker's queue tail |
 | Coroutine migration | Allowed — coroutines move between workers via work stealing |
 | Wakeup ownership | IO reactor / timer / channel wake → push to global queue or target worker's local queue |
 | Duplicate wakeup prevention | Atomic coroutine state CAS (WAITING → RUNNABLE); if CAS fails, skip |
@@ -289,16 +289,16 @@ Total Runtime Memory =
 
 ## 10. GAP-C1 Opcode Governance Decision
 
-**Decision: v1.1 FROZEN (0-45) + v1.2 RATIFIED (46-62).**
+**Decision: v1.1 FROZEN (0-45) + v1.2 PROPOSED EXTENSION (46-62, PENDING FORMAL GOVERNANCE).**
 
 | Range | Version | Status | Opcodes |
 |-------|---------|--------|---------|
 | 0-45 | v1.1 | FROZEN | Core language (arithmetic, control flow, functions, arrays, maps, closures, basic exception THROW/TRY) |
-| 46-53 | v1.2 | RATIFIED | Bitwise (BAND, BOR, BXOR, BNOT, SHL, SHR, ROTR, ROTL) — P0-15 |
-| 54-56 | v1.2 | RATIFIED | Coroutine (SPAWN, YIELD, SLEEP) — P0-15.14/15 |
-| 57-59 | v1.2 | RATIFIED | IO-aware (WAIT_READ, WAIT_WRITE, WAIT_CHANNEL) — P0-15.16 |
-| 60 | v1.2 | RATIFIED | MOV — P0-COMPILER-02 |
-| 61-62 | v1.2 | RATIFIED | Structured exception (CATCH_ENTER, FINALLY_END) |
+| 46-53 | v1.2 | PROPOSED | Bitwise (BAND, BOR, BXOR, BNOT, SHL, SHR, ROTR, ROTL) — P0-15 |
+| 54-56 | v1.2 | PROPOSED | Coroutine (SPAWN, YIELD, SLEEP) — P0-15.14/15 |
+| 57-59 | v1.2 | PROPOSED | IO-aware (WAIT_READ, WAIT_WRITE, WAIT_CHANNEL) — P0-15.16 |
+| 60 | v1.2 | PROPOSED | MOV — P0-COMPILER-02 |
+| 61-62 | v1.2 | PROPOSED | Structured exception (CATCH_ENTER, FINALLY_END) |
 
 **Rationale:**
 - 46-62 are already implemented, tested, and used by existing programs/tests
@@ -474,14 +474,14 @@ Total Runtime Memory =
 
 | GAP | Description | Disposition | Status |
 |-----|-------------|-------------|--------|
-| GAP-C1 | Opcode Governance Drift (spec 0-45 vs runtime 0-62) | v1.1 FROZEN + v1.2 RATIFIED (46-62) | **RESOLVED (governance decision)** |
+| GAP-C1 | Opcode Governance Drift (spec 0-45 vs runtime 0-62) | v1.1 FROZEN + v1.2 PROPOSED EXTENSION (46-62, pending formal governance) | **DIRECTION SET (pending formal governance ratification)** |
 | GAP-C2 | Semantic VM Convergence (vm.tll doesn't implement 46-62) | Update vm.tll to implement v1.2 (future implementation) | **DIRECTION SET, implementation pending** |
 | G1 | Frame Allocation Granularity (fixed 4096) | Dynamic frame sizing by maxRegister | **RESOLVED (architecture decision)** |
 | G2 | Execution-Context Ownership (TLLVM mixes state) | Split: shared program + per-worker ExecutionContext | **RESOLVED (architecture decision)** |
 | G3 | Global VM Lock Serialization (g_vm_lock) | Remove g_vm_lock, replace with per-worker context + fine-grained sync | **RESOLVED (architecture decision)** |
-| G4 | Heap Atomic Ownership (plain int refCount) | Atomic refCount (relaxed incref, acq_rel decref) | **RESOLVED (architecture decision)** |
+| G4 | Heap Atomic Ownership (plain int refCount) | Atomic refCount (RECOMMENDED BASELINE — relaxed incref, acq_rel decref candidate, pending ThreadSanitizer + microbenchmark validation) | **RECOMMENDED (pending implementation validation)** |
 | G5 | Mutable Global-State Sync (no fine-grained lock) | Hybrid: immutable + per-element sync (16-mutex stripe initial) | **RESOLVED (architecture decision)** |
-| G6 | Scheduler Fairness/Progress (single-VM) | Per-worker local queue + global queue + work stealing + atomic state | **RESOLVED (architecture decision)** |
+| G6 | Scheduler Fairness/Progress (single-VM) | Per-worker local queue + global queue (D-1/D-2 required) + work stealing (D-3 optimization, PENDING) + atomic state | **RECOMMENDED (phased implementation)** |
 | G7 | IO Wakeup Under Multiple Workers (single-VM select) | Shared IO reactor thread + per-worker local queues | **RESOLVED (architecture decision)** |
 | G8 | Runtime Memory Efficiency (formerly "4GB Memory Ceiling") | Dynamic frame sizing (primary) + 10 efficiency principles; 4GB = optimization target, NOT hard gate | **CORRECTED + RESOLVED (architecture direction)** |
 | G9 | Performance Regression Gate (no defined targets) | Measurable contract + regression gate + worker scaling | **RESOLVED (architecture decision)** |

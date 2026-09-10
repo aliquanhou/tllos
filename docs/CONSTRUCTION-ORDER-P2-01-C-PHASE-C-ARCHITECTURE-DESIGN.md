@@ -28,6 +28,12 @@ execution model toward a High-Frame Runtime. The design prioritizes:
 
 **No Runtime source code is modified in this phase.** This is pure architecture design.
 
+### Decision Confidence Levels
+
+All architecture decisions are labeled: **PROVEN** (evidence-supported), **RECOMMENDED** (current best choice, needs validation), **PENDING** (requires experiments/proof/governance before finalization).
+
+Key levels: Dynamic Frame=RECOMMENDED (return-register proof needed), Atomic RefCount=RECOMMENDED BASELINE (ThreadSanitizer validation needed), Scheduler=RECOMMENDED (D-1/D-2) + PENDING (D-3 work stealing), Opcode v1.2=PENDING FORMAL GOVERNANCE, Memory Efficiency=PROVEN (4GB is optimization target, not hard gate).
+
 ---
 
 ## C1 — Frame Model
@@ -79,7 +85,7 @@ function only uses 3.
 **Implementation notes (for future phase, NOT this phase):**
 - `frame_pool_acquire()`: if pooled frame has `registerCount >= required maxRegister`, reuse; else free pooled frame's registers and reallocate at required size
 - `create_frame()`: pass `fn->maxRegister` to frame allocation
-- `INVOKE_RET_REG = 4095`: must change to `fn->maxRegister` (or `maxRegister` is guaranteed >= return reg index by compiler)
+- **Return-register semantics MUST BE PROVEN before implementation.** Current code uses fixed `INVOKE_RET_REG = 4095` and accesses `parentFrame->registers[INVOKE_RET_REG]`. Cannot simply change to `fn->maxRegister` without proving: (a) all return-value paths use which register; (b) compiler guarantees `maxRegister` covers it; (c) parent frame always has it allocated. Semantic proof required.
 - Verify compiler guarantees `maxRegister` includes all register indices actually used (including return register)
 
 **Risk:** If compiler's `maxRegister` is inaccurate (e.g., doesn't account for some temporary registers), frame could be too small. Mitigation: add debug-mode assertion that register index < registerCount; verify with full test suite before release.
@@ -111,11 +117,11 @@ function only uses 3.
 
 | Component | Measurement Method | Current Estimate | Notes |
 |-----------|-------------------|------------------|-------|
-| `sizeof(TLLValue)` | compile-time `sizeof` | ~16 bytes (type tag + union) | Platform-dependent |
-| `sizeof(TLLFrame)` | compile-time `sizeof` | ~80-100 bytes (struct fields) | Excludes dynamically allocated arrays |
-| `sizeof(TLLCoroutine)` | compile-time `sizeof` | ~80-100 bytes | Excludes callStack array |
-| Register allocation | `frame->registerCount × sizeof(TLLValue)` | 4096 × 16 = 64KB (current) | Will reduce with Model B |
-| argStack allocation | `argStackCapacity × sizeof(TLLValue)` | 64 × 16 = 1KB initial | Grows dynamically |
+| `sizeof(TLLValue)` | compile-time `sizeof` | **24 bytes** (MEASURED: MSVC 2022 x64) | type tag 4 + padding 4 + union 16 |
+| `sizeof(TLLFrame)` | compile-time `sizeof` | **120 bytes** (MEASURED) | Excludes dynamically allocated arrays |
+| `sizeof(TLLCoroutine)` | compile-time `sizeof` | **96 bytes** (MEASURED) | Excludes callStack array |
+| Register allocation | `frame->registerCount × sizeof(TLLValue)` | 4096 × 24 = **96 KB** (current fixed) | Will reduce with Model B (dynamic maxRegister) |
+| argStack allocation | `argStackCapacity × sizeof(TLLValue)` | 64 × 24 = **1.5 KB** initial | Grows dynamically |
 | tryStack allocation | `tryStackCapacity × sizeof(int)` | 16 × 4 = 64 bytes initial | Grows dynamically |
 | Frame Pool overhead | `pool_size × sizeof(TLLFrame*)` + pooled frame memory | 512 × 8 = 4KB (pointers) + pooled frames | Pooled frames retain full allocation |
 | Allocator metadata | malloc overhead per allocation | ~16-32 bytes per allocation | Platform-dependent |
@@ -321,11 +327,11 @@ Worker B: tll_value_free(obj)     → read refCount → decrement → write
                                     → concurrent read-modify-write → LOST UPDATE
 ```
 
-### Design Decision: Atomic RefCount IS Required
+### Recommended Baseline: Atomic RefCount (PENDING IMPLEMENTATION EVIDENCE)
 
-With Model C (shared heap across workers), reference counts MUST be atomic to prevent data races.
+With Model C (shared heap across workers), reference counts SHOULD be atomic to prevent data races. This is the **recommended baseline**, not a proven final model. Must be validated with microbenchmarks, concurrency stress tests, and ThreadSanitizer before finalization.
 
-### Atomic Memory Ordering Design
+### Atomic Memory Ordering (Recommended Baseline — PENDING VALIDATION)
 
 | Operation | Memory Order | Rationale |
 |-----------|-------------|-----------|
@@ -426,13 +432,13 @@ contract is fully preserved.
 **Rationale:**
 1. **Most globals are actually immutable after initialization** — function references, constants, etc. These need no synchronization.
 2. **Mutable globals are typically few** — programs that use mutable globals usually have a small number. Per-element atomic operations avoid global lock contention.
-3. **TLLValue is 16 bytes** — can be stored/loaded atomically on most platforms (with proper alignment), or use a per-element spinlock for larger operations.
+3. **TLLValue is 24 bytes (measured)** — cannot be atomically loaded/stored on most platforms; this justifies per-element synchronization (mutex stripe) rather than naive atomic load/store.
 4. **Backward compatible** — preserves shared globals semantics; programs see consistent global state.
 5. **Simple to implement and debug** — no complex RCU or copy-on-write machinery.
 
 **Design:**
 - `globals` array remains shared
-- Each `globals[idx]` is a `TLLValue` (16 bytes)
+- Each `globals[idx]` is a `TLLValue` (24 bytes, measured)
 - **Read (OP_LOAD_GLOBAL):** atomic load of `globals[idx]` with `memory_order_acquire`
 - **Write (OP_STORE_GLOBAL):**
   1. incref(new value) (atomic, C5)
@@ -501,9 +507,9 @@ contract is fully preserved.
 - Workers check global queue when local queue is empty
 - Global queue can be lock-free (MPMC queue) or mutex-protected (low contention if workers prefer local)
 
-#### Work Stealing
+#### Work Stealing (Phase D-3 Optimization — PENDING)
 
-- **Yes** — when a worker's local and global queues are empty, it steals from a random other worker
+- **Phase D-3 optimization** — when a worker's local and global queues are empty, it steals from a random other worker
 - Steal from the victim's queue tail (opposite end from victim's push/pop) to minimize contention
 - Work stealing provides automatic load balancing
 
@@ -631,10 +637,10 @@ TLL Opcode Specification Governance:
 
 - v1.1 (FROZEN): Opcodes 0-45 — core language (arithmetic, control flow, functions,
   arrays, maps, closures, basic exception THROW/TRY)
-- v1.2 (RATIFIED): Opcodes 46-62 — runtime extension (bitwise, coroutine, IO-aware
+- v1.2 (PROPOSED EXTENSION — PENDING FORMAL GOVERNANCE): Opcodes 46-62 — runtime extension
   scheduler, MOV, structured exception CATCH/FINALLY)
   - These were implemented during P0-15, P0-15.14/15/16, P0-COMPILER-02 phases
-  - Formally ratified as v1.2 during P2-01-C Phase C
+  - Proposed as v1.2 extension during P2-01-C Phase C; formal ratification requires Specification/Governance process (architecture agent cannot unilaterally ratify language versions)
   - Semantic VM (vm.tll) MUST be updated to implement v1.2 opcodes (GAP-C2 resolution)
 - Future opcodes: Must go through formal architecture decision + version bump (v1.3+)
 - Frozen v1.1 semantics: MUST NOT be silently modified. Any change to v1.1 opcode
@@ -910,11 +916,11 @@ over complex, marginal optimizations (spill, segmentation, object pooling).
 | **Memory** | 4GB treated as hard ceiling (incorrect) | Hard constraint / Optimization target | **Optimization target / reference budget** | Correctness > memory; simplicity > marginal savings | None (correction of prior error) | N/A (governance correction) |
 | **ExecutionContext** | TLLVM mixes program + execution state | Keep mixed / Split per-worker | **Split: shared program + per-worker ExecutionContext** | Enables true parallelism; preserves shared globals; incremental path | Migration of all TLLVM references | Full regression + concurrency tests |
 | **Worker** | Global VM lock (no parallelism) | A: Global lock / B: One VM/worker / C: Shared prog+per-worker ctx / D: Actor | **C: Shared Program + Per-Worker ExecutionContext** | True parallelism; shared globals; backward compatible; coroutine migration | Shared state synchronization complexity | Concurrency tests + scaling benchmarks |
-| **Heap** | Plain int refCount (non-atomic) | Keep non-atomic / Atomic refcount | **Atomic refCount** (relaxed incref, acq_rel decref) | Required for shared heap under multi-worker; drop-in replacement; B11 compatible | Atomic operation overhead (measurable, typically small) | Concurrency stress + ownership tests |
+| **Heap** | Plain int refCount (non-atomic) | Keep non-atomic / Atomic refcount | **Atomic refCount (RECOMMENDED BASELINE — pending validation)** | Required for shared heap under multi-worker; drop-in replacement; B11 compatible | Atomic operation overhead; memory ordering correctness | Concurrency stress + ownership tests + ThreadSanitizer + microbenchmarks |
 | **Global** | Shared globals, only g_vm_lock protection | Global lock / RW lock / Atomic per-element / COW / TLS | **Hybrid: atomic per-element for mutable + immutable for read-only** (initial: 16-mutex stripe) | Reduces contention; preserves semantics; simple; portable | Mutex stripe contention (low for typical workloads) | Concurrent global tests + benchmarks |
-| **Scheduler** | Per-VM round-robin + select, single-threaded | Global queue / Per-worker local + work stealing | **Per-worker local queue + global queue + work stealing** | Reduces contention; load balancing; coroutine migration allowed | Work-stealing complexity; duplicate wakeup prevention | Scheduler stress + no-lost-wakeup tests |
+| **Scheduler** | Per-VM round-robin + select, single-threaded | Global queue / Per-worker local + work stealing | **Per-worker local queue + global queue (D-1/D-2 required); work stealing (D-3 optimization, PENDING)** | Reduces contention; load balancing; coroutine migration allowed; phased to avoid 10 variables at once | Work-stealing complexity; duplicate wakeup prevention | Scheduler stress + no-lost-wakeup tests |
 | **IO** | select() in VM thread, single IO wait | Per-worker epoll / Shared IO reactor | **Shared IO reactor thread** + per-worker local queues | Preserves P0-RUNTIME-08 semantics; centralized IO; scalable | Reactor thread bottleneck (mitigated by batching) | IO stress + timeout tests |
-| **Opcode** | Spec 0-45 frozen, runtime 0-62 (drift) | A: v1.1 ext / B: v1.2 / C: runtime-private / D: formalize | **B+D: Formally promote 46-62 to v1.2, retroactive documentation** | Clean version boundary; Semantic VM can implement; honest about history | Requires spec documentation + vm.tll update (future) | Spec update + Semantic VM convergence |
+| **Opcode** | Spec 0-45 frozen, runtime 0-62 (drift) | A: v1.1 ext / B: v1.2 / C: runtime-private / D: formalize | **B+D: Propose 46-62 as v1.2 extension (PENDING FORMAL GOVERNANCE)** | Clean version boundary; Semantic VM can implement; honest about history; architecture agent cannot unilaterally ratify | Requires spec documentation + vm.tll update (future) + formal governance process | Spec update + Semantic VM convergence |
 | **Semantic VM** | vm.tll implements 0-45 only, runtime 0-62 | Leave as-is / Update vm.tll / Declare host-only | **Update vm.tll to implement v1.2** (future implementation) | vm.tll is canonical semantic authority; must match runtime | IO opcodes hardest to implement in vm.tll | Semantic VM tests + cross-validation |
 | **Performance** | Historical baseline only, no contract | No targets / Define contract | **Define measurable contract + regression gate** | Prevents performance regression; enables data-driven decisions | Targets may be too optimistic (set based on measurement) | Benchmark suite + baseline measurement |
 | **Evidence** | Ad-hoc test results | Continue ad-hoc / Formal evidence contract | **Formal evidence contract** (functional/concurrency/memory/performance) | Reproducibility; auditability; no fake passes | More work to produce evidence | Evidence documents + test automation |
@@ -929,14 +935,15 @@ over complex, marginal optimizations (spill, segmentation, object pooling).
 FRAME MODEL              = Dynamic Frame Sized by TLLFunction.maxRegister (Model B)
 EXECUTION CONTEXT MODEL  = Shared Read-Only Program + Per-Worker TLLEXecutionContext (Model C)
 WORKER MODEL             = Per-Worker ExecutionContext + Global Task Queue + Work-Stealing Scheduler
-HEAP MODEL               = Shared Heap with Atomic RefCount (relaxed incref, acq_rel decref)
+HEAP MODEL               = Shared Heap with Atomic RefCount (RECOMMENDED BASELINE — pending validation)
+                           (relaxed incref, acq_rel decref — candidate memory ordering, must be validated)
 GLOBAL STATE MODEL       = Hybrid: Immutable for read-only + Per-Element Synchronization for mutable
                            (initial implementation: 16-mutex stripe array)
-SCHEDULER MODEL          = Per-Worker Local Runnable Queue + Global Queue + Work Stealing
+SCHEDULER MODEL          = Per-Worker Local Runnable Queue + Global Queue (D-1/D-2 required)
                            + Atomic Coroutine State (duplicate wakeup prevention)
 IO MODEL                 = Shared IO Reactor Thread (select/epoll/IOCP) + Per-Worker Local Queues
                            + Preserved P0-RUNTIME-08 timed-wait semantics
-OPCODE GOVERNANCE MODEL  = v1.1 FROZEN (0-45) + v1.2 RATIFIED (46-62)
+OPCODE GOVERNANCE MODEL  = v1.1 FROZEN (0-45) + v1.2 PROPOSED EXTENSION (46-62, PENDING FORMAL GOVERNANCE)
                            + Future opcodes require formal version bump
 SEMANTIC VM MODEL        = Update runtime/vm.tll to implement v1.2 opcodes (future implementation)
                            + vm.tll remains canonical semantic authority
