@@ -499,7 +499,7 @@ int coroutine_wake_channel(TLLVM *vm, void *channelPtr) {
     int i;
     /* D2-R3.1: Wake list for exact-once enqueue.
      * Only coroutines that transition WAITING -> RUNNABLE in this call are enqueued. */
-    int wakeList[256];
+    int *wakeList = (int*)malloc(vm->coroutineCount * sizeof(int));
     int wakeCount = 0;
 
 #ifdef _WIN32
@@ -515,7 +515,7 @@ int coroutine_wake_channel(TLLVM *vm, void *channelPtr) {
              * Already-RUNNABLE coroutines are NOT enqueued again. */
             if (co->state == TLL_COROUTINE_WAITING) {
                 co->state = TLL_COROUTINE_RUNNABLE;
-                if (wakeCount < 256) {
+                if (wakeList != NULL \&\& wakeCount < vm->coroutineCount) {
                     wakeList[wakeCount++] = i;
                 }
             }
@@ -534,6 +534,7 @@ int coroutine_wake_channel(TLLVM *vm, void *channelPtr) {
             tll_runnable_queue_enqueue(&vm->runnable_queue, wakeList[i]);
         }
     }
+    free(wakeList);
     return woken;
 }
 /* Yield: save current, destroy if dead, round-robin to next runnable.
@@ -2017,7 +2018,7 @@ static void tll_wake_expired_sleepers(TLLVM *vm) {
     long long now = current_time_ms();
     int i;
     /* D2-R3.1: Wake list for exact-once enqueue. */
-    int wakeList[256];
+    int *wakeList = (int*)malloc(vm->coroutineCount * sizeof(int));
     int wakeCount = 0;
 
 #ifdef _WIN32
@@ -2033,7 +2034,7 @@ static void tll_wake_expired_sleepers(TLLVM *vm) {
             /* D2-R3.1: Only record if this is a true WAITING -> RUNNABLE transition. */
             if (co->state == TLL_COROUTINE_WAITING) {
                 co->state = TLL_COROUTINE_RUNNABLE;
-                if (wakeCount < 256) {
+                if (wakeList != NULL \&\& wakeCount < vm->coroutineCount) {
                     wakeList[wakeCount++] = i;
                 }
             }
@@ -2051,6 +2052,7 @@ static void tll_wake_expired_sleepers(TLLVM *vm) {
             tll_runnable_queue_enqueue(&vm->runnable_queue, wakeList[i]);
         }
     }
+    free(wakeList);
 }
 /* D2-R3: Check IO readiness and wake waiting coroutines. Used by worker scheduler.
  * Collects all waitingFd, calls select(), wakes ready ones, handles timeouts.
@@ -2062,7 +2064,7 @@ static int tll_wake_io_ready(TLLVM *vm, int timeoutMs) {
     int ioCount = 0;
     int maxFd = 0;
     /* D2-R3.1: Wake list for exact-once enqueue. */
-    int wakeList[256];
+    int *wakeList = (int*)malloc(vm->coroutineCount * sizeof(int));
     int wakeCount = 0;
     fd_set readfds, writefds, exceptfds;
     FD_ZERO(&readfds);
@@ -2091,7 +2093,10 @@ static int tll_wake_io_ready(TLLVM *vm, int timeoutMs) {
     pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
 #endif
 
-    if (ioCount == 0) return 0;
+    if (ioCount == 0) {
+        free(wakeList);
+        return 0;
+    }
 
     /* Call select */
     struct timeval tv, *ptv = NULL;
@@ -2137,7 +2142,7 @@ static int tll_wake_io_ready(TLLVM *vm, int timeoutMs) {
             /* D2-R3.1: Only record if this is a true WAITING -> RUNNABLE transition. */
             if (co->state == TLL_COROUTINE_WAITING) {
                 co->state = TLL_COROUTINE_RUNNABLE;
-                if (wakeCount < 256) {
+                if (wakeList != NULL \&\& wakeCount < vm->coroutineCount) {
                     wakeList[wakeCount++] = i;
                 }
             }
@@ -2156,6 +2161,7 @@ static int tll_wake_io_ready(TLLVM *vm, int timeoutMs) {
             tll_runnable_queue_enqueue(&vm->runnable_queue, wakeList[i]);
         }
     }
+    free(wakeList);
     return woken;
 }
 /* Initialize worker execution context.

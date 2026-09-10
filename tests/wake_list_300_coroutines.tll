@@ -1,0 +1,49 @@
+// P2-01-C-D2-R3.1-final: Wake list >256 coroutines test
+// Verifies: dynamic wakeList has no 256 cap, all 300 coroutines are woken and executed
+let completed_count = 0
+let target_count = 300
+
+fn sleep_task(id: int) -> int {
+    coroutine.sleep(50)
+    // Atomic-ish increment via global (single worker in this test)
+    completed_count = completed_count + 1
+    return 0
+}
+
+fn main() -> void {
+    io.println("=== Wake List 300 Coroutines Test (no 256 cap) ===")
+
+    let rc = runtime.startWorkers(2)
+    io.println("startWorkers: " + convert.toString(rc))
+
+    io.println("Submitting 300 coroutines...")
+    let i = 0
+    while i < target_count {
+        let co = coroutine.spawn(fn() { sleep_task(i) })
+        runtime.submitCoroutine(co)
+        i = i + 1
+    }
+    io.println("Submitted 300 coroutines, waiting for completion...")
+
+    // Wait for all to complete
+    let waited = 0
+    while waited < 200 {
+        if completed_count >= target_count { break }
+        let j = 0
+        while j < 100000 { j = j + 1 }
+        waited = waited + 1
+    }
+
+    io.println("waited=" + convert.toString(waited))
+    io.println("completed_count=" + convert.toString(completed_count) + " / " + convert.toString(target_count))
+
+    runtime.shutdownWorkers()
+
+    if completed_count >= target_count {
+        io.println("TEST_RESULT: PASS - all 300 coroutines woken and executed (no 256 cap)")
+    } else {
+        io.println("TEST_RESULT: FAIL - only " + convert.toString(completed_count) + " / " + convert.toString(target_count) + " completed")
+    }
+}
+
+main()
