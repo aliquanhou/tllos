@@ -1,6 +1,6 @@
 // P0-15.17.1: Auto-sync test - Node A (mines 3 blocks first, then waits)
-from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, submitTransaction, mineBlockFromMempool, printNodeStatus, getNodeStatus
-from "../../stdlib/blockchain" import createTransaction, signTransaction
+from "../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, submitTransaction, mineBlockFromMempool, printNodeStatus, getNodeStatus
+from "../stdlib/blockchain" import createTransaction, signTransaction
 
 let node = createBlockchainNode("nodeA", "127.0.0.1", 19301, 1, 50)
 startNode(node)

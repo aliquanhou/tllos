@@ -1863,13 +1863,33 @@ fn cg_compileCall(expr: map) -> int {
         return resultReg
     }
 
-    // P0-15.16: coroutine.waitRead(fd) -> WAIT_READ opcode
+    // P0-15.16: coroutine.waitRead(fd) -> WAIT_READ opcode (timeout=0, no deadline)
     if callee["kind"] == "Member" && callee.object["kind"] == "Ident" && callee.object["name"] == "coroutine" && callee["property"] == "waitRead" {
         if arrays.length(args) > 0 {
             let fdReg = cg_compileExpression(arrays.get(args, 0))
-            cg_emit(OP_WAIT_READ, [fdReg])
+            cg_emit(OP_WAIT_READ, [fdReg, 0])
         }
         cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
+        return resultReg
+    }
+
+    // P0-RUNTIME-08-R2: coroutine.waitReadWithTimeout(fd, timeoutMs) -> WAIT_READ with deadline
+    if callee["kind"] == "Member" && callee.object["kind"] == "Ident" && callee.object["name"] == "coroutine" && callee["property"] == "waitReadWithTimeout" {
+        if arrays.length(args) > 0 {
+            let fdReg = cg_compileExpression(arrays.get(args, 0))
+            let timeoutReg = 0
+            if arrays.length(args) > 1 {
+                timeoutReg = cg_compileExpression(arrays.get(args, 1))
+            } else {
+                timeoutReg = cg_addConstant(0)
+            }
+            cg_emit(OP_WAIT_READ, [fdReg, timeoutReg])
+            // P0-RUNTIME-08-R2-FINAL-CLOSURE-3: OP_WAIT_READ returns waitResult in fdReg (1=ready, 0=timeout)
+            let zeroReg = cg_addConstant(0)
+            cg_emit(OP_ADD, [resultReg, fdReg, zeroReg])
+        } else {
+            cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
+        }
         return resultReg
     }
 
@@ -1880,6 +1900,26 @@ fn cg_compileCall(expr: map) -> int {
             cg_emit(OP_WAIT_WRITE, [fdReg])
         }
         cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
+        return resultReg
+    }
+
+    // P0-RUNTIME-08-R2: coroutine.waitWriteWithTimeout(fd, timeoutMs) -> WAIT_WRITE with deadline
+    if callee["kind"] == "Member" && callee.object["kind"] == "Ident" && callee.object["name"] == "coroutine" && callee["property"] == "waitWriteWithTimeout" {
+        if arrays.length(args) > 0 {
+            let fdReg = cg_compileExpression(arrays.get(args, 0))
+            let timeoutReg = 0
+            if arrays.length(args) > 1 {
+                timeoutReg = cg_compileExpression(arrays.get(args, 1))
+            } else {
+                timeoutReg = cg_addConstant(0)
+            }
+            cg_emit(OP_WAIT_WRITE, [fdReg, timeoutReg])
+            // P0-RUNTIME-08-R2-FINAL-CLOSURE-3: OP_WAIT_WRITE returns waitResult in fdReg (1=ready, 0=timeout)
+            let zeroReg2 = cg_addConstant(0)
+            cg_emit(OP_ADD, [resultReg, fdReg, zeroReg2])
+        } else {
+            cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
+        }
         return resultReg
     }
 
@@ -1974,8 +2014,15 @@ fn cg_compileCall(expr: map) -> int {
                 cg_patchJump(jmpFalseIdx)
                 ti = ti + 1
             }
-            // Fallback: no type matched
-            cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
+            // Fallback: no type matched - try normal member access (for map/other types)
+            let fnReg = cg_allocReg()
+            cg_emit(OP_MEMBER_GET, [fnReg, selfReg, cg_addConstant(propName)])
+            let pi2 = 0
+            while pi2 < arrays.length(argRegs) {
+                cg_emit(OP_PUSH, [arrays.get(argRegs, pi2)])
+                pi2 = pi2 + 1
+            }
+            cg_emit(OP_CALL, [resultReg, fnReg + 100000, arrays.length(args)])
             // Patch all end jumps to here
             let ei = 0
             while ei < arrays.length(endJumpIdxs) {
@@ -2240,6 +2287,8 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
         if fnName == "select" { return 141 }
         if fnName == "tryRecv" { return 142 }
         if fnName == "trySend" { return 143 }
+        if fnName == "connectNonBlocking" { return 221 }
+        if fnName == "getSocketError" { return 222 }
     }
     if modName == "coroutine" {
         if fnName == "wakeChannel" { return 144 }

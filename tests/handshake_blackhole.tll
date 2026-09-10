@@ -1,0 +1,102 @@
+// P0-RUNTIME-08-R2: Handshake Blackhole deterministic test
+// Verifies that p2pConnectWithRetry() correctly handles a handshake blackhole:
+// TCP connection established, but server never sends handshake response.
+
+from "../stdlib/p2p" import p2pConnectWithRetry
+
+io.println("=== Handshake Blackhole Deterministic Test ===")
+
+let BLACKHOLE_PORT = 30010
+let MAX_ATTEMPTS = 5
+
+let serverReady = false
+let acceptedCount = 0
+
+// Blackhole server: accept connections, NEVER send handshake response.
+fn blackholeServer() {
+    io.println("[blackhole] starting")
+    let srv = tcp.listen("127.0.0.1", BLACKHOLE_PORT)
+    serverReady = true
+    io.println("[blackhole] listening on port " + convert.toString(BLACKHOLE_PORT) + " fd=" + convert.toString(srv))
+    let i = 0
+    while i < MAX_ATTEMPTS + 2 {
+        coroutine.waitRead(srv)
+        let clientFd = tcp.accept(srv)
+        if clientFd >= 0 {
+            acceptedCount = acceptedCount + 1
+            io.println("[blackhole] accepted #" + convert.toString(acceptedCount) + " fd=" + convert.toString(clientFd) + " - NO HANDSHAKE")
+        }
+        i = i + 1
+    }
+    io.println("[blackhole] accepted max, waiting")
+    let j = 0
+    while j < 200 {
+        coroutine.sleep(100)
+        j = j + 1
+    }
+    tcp.close(srv)
+    io.println("[blackhole] exiting")
+}
+
+io.println("[main] spawning server")
+coroutine.spawn(blackholeServer)
+io.println("[main] spawned, waiting ready")
+
+let guard = 0
+while !serverReady && guard < 200 {
+    coroutine.yield()
+    guard = guard + 1
+}
+
+if !serverReady {
+    io.println("FAIL: server did not start")
+    io.println("TEST_RESULT: FAIL")
+    return
+}
+
+io.println("[main] server ready, calling p2pConnectWithRetry")
+
+let testNode = {
+    nodeId: "test-node",
+    host: "127.0.0.1",
+    port: 19000,
+    peers: [],
+    running: true
+}
+
+let overallStart = time.nowMs()
+let result = p2pConnectWithRetry(testNode, "127.0.0.1", BLACKHOLE_PORT)
+let overallElapsed = time.nowMs() - overallStart
+
+io.println("")
+io.println("=== Results ===")
+io.println("returned: " + convert.toString(result))
+io.println("accepted connections: " + convert.toString(acceptedCount))
+io.println("overall elapsed: " + convert.toString(overallElapsed) + "ms")
+
+let pass = true
+if result {
+    io.println("FAIL: should return false")
+    pass = false
+} else {
+    io.println("OK: returned false")
+}
+if acceptedCount < MAX_ATTEMPTS {
+    io.println("FAIL: only accepted " + convert.toString(acceptedCount))
+    pass = false
+} else {
+    io.println("OK: accepted " + convert.toString(acceptedCount))
+}
+if overallElapsed < 8000 || overallElapsed > 18000 {
+    io.println("FAIL: elapsed " + convert.toString(overallElapsed) + "ms out of range")
+    pass = false
+} else {
+    io.println("OK: elapsed " + convert.toString(overallElapsed) + "ms")
+}
+
+if pass {
+    io.println("PASS: Handshake blackhole handled correctly")
+    io.println("TEST_RESULT: PASS")
+} else {
+    io.println("TEST_RESULT: FAIL")
+}

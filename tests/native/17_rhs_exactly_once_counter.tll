@@ -1,0 +1,89 @@
+// P2-01-B11-R1-R2: RHS Exactly Once Observable Counter Test
+// 证明 assignment RHS 恰好执行一次，不是代码阅读证明，而是机器可观测证明
+//
+// 场景：
+//   1. 简单赋值 x = get_with_counter(log) — RHS 应执行恰好一次
+//   2. 嵌套赋值 y = (x = get_with_counter(log)) — 内层 RHS 应执行恰好一次
+//   3. let 初始化嵌套赋值 let z = (x = get_with_counter(log)) — 内层 RHS 应执行恰好一次
+//   4. 自赋值 x = x — 不应执行任何函数（无 RHS 函数调用）
+//   5. 两层嵌套赋值 z = (y = (x = get_with_counter(log))) — 最内层 RHS 应执行恰好一次
+
+fn get_with_counter(log) {
+    log[0] = log[0] + 1;
+    return 42;
+}
+
+fn main() {
+    io.println("=== RHS Exactly Once Observable Counter Test ===");
+
+    // Test 1: 简单赋值 — RHS 应执行恰好一次
+    io.println("--- Test 1: simple assignment ---");
+    let log1 = [0];
+    let x1 = 0;
+    x1 = get_with_counter(log1);
+    io.println("x1=");
+    io.println(x1);
+    io.println("count1=");
+    io.println(log1[0]);
+    io.println("expected_count=1");
+
+    // Test 2: 嵌套赋值 — 内层 RHS 应执行恰好一次
+    io.println("--- Test 2: nested assignment y = (x = fn()) ---");
+    let log2 = [0];
+    let x2 = 0;
+    let y2 = 0;
+    y2 = (x2 = get_with_counter(log2));
+    io.println("x2=");
+    io.println(x2);
+    io.println("y2=");
+    io.println(y2);
+    io.println("count2=");
+    io.println(log2[0]);
+    io.println("expected_count=1");
+
+    // Test 3: let 初始化嵌套赋值 — 内层 RHS 应执行恰好一次
+    io.println("--- Test 3: let z = (x = fn()) ---");
+    let log3 = [0];
+    let x3 = 0;
+    let z3 = (x3 = get_with_counter(log3));
+    io.println("x3=");
+    io.println(x3);
+    io.println("z3=");
+    io.println(z3);
+    io.println("count3=");
+    io.println(log3[0]);
+    io.println("expected_count=1");
+
+    // Test 4: 自赋值 — 不应有函数调用
+    io.println("--- Test 4: self-assignment x = x ---");
+    let log4 = [0];
+    let x4 = 99;
+    x4 = x4;
+    io.println("x4=");
+    io.println(x4);
+    io.println("count4=");
+    io.println(log4[0]);
+    io.println("expected_count=0");
+
+    // Test 5: 两层嵌套赋值 z = (y = (x = fn())) — 最内层 RHS 应执行恰好一次
+    io.println("--- Test 5: two-level nested z = (y = (x = fn())) ---");
+    let log5 = [0];
+    let x5 = 0;
+    let y5 = 0;
+    let z5 = 0;
+    z5 = (y5 = (x5 = get_with_counter(log5)));
+    io.println("x5=");
+    io.println(x5);
+    io.println("y5=");
+    io.println(y5);
+    io.println("z5=");
+    io.println(z5);
+    io.println("count5=");
+    io.println(log5[0]);
+    io.println("expected_count=1");
+
+    io.println("=== done ===");
+    return 0;
+}
+
+main()

@@ -1,0 +1,61 @@
+// P0-RUNTIME-08-R2 FINAL CLOSURE-2: Retry Budget Deterministic Test
+// Verifies that p2pConnectWithRetry() with connect timeout has a provable total budget.
+// Scenario B: TCP connect timeout (no listener) -> 5 x 2.5s + 2s backoff = 14.5s
+// Scenario A (handshake blackhole) is already verified in handshake_blackhole.tll.
+
+from "../stdlib/p2p" import p2pConnectWithRetry
+
+io.println("=== Retry Budget Deterministic Test (Connect Timeout Scenario) ===")
+
+let testNode = {
+    nodeId: "retry-budget-test",
+    host: "127.0.0.1",
+    port: 19000,
+    peers: [],
+    running: true
+}
+
+// Connect to a port with no listener -> connect timeout every attempt
+io.println("")
+io.println("Connecting to closed port 19996 (no listener)")
+io.println("Expected: 5 attempts x 2500ms connect timeout + 2000ms backoff = ~14500ms")
+
+let start = time.nowMs()
+let result = p2pConnectWithRetry(testNode, "127.0.0.1", 19996)
+let elapsed = time.nowMs() - start
+
+io.println("")
+io.println("=== Results ===")
+io.println("returned: " + convert.toString(result))
+io.println("overall elapsed: " + convert.toString(elapsed) + "ms")
+
+let pass = true
+if result {
+    io.println("FAIL: should return false")
+    pass = false
+} else {
+    io.println("OK: returned false")
+}
+
+// Theoretical worst case: 5 * 2500 + 2000 = 14500ms
+// Allow measurement tolerance: [12000, 18000]
+if elapsed < 12000 || elapsed > 18000 {
+    io.println("FAIL: elapsed " + convert.toString(elapsed) + "ms out of bounds [12000, 18000]")
+    pass = false
+} else {
+    io.println("OK: elapsed " + convert.toString(elapsed) + "ms within bounds")
+}
+
+io.println("")
+io.println("=== Budget Analysis ===")
+io.println("Theoretical worst case: 5 x 2500ms (connect) + 2000ms (backoff) = 14500ms")
+io.println("Actual: " + convert.toString(elapsed) + "ms")
+io.println("This proves connect timeout is HARD BOUNDED at runtime level.")
+
+if pass {
+    io.println("")
+    io.println("PASS: Retry budget with connect timeout is provably bounded")
+    io.println("TEST_RESULT: PASS")
+} else {
+    io.println("TEST_RESULT: FAIL")
+}

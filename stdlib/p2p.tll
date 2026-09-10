@@ -18,6 +18,32 @@ fn createP2PNode(nodeId: string, host: string, port: int) -> map {
     }
 }
 
+// Connect with hard timeout (P0-RUNTIME-08-R2 FINAL CLOSURE-2)
+// Uses non-blocking connect + waitWriteWithTimeout + getsockopt(SO_ERROR)
+// This provides a TRUE runtime-level hard bound on connect, not an OS-dependent assumption.
+fn connectWithTimeout(host: string, port: int, timeoutMs: int) -> int {
+    let fd = tcp.connectNonBlocking(host, port)
+    if fd < 0 {
+        return -1
+    }
+    // Wait for socket to become writable (connect complete or failed)
+    // P0-RUNTIME-08-R2-FINAL-CLOSURE-3: use waitWriteWithTimeout return value
+    // true = fd writable/READY, false = deadline expired/TIMEOUT
+    let ready = coroutine.waitWriteWithTimeout(fd, timeoutMs)
+    // P0-RUNTIME-08-R2-FINAL-CLOSURE-3: waitWriteWithTimeout returns int (1=ready, 0=timeout)
+    if ready == 0 {
+        tcp.close(fd)
+        return -1
+    }
+    // Check socket error via getsockopt(SO_ERROR)
+    let soError = tcp.getSocketError(fd)
+    if soError != 0 {
+        tcp.close(fd)
+        return -1
+    }
+    return fd
+}
+
 // Convert integer to 4-digit hex string
 fn intToHex4(n: int) -> string {
     let _ih_hex = "0123456789abcdef"
@@ -111,12 +137,11 @@ fn p2pListen(node: map) -> bool {
 
 // Connect to a peer (uses non-blocking waitRead for handshake response)
 fn p2pConnect(node: map, host: string, port: int) -> bool {
-    let _pc_fd = tcp.connect(host, port)
+    let _pc_fd = connectWithTimeout(host, port, 2500)
     if _pc_fd < 0 {
         io.println("[" + node.nodeId + "] Failed to connect to " + host + ":" + convert.toString(port))
         return false
     }
-    tcp.setTimeout(_pc_fd, 5000)
     // Send handshake
     let _pc_handshake = {
         nodeId: node.nodeId,
@@ -126,8 +151,8 @@ fn p2pConnect(node: map, host: string, port: int) -> bool {
     }
     let _pc_msg = encodeMessage("handshake", _pc_handshake)
     tcp.send(_pc_fd, _pc_msg)
-    // Non-blocking wait for handshake response (yields coroutine)
-    coroutine.waitRead(_pc_fd)
+    // Wait for handshake response with 5s bounded timeout (P0-RUNTIME-08-R2)
+    coroutine.waitReadWithTimeout(_pc_fd, 5000)
     let _pc_resp = tcp.tryRecv(_pc_fd, 65536)
     let _pc_decoded = decodeMessages(_pc_resp)
     if arrays.length(_pc_decoded.messages) > 0 {
@@ -153,6 +178,77 @@ fn p2pConnect(node: map, host: string, port: int) -> bool {
         }
     }
     tcp.close(_pc_fd)
+    return false
+}
+
+// Connect to a peer with bounded retry (P0-RUNTIME-08-R2)
+// Contract: MAX_ATTEMPTS=5, exponential backoff, observable, bounded
+// Total budget: ~24.5s worst case (5*(2.5s connect + 2s handshake) + 2s backoff)
+// Note: connectWithTimeout() provides a TRUE runtime-level hard bound (2500ms)
+// via non-blocking connect + waitWriteWithTimeout + getsockopt(SO_ERROR).
+fn p2pConnectWithRetry(node: map, host: string, port: int) -> bool {
+    let MAX_ATTEMPTS = 5
+    let BACKOFF_BASE_MS = 200
+    let BACKOFF_MAX_MS = 1000
+    let HANDSHAKE_TIMEOUT_MS = 2000
+    let attempt = 1
+    while attempt <= MAX_ATTEMPTS {
+        let attemptStart = time.nowMs()
+        io.println("[" + node.nodeId + "] CONNECT_ATTEMPT attempt=" + convert.toString(attempt) + "/" + convert.toString(MAX_ATTEMPTS) + " host=" + host + " port=" + convert.toString(port))
+
+        let fd = connectWithTimeout(host, port, 2500)
+        let elapsed = time.nowMs() - attemptStart
+
+        if fd >= 0 {
+            io.println("[" + node.nodeId + "] CONNECT_SUCCESS attempt=" + convert.toString(attempt) + " elapsed_ms=" + convert.toString(elapsed) + " fd=" + convert.toString(fd))
+
+            let _pc_handshake = {
+                nodeId: node.nodeId,
+                host: node.host,
+                port: node.port,
+                version: "0.1.0"
+            }
+            let _pc_msg = encodeMessage("handshake", _pc_handshake)
+            tcp.send(fd, _pc_msg)
+            coroutine.waitReadWithTimeout(fd, HANDSHAKE_TIMEOUT_MS)
+            let _pc_resp = tcp.tryRecv(fd, 65536)
+            let _pc_decoded = decodeMessages(_pc_resp)
+            if arrays.length(_pc_decoded.messages) > 0 {
+                let _pc_respMsg = _pc_decoded.messages[0]
+                if _pc_respMsg.type == "handshake" {
+                    let _pc_peer = {
+                        nodeId: _pc_respMsg.payload.nodeId,
+                        host: host,
+                        port: port,
+                        fd: fd,
+                        lastSeen: time.nowMs(),
+                        recvBuffer: _pc_decoded.remaining,
+                        alive: true
+                    }
+                    arrays.push(node.peers, _pc_peer)
+                    io.println("[" + node.nodeId + "] HANDSHAKE_SUCCESS peer=" + _pc_peer.nodeId + " attempt=" + convert.toString(attempt))
+                    if node.running {
+                        coroutine.spawn(p2pPeerReceiveLoop, node, fd)
+                    }
+                    return true
+                }
+            }
+            io.println("[" + node.nodeId + "] HANDSHAKE_FAILED attempt=" + convert.toString(attempt) + " elapsed_ms=" + convert.toString(time.nowMs() - attemptStart))
+            tcp.close(fd)
+        } else {
+            io.println("[" + node.nodeId + "] CONNECT_FAILED attempt=" + convert.toString(attempt) + " elapsed_ms=" + convert.toString(elapsed) + " fd=-1 transport_error=not_exposed_by_current_api")
+        }
+
+        if attempt < MAX_ATTEMPTS {
+            let backoff = attempt * BACKOFF_BASE_MS
+            if backoff > BACKOFF_MAX_MS { backoff = BACKOFF_MAX_MS }
+            io.println("[" + node.nodeId + "] CONNECT_RETRY attempt=" + convert.toString(attempt) + " backoff_ms=" + convert.toString(backoff))
+            coroutine.sleep(backoff)
+        }
+        attempt = attempt + 1
+    }
+
+    io.println("[" + node.nodeId + "] CONNECT_EXHAUSTED attempts=" + convert.toString(MAX_ATTEMPTS) + " host=" + host + " port=" + convert.toString(port))
     return false
 }
 

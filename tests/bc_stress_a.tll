@@ -1,8 +1,8 @@
 // P0-15.18.3: Blockchain High-Message Stress Test - Node A
-// Submits 120 high-frequency transactions (fee递增) to trigger mempool capacity=50 overflow,
+// Submits 120 high-frequency transactions (fee閫掑) to trigger mempool capacity=50 overflow,
 // then mines blocks. Verifies transaction propagation + block propagation + final consistency.
-from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, submitTransaction, mineBlockFromMempool, printNodeStatus, getNodeStatus
-from "../../stdlib/blockchain" import createTransaction, signTransaction
+from "../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, submitTransaction, mineBlockFromMempool, printNodeStatus, getNodeStatus
+from "../stdlib/blockchain" import createTransaction, signTransaction
 
 let node = createBlockchainNode("nodeA", "127.0.0.1", 19301, 1, 50)
 // Override mempool capacity to 50 to test real overflow behavior
@@ -20,7 +20,7 @@ while waitTicks < 80 {
 }
 io.println("=== Node A peers=" + convert.toString(node.p2p.peers.length) + " ===")
 
-// Phase 1: Submit 120 high-frequency transactions (fee 1->120,递增)
+// Phase 1: Submit 120 high-frequency transactions (fee 1->120,閫掑)
 // mempool capacity=50, so after 50, lowest-fee txs get evicted
 io.println("=== Phase 1: Submitting 120 transactions (high frequency) ===")
 let txSubmitted = 0
@@ -28,7 +28,7 @@ let txAccepted = 0
 let txRejected = 0
 let nonce = 0
 while nonce < 120 {
-    let fee = 1 + nonce  // fee递增: 1,2,3,...,120
+    let fee = 1 + nonce  // fee閫掑: 1,2,3,...,120
     let amount = 100 + nonce
     let tx = createTransaction("addrA", "addrB", amount, fee, nonce, time.nowMs(), "keyA")
     tx = signTransaction(tx, "privateA")

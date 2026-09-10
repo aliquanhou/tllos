@@ -1,0 +1,74 @@
+// P2-01-B11-R1-R2-FIX3: Assignment Expression Ownership - Ident RHS Test
+// Verifies: let z = (x = y) where RHS is variable reference (Ident)
+// This is the key counterexample from architecture review:
+//   y ref=1, x=y -> ref=2, z=... -> ref still=2,
+//   free(x)->1, free(y)->0, free(z)-> double-free
+
+fn test_let_nested_ident_rhs() {
+    io.println("=== 1. let z = (x = y) Ident RHS ===");
+    let x = "old_x";
+    let y = "source_y";
+    let z = (x = y);
+    io.println(x);
+    io.println(y);
+    io.println(z);
+}
+
+fn test_stmt_nested_ident_rhs() {
+    io.println("=== 2. z = (x = y) Ident RHS statement ===");
+    let x = "old_x";
+    let y = "source_y";
+    let z = "old_z";
+    z = (x = y);
+    io.println(x);
+    io.println(y);
+    io.println(z);
+}
+
+fn test_two_level_nested_ident_rhs() {
+    io.println("=== 3. w = (z = (y = x)) Ident RHS two level ===");
+    let x = "source_x";
+    let y = "old_y";
+    let z = "old_z";
+    let w = "old_w";
+    w = (z = (y = x));
+    io.println(x);
+    io.println(y);
+    io.println(z);
+    io.println(w);
+}
+
+fn test_let_nested_temp_rhs() {
+    io.println("=== 4. let z = (x = temp) temporary RHS ===");
+    let x = "old_x";
+    let z = (x = "temp_value");
+    io.println(x);
+    io.println(z);
+}
+
+fn test_mixed_nested() {
+    io.println("=== 5. mixed: z = (x = y) then z = (x = temp) ===");
+    let x = "old_x";
+    let y = "source_y";
+    let z = "old_z";
+    z = (x = y);
+    io.println(x);
+    io.println(y);
+    io.println(z);
+    z = (x = "new_temp");
+    io.println(x);
+    io.println(z);
+}
+
+fn main() {
+    io.println("=== assignment_ownership_ident_rhs ===");
+    test_let_nested_ident_rhs();
+    test_stmt_nested_ident_rhs();
+    test_two_level_nested_ident_rhs();
+    test_let_nested_temp_rhs();
+    test_mixed_nested();
+    io.println("=== done ===");
+    return 0;
+}
+
+main()

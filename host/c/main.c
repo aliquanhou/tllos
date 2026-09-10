@@ -17,6 +17,9 @@
 #include "tllvm.h"
 #include <time.h>
 
+/* Scheduler trace dump (defined in vm.c) */
+extern void sched_trace_dump(void);
+
 /* Process API globals (P0-2.2) */
 int tll_argc = 0;
 char **tll_argv = NULL;
@@ -50,6 +53,9 @@ int main(int argc, char *argv[]) {
 
     tll_vm_run(vm);
 
+    /* Dump scheduler trace if enabled */
+    sched_trace_dump();
+
     tll_vm_free(vm);
     /* TLL-027: free program and its resources */
     if (prog) {
@@ -62,5 +68,6 @@ int main(int argc, char *argv[]) {
         free(prog);
     }
 
+    fflush(stdout);
     return tll_exit_code;
 }

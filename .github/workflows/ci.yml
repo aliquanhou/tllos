@@ -1,4 +1,4 @@
-﻿name: CI
+name: CI
 
 on:
   push:
@@ -9,6 +9,7 @@ on:
 jobs:
   native-build-test:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
@@ -31,14 +32,14 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           cd host/c
-          gcc -O2 -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread -ldl -lssl -lcrypto
+          gcc -O2 -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c ../../runtime/value.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread -ldl -lssl -lcrypto
           ./tllvm --version 2>/dev/null || true
 
       - name: Build Native Launcher (macOS)
         if: runner.os == 'macOS'
         run: |
           cd host/c
-          gcc -O2 -std=gnu99 -D_DARWIN_C_SOURCE -o tllvm main.c vm.c value.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread -framework Security -framework CoreFoundation
+          gcc -O2 -std=gnu99 -D_DARWIN_C_SOURCE -o tllvm main.c vm.c ../../runtime/value.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread -framework Security -framework CoreFoundation
           ./tllvm --version 2>/dev/null || true
 
       - name: Setup MSVC (Windows)
@@ -50,7 +51,7 @@ jobs:
         shell: cmd
         run: |
           cd host\c
-          cl /O2 /D_CRT_SECURE_NO_WARNINGS /Fe:tllvm.exe main.c vm.c value.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c ws2_32.lib winhttp.lib bcrypt.lib
+          cl /O2 /D_CRT_SECURE_NO_WARNINGS /Fe:tllvm.exe main.c vm.c ..\..\runtime\value.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c ws2_32.lib winhttp.lib bcrypt.lib
           if errorlevel 1 exit /b 1
 
       - name: Verify bootstrap seed exists
@@ -684,3 +685,60 @@ jobs:
           if ((Get-Content perf_blockchain.log -Raw) -notmatch "PERF_BLOCKCHAIN_PASS") { throw "perf_blockchain did not PASS" }
           Write-Output "=== Performance Benchmark PASSED ==="
 
+
+
+  coroutine-only-verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup C compiler (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y gcc libssl-dev
+      - name: Setup C compiler (macOS)
+        if: runner.os == 'macOS'
+        run: brew install gcc
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        run: cd host/c && gcc -O2 -std=gnu99 -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -o tllvm main.c vm.c ../../runtime/value.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread -ldl -lssl -lcrypto
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: cd host/c && gcc -O2 -std=gnu99 -D_DARWIN_C_SOURCE -o tllvm main.c vm.c ../../runtime/value.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c -lm -lpthread -framework Security -framework CoreFoundation
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: cd host\c && cl /O2 /D_CRT_SECURE_NO_WARNINGS /Fe:tllvm.exe main.c vm.c ..\..\runtime\value.c json.c builtin.c ffi_builtin.c sqlite_builtin.c crypto_builtin.c password_builtin.c hmac_builtin.c http_client_builtin.c sqlite3.c ws2_32.lib winhttp.lib bcrypt.lib
+      - name: Coroutine Test (Linux/macOS)
+        if: runner.os != 'Windows'
+        timeout-minutes: 20
+        run: |
+          host/c/tllvm tools/TLLC/tllc.tllbc compile tests/coroutine_stress_test.tll -o tests/coroutine_stress_test.tllbc
+          host/c/tllvm tests/coroutine_stress_test.tllbc 2>&1 | tee /tmp/cs.log
+          test ${PIPESTATUS[0]} -eq 0
+          grep -q "Test 1 PASS" /tmp/cs.log
+          grep -q "Test 2 PASS" /tmp/cs.log
+          grep -q "Test 3 PASS" /tmp/cs.log
+          ! grep -q "FAIL" /tmp/cs.log
+          grep -q "Stress Tests Done" /tmp/cs.log
+      - name: Coroutine Test (Windows)
+        if: runner.os == 'Windows'
+        timeout-minutes: 20
+        shell: powershell
+        run: |
+          host\c\tllvm.exe tools\TLLC\tllc.tllbc compile tests\coroutine_stress_test.tll -o tests\coroutine_stress_test.tllbc
+          if ($LASTEXITCODE -ne 0) { throw "Compile failed" }
+          & host\c\tllvm.exe tests\coroutine_stress_test.tllbc 2>&1 | Tee-Object cs.log
+          if ($LASTEXITCODE -ne 0) { throw "Run failed" }
+          $log = Get-Content cs.log -Raw
+          if ($log -notmatch "Test 1 PASS") { throw "Test1 fail" }
+          if ($log -notmatch "Test 2 PASS") { throw "Test2 fail" }
+          if ($log -notmatch "Test 3 PASS") { throw "Test3 fail" }
+          if ($log -match "FAIL") { throw "Has FAIL" }
+          if ($log -notmatch "Stress Tests Done") { throw "Not done" }

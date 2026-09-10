@@ -1,6 +1,6 @@
 // P0-15.17.2: Reconnect+AutoSync test - Node A (continuous miner)
-from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, submitTransaction, mineBlockFromMempool, printNodeStatus, getNodeStatus
-from "../../stdlib/blockchain" import createTransaction, signTransaction
+from "../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, submitTransaction, mineBlockFromMempool, printNodeStatus, getNodeStatus
+from "../stdlib/blockchain" import createTransaction, signTransaction
 
 let node = createBlockchainNode("nodeA", "127.0.0.1", 19501, 1, 50)
 startNode(node)

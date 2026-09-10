@@ -1,6 +1,6 @@
 // P0-15.17.2: Reconnect+AutoSync test - Node B (sync -> disconnect -> reconnect -> auto-sync)
-from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, reconnectToPeer, printNodeStatus, getNodeStatus
-from "../../stdlib/p2p" import p2pDisconnect, p2pStop, p2pListen, p2pStart
+from "../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, reconnectToPeer, printNodeStatus, getNodeStatus
+from "../stdlib/p2p" import p2pDisconnect, p2pStop, p2pListen, p2pStart
 
 let node = createBlockchainNode("nodeB", "127.0.0.1", 19502, 1, 50)
 startNode(node)

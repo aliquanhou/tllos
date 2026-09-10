@@ -1,0 +1,105 @@
+// P0-RUNTIME-08-R2: Deadline wake does not block scheduler
+// Verifies that while coroutine A is in waitReadWithTimeout (WAITING_IO + deadline),
+// coroutine B continues running. This proves the IO waiter's deadline does not
+// block the entire scheduler.
+
+io.println("=== Deadline Wake Scheduler Non-Blocking Test ===")
+
+let TEST_PORT = 19361
+let TIMEOUT_MS = 2000
+
+let serverReady = false
+let aStarted = false
+let aResumed = false
+let bAliveCount = 0
+let bAliveDuringAWait = 0
+
+// Server: accept connection, send NO data, exit
+fn serverWorker() {
+    let srv = tcp.listen("127.0.0.1", TEST_PORT)
+    serverReady = true
+    coroutine.waitRead(srv)
+    let clientFd = tcp.accept(srv)
+    io.println("[server] accepted, sending NO data")
+    tcp.close(srv)
+}
+
+// Coroutine A: connect, waitReadWithTimeout, record resume
+fn coroutineA() {
+    aStarted = true
+    let fd = tcp.connect("127.0.0.1", TEST_PORT)
+    io.println("[A] connected, waiting with timeout=" + convert.toString(TIMEOUT_MS) + "ms")
+    let start = time.nowMs()
+    coroutine.waitReadWithTimeout(fd, TIMEOUT_MS)
+    let elapsed = time.nowMs() - start
+    aResumed = true
+    io.println("[A] resumed after " + convert.toString(elapsed) + "ms (deadline fired)")
+    tcp.close(fd)
+}
+
+// Coroutine B: periodically record "B_ALIVE" while A is waiting
+fn coroutineB() {
+    let i = 0
+    while i < 10 {
+        coroutine.sleep(200)
+        bAliveCount = bAliveCount + 1
+        if aStarted && !aResumed {
+            bAliveDuringAWait = bAliveDuringAWait + 1
+            io.println("[B] ALIVE tick " + convert.toString(i) + " (A is still waiting)")
+        } else if aResumed {
+            io.println("[B] ALIVE tick " + convert.toString(i) + " (A has resumed)")
+        } else {
+            io.println("[B] ALIVE tick " + convert.toString(i) + " (A not started yet)")
+        }
+        i = i + 1
+    }
+    io.println("[B] finished 10 ticks")
+}
+
+// Start server
+coroutine.spawn(serverWorker)
+let guard = 0
+while !serverReady && guard < 100 {
+    coroutine.yield()
+    guard = guard + 1
+}
+
+// Start A and B concurrently
+coroutine.spawn(coroutineA)
+coroutine.spawn(coroutineB)
+
+// Wait for A to resume (with extra time for B to finish)
+let waitGuard = 0
+while !aResumed && waitGuard < 200 {
+    coroutine.yield()
+    waitGuard = waitGuard + 1
+}
+
+// Give B time to finish its ticks
+coroutine.sleep(500)
+
+io.println("")
+io.println("=== Results ===")
+io.println("A started: " + convert.toString(aStarted))
+io.println("A resumed (deadline fired): " + convert.toString(aResumed))
+io.println("B total alive ticks: " + convert.toString(bAliveCount))
+io.println("B alive ticks during A wait: " + convert.toString(bAliveDuringAWait))
+
+// Verify: B ran at least 3 times while A was waiting
+// (A waits ~2000ms, B ticks every 200ms, so ~8-9 ticks during wait)
+let pass = true
+if !aResumed {
+    io.println("FAIL: A never resumed (deadline did not fire)")
+    pass = false
+}
+if bAliveDuringAWait < 3 {
+    io.println("FAIL: B only ran " + convert.toString(bAliveDuringAWait) + " times during A wait (scheduler was blocked)")
+    pass = false
+}
+
+if pass {
+    io.println("PASS: Deadline wake did not block scheduler - B ran " + convert.toString(bAliveDuringAWait) + " times while A waited")
+    io.println("TEST_RESULT: PASS")
+} else {
+    io.println("TEST_RESULT: FAIL")
+}

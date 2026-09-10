@@ -17,7 +17,7 @@ jobs:
       - name: Build Native Launcher
         run: |
           cd host/c
-          gcc -O2 -std=c99 -D_WIN32=0 -o tllvm main.c vm.c value.c json.c builtin.c
+          gcc -O2 -std=c99 -D_WIN32=0 -o tllvm main.c vm.c ../../runtime/value.c json.c builtin.c
 
       - name: Verify bootstrap seed
         run: |

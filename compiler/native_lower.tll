@@ -19,6 +19,114 @@ let nl_functionCount = 0
 // B.10: Track local variables for refcount management
 let nl_localVars: list = []
 
+// ============ Builtin Function Registry (Canonical) ============
+// P2-01-B11-R1-R2-R3-FINAL-R1: Three-tier semantic classification.
+//
+// ARCHITECTURE DECISION (Phase 2-01 B11):
+//   Native Target has NO runtime builtin dispatcher/registry.
+//   native_lower.tll generates DIRECT C function calls to Shared Runtime Core.
+//   Therefore "builtin binding" = "C-callable semantic surface used by lowering",
+//   NOT a runtime dispatch table.
+//
+// THREE-TIER CLASSIFICATION:
+//   1. Language-Callable Builtins (nl_builtinFunctions):
+//      Stable API invocable from TLL source (directly or via operator/method lowering).
+//      These are the ONLY entries checked by nl_isBuiltinFunction().
+//   2. Runtime-Internal / Lifecycle APIs (nl_runtimeInternalFunctions):
+//      Compiler-generated lifecycle calls (init/cleanup). NOT language-callable.
+//      Listed for validator exclusion only.
+//   3. Test-only Verification APIs (nl_testOnlyFunctions):
+//      Compiler/runtime instrumentation for ownership/lifetime tests ONLY.
+//      Marked "NOT part of public ABI" in runtime header.
+//      NOT stable language-callable builtins. Listed for validator exclusion.
+//
+// Runtime Header (runtime/tll_runtime.h + native/runtime/tll_native.h):
+//   = Native ABI declaration surface, NOT a builtin registry.
+//   Contains all three tiers above. Validator must classify, not assume all = builtins.
+//
+// Canonical source of truth for each tier: the lists in this file.
+// Machine-verification gate: scripts/verify-builtin-registry.ps1 (bidirectional, tier-aware).
+let nl_builtinFunctions: list = [
+    // Value creation
+    "tll_null",
+    "tll_bool",
+    "tll_int",
+    "tll_float",
+    "tll_string",
+    "tll_string_n",
+    // Container creation
+    "tll_array",
+    "tll_map",
+    // Function/builtin creation
+    "tll_function",
+    "tll_builtin",
+    // Reference counting (lowering-internal but language-visible via semantics)
+    "tll_value_incref",
+    "tll_value_free",
+    // Truth / equality
+    "tll_truthy",
+    "tll_equals",
+    // Assignment
+    "tll_assign",
+    // Conversion
+    "tll_to_string",
+    "tll_to_json",
+    // Arithmetic
+    "tll_add",
+    "tll_sub",
+    "tll_mul",
+    "tll_div",
+    "tll_mod",
+    // Comparison
+    "tll_eq",
+    "tll_neq",
+    "tll_lt",
+    "tll_gt",
+    "tll_le",
+    "tll_ge",
+    // Array operations (non-tll_ prefix, but language-callable via index/method)
+    "array_push",
+    "array_get",
+    "array_set",
+    // Map operations (non-tll_ prefix, but language-callable via index/method)
+    "map_set",
+    "map_get",
+    "map_has",
+    // IO
+    "tll_io_print",
+    "tll_io_println"
+]
+
+// Runtime-Internal / Lifecycle API (NOT language-callable builtins).
+// These are compiler-generated lifecycle calls only. Listed here for
+// validator exclusion; they must NOT appear in nl_builtinFunctions.
+let nl_runtimeInternalFunctions: list = [
+    "tll_runtime_init",
+    "tll_runtime_cleanup",
+    "tll_native_init",
+    "tll_native_cleanup"
+]
+
+// Test-only Verification API (NOT stable language-callable builtins).
+// Marked "NOT part of public ABI / ONLY for ownership/lifetime verification tests"
+// in runtime/tll_runtime.h. Must NOT be used in production code or exposed as stable API.
+// Listed here for validator exclusion; they must NOT appear in nl_builtinFunctions.
+let nl_testOnlyFunctions: list = [
+    "tll_debug_refcount",
+    "tll_debug_print_refcount"
+]
+
+fn nl_isBuiltinFunction(name: string) -> bool {
+    let i = 0
+    while i < arrays.length(nl_builtinFunctions) {
+        if arrays.get(nl_builtinFunctions, i) == name {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
 // ============ Helpers ============
 fn nl_emit(line: string) -> void {
     let prefix = ""
@@ -46,6 +154,34 @@ fn nl_convertType(tllType: string) -> string {
     // Native Target 统一使用 TLLValue（动态类型），与 Bytecode Target 保持语义一致
     // 类型标注仅用于类型检查，不改变生成的 C 代码类型
     return "TLLValue"
+}
+
+// ============ Ownership Helpers ============
+// P2-01-B11-R1-R2-FIX3: Recursively determine if an expression (including nested assignment)
+// carries a temporary reference that must be released when the expression is consumed.
+//
+// Returns true if the expression creates/owns a temporary refcounted reference:
+//   - String/Array/Map literals, Call, Binary(non-assignment), Unary -> temporary ref
+//   - Ident -> variable reference, NO temporary ref
+//   - Int/Float/Bool/Null -> value types, no refcount
+//   - Binary(operator="=") -> recursively check RHS of the assignment
+fn nl_exprHasTemporaryRef(expr: map) -> bool {
+    let kind = expr.kind
+    // Value types: no refcount
+    if kind == "Int" || kind == "Float" || kind == "Bool" || kind == "Null" {
+        return false
+    }
+    // Ident: variable reference, no temporary ref
+    if kind == "Ident" {
+        return false
+    }
+    // Assignment expression: recursively check RHS
+    if kind == "Binary" && expr.operator == "=" {
+        return nl_exprHasTemporaryRef(expr.right)
+    }
+    // All other expressions (String, Array, Map, Call, Binary non-assign, Unary, Member, Index):
+    // may create or carry a temporary reference
+    return true
 }
 
 // ============ Expression Lowering ============
@@ -106,9 +242,10 @@ fn nl_lowerExpression(expr: map) -> string {
                 return "(tll_value_incref(" + right + "), array_set(" + idxObj + ".as.array, " + idxVal + ".as.integer, " + right + "), " + right + ")"
             }
             // Normal variable assignment
-            // B.11: Ownership - retain new, release old, then assign
-            // Order: incref(right) first, then free(left), to avoid use-after-free when x=x
-            return "(tll_value_incref(" + right + "), tll_value_free(" + left + "), " + left + " = " + right + ")"
+            // P2-01-B11-R1-R2: Use tll_assign() helper for ownership-safe assignment.
+            // tll_assign: incref(new) FIRST -> free(old) -> store, safe for x=x self-assignment.
+            // RHS evaluated exactly once (passed as argument), no double-evaluation of function calls.
+            return "tll_assign(&" + left + ", " + right + ")"
         }
         let left = nl_lowerExpression(expr.left)
         let right = nl_lowerExpression(expr.right)
@@ -152,7 +289,8 @@ fn nl_lowerExpression(expr: map) -> string {
         }
         // B.11: Ownership - caller retains arguments for user-defined functions
         // Built-in functions (tll_ prefix) are C functions, do not follow TLL refcount rules
-        let isBuiltin = strings.hasPrefix(callee, "tll_")
+        // B.11-R1-R2-R3: Use extensible builtin registry instead of hardcoded || chain
+        let isBuiltin = nl_isBuiltinFunction(callee)
         if isBuiltin == false && arrays.length(args) > 0 {
             let increfExprs: list = []
             let ai = 0
@@ -257,6 +395,18 @@ fn nl_lowerStatement(stmt: map) -> void {
             initExpr = " = " + nl_lowerExpression(stmt.value)
         }
         nl_emit(varType + " " + stmt.name + initExpr + ";")
+        // P2-01-B11-R1-R2-FIX3: If init expression is assignment with Ident RHS (no temporary ref),
+        // the variable holds a borrow, not an owned ref. Increment refcount to give it
+        // independent ownership so function-exit free() is correct (avoids double-free).
+        if stmt.value != null && stmt.value.kind == "Binary" && stmt.value.operator == "=" && !nl_exprHasTemporaryRef(stmt.value) {
+            nl_emit("tll_value_incref(" + stmt.name + ");")
+        }
+        // P2-01-B11-R1-R2-R3: If init expression is Ident (variable reference),
+        // the new variable shares the same object. Increment refcount so both
+        // variables hold independent ownership (avoids use-after-free when one is reassigned).
+        if stmt.value != null && stmt.value.kind == "Ident" {
+            nl_emit("tll_value_incref(" + stmt.name + ");")
+        }
         return
     }
 
@@ -264,7 +414,8 @@ fn nl_lowerStatement(stmt: map) -> void {
     if kind == "Assignment" {
         let target = nl_lowerExpression(stmt.target)
         let value = nl_lowerExpression(stmt.value)
-        nl_emit(target + " = " + value + ";")
+        // P2-01-B11-R1-R2: Use tll_assign() for ownership-safe assignment
+        nl_emit("tll_assign(&" + target + ", " + value + ");")
         return
     }
 
@@ -276,15 +427,19 @@ fn nl_lowerStatement(stmt: map) -> void {
         }
         if stmt.value != null {
             let value = nl_lowerExpression(stmt.value)
+            // B.11-R1: Save return value to temp variable to avoid double evaluation.
+            // Without this, "return f()" would call f() twice (once for incref, once for return),
+            // and if f() uses a parameter that gets freed between the two calls, it causes use-after-free.
+            nl_emit("TLLValue __tll_retval = " + value + ";")
             // B.10: Increment refcount of return value (caller will own it)
-            nl_emit("tll_value_incref(" + value + ");")
-            // B.10: Free all local variables
+            nl_emit("tll_value_incref(__tll_retval);")
+            // B.10: Free all local variables (NOT __tll_retval, caller owns it after incref)
             let vi = 0
             while vi < arrays.length(nl_localVars) {
                 nl_emit("tll_value_free(" + arrays.get(nl_localVars, vi) + ");")
                 vi = vi + 1
             }
-            nl_emit("return " + value + ";")
+            nl_emit("return __tll_retval;")
         } else {
             // B.10: Free all local variables for void return
             let vi = 0
@@ -354,8 +509,28 @@ fn nl_lowerStatement(stmt: map) -> void {
 
     // 表达式语句
     if kind == "ExpressionStatement" {
-        let expr = nl_lowerExpression(stmt.expression)
-        nl_emit(expr + ";")
+        let innerExpr = stmt.expression
+        // P2-01-B11-R1-R2 Blocker 1: Assignment expression result ownership closure.
+        // tll_assign() returns new_value with refcount retained (incref inside).
+        // If RHS is a temporary expression (literal, function call, etc.), the return
+        // value owns the temporary reference and MUST be released to avoid leak.
+        // If RHS is a variable reference (Ident), the return value is a borrow (not own),
+        // so we must NOT release it (would cause UAF for x=x self-assignment).
+        if innerExpr.kind == "Binary" && innerExpr.operator == "=" {
+            let assignExpr = nl_lowerExpression(innerExpr)
+            // P2-01-B11-R1-R2-FIX3: recursively check if assignment carries temporary ref
+            if nl_exprHasTemporaryRef(innerExpr) {
+                nl_emit("{")
+                nl_emit("    TLLValue __tll_assign_result = " + assignExpr + ";")
+                nl_emit("    tll_value_free(__tll_assign_result);")
+                nl_emit("}")
+            } else {
+                nl_emit(assignExpr + ";")
+            }
+        } else {
+            let expr = nl_lowerExpression(innerExpr)
+            nl_emit(expr + ";")
+        }
         return
     }
 
@@ -401,6 +576,16 @@ fn nl_lowerFunction(fnDecl: map) -> void {
 
     // B.10: Reset local variable tracking for refcount management
     nl_localVars = []
+
+    // B.11-R1: Register function parameters in ownership tracking
+    // Parameters are callee-owned for call lifetime and must be released at function exit,
+    // matching Bytecode VM behavior (do_call stores args in locals, free_frame releases them).
+    let pi = 0
+    while pi < arrays.length(fnDecl.params) {
+        let param = arrays.get(fnDecl.params, pi)
+        arrays.push(nl_localVars, param.name)
+        pi = pi + 1
+    }
 
     // 函数体（可能是 Block 节点，也可能直接是语句列表）
     let body = fnDecl.body
