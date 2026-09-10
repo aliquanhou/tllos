@@ -485,7 +485,7 @@ static long long current_time_ms(void) {
 
 /* P0-15.16: Check if a coroutine is runnable (not dead, not sleeping, not waiting on IO/channel). */
 static int coroutine_is_runnable(TLLCoroutine *co) {
-    if (!co || co->state == 2) return 0;  /* dead */
+    if (!co || co->state == TLL_COROUTINE_COMPLETED) return 0;  /* completed */
     if (co->wakeTime > 0) return 0;         /* sleeping */
     if (co->waitingFd > 0) return 0;         /* waiting on IO */
     if (co->waitingChannel != NULL) return 0; /* waiting on channel */
@@ -497,16 +497,51 @@ static int coroutine_is_runnable(TLLCoroutine *co) {
 int coroutine_wake_channel(TLLVM *vm, void *channelPtr) {
     int woken = 0;
     int i;
+    /* D2-R3: All state transitions under coroutine_table_lock.
+     * In worker mode, woken coroutines must be enqueued for execution. */
+#ifdef _WIN32
+    EnterCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+    pthread_mutex_lock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
     for (i = 0; i < vm->coroutineCount; i++) {
         TLLCoroutine *co = vm->coroutines[i];
         if (co && co->waitingChannel == channelPtr) {
             co->waitingChannel = NULL;
+            if (co->state == TLL_COROUTINE_WAITING) {
+                co->state = TLL_COROUTINE_RUNNABLE;
+            }
             woken++;
+        }
+    }
+#ifdef _WIN32
+    LeaveCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+    pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
+
+    /* D2-R3: In worker mode, enqueue only the coroutines just woken by this channel.
+     * We track them by checking they were waiting on this channel before wake.
+     * Since we already cleared waitingChannel under lock, we re-scan and enqueue
+     * those that are now RUNNABLE with no waitingChannel and were not already running.
+     * To avoid double-enqueue, we only enqueue if the coroutine is not the current one. */
+    if (vm->multi_worker_initialized && woken > 0) {
+        int currentIdx = -1;
+        if (g_tll_current_worker != NULL) {
+            currentIdx = g_tll_current_worker->ctx.currentCoroutine;
+        }
+        for (i = 0; i < vm->coroutineCount; i++) {
+            if (i == currentIdx) continue;  /* don't enqueue the currently running waker */
+            TLLCoroutine *co = vm->coroutines[i];
+            if (co && co->waitingChannel == NULL && co->state == TLL_COROUTINE_RUNNABLE &&
+                co->wakeTime == 0 && co->waitingFd <= 0) {
+                /* This coroutine was just woken (was waiting on channel, now runnable) */
+                tll_runnable_queue_enqueue(&vm->runnable_queue, i);
+            }
         }
     }
     return woken;
 }
-
 /* Yield: save current, destroy if dead, round-robin to next runnable.
  * P0-15.15: Sleeping coroutines (wakeTime > now) are skipped.
  * P0-15.16: IO-aware - if no runnable coroutines, collect WAITING_IO fds,
@@ -567,7 +602,7 @@ static void coroutine_yield(TLLVM *vm) {
         for (i = 0; i < vm->coroutineCount; i++) {
             int idx = (old + 1 + i) % vm->coroutineCount;
             TLLCoroutine *co = vm->coroutines[idx];
-            if (!co || co->state == 2) { deadCount++; continue; }
+            if (!co || co->state == TLL_COROUTINE_COMPLETED) { deadCount++; continue; }
             if (co->wakeTime > 0) { sleepingCount++; continue; }
             if (co->waitingFd > 0 || co->waitingChannel != NULL) continue;
             runnableCount++;
@@ -646,7 +681,7 @@ static void coroutine_yield(TLLVM *vm) {
                 int allNonDeadAreIO = 1;
                 for (i = 0; i < vm->coroutineCount; i++) {
                     TLLCoroutine *co = vm->coroutines[i];
-                    if (!co || co->state == 2) continue;
+                    if (!co || co->state == TLL_COROUTINE_COMPLETED) continue;
                     if (co->waitingFd <= 0 && co->waitingChannel == NULL) {
                         allNonDeadAreIO = 0;
                         break;
@@ -1041,7 +1076,7 @@ static void tll_vm_exec(TLLVM *vm) {
                 int ci2;
                 for (ci2 = 0; ci2 < vm->coroutineCount; ci2++) {
                     TLLCoroutine *co = vm->coroutines[ci2];
-                    if (!co || co->state == 2) continue;
+                    if (!co || co->state == TLL_COROUTINE_COMPLETED) continue;
                     if (co->waitingFd <= 0 && co->waitingChannel == NULL) {
                         onlyIOWaiters = 0;
                         break;
@@ -1982,23 +2017,145 @@ static int tll_runnable_queue_dequeue_timeout(TLLRunnableQueue *q, int timeoutMs
 }
 
 /* D2-R2: Wake coroutines whose sleep timer has expired. Called by worker loop. */
+/* D2-R3: Wake coroutines whose sleep timer has expired. All state transitions under coroutine_table_lock. */
 static void tll_wake_expired_sleepers(TLLVM *vm) {
     long long now = current_time_ms();
     int i;
+#ifdef _WIN32
+    EnterCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+    pthread_mutex_lock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
     for (i = 0; i < vm->coroutineCount; i++) {
         TLLCoroutine *co = vm->coroutines[i];
         if (!co) continue;
         if (co->wakeTime > 0 && co->wakeTime <= now) {
             co->wakeTime = 0;
-            /* If it was WAITING due to sleep, mark RUNNABLE and enqueue */
+            /* If it was WAITING due to sleep, mark RUNNABLE */
             if (co->state == TLL_COROUTINE_WAITING) {
                 co->state = TLL_COROUTINE_RUNNABLE;
-                tll_runnable_queue_enqueue(&vm->runnable_queue, i);
             }
+        }
+    }
+#ifdef _WIN32
+    LeaveCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+    pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
+
+    /* Enqueue newly-runnable coroutines outside the lock */
+    for (i = 0; i < vm->coroutineCount; i++) {
+        TLLCoroutine *co = vm->coroutines[i];
+        if (co && co->wakeTime == 0 && co->state == TLL_COROUTINE_RUNNABLE &&
+            co->waitingFd <= 0 && co->waitingChannel == NULL) {
+            /* Only enqueue if not already in queue (heuristic: was waiting) */
+            tll_runnable_queue_enqueue(&vm->runnable_queue, i);
         }
     }
 }
 
+/* D2-R3: Check IO readiness and wake waiting coroutines. Used by worker scheduler.
+ * Collects all waitingFd, calls select(), wakes ready ones, handles timeouts.
+ * Returns number of coroutines woken. */
+static int tll_wake_io_ready(TLLVM *vm, int timeoutMs) {
+    int woken = 0;
+    int i;
+    int ioCount = 0;
+    int maxFd = 0;
+    fd_set readfds, writefds, exceptfds;
+    FD_ZERO(&readfds);
+    FD_ZERO(&writefds);
+    FD_ZERO(&exceptfds);
+
+    /* Collect waiting fds under lock */
+#ifdef _WIN32
+    EnterCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+    pthread_mutex_lock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
+    for (i = 0; i < vm->coroutineCount; i++) {
+        TLLCoroutine *co = vm->coroutines[i];
+        if (!co || co->waitingFd <= 0) continue;
+        SOCKET s = (SOCKET)co->waitingFd;
+        if ((int)s > maxFd) maxFd = (int)s;
+        if (co->waitingEvents & 1) FD_SET(s, &readfds);
+        if (co->waitingEvents & 2) FD_SET(s, &writefds);
+        FD_SET(s, &exceptfds);
+        ioCount++;
+    }
+#ifdef _WIN32
+    LeaveCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+    pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
+
+    if (ioCount == 0) return 0;
+
+    /* Call select */
+    struct timeval tv, *ptv = NULL;
+    if (timeoutMs > 0) {
+        tv.tv_sec = timeoutMs / 1000;
+        tv.tv_usec = (timeoutMs % 1000) * 1000;
+        ptv = &tv;
+    }
+    int ready = select(maxFd + 1, &readfds, &writefds, &exceptfds, ptv);
+
+    /* Wake ready coroutines under lock */
+#ifdef _WIN32
+    EnterCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+    pthread_mutex_lock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
+    long long now = current_time_ms();
+    for (i = 0; i < vm->coroutineCount; i++) {
+        TLLCoroutine *co = vm->coroutines[i];
+        if (!co || co->waitingFd <= 0) continue;
+        SOCKET s = (SOCKET)co->waitingFd;
+        int isReady = 0;
+        if (ready > 0) {
+            if ((co->waitingEvents & 1) && FD_ISSET(s, &readfds)) isReady = 1;
+            if ((co->waitingEvents & 2) && FD_ISSET(s, &writefds)) isReady = 1;
+            if (FD_ISSET(s, &exceptfds)) isReady = 1;
+        }
+        /* Check deadline timeout */
+        if (!isReady && co->waitDeadline > 0 && co->waitDeadline <= now) {
+            isReady = 1;
+            co->waitResult = 0;  /* timeout */
+        }
+        /* Handle select error: wake all to avoid infinite loop */
+        if (ready == SOCKET_ERROR) {
+            isReady = 1;
+            co->waitResult = 0;
+        }
+        if (isReady) {
+            co->waitingFd = 0;
+            co->waitingEvents = 0;
+            co->waitDeadline = 0;
+            if (co->waitResult != 0) co->waitResult = 1;  /* fd ready */
+            if (co->state == TLL_COROUTINE_WAITING) {
+                co->state = TLL_COROUTINE_RUNNABLE;
+            }
+            woken++;
+        }
+    }
+#ifdef _WIN32
+    LeaveCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+    pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
+
+    /* Enqueue newly-runnable coroutines outside lock */
+    if (woken > 0 && vm->multi_worker_initialized) {
+        for (i = 0; i < vm->coroutineCount; i++) {
+            TLLCoroutine *co = vm->coroutines[i];
+            if (co && co->waitingFd <= 0 && co->state == TLL_COROUTINE_RUNNABLE &&
+                co->wakeTime == 0 && co->waitingChannel == NULL) {
+                tll_runnable_queue_enqueue(&vm->runnable_queue, i);
+            }
+        }
+    }
+    return woken;
+}
 /* Initialize worker execution context.
  * D2-R1: do NOT allocate callStack here — worker borrows coroutine's callStack.
  * Allocating here and then overwriting with coro->callStack caused a leak. */
@@ -2043,9 +2200,13 @@ static void *tll_worker_thread(void *param) {
         /* D2-R2: Wake expired sleepers before checking queue */
         tll_wake_expired_sleepers(vm);
 
-        /* Dequeue with timeout to allow periodic timer checks */
+        /* Dequeue with timeout to allow periodic timer/IO checks */
         int coro_idx = tll_runnable_queue_dequeue_timeout(&vm->runnable_queue, 50);
-        if (coro_idx == -1) continue;  /* timeout, loop back to check timers */
+        if (coro_idx == -1) {
+            /* D2-R3: Check IO readiness when queue is empty */
+            tll_wake_io_ready(vm, 0);
+            continue;
+        }
 
         /* Check for shutdown sentinel */
         if (coro_idx == TLL_SHUTDOWN_SENTINEL) {

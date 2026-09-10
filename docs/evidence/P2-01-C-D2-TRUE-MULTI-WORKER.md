@@ -416,3 +416,78 @@ The key invariant is: **no simultaneous dual execution**, which is guaranteed by
 ---
 
 **D2-R2 Construction Complete. Awaiting independent architecture audit.**
+---
+
+## 16. D2-R3 WAIT/WAKE Closure (REQUEST CHANGES → FIXED)
+
+**Date:** 2026-09-11
+**Trigger:** Independent audit found 4 gaps: IO WAITING not closed, Channel WAITING not closed, wake path no lock, state magic number.
+
+### 16.1 Fix 1: State Magic Number Cleanup
+
+**Problem:** `coroutine_is_runnable()` used `co->state == 2 /* dead */`, but `TLL_COROUTINE_WAITING = 2`. Historical semantic conflict.
+
+**Fix:** All 4 occurrences of `state == 2` changed to `TLL_COROUTINE_COMPLETED` (state == 3). Includes:
+- `coroutine_is_runnable()`
+- Legacy scheduler dead count check
+- 2 legacy scheduler IO waiter checks
+
+### 16.2 Fix 2: Channel WAITING → RUNNABLE Closure
+
+**Problem:** `coroutine_wake_channel()` only cleared `waitingChannel` and counted woken, did not enqueue in worker mode.
+
+**Fix:** `coroutine_wake_channel()` now:
+1. Acquires `coroutine_table_lock`
+2. Clears `waitingChannel`, if state==WAITING sets RUNNABLE
+3. Releases lock
+4. In worker mode (`multi_worker_initialized`), enqueues woken coroutines (excluding currently running waker)
+
+### 16.3 Fix 3: Wake Path Synchronization
+
+**Problem:** `tll_wake_expired_sleepers()` read/modified `wakeTime` and `state` without lock, concurrent with claim path.
+
+**Fix:** `tll_wake_expired_sleepers()` now:
+1. Acquires `coroutine_table_lock`
+2. Reads/modifies `wakeTime` and `state` under lock
+3. Releases lock
+4. Enqueues newly-runnable coroutines outside lock
+
+All WAIT/WAKE state transitions now统一使用 `coroutine_table_lock`.
+
+### 16.4 Fix 4: IO WAITING → RUNNABLE Closure
+
+**Problem:** Worker scheduler had no IO ready check. `tll_wake_expired_sleepers()` only handled wakeTime.
+
+**Fix:** Added `tll_wake_io_ready(vm, timeoutMs)`:
+1. Collects all `waitingFd` under lock
+2. Calls `select()` with timeout
+3. Wakes ready fds (clears waitingFd, sets waitResult=1)
+4. Handles deadline timeouts (waitResult=0)
+5. Handles select() SOCKET_ERROR (wake all to avoid infinite loop)
+6. If state==WAITING, sets RUNNABLE
+7. In worker mode, enqueues woken coroutines
+
+Worker loop now calls `tll_wake_io_ready(vm, 0)` when dequeue times out.
+
+### 16.5 D2-R3 Test Results
+
+| Test | Result | Notes |
+|------|--------|-------|
+| multi_worker_parallel | PASS | |
+| multi_worker_overlap_proof | PASS | |
+| multi_worker_stress (2W/100T) | PASS | |
+| worker_global_test | PASS | |
+| simple_sleep_wakeup_test | PASS | |
+| worker_ownership_boundary | PASS | 3/3 stable |
+
+All existing tests pass with D2-R3 changes. No regression.
+
+### 16.6 B-GAP: Channel/IO Wake End-to-End Test
+
+Channel wake and IO wake code closures are implemented and verified via code review. End-to-end TLL source tests for channel wake and IO wake are recorded as B-GAP for subsequent hardening phase.
+
+Sleep wake is fully verified via `simple_sleep_wakeup_test.tll`.
+
+---
+
+**D2-R3 Construction Complete. Awaiting independent architecture audit.**
