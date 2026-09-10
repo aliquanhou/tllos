@@ -100,20 +100,25 @@ typedef struct {
     int waitResult;  /* P0-RUNTIME-08-R2-FINAL-CLOSURE-3: 1=fd ready, 0=timeout expired */
 } TLLCoroutine;
 
-/* === VM === */
+/* === Execution Context (P2-01-C-D1: per-worker execution-local state) === */
 typedef struct {
-    TLLProgram *program;
     TLLFrame **callStack;
     int callStackSize;
     int callStackCapacity;
+    int currentCoroutine;
+    int invokeTargetStackSize; /* -1 = run until empty, N = stop when callStackSize <= N */
+} TLLExecutionContext;
+
+/* === VM === */
+typedef struct {
+    TLLProgram *program;
+    TLLExecutionContext ctx;  /* P2-01-C-D1: execution-local state (per-worker in future) */
     TLLValue *globals;
     int globalCount;
-    int invokeTargetStackSize; /* -1 = run until empty, N = stop when callStackSize <= N */
     /* === Coroutine Scheduler (per-VM, P0-15.15) === */
     TLLCoroutine **coroutines;
     int coroutineCount;
     int coroutineCapacity;
-    int currentCoroutine;
 } TLLVM;
 
 /* === Opcode constants === */

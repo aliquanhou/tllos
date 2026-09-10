@@ -1,0 +1,126 @@
+// P2-01-C-D1 Dynamic Frame Test
+// Tests: small/medium/large register functions, recursion, nested calls,
+// return values, multiple return paths, frame pool reuse.
+
+// === Small register function (simple arithmetic) ===
+fn add(a: int, b: int) -> int {
+    return a + b
+}
+
+// === Medium register function (multiple locals) ===
+fn compute(x: int, y: int) -> int {
+    let a = x + y
+    let b = x - y
+    let c = a * b
+    let d = c / 2
+    return d + a
+}
+
+// === Large register function (many locals, arrays) ===
+fn large_func(n: int) -> int {
+    let a1 = n
+    let a2 = n * 2
+    let a3 = n * 3
+    let a4 = n * 4
+    let a5 = n * 5
+    let arr = [a1, a2, a3, a4, a5]
+    let sum = 0
+    for i in 0..5 {
+        sum = sum + arr[i]
+    }
+    return sum
+}
+
+// === Recursive function (deep call stack) ===
+fn factorial(n: int) -> int {
+    if n <= 1 {
+        return 1
+    }
+    return n * factorial(n - 1)
+}
+
+// === Multiple return paths ===
+fn classify(n: int) -> string {
+    if n < 0 {
+        return "negative"
+    }
+    if n == 0 {
+        return "zero"
+    }
+    if n % 2 == 0 {
+        return "even"
+    }
+    return "odd"
+}
+
+// === Nested calls (call chain) ===
+fn inner(x: int) -> int {
+    return x * 2
+}
+
+fn middle(x: int) -> int {
+    return inner(x) + 1
+}
+
+fn outer(x: int) -> int {
+    return middle(x) * 3
+}
+
+// === Return parameter directly (tests INVOKE_RET_REG) ===
+fn identity(x: int) -> int {
+    return x
+}
+
+fn identity_str(s: string) -> string {
+    return s
+}
+
+// === Map return (tests container + return) ===
+fn make_map(key: string, val: int) -> map {
+    let m = {}
+    m[key] = val
+    return m
+}
+
+fn main() -> void {
+    io.println("=== Dynamic Frame Test ===")
+    
+    // Small function
+    io.println("add(3,4)=" + convert.toString(add(3, 4)))
+    
+    // Medium function
+    io.println("compute(10,5)=" + convert.toString(compute(10, 5)))
+    
+    // Large function
+    io.println("large_func(2)=" + convert.toString(large_func(2)))
+    
+    // Recursion
+    io.println("factorial(10)=" + convert.toString(factorial(10)))
+    
+    // Multiple return paths
+    io.println("classify(-5)=" + classify(-5))
+    io.println("classify(0)=" + classify(0))
+    io.println("classify(4)=" + classify(4))
+    io.println("classify(7)=" + classify(7))
+    
+    // Nested calls
+    io.println("outer(5)=" + convert.toString(outer(5)))
+    
+    // Identity (return parameter)
+    io.println("identity(42)=" + convert.toString(identity(42)))
+    io.println("identity_str(hello)=" + identity_str("hello"))
+    
+    // Map return
+    let m = make_map("answer", 42)
+    io.println("map[answer]=" + convert.toString(m["answer"]))
+    
+    // Frame pool reuse (repeated calls)
+    let total = 0
+    for i in 0..100 {
+        total = total + add(i, 1)
+    }
+    io.println("repeated add sum=" + convert.toString(total))
+    
+    io.println("=== ALL TESTS PASSED ===")
+}
+main()

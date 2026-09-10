@@ -1,0 +1,71 @@
+// P2-01-C-D1 Performance Benchmark
+// Measures function call throughput and memory usage with Dynamic Frame.
+
+fn empty_fn() -> void {
+    // empty function - minimal frame
+}
+
+fn add_one(x: int) -> int {
+    return x + 1
+}
+
+fn compute_many(a: int, b: int, c: int, d: int, e: int) -> int {
+    let r1 = a + b
+    let r2 = c - d
+    let r3 = r1 * r2
+    let r4 = r3 + e
+    let r5 = r4 / 2
+    return r5 + r1
+}
+
+fn main() -> void {
+    io.println("=== P2-01-C-D1 Performance Benchmark ===")
+    
+    // Benchmark 1: empty function calls (minimal frame)
+    let iterations = 100000
+    let start = time.now()
+    for i in 0..iterations {
+        empty_fn()
+    }
+    let elapsed = time.now() - start
+    let throughput = convert.toInt(iterations / elapsed)
+    io.println("Empty fn calls: " + convert.toString(iterations) + " in " + convert.toString(elapsed) + "s = " + convert.toString(throughput) + " calls/sec")
+    
+    // Benchmark 2: simple function calls with return
+    let sum = 0
+    let start2 = time.now()
+    for i in 0..iterations {
+        sum = add_one(sum)
+    }
+    let elapsed2 = time.now() - start2
+    let throughput2 = convert.toInt(iterations / elapsed2)
+    io.println("add_one calls: " + convert.toString(iterations) + " in " + convert.toString(elapsed2) + "s = " + convert.toString(throughput2) + " calls/sec")
+    io.println("sum=" + convert.toString(sum))
+    
+    // Benchmark 3: complex function (more registers/locals)
+    let result = 0
+    let start3 = time.now()
+    for i in 0..(iterations / 10) {
+        result = compute_many(i, i+1, i+2, i+3, i+4)
+    }
+    let elapsed3 = time.now() - start3
+    let count3 = iterations / 10
+    let throughput3 = convert.toInt(count3 / elapsed3)
+    io.println("compute_many calls: " + convert.toString(count3) + " in " + convert.toString(elapsed3) + "s = " + convert.toString(throughput3) + " calls/sec")
+    io.println("result=" + convert.toString(result))
+    
+    // Benchmark 4: recursive calls (deep call stack)
+    fn fib(n: int) -> int {
+        if n <= 1 {
+            return n
+        }
+        return fib(n - 1) + fib(n - 2)
+    }
+    let start4 = time.now()
+    let fib_result = fib(25)
+    let elapsed4 = time.now() - start4
+    io.println("fib(25)=" + convert.toString(fib_result) + " in " + convert.toString(elapsed4) + "s")
+    
+    io.println("=== Benchmark Complete ===")
+}
+main()
