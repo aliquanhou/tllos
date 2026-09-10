@@ -1,4 +1,4 @@
-/* TLL Bootstrap VM - executes bytecode opcodes.
+﻿/* TLL Bootstrap VM - executes bytecode opcodes.
  * This is the Host/Bootstrap layer. Language semantics live in runtime/vm.tll.
  */
 #include "tllvm.h"
@@ -219,6 +219,7 @@ int PASCAL select(int, fd_set*, fd_set*, fd_set*, const struct timeval*);
 #include <alloca.h>
 typedef int SOCKET;
 #define INVALID_SOCKET (-1)
+#define SOCKET_ERROR (-1)
 #define closesocket(s) close(s)
 #endif
 
@@ -1595,6 +1596,12 @@ static void tll_vm_exec(TLLVM *vm) {
                     if (co && fd > 0) {
                         co->waitingFd = fd;
                         co->waitingEvents = 2;  /* WRITE */
+                        co->waitDeadline = 0;
+                        /* P0-RUNTIME-08-R2: only set deadline when timeout operand is present */
+                        if (inst->operandCount > 1 && regs[b].type == TLL_INT && regs[b].as.integer > 0) {
+                            long long now = current_time_ms();
+                            co->waitDeadline = now + (long long)regs[b].as.integer;
+                        }
                     }
                 }
                 coroutine_yield(vm);

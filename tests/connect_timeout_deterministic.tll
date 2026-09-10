@@ -1,0 +1,61 @@
+// P0-RUNTIME-08-R2 FINAL CLOSURE-2: Connect Timeout Deterministic Test
+// Verifies that connectWithTimeout() provides a TRUE runtime-level hard bound.
+// Uses non-blocking connect + waitWriteWithTimeout + getsockopt(SO_ERROR).
+
+from "../stdlib/p2p" import connectWithTimeout
+
+io.println("=== Connect Timeout Deterministic Test ===")
+
+// Test 1: Connect to non-existent port with 2500ms timeout
+io.println("")
+io.println("Test 1: connect to closed port, timeout=2500ms")
+let start1 = time.nowMs()
+let fd1 = connectWithTimeout("127.0.0.1", 19998, 2500)
+let elapsed1 = time.nowMs() - start1
+io.println("  fd=" + convert.toString(fd1) + " elapsed=" + convert.toString(elapsed1) + "ms")
+
+let pass1 = true
+if fd1 >= 0 {
+    io.println("  FAIL: should return -1 for closed port")
+    pass1 = false
+} else {
+    io.println("  OK: returned -1")
+}
+if elapsed1 < 2000 || elapsed1 > 5000 {
+    io.println("  FAIL: elapsed " + convert.toString(elapsed1) + "ms out of bounds [2000, 5000]")
+    pass1 = false
+} else {
+    io.println("  OK: elapsed " + convert.toString(elapsed1) + "ms within bounds")
+}
+
+// Test 2: Connect to non-existent port with 1000ms timeout
+io.println("")
+io.println("Test 2: connect to closed port, timeout=1000ms")
+let start2 = time.nowMs()
+let fd2 = connectWithTimeout("127.0.0.1", 19997, 1000)
+let elapsed2 = time.nowMs() - start2
+io.println("  fd=" + convert.toString(fd2) + " elapsed=" + convert.toString(elapsed2) + "ms")
+
+let pass2 = true
+if fd2 >= 0 {
+    io.println("  FAIL: should return -1")
+    pass2 = false
+} else {
+    io.println("  OK: returned -1")
+}
+if elapsed2 < 800 || elapsed2 > 3000 {
+    io.println("  FAIL: elapsed " + convert.toString(elapsed2) + "ms out of bounds [800, 3000]")
+    pass2 = false
+} else {
+    io.println("  OK: elapsed " + convert.toString(elapsed2) + "ms within bounds")
+}
+
+// Summary
+io.println("")
+io.println("=== Summary ===")
+if pass1 && pass2 {
+    io.println("PASS: Connect timeout is truly bounded at runtime level")
+    io.println("TEST_RESULT: PASS")
+} else {
+    io.println("TEST_RESULT: FAIL")
+}

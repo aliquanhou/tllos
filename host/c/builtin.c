@@ -1900,6 +1900,42 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
         }
         return tll_int(-1);
     }
+    if (idx == 221) { /* tcp.connectNonBlocking(host, port) -> fd (non-blocking connect in progress) */
+        const char *host = (argCount > 0 && args[0].type == TLL_STRING) ? args[0].as.string : "127.0.0.1";
+        int port = (argCount > 1 && args[1].type == TLL_INT) ? (int)args[1].as.integer : 9000;
+#ifdef _WIN32
+        static int wsa_init_nb = 0;
+        if (!wsa_init_nb) { WSADATA wsa; WSAStartup(MAKEWORD(2,2), &wsa); wsa_init_nb = 1; }
+#endif
+        SOCKET s = socket(AF_INET, SOCK_STREAM, 0);
+        if (s == INVALID_SOCKET) return tll_int(-1);
+        /* Set non-blocking mode */
+#ifdef _WIN32
+        unsigned long mode = 1;
+        ioctlsocket(s, FIONBIO, &mode);
+#else
+        int flags = fcntl(s, F_GETFL, 0);
+        fcntl(s, F_SETFL, flags | O_NONBLOCK);
+#endif
+        struct sockaddr_in addr;
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = inet_addr(host);
+        addr.sin_port = htons((unsigned short)port);
+        int ret = connect(s, (struct sockaddr*)&addr, sizeof(addr));
+        /* Non-blocking connect: returns -1 with EINPROGRESS/WSAEWOULDBLOCK, that's expected */
+        /* Return fd immediately; caller should waitWriteWithTimeout then getSocketError */
+        return tll_int((long long)s);
+    }
+    if (idx == 222) { /* tcp.getSocketError(fd) -> int (0=connected, !=0=error code) */
+        if (argCount > 0 && args[0].type == TLL_INT) {
+            SOCKET s = (SOCKET)args[0].as.integer;
+            int so_error = 0;
+            socklen_t len = sizeof(so_error);
+            getsockopt(s, SOL_SOCKET, SO_ERROR, (char*)&so_error, &len);
+            return tll_int((long long)so_error);
+        }
+        return tll_int(-1);
+    }
     if (idx == 144) { /* coroutine.wakeChannel(channelMap) -> int number woken */
         if (argCount > 0 && args[0].type == TLL_MAP) {
             void *chPtr = (void*)args[0].as.map;

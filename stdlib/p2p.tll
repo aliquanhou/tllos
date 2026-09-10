@@ -18,6 +18,32 @@ fn createP2PNode(nodeId: string, host: string, port: int) -> map {
     }
 }
 
+// Connect with hard timeout (P0-RUNTIME-08-R2 FINAL CLOSURE-2)
+// Uses non-blocking connect + waitWriteWithTimeout + getsockopt(SO_ERROR)
+// This provides a TRUE runtime-level hard bound on connect, not an OS-dependent assumption.
+fn connectWithTimeout(host: string, port: int, timeoutMs: int) -> int {
+    let fd = tcp.connectNonBlocking(host, port)
+    if fd < 0 {
+        return -1
+    }
+    // Wait for socket to become writable (connect complete or failed)
+    let waitStart = time.nowMs()
+    coroutine.waitWriteWithTimeout(fd, timeoutMs)
+    let waitElapsed = time.nowMs() - waitStart
+    // If timeout fired before socket became writable, connect failed
+    if waitElapsed >= timeoutMs - 50 {
+        tcp.close(fd)
+        return -1
+    }
+    // Check socket error via getsockopt(SO_ERROR)
+    let soError = tcp.getSocketError(fd)
+    if soError != 0 {
+        tcp.close(fd)
+        return -1
+    }
+    return fd
+}
+
 // Convert integer to 4-digit hex string
 fn intToHex4(n: int) -> string {
     let _ih_hex = "0123456789abcdef"
@@ -111,7 +137,7 @@ fn p2pListen(node: map) -> bool {
 
 // Connect to a peer (uses non-blocking waitRead for handshake response)
 fn p2pConnect(node: map, host: string, port: int) -> bool {
-    let _pc_fd = tcp.connect(host, port)
+    let _pc_fd = connectWithTimeout(host, port, 2500)
     if _pc_fd < 0 {
         io.println("[" + node.nodeId + "] Failed to connect to " + host + ":" + convert.toString(port))
         return false
@@ -158,8 +184,8 @@ fn p2pConnect(node: map, host: string, port: int) -> bool {
 // Connect to a peer with bounded retry (P0-RUNTIME-08-R2)
 // Contract: MAX_ATTEMPTS=5, exponential backoff, observable, bounded
 // Total budget: ~24.5s worst case (5*(2.5s connect + 2s handshake) + 2s backoff)
-// Note: tcp.connect() is NOT modified; 2.5s connect upper bound is an engineering
-// assumption for Windows 127.0.0.1 topology, not an absolute TCP API guarantee.
+// Note: connectWithTimeout() provides a TRUE runtime-level hard bound (2500ms)
+// via non-blocking connect + waitWriteWithTimeout + getsockopt(SO_ERROR).
 fn p2pConnectWithRetry(node: map, host: string, port: int) -> bool {
     let MAX_ATTEMPTS = 5
     let BACKOFF_BASE_MS = 200
@@ -170,7 +196,7 @@ fn p2pConnectWithRetry(node: map, host: string, port: int) -> bool {
         let attemptStart = time.nowMs()
         io.println("[" + node.nodeId + "] CONNECT_ATTEMPT attempt=" + convert.toString(attempt) + "/" + convert.toString(MAX_ATTEMPTS) + " host=" + host + " port=" + convert.toString(port))
 
-        let fd = tcp.connect(host, port)
+        let fd = connectWithTimeout(host, port, 2500)
         let elapsed = time.nowMs() - attemptStart
 
         if fd >= 0 {

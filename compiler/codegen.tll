@@ -1899,6 +1899,22 @@ fn cg_compileCall(expr: map) -> int {
         return resultReg
     }
 
+    // P0-RUNTIME-08-R2: coroutine.waitWriteWithTimeout(fd, timeoutMs) -> WAIT_WRITE with deadline
+    if callee["kind"] == "Member" && callee.object["kind"] == "Ident" && callee.object["name"] == "coroutine" && callee["property"] == "waitWriteWithTimeout" {
+        if arrays.length(args) > 0 {
+            let fdReg = cg_compileExpression(arrays.get(args, 0))
+            let timeoutReg = 0
+            if arrays.length(args) > 1 {
+                timeoutReg = cg_compileExpression(arrays.get(args, 1))
+            } else {
+                timeoutReg = cg_addConstant(0)
+            }
+            cg_emit(OP_WAIT_WRITE, [fdReg, timeoutReg])
+        }
+        cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
+        return resultReg
+    }
+
     // P0-15.16: coroutine.waitChannel(channelMap) -> WAIT_CHANNEL opcode
     if callee["kind"] == "Member" && callee.object["kind"] == "Ident" && callee.object["name"] == "coroutine" && callee["property"] == "waitChannel" {
         if arrays.length(args) > 0 {
@@ -2263,6 +2279,8 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
         if fnName == "select" { return 141 }
         if fnName == "tryRecv" { return 142 }
         if fnName == "trySend" { return 143 }
+        if fnName == "connectNonBlocking" { return 221 }
+        if fnName == "getSocketError" { return 222 }
     }
     if modName == "coroutine" {
         if fnName == "wakeChannel" { return 144 }
