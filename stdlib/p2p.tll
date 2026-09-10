@@ -27,11 +27,11 @@ fn connectWithTimeout(host: string, port: int, timeoutMs: int) -> int {
         return -1
     }
     // Wait for socket to become writable (connect complete or failed)
-    let waitStart = time.nowMs()
-    coroutine.waitWriteWithTimeout(fd, timeoutMs)
-    let waitElapsed = time.nowMs() - waitStart
-    // If timeout fired before socket became writable, connect failed
-    if waitElapsed >= timeoutMs - 50 {
+    // P0-RUNTIME-08-R2-FINAL-CLOSURE-3: use waitWriteWithTimeout return value
+    // true = fd writable/READY, false = deadline expired/TIMEOUT
+    let ready = coroutine.waitWriteWithTimeout(fd, timeoutMs)
+    // P0-RUNTIME-08-R2-FINAL-CLOSURE-3: waitWriteWithTimeout returns int (1=ready, 0=timeout)
+    if ready == 0 {
         tcp.close(fd)
         return -1
     }

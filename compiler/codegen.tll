@@ -1884,8 +1884,12 @@ fn cg_compileCall(expr: map) -> int {
                 timeoutReg = cg_addConstant(0)
             }
             cg_emit(OP_WAIT_READ, [fdReg, timeoutReg])
+            // P0-RUNTIME-08-R2-FINAL-CLOSURE-3: OP_WAIT_READ returns waitResult in fdReg (1=ready, 0=timeout)
+            let zeroReg = cg_addConstant(0)
+            cg_emit(OP_ADD, [resultReg, fdReg, zeroReg])
+        } else {
+            cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
         }
-        cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
         return resultReg
     }
 
@@ -1910,8 +1914,12 @@ fn cg_compileCall(expr: map) -> int {
                 timeoutReg = cg_addConstant(0)
             }
             cg_emit(OP_WAIT_WRITE, [fdReg, timeoutReg])
+            // P0-RUNTIME-08-R2-FINAL-CLOSURE-3: OP_WAIT_WRITE returns waitResult in fdReg (1=ready, 0=timeout)
+            let zeroReg2 = cg_addConstant(0)
+            cg_emit(OP_ADD, [resultReg, fdReg, zeroReg2])
+        } else {
+            cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
         }
-        cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
         return resultReg
     }
 

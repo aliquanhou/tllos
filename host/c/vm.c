@@ -656,6 +656,7 @@ static void coroutine_yield(TLLVM *vm) {
                             co->waitingFd = 0;
                             co->waitingEvents = 0;
                             co->waitDeadline = 0;
+                            co->waitResult = 1;  /* fd ready */
                         }
                     }
                 }
@@ -669,6 +670,7 @@ static void coroutine_yield(TLLVM *vm) {
                         co->waitingFd = 0;
                         co->waitingEvents = 0;
                         co->waitDeadline = 0;
+                        co->waitResult = 0;  /* timeout expired */
                     }
                 }
                 /* P0-RUNTIME-08-R2: Handle select() SOCKET_ERROR.
@@ -684,6 +686,7 @@ static void coroutine_yield(TLLVM *vm) {
                         co->waitingFd = 0;
                         co->waitingEvents = 0;
                         co->waitDeadline = 0;
+                        co->waitResult = 0;  /* socket error, treat as failure */
                     }
                 }
             } else {
@@ -1585,6 +1588,11 @@ static void tll_vm_exec(TLLVM *vm) {
                 coroutine_yield(vm);
                 frame = vm->callStack[vm->callStackSize - 1];
                 regs = frame->registers;
+                /* Return waitResult in regs[a]: 1=fd ready, 0=timeout */
+                if (vm->coroutineCount > 0 && vm->currentCoroutine < vm->coroutineCount) {
+                    TLLCoroutine *co = vm->coroutines[vm->currentCoroutine];
+                    if (co) regs[a] = tll_int(co->waitResult);
+                }
                 break;
             }
             case OP_WAIT_WRITE: {
@@ -1607,6 +1615,11 @@ static void tll_vm_exec(TLLVM *vm) {
                 coroutine_yield(vm);
                 frame = vm->callStack[vm->callStackSize - 1];
                 regs = frame->registers;
+                /* Return waitResult in regs[a]: 1=fd ready, 0=timeout */
+                if (vm->coroutineCount > 0 && vm->currentCoroutine < vm->coroutineCount) {
+                    TLLCoroutine *co = vm->coroutines[vm->currentCoroutine];
+                    if (co) regs[a] = tll_int(co->waitResult);
+                }
                 break;
             }
             case OP_WAIT_CHANNEL: {

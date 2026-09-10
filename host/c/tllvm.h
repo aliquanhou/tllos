@@ -97,6 +97,7 @@ typedef struct {
     void *waitingChannel; /* NULL=not waiting on channel, else TLLMap* channel pointer */
     /* P0-RUNTIME-08-R2: IO wait deadline (0=no timeout, >0=ms timestamp; scheduler wakes on expiry) */
     long long waitDeadline;
+    int waitResult;  /* P0-RUNTIME-08-R2-FINAL-CLOSURE-3: 1=fd ready, 0=timeout expired */
 } TLLCoroutine;
 
 /* === VM === */

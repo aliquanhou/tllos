@@ -7,6 +7,9 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <ctype.h>
+#ifndef _WIN32
+#include <fcntl.h>  /* F_GETFL/F_SETFL/O_NONBLOCK for non-blocking connect */
+#endif
 
 #ifndef S_ISREG
 #define S_ISREG(m) (((m) & 0170000) == 0100000)
@@ -1909,29 +1912,63 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
 #endif
         SOCKET s = socket(AF_INET, SOCK_STREAM, 0);
         if (s == INVALID_SOCKET) return tll_int(-1);
-        /* Set non-blocking mode */
+        /* Set non-blocking mode - FAIL CLOSED */
 #ifdef _WIN32
         unsigned long mode = 1;
-        ioctlsocket(s, FIONBIO, &mode);
+        if (ioctlsocket(s, FIONBIO, &mode) != 0) {
+            closesocket(s);
+            return tll_int(-1);
+        }
 #else
         int flags = fcntl(s, F_GETFL, 0);
-        fcntl(s, F_SETFL, flags | O_NONBLOCK);
+        if (flags < 0) {
+            close(s);
+            return tll_int(-1);
+        }
+        if (fcntl(s, F_SETFL, flags | O_NONBLOCK) < 0) {
+            close(s);
+            return tll_int(-1);
+        }
 #endif
         struct sockaddr_in addr;
         addr.sin_family = AF_INET;
         addr.sin_addr.s_addr = inet_addr(host);
         addr.sin_port = htons((unsigned short)port);
         int ret = connect(s, (struct sockaddr*)&addr, sizeof(addr));
-        /* Non-blocking connect: returns -1 with EINPROGRESS/WSAEWOULDBLOCK, that's expected */
-        /* Return fd immediately; caller should waitWriteWithTimeout then getSocketError */
-        return tll_int((long long)s);
+        if (ret == 0) {
+            /* Case A: immediate success - return fd */
+            return tll_int((long long)s);
+        }
+        /* ret == -1: check if connection is in progress or immediate failure */
+#ifdef _WIN32
+        int err = WSAGetLastError();
+        if (err == WSAEWOULDBLOCK) {
+            /* Case B: connection in progress - return fd, caller waits */
+            return tll_int((long long)s);
+        }
+#else
+        if (errno == EINPROGRESS) {
+            /* Case B: connection in progress - return fd, caller waits */
+            return tll_int((long long)s);
+        }
+#endif
+        /* Case C: immediate failure - close fd and return -1 */
+#ifdef _WIN32
+        closesocket(s);
+#else
+        close(s);
+#endif
+        return tll_int(-1);
     }
-    if (idx == 222) { /* tcp.getSocketError(fd) -> int (0=connected, !=0=error code) */
+    if (idx == 222) { /* tcp.getSocketError(fd) -> int (0=connected, !=0=error code, -1=getsockopt itself failed) */
         if (argCount > 0 && args[0].type == TLL_INT) {
             SOCKET s = (SOCKET)args[0].as.integer;
             int so_error = 0;
             socklen_t len = sizeof(so_error);
-            getsockopt(s, SOL_SOCKET, SO_ERROR, (char*)&so_error, &len);
+            if (getsockopt(s, SOL_SOCKET, SO_ERROR, (char*)&so_error, &len) != 0) {
+                /* getsockopt itself failed - FAIL CLOSED: return -1 (connection failed) */
+                return tll_int(-1);
+            }
             return tll_int((long long)so_error);
         }
         return tll_int(-1);
