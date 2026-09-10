@@ -491,3 +491,82 @@ Sleep wake is fully verified via `simple_sleep_wakeup_test.tll`.
 ---
 
 **D2-R3 Construction Complete. Awaiting independent architecture audit.**
+---
+
+## 17. D2-R3.1 Queue Wake Exactness Closure (REQUEST CHANGES → FIXED)
+
+**Date:** 2026-09-11
+**Trigger:** Independent audit found: wake paths used "full-table scan RUNNABLE coroutine" heuristic for enqueue, could not prove only just-woken coroutines were enqueued — potential duplicate runnable queue entries.
+
+### 17.1 Problem
+
+All three wake functions (`tll_wake_expired_sleepers`, `tll_wake_io_ready`, `coroutine_wake_channel`) used the same pattern:
+1. Under lock: wake some coroutines (WAITING → RUNNABLE)
+2. Release lock
+3. **Full-table scan**: find all coroutines matching `RUNNABLE && wakeTime==0 && waitingFd<=0 && waitingChannel==NULL`
+4. Enqueue all of them
+
+This heuristic could not distinguish:
+- Just-woken coroutines (should be enqueued)
+- Already-RUNNABLE coroutines (should NOT be re-enqueued)
+
+Result: potential duplicate queue entries, wasted worker claim attempts.
+
+### 17.2 Fix: Wake List / Exact-Once Enqueue
+
+All three wake functions now use a **wake list**:
+
+```text
+under coroutine_table_lock:
+    if coroutine transitions WAITING → RUNNABLE:
+        record index into local wakeList[]
+
+release lock
+
+for each recorded index in wakeList[]:
+    enqueue exactly once
+```
+
+Key invariant: **Only true WAITING → RUNNABLE transitions are recorded and enqueued.**
+Already-RUNNABLE coroutines are never re-enqueued.
+
+### 17.3 Functions Modified
+
+| Function | Change |
+|----------|--------|
+| `coroutine_wake_channel()` | Added `wakeList[256]`, records only WAITING→RUNNABLE transitions, enqueues only recorded indexes |
+| `tll_wake_expired_sleepers()` | Same wake list pattern |
+| `tll_wake_io_ready()` | Same wake list pattern |
+
+### 17.4 Exactly-Once Rule
+
+```text
+WAITING → RUNNABLE  =  enqueue trigger (exactly once)
+RUNNABLE → RUNNABLE  =  NO enqueue
+```
+
+This is now enforced by code structure, not heuristic.
+
+### 17.5 Test Results
+
+All 6 existing worker tests PASS with D2-R3.1 changes:
+
+| Test | Result |
+|------|--------|
+| multi_worker_parallel | PASS |
+| multi_worker_overlap_proof | PASS |
+| multi_worker_stress (2W/100T) | PASS |
+| worker_global_test | PASS |
+| simple_sleep_wakeup_test | PASS |
+| worker_ownership_boundary | PASS |
+
+No regression.
+
+### 17.6 B-GAP (unchanged from R3)
+
+- Channel/IO Wake end-to-end TLL source tests: B-GAP (code closure verified via source audit + wake list mechanism)
+- Sleep Wake: fully verified via `simple_sleep_wakeup_test.tll`
+
+---
+
+**D2-R3.1 Construction Complete. Awaiting independent architecture audit.**

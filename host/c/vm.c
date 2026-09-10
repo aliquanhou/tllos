@@ -497,8 +497,11 @@ static int coroutine_is_runnable(TLLCoroutine *co) {
 int coroutine_wake_channel(TLLVM *vm, void *channelPtr) {
     int woken = 0;
     int i;
-    /* D2-R3: All state transitions under coroutine_table_lock.
-     * In worker mode, woken coroutines must be enqueued for execution. */
+    /* D2-R3.1: Wake list for exact-once enqueue.
+     * Only coroutines that transition WAITING -> RUNNABLE in this call are enqueued. */
+    int wakeList[256];
+    int wakeCount = 0;
+
 #ifdef _WIN32
     EnterCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
 #else
@@ -508,8 +511,13 @@ int coroutine_wake_channel(TLLVM *vm, void *channelPtr) {
         TLLCoroutine *co = vm->coroutines[i];
         if (co && co->waitingChannel == channelPtr) {
             co->waitingChannel = NULL;
+            /* D2-R3.1: Only record if this is a true WAITING -> RUNNABLE transition.
+             * Already-RUNNABLE coroutines are NOT enqueued again. */
             if (co->state == TLL_COROUTINE_WAITING) {
                 co->state = TLL_COROUTINE_RUNNABLE;
+                if (wakeCount < 256) {
+                    wakeList[wakeCount++] = i;
+                }
             }
             woken++;
         }
@@ -520,24 +528,10 @@ int coroutine_wake_channel(TLLVM *vm, void *channelPtr) {
     pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
 #endif
 
-    /* D2-R3: In worker mode, enqueue only the coroutines just woken by this channel.
-     * We track them by checking they were waiting on this channel before wake.
-     * Since we already cleared waitingChannel under lock, we re-scan and enqueue
-     * those that are now RUNNABLE with no waitingChannel and were not already running.
-     * To avoid double-enqueue, we only enqueue if the coroutine is not the current one. */
-    if (vm->multi_worker_initialized && woken > 0) {
-        int currentIdx = -1;
-        if (g_tll_current_worker != NULL) {
-            currentIdx = g_tll_current_worker->ctx.currentCoroutine;
-        }
-        for (i = 0; i < vm->coroutineCount; i++) {
-            if (i == currentIdx) continue;  /* don't enqueue the currently running waker */
-            TLLCoroutine *co = vm->coroutines[i];
-            if (co && co->waitingChannel == NULL && co->state == TLL_COROUTINE_RUNNABLE &&
-                co->wakeTime == 0 && co->waitingFd <= 0) {
-                /* This coroutine was just woken (was waiting on channel, now runnable) */
-                tll_runnable_queue_enqueue(&vm->runnable_queue, i);
-            }
+    /* D2-R3.1: Enqueue ONLY the recorded wake list — exact-once, no full-table scan. */
+    if (vm->multi_worker_initialized && wakeCount > 0) {
+        for (i = 0; i < wakeCount; i++) {
+            tll_runnable_queue_enqueue(&vm->runnable_queue, wakeList[i]);
         }
     }
     return woken;
@@ -2018,9 +2012,14 @@ static int tll_runnable_queue_dequeue_timeout(TLLRunnableQueue *q, int timeoutMs
 
 /* D2-R2: Wake coroutines whose sleep timer has expired. Called by worker loop. */
 /* D2-R3: Wake coroutines whose sleep timer has expired. All state transitions under coroutine_table_lock. */
+/* D2-R3.1: Wake coroutines whose sleep timer has expired. Uses wake list for exact-once enqueue. */
 static void tll_wake_expired_sleepers(TLLVM *vm) {
     long long now = current_time_ms();
     int i;
+    /* D2-R3.1: Wake list for exact-once enqueue. */
+    int wakeList[256];
+    int wakeCount = 0;
+
 #ifdef _WIN32
     EnterCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
 #else
@@ -2031,9 +2030,12 @@ static void tll_wake_expired_sleepers(TLLVM *vm) {
         if (!co) continue;
         if (co->wakeTime > 0 && co->wakeTime <= now) {
             co->wakeTime = 0;
-            /* If it was WAITING due to sleep, mark RUNNABLE */
+            /* D2-R3.1: Only record if this is a true WAITING -> RUNNABLE transition. */
             if (co->state == TLL_COROUTINE_WAITING) {
                 co->state = TLL_COROUTINE_RUNNABLE;
+                if (wakeCount < 256) {
+                    wakeList[wakeCount++] = i;
+                }
             }
         }
     }
@@ -2043,25 +2045,25 @@ static void tll_wake_expired_sleepers(TLLVM *vm) {
     pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
 #endif
 
-    /* Enqueue newly-runnable coroutines outside the lock */
-    for (i = 0; i < vm->coroutineCount; i++) {
-        TLLCoroutine *co = vm->coroutines[i];
-        if (co && co->wakeTime == 0 && co->state == TLL_COROUTINE_RUNNABLE &&
-            co->waitingFd <= 0 && co->waitingChannel == NULL) {
-            /* Only enqueue if not already in queue (heuristic: was waiting) */
-            tll_runnable_queue_enqueue(&vm->runnable_queue, i);
+    /* D2-R3.1: Enqueue ONLY the recorded wake list — exact-once, no full-table scan. */
+    if (vm->multi_worker_initialized && wakeCount > 0) {
+        for (i = 0; i < wakeCount; i++) {
+            tll_runnable_queue_enqueue(&vm->runnable_queue, wakeList[i]);
         }
     }
 }
-
 /* D2-R3: Check IO readiness and wake waiting coroutines. Used by worker scheduler.
  * Collects all waitingFd, calls select(), wakes ready ones, handles timeouts.
  * Returns number of coroutines woken. */
+/* D2-R3.1: Check IO readiness and wake waiting coroutines. Uses wake list for exact-once enqueue. */
 static int tll_wake_io_ready(TLLVM *vm, int timeoutMs) {
     int woken = 0;
     int i;
     int ioCount = 0;
     int maxFd = 0;
+    /* D2-R3.1: Wake list for exact-once enqueue. */
+    int wakeList[256];
+    int wakeCount = 0;
     fd_set readfds, writefds, exceptfds;
     FD_ZERO(&readfds);
     FD_ZERO(&writefds);
@@ -2132,8 +2134,12 @@ static int tll_wake_io_ready(TLLVM *vm, int timeoutMs) {
             co->waitingEvents = 0;
             co->waitDeadline = 0;
             if (co->waitResult != 0) co->waitResult = 1;  /* fd ready */
+            /* D2-R3.1: Only record if this is a true WAITING -> RUNNABLE transition. */
             if (co->state == TLL_COROUTINE_WAITING) {
                 co->state = TLL_COROUTINE_RUNNABLE;
+                if (wakeCount < 256) {
+                    wakeList[wakeCount++] = i;
+                }
             }
             woken++;
         }
@@ -2144,14 +2150,10 @@ static int tll_wake_io_ready(TLLVM *vm, int timeoutMs) {
     pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
 #endif
 
-    /* Enqueue newly-runnable coroutines outside lock */
-    if (woken > 0 && vm->multi_worker_initialized) {
-        for (i = 0; i < vm->coroutineCount; i++) {
-            TLLCoroutine *co = vm->coroutines[i];
-            if (co && co->waitingFd <= 0 && co->state == TLL_COROUTINE_RUNNABLE &&
-                co->wakeTime == 0 && co->waitingChannel == NULL) {
-                tll_runnable_queue_enqueue(&vm->runnable_queue, i);
-            }
+    /* D2-R3.1: Enqueue ONLY the recorded wake list — exact-once, no full-table scan. */
+    if (wakeCount > 0 && vm->multi_worker_initialized) {
+        for (i = 0; i < wakeCount; i++) {
+            tll_runnable_queue_enqueue(&vm->runnable_queue, wakeList[i]);
         }
     }
     return woken;
