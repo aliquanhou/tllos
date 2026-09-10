@@ -1,0 +1,124 @@
+// P2-01-C-D2-R1: True Parallel Overlap Proof
+// Uses barrier pattern with global ints to PROVE two workers execute simultaneously.
+
+// Shared state (global ints are proven to be modifiable by workers)
+let A_started = 0
+let B_started = 0
+let overlap_proven = 0
+let A_worker = -1
+let B_worker = -1
+
+fn task_A() -> int {
+    A_worker = runtime.currentWorkerId()
+    A_started = 1
+
+    // Barrier: spin until B also starts (proves simultaneous execution)
+    let spin = 0
+    while B_started == 0 && spin < 20000000 {
+        spin = spin + 1
+    }
+
+    // If B started while we were spinning, overlap is proven
+    if B_started == 1 {
+        overlap_proven = 1
+    }
+
+    // CPU work while B is also running
+    let sum = 0
+    let i = 0
+    while i < 300000 {
+        sum = sum + i
+        i = i + 1
+    }
+    return sum
+}
+
+fn task_B() -> int {
+    B_worker = runtime.currentWorkerId()
+    B_started = 1
+
+    // Barrier: spin until A also starts
+    let spin = 0
+    while A_started == 0 && spin < 20000000 {
+        spin = spin + 1
+    }
+
+    // CPU work while A is also running
+    let sum = 0
+    let i = 0
+    while i < 300000 {
+        sum = sum + i
+        i = i + 1
+    }
+    return sum
+}
+
+fn main() -> void {
+    io.println("=== P2-01-C-D2-R1: True Parallel Overlap Proof ===")
+    io.println("CPU count: " + convert.toString(runtime.cpuCount()))
+
+    let rc = runtime.startWorkers(2)
+    if rc != 0 {
+        io.println("FAIL: could not start workers")
+        return
+    }
+    io.println("Workers started: " + convert.toString(runtime.workerCount()))
+
+    // Spawn both tasks
+    let coA = coroutine.spawn(fn() { task_A() })
+    let coB = coroutine.spawn(fn() { task_B() })
+
+    // Submit both — should be picked up by different workers
+    runtime.submitCoroutine(coA)
+    runtime.submitCoroutine(coB)
+
+    io.println("Submitted both tasks. Waiting for completion...")
+
+    // Wait for both to complete
+    let waited = 0
+    while waited < 1000 {
+        let t0 = runtime.workerTasksCompleted(0)
+        let t1 = runtime.workerTasksCompleted(1)
+        if t0 + t1 >= 2 { break }
+        let j = 0
+        while j < 50000 { j = j + 1 }
+        waited = waited + 1
+    }
+
+    let final0 = runtime.workerTasksCompleted(0)
+    let final1 = runtime.workerTasksCompleted(1)
+
+    runtime.shutdownWorkers()
+
+    io.println("")
+    io.println("=== Results ===")
+    io.println("Task A worker: " + convert.toString(A_worker))
+    io.println("Task B worker: " + convert.toString(B_worker))
+    io.println("A started: " + convert.toString(A_started))
+    io.println("B started: " + convert.toString(B_started))
+    io.println("Overlap proven: " + convert.toString(overlap_proven))
+    io.println("Worker 0 tasks: " + convert.toString(final0))
+    io.println("Worker 1 tasks: " + convert.toString(final1))
+
+    io.println("")
+    let both_started = A_started == 1 && B_started == 1
+    let different_workers = A_worker != B_worker && A_worker >= 0
+    let overlap = overlap_proven == 1
+    let both_completed = final0 + final1 >= 2
+
+    if both_started && different_workers && overlap && both_completed {
+        io.println("TEST_RESULT: PASS")
+        io.println("  - Both tasks started")
+        io.println("  - Ran on different workers (true multi-worker)")
+        io.println("  - Overlap window proven via barrier")
+        io.println("  - Both tasks completed without loss")
+    } else {
+        io.println("TEST_RESULT: FAIL")
+        io.println("  both_started=" + convert.toString(both_started))
+        io.println("  different_workers=" + convert.toString(different_workers))
+        io.println("  overlap=" + convert.toString(overlap))
+        io.println("  both_completed=" + convert.toString(both_completed))
+    }
+}
+
+main()

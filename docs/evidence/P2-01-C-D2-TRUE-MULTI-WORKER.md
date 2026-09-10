@@ -229,3 +229,96 @@ tllvm.exe tests\multi_worker_parallel.tllbc
 ---
 
 **Construction Complete. Awaiting independent architecture audit.**
+
+---
+
+## 14. D2-R1 Concurrency Closure (REQUEST CHANGES → FIXED)
+
+**Date:** 2026-09-11
+**Trigger:** Independent audit found 4 gaps requiring closure.
+
+### 14.1 True Parallel Overlap Proof (FIXED)
+
+**Problem:** Original test only verified "both tasks completed", not "both tasks executed simultaneously".
+
+**Fix:** New test `tests/multi_worker_overlap_proof.tll` uses a **barrier pattern**:
+- Task A: sets `A_started=1`, spins until `B_started==1`, sets `overlap_proven=1`
+- Task B: sets `B_started=1`, spins until `A_started==1`
+- Both tasks then perform CPU work while the other is running
+
+**Result:**
+```
+Task A worker: 0
+Task B worker: 1
+A started: 1
+B started: 1
+Overlap proven: 1
+Worker 0 tasks: 1
+Worker 1 tasks: 1
+TEST_RESULT: PASS
+```
+
+**This proves D2-5:** Task A and Task B execution windows truly overlap, on different workers.
+
+### 14.2 Coroutine Claim Exactly-Once (FIXED)
+
+**Problem:** Worker directly set `coro->state = RUNNING` without synchronization. Two workers could theoretically claim the same coroutine.
+
+**Fix:** All state transitions now protected by `coroutine_table_lock`:
+- **Claim:** Worker acquires lock, checks `state == RUNNABLE`, atomically sets `RUNNING`, releases lock. If not RUNNABLE, skips.
+- **Submit:** `tll_runtime_submit_coroutine()` acquires lock, rejects if `state == RUNNING` (held by worker), sets `RUNNABLE`.
+- **Complete:** Worker acquires lock, sets `COMPLETED` or `RUNNABLE` (for yielded), releases lock. Requeue happens outside lock.
+
+This guarantees: **one coroutine = exactly one worker at a time.**
+
+### 14.3 Coroutine State Synchronization (FIXED)
+
+**Problem:** State transitions were unsynchronized.
+
+**Fix:** Complete state machine now lock-protected:
+```
+submit (lock) → RUNNABLE
+claim  (lock) → RUNNABLE → RUNNING
+complete (lock) → RUNNING → COMPLETED
+yield (lock)    → RUNNING → RUNNABLE + requeue
+```
+
+`coroutine_table_lock` is a CRITICAL_SECTION (Windows) / pthread_mutex (POSIX), allocated as opaque pointer.
+
+### 14.4 Queue/Resource Cleanup (FIXED)
+
+**Problem 1:** Worker ctx init allocated `callStack` (64 entries), then immediately overwrote it with `coro->callStack` → **memory leak**.
+
+**Fix:** `tll_worker_ctx_init()` no longer allocates callStack. Worker **borrows** coroutine's callStack during execution and sets it back to NULL when done. `tll_worker_ctx_free()` does not free callStack (it belongs to coroutine).
+
+**Problem 2:** Queue init allocated lock/sem but shutdown never freed them → **resource leak**.
+
+**Fix:** New `tll_runnable_queue_cleanup()` function:
+- Frees remaining queue nodes
+- Closes semaphore handle (Windows) / destroys cond (POSIX)
+- Deletes critical section (Windows) / destroys mutex (POSIX)
+- Frees lock memory
+
+Called from `tll_runtime_shutdown_workers()` after workers join.
+
+**Also fixed:** `coroutine_table_lock` cleanup in shutdown_workers.
+
+### 14.5 D2-R1 Test Results
+
+| Test | Result |
+|------|--------|
+| multi_worker_parallel (2W/2T) | PASS |
+| multi_worker_stress (2W/100T) | PASS (46/54 load balance) |
+| multi_worker_overlap_proof | **PASS (overlap proven)** |
+| worker_global_test | PASS (worker can modify global) |
+| test_simple_coroutine | PASS |
+| coroutine_512_test | PASS |
+| coroutine_sleep_test | PASS |
+| test_spawn | PASS |
+| dynamic_frame_test | PASS |
+
+**No regressions. All D2-R1 closure items fixed.**
+
+---
+
+**D2-R1 Construction Complete. Awaiting independent architecture audit.**

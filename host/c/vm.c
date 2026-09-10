@@ -1928,25 +1928,27 @@ static int tll_runnable_queue_dequeue(TLLRunnableQueue *q) {
     return idx;
 }
 
-/* Initialize worker execution context */
+/* Initialize worker execution context.
+ * D2-R1: do NOT allocate callStack here — worker borrows coroutine's callStack.
+ * Allocating here and then overwriting with coro->callStack caused a leak. */
 static void tll_worker_ctx_init(TLLExecutionContext *ctx) {
-    ctx->callStackCapacity = 64;
-    ctx->callStack = (TLLFrame**)calloc(64, sizeof(TLLFrame*));
+    ctx->callStackCapacity = 0;
+    ctx->callStack = NULL;  /* borrowed from coroutine during execution */
     ctx->callStackSize = 0;
     ctx->currentCoroutine = -1;
     ctx->invokeTargetStackSize = -1;
 }
 
-/* Free worker execution context */
+/* Free worker execution context.
+ * D2-R1: do NOT free callStack — it is owned by the coroutine, not the worker.
+ * Worker only borrows it during execution and sets it back to NULL when done. */
 static void tll_worker_ctx_free(TLLExecutionContext *ctx) {
-    if (ctx->callStack) {
-        while (ctx->callStackSize > 0) {
-            TLLFrame *f = ctx->callStack[--ctx->callStackSize];
-            free_frame(f);
-        }
-        free(ctx->callStack);
-        ctx->callStack = NULL;
-    }
+    /* callStack is borrowed from coroutine; worker must not free it.
+     * If worker is being destroyed while still holding a callStack, that's
+     * a lifecycle bug — but we don't free it here to avoid double-free. */
+    ctx->callStack = NULL;
+    ctx->callStackSize = 0;
+    ctx->callStackCapacity = 0;
 }
 
 /* Worker thread function - executes coroutines from global queue */
@@ -1980,13 +1982,31 @@ static void *tll_worker_thread(void *param) {
             continue;
         }
 
+        /* D2-R1: Claim coroutine exactly-once using coroutine_table_lock.
+         * Only RUNNABLE coroutines can be claimed; this prevents two workers
+         * from simultaneously executing the same coroutine. */
+#ifdef _WIN32
+        EnterCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+        pthread_mutex_lock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
         TLLCoroutine *coro = vm->coroutines[coro_idx];
-        if (!coro || coro->state == TLL_COROUTINE_COMPLETED) {
+        if (!coro || coro->state != TLL_COROUTINE_RUNNABLE) {
+            /* Already claimed by another worker, completed, or invalid */
+#ifdef _WIN32
+            LeaveCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+            pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
             continue;
         }
+        coro->state = TLL_COROUTINE_RUNNING;  /* claim: RUNNABLE -> RUNNING */
+#ifdef _WIN32
+        LeaveCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+        pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
 
-        /* Mark as RUNNING */
-        coro->state = TLL_COROUTINE_RUNNING;
         worker->ctx.currentCoroutine = coro_idx;
 
         /* Load coroutine's call stack into worker's independent context */
@@ -2003,12 +2023,27 @@ static void *tll_worker_thread(void *param) {
         coro->callStackSize = worker->ctx.callStackSize;
         coro->callStackCapacity = worker->ctx.callStackCapacity;
 
-        /* Determine final state */
+        /* D2-R1: Final state transition under coroutine_table_lock.
+         * RUNNING -> COMPLETED or RUNNING -> RUNNABLE (requeue). */
+#ifdef _WIN32
+        EnterCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+        pthread_mutex_lock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
         if (coro->callStackSize == 0) {
             coro->state = TLL_COROUTINE_COMPLETED;
         } else {
             /* Yielded or waiting - requeue for later execution */
             coro->state = TLL_COROUTINE_RUNNABLE;
+        }
+#ifdef _WIN32
+        LeaveCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+        pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
+
+        /* Requeue outside the lock to avoid lock contention */
+        if (coro->callStackSize > 0) {
             tll_runnable_queue_enqueue(&vm->runnable_queue, coro_idx);
         }
 
@@ -2077,17 +2112,81 @@ int tll_runtime_start_workers(TLLVM *vm, int count) {
     return 0;
 }
 
-/* Submit a coroutine to the global runnable queue */
+/* Submit a coroutine to the global runnable queue.
+ * D2-R1: state transition under coroutine_table_lock to ensure
+ * a coroutine is not submitted while another worker holds it. */
 int tll_runtime_submit_coroutine(TLLVM *vm, int coroutine_idx) {
     if (!vm->multi_worker_initialized) return -1;
     if (coroutine_idx < 0 || coroutine_idx >= vm->coroutineCount) return -1;
 
+#ifdef _WIN32
+    EnterCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+    pthread_mutex_lock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
     TLLCoroutine *coro = vm->coroutines[coroutine_idx];
-    if (!coro) return -1;
-
+    if (!coro) {
+#ifdef _WIN32
+        LeaveCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+        pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
+        return -1;
+    }
+    /* Only accept submission if not already RUNNING (held by a worker) */
+    if (coro->state == TLL_COROUTINE_RUNNING) {
+#ifdef _WIN32
+        LeaveCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+        pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
+        return -1;
+    }
     coro->state = TLL_COROUTINE_RUNNABLE;
+#ifdef _WIN32
+    LeaveCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+    pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
+
     tll_runnable_queue_enqueue(&vm->runnable_queue, coroutine_idx);
     return 0;
+}
+
+/* D2-R1: Clean up global runnable queue resources (lock, semaphore, nodes) */
+static void tll_runnable_queue_cleanup(TLLRunnableQueue *q) {
+    /* Free remaining nodes */
+    TLLRunnableNode *node = q->head;
+    while (node) {
+        TLLRunnableNode *next = node->next;
+        free(node);
+        node = next;
+    }
+    q->head = q->tail = NULL;
+    q->count = 0;
+
+#ifdef _WIN32
+    if (q->sem) {
+        CloseHandle((HANDLE)q->sem);
+        q->sem = NULL;
+    }
+    if (q->lock) {
+        DeleteCriticalSection((CRITICAL_SECTION*)q->lock);
+        free(q->lock);
+        q->lock = NULL;
+    }
+#else
+    if (q->cond) {
+        pthread_cond_destroy((pthread_cond_t*)q->cond);
+        free(q->cond);
+        q->cond = NULL;
+    }
+    if (q->lock) {
+        pthread_mutex_destroy((pthread_mutex_t*)q->lock);
+        free(q->lock);
+        q->lock = NULL;
+    }
+#endif
 }
 
 /* Shutdown all worker threads */
@@ -2125,4 +2224,23 @@ void tll_runtime_shutdown_workers(TLLVM *vm) {
     vm->workers = NULL;
     vm->workerCount = 0;
     vm->multi_worker_initialized = 0;
+    vm->shutdown_requested = 0;
+
+    /* D2-R1: Clean up queue resources (lock, semaphore, remaining nodes) */
+    tll_runnable_queue_cleanup(&vm->runnable_queue);
+
+    /* D2-R1: Clean up coroutine_table_lock */
+#ifdef _WIN32
+    if (vm->coroutine_table_lock) {
+        DeleteCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+        free(vm->coroutine_table_lock);
+        vm->coroutine_table_lock = NULL;
+    }
+#else
+    if (vm->coroutine_table_lock) {
+        pthread_mutex_destroy((pthread_mutex_t*)vm->coroutine_table_lock);
+        free(vm->coroutine_table_lock);
+        vm->coroutine_table_lock = NULL;
+    }
+#endif
 }

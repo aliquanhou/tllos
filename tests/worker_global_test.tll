@@ -1,0 +1,42 @@
+// Simple test: can worker modify global variable?
+let shared_counter = 0
+let worker_id_seen = -1
+
+fn worker_task() -> int {
+    shared_counter = 42
+    worker_id_seen = runtime.currentWorkerId()
+    return 0
+}
+
+fn main() -> void {
+    io.println("Before: counter=" + convert.toString(shared_counter))
+
+    let rc = runtime.startWorkers(1)
+    io.println("startWorkers: " + convert.toString(rc))
+
+    let co = coroutine.spawn(fn() { worker_task() })
+    runtime.submitCoroutine(co)
+
+    // Wait for completion
+    let waited = 0
+    while waited < 500 {
+        if runtime.workerTasksCompleted(0) >= 1 { break }
+        let j = 0
+        while j < 10000 { j = j + 1 }
+        waited = waited + 1
+    }
+
+    io.println("After: counter=" + convert.toString(shared_counter))
+    io.println("Worker id seen: " + convert.toString(worker_id_seen))
+    io.println("Worker tasks completed: " + convert.toString(runtime.workerTasksCompleted(0)))
+
+    runtime.shutdownWorkers()
+
+    if shared_counter == 42 {
+        io.println("TEST_RESULT: PASS - worker can modify global")
+    } else {
+        io.println("TEST_RESULT: FAIL - worker did not modify global")
+    }
+}
+
+main()
