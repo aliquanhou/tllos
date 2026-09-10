@@ -1,0 +1,11 @@
+// Minimal test: start workers, do nothing, shutdown
+fn main() -> void {
+    io.println("STEP 1: before startWorkers")
+    let rc = runtime.startWorkers(2)
+    io.println("STEP 2: startWorkers returned " + convert.toString(rc))
+    io.println("STEP 3: workerCount = " + convert.toString(runtime.workerCount()))
+    runtime.shutdownWorkers()
+    io.println("STEP 4: shutdown complete")
+}
+
+main()

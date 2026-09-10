@@ -1,0 +1,11 @@
+// Simple test for runtime builtins
+fn main() -> void {
+    io.println("CPU count: " + convert.toString(runtime.cpuCount()))
+    let rc = runtime.startWorkers(2)
+    io.println("startWorkers(2) = " + convert.toString(rc))
+    io.println("workerCount = " + convert.toString(runtime.workerCount()))
+    runtime.shutdownWorkers()
+    io.println("DONE")
+}
+
+main()

@@ -1,4 +1,4 @@
-﻿/* TLL Builtin functions - Host ABI + stdlib implementation for bootstrap VM.
+/* TLL Builtin functions - Host ABI + stdlib implementation for bootstrap VM.
  * Note: In the final architecture, json/math/strings/arrays/convert should be
  * implemented in TLL stdlib. This C implementation is for bootstrap only.
  */
@@ -1982,8 +1982,48 @@ TLLValue tll_call_builtin(TLLVM *vm, int idx, TLLValue *args, int argCount) {
         return tll_int(0);
     }
 
-
-    /* P0-15.19 Cryptographic Foundation */
+    /* === P2-01-C-D2: True Multi-Worker Runtime API === */
+    if (idx == 223) { /* runtime.startWorkers(count) -> int (0=success, -1=fail) */
+        if (argCount > 0 && args[0].type == TLL_INT) {
+            int count = (int)args[0].as.integer;
+            return tll_int(tll_runtime_start_workers(vm, count));
+        }
+        return tll_int(-1);
+    }
+    if (idx == 224) { /* runtime.submitCoroutine(coro_idx) -> int (0=success, -1=fail) */
+        if (argCount > 0 && args[0].type == TLL_INT) {
+            int coro_idx = (int)args[0].as.integer;
+            return tll_int(tll_runtime_submit_coroutine(vm, coro_idx));
+        }
+        return tll_int(-1);
+    }
+    if (idx == 225) { /* runtime.shutdownWorkers() -> int */
+        tll_runtime_shutdown_workers(vm);
+        return tll_int(0);
+    }
+    if (idx == 226) { /* runtime.currentWorkerId() -> int (-1=main thread) */
+        if (g_tll_current_worker) return tll_int(g_tll_current_worker->worker_id);
+        return tll_int(-1);
+    }
+    if (idx == 227) { /* runtime.workerCount() -> int */
+        return tll_int(vm->workerCount);
+    }
+    if (idx == 228) { /* runtime.workerTasksCompleted(worker_id) -> int */
+        if (argCount > 0 && args[0].type == TLL_INT) {
+            int wid = (int)args[0].as.integer;
+            if (wid >= 0 && wid < vm->workerCount && vm->workers[wid]) {
+                return tll_int(vm->workers[wid]->tasks_completed);
+            }
+        }
+        return tll_int(-1);
+    }
+    if (idx == 229) { /* runtime.cpuCount() -> int */
+#ifdef _WIN32
+        SYSTEM_INFO si; GetSystemInfo(&si); return tll_int(si.dwNumberOfProcessors);
+#else
+        return tll_int(sysconf(_SC_NPROCESSORS_ONLN));
+#endif
+    }
     if (idx == 145) { /* crypto.randomBytes(n) -> string (hex-encoded) */
         if (argCount > 0 && args[0].type == TLL_INT) {
             int n = (int)args[0].as.integer;

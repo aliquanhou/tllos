@@ -29,6 +29,12 @@
 #include <string.h>
 #include <math.h>
 
+/* P2-01-C-D2: synchronization primitives for multi-worker */
+/* P2-01-C-D2: synchronization primitives are opaque pointers here.
+ * Actual CRITICAL_SECTION/pthread_mutex_t are allocated in vm.c. */
+typedef void *TLL_MUTEX;
+typedef void *TLL_SEM;
+typedef void *TLL_THREAD;
 /* === Shared TLL Runtime Core ===
  * 提供: TLLValue/TLLArray/TLLMap/TLLClosureEnv/TLLUpvalue 数据结构,
  *       值创建/引用计数/truthy/equals/toString/Array/Map 操作函数。
@@ -109,16 +115,72 @@ typedef struct {
     int invokeTargetStackSize; /* -1 = run until empty, N = stop when callStackSize <= N */
 } TLLExecutionContext;
 
-/* === VM === */
+
+/* === D-2: Coroutine states (true multi-worker) === */
+#define TLL_COROUTINE_RUNNABLE   0
+#define TLL_COROUTINE_RUNNING    1
+#define TLL_COROUTINE_WAITING    2
+#define TLL_COROUTINE_COMPLETED  3
+
+/* === D-2: Runnable Queue Node === */
+typedef struct TLLRunnableNode {
+    int coroutine_idx;
+    struct TLLRunnableNode *next;
+} TLLRunnableNode;
+
+/* === D-2: Global Runnable Queue (thread-safe) === */
 typedef struct {
+    TLLRunnableNode *head;
+    TLLRunnableNode *tail;
+    int count;
+#ifdef _WIN32
+    TLL_MUTEX lock;
+    TLL_SEM sem;
+#else
+    TLL_MUTEX lock;
+    TLL_SEM sem;
+#endif
+} TLLRunnableQueue;
+
+/* === D-2: Worker (per-worker independent execution context) === */
+
+/* Forward declaration for TLLWorker->vm back pointer */
+typedef struct TLLVM TLLVM;
+typedef struct TLLWorker {
+    int worker_id;
+    TLLExecutionContext ctx;  /* INDEPENDENT — not shared */
+    TLLVM *vm;  /* back pointer to shared runtime */
+    volatile int running;
+    volatile int tasks_completed;
+#ifdef _WIN32
+    void *thread;
+#else
+    void *thread;
+#endif
+} TLLWorker;
+/* === VM === */
+
+/* P2-01-C-D2: thread-local current worker (defined in vm.c) */
+#ifdef _WIN32
+extern __declspec(thread) TLLWorker *g_tll_current_worker;
+#else
+extern __thread TLLWorker *g_tll_current_worker;
+#endif
+typedef struct TLLVM {
     TLLProgram *program;
-    TLLExecutionContext ctx;  /* P2-01-C-D1: execution-local state (per-worker in future) */
+    TLLExecutionContext ctx;  /* legacy single-context (backward compat) */
     TLLValue *globals;
     int globalCount;
-    /* === Coroutine Scheduler (per-VM, P0-15.15) === */
     TLLCoroutine **coroutines;
     int coroutineCount;
     int coroutineCapacity;
+    /* === D-2: True Multi-Worker Runtime === */
+    TLLWorker **workers;
+    int workerCount;
+    TLLRunnableQueue runnable_queue;
+    TLL_MUTEX coroutine_table_lock;
+    int multi_worker_initialized;
+    volatile int shutdown_requested;
 } TLLVM;
 
 /* === Opcode constants === */

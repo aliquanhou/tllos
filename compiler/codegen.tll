@@ -2395,7 +2395,15 @@ fn cg_getBuiltinIndex(modName: string, fnName: string) -> int {
         if fnName == "cstring" { return 213 }
         if fnName == "string" { return 214 }
     }
-    return -1
+    if modName == "runtime" {
+        if fnName == "startWorkers" { return 223 }
+        if fnName == "submitCoroutine" { return 224 }
+        if fnName == "shutdownWorkers" { return 225 }
+        if fnName == "currentWorkerId" { return 226 }
+        if fnName == "workerCount" { return 227 }
+        if fnName == "workerTasksCompleted" { return 228 }
+        if fnName == "cpuCount" { return 229 }
+    }    return -1
 }
 
 fn cg_compileArray(expr: map) -> int {

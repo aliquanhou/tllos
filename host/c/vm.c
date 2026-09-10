@@ -4,6 +4,19 @@
 #include "tllvm.h"
 #include <stdint.h>
 
+
+/* === P2-01-C-D2: True Multi-Worker Runtime === */
+/* Thread-local current worker. When set, tll_vm_exec uses worker->ctx
+ * instead of vm->ctx, enabling true per-worker independent execution. */
+#ifdef _WIN32
+__declspec(thread) TLLWorker *g_tll_current_worker = NULL;
+#else
+__thread TLLWorker *g_tll_current_worker = NULL;
+#endif
+
+/* Get current execution context: worker's ctx if in worker thread, else vm->ctx */
+#define TLL_CTX(vm) (g_tll_current_worker ? &g_tll_current_worker->ctx : &(vm)->ctx)
+
 /* Debug counters for Heisenbug diagnosis */
 static long long dbg_yield_calls = 0;
 static long long dbg_pass0_no_runnable = 0;
@@ -341,7 +354,7 @@ static void free_frame(TLLFrame *frame);
 
 static void coroutine_init(TLLVM *vm) {
     vm->coroutineCount = 0;
-    vm->ctx.currentCoroutine = 0;
+    TLL_CTX(vm)->currentCoroutine = 0;
     if (vm->coroutines) { free(vm->coroutines); vm->coroutines = NULL; }
     vm->coroutineCapacity = 16;
     vm->coroutines = (TLLCoroutine**)calloc(16, sizeof(TLLCoroutine*));
@@ -380,11 +393,11 @@ static void coroutine_destroy(TLLVM *vm, int idx) {
     vm->coroutineCount--;
 
     /* Adjust currentCoroutine if it was affected by the swap */
-    if (vm->ctx.currentCoroutine == last) {
+    if (TLL_CTX(vm)->currentCoroutine == last) {
         /* current was the last element, now swapped to idx */
-        vm->ctx.currentCoroutine = idx;
-    } else if (vm->ctx.currentCoroutine >= vm->coroutineCount) {
-        vm->ctx.currentCoroutine = 0;
+        TLL_CTX(vm)->currentCoroutine = idx;
+    } else if (TLL_CTX(vm)->currentCoroutine >= vm->coroutineCount) {
+        TLL_CTX(vm)->currentCoroutine = 0;
     }
 }
 
@@ -415,17 +428,17 @@ static TLLCoroutine *coroutine_create(TLLVM *vm, TLLFunction *fn, TLLValue *args
 }
 
 static void coroutine_save_current(TLLVM *vm) {
-    if (vm->ctx.currentCoroutine < 0 || vm->ctx.currentCoroutine >= vm->coroutineCount) return;
-    TLLCoroutine *co = vm->coroutines[vm->ctx.currentCoroutine];
+    if (TLL_CTX(vm)->currentCoroutine < 0 || TLL_CTX(vm)->currentCoroutine >= vm->coroutineCount) return;
+    TLLCoroutine *co = vm->coroutines[TLL_CTX(vm)->currentCoroutine];
     if (!co) return;
-    co->callStack = vm->ctx.callStack;
-    co->callStackSize = vm->ctx.callStackSize;
-    co->callStackCapacity = vm->ctx.callStackCapacity;
-    co->invokeTargetStackSize = vm->ctx.invokeTargetStackSize;
+    co->callStack = TLL_CTX(vm)->callStack;
+    co->callStackSize = TLL_CTX(vm)->callStackSize;
+    co->callStackCapacity = TLL_CTX(vm)->callStackCapacity;
+    co->invokeTargetStackSize = TLL_CTX(vm)->invokeTargetStackSize;
     /* Trace save */
-    if (g_schedTraceEnabled && (g_traceTargetCo < 0 || vm->ctx.currentCoroutine == g_traceTargetCo)) {
-        int pc = (vm->ctx.callStackSize > 0) ? vm->ctx.callStack[vm->ctx.callStackSize - 1]->pc : -1;
-        sched_trace_record(TRACE_SAVE, vm->ctx.currentCoroutine, -1, -1,
+    if (g_schedTraceEnabled && (g_traceTargetCo < 0 || TLL_CTX(vm)->currentCoroutine == g_traceTargetCo)) {
+        int pc = (TLL_CTX(vm)->callStackSize > 0) ? TLL_CTX(vm)->callStack[TLL_CTX(vm)->callStackSize - 1]->pc : -1;
+        sched_trace_record(TRACE_SAVE, TLL_CTX(vm)->currentCoroutine, -1, -1,
                 vm->coroutineCount, 0, 0, 0, 0, 0, 0, pc);
     }
 }
@@ -434,17 +447,17 @@ static void coroutine_restore(TLLVM *vm, int idx) {
     if (idx < 0 || idx >= vm->coroutineCount) return;
     TLLCoroutine *co = vm->coroutines[idx];
     if (!co) return;
-    vm->ctx.callStack = co->callStack;
-    vm->ctx.callStackSize = co->callStackSize;
-    vm->ctx.callStackCapacity = co->callStackCapacity;
-    vm->ctx.invokeTargetStackSize = co->invokeTargetStackSize;
-    vm->ctx.currentCoroutine = idx;
+    TLL_CTX(vm)->callStack = co->callStack;
+    TLL_CTX(vm)->callStackSize = co->callStackSize;
+    TLL_CTX(vm)->callStackCapacity = co->callStackCapacity;
+    TLL_CTX(vm)->invokeTargetStackSize = co->invokeTargetStackSize;
+    TLL_CTX(vm)->currentCoroutine = idx;
     /* Trace restore */
     if (g_schedTraceEnabled && (g_traceTargetCo < 0 || idx == g_traceTargetCo)) {
         int pc = -1;
-        int stackSize = vm->ctx.callStackSize;
-        if (stackSize > 0 && vm->ctx.callStack[stackSize - 1]) {
-            pc = vm->ctx.callStack[stackSize - 1]->pc;
+        int stackSize = TLL_CTX(vm)->callStackSize;
+        if (stackSize > 0 && TLL_CTX(vm)->callStack[stackSize - 1]) {
+            pc = TLL_CTX(vm)->callStack[stackSize - 1]->pc;
         }
         sched_trace_record(TRACE_RESUME, -1, idx, stackSize,
                 vm->coroutineCount, 0, 0, 0, 0, 0, 0, pc);
@@ -499,7 +512,7 @@ int coroutine_wake_channel(TLLVM *vm, void *channelPtr) {
  * WAITING_CHANNEL coroutines skipped until explicitly woken via wakeChannel.
  */
 static void coroutine_yield(TLLVM *vm) {
-    int old = vm->ctx.currentCoroutine;
+    int old = TLL_CTX(vm)->currentCoroutine;
     int selfDead = 0;
     dbg_yield_calls++;
 
@@ -751,14 +764,14 @@ TLLVM *tll_vm_create(TLLProgram *prog) {
     vm->globalCount = prog->globalCount;
     vm->globals = (TLLValue*)calloc(prog->globalCount, sizeof(TLLValue));
     for (int i = 0; i < prog->globalCount; i++) vm->globals[i] = tll_null();
-    vm->ctx.callStackCapacity = 64;
-    vm->ctx.callStack = (TLLFrame**)calloc(64, sizeof(TLLFrame*));
-    vm->ctx.invokeTargetStackSize = -1;
+    TLL_CTX(vm)->callStackCapacity = 64;
+    TLL_CTX(vm)->callStack = (TLLFrame**)calloc(64, sizeof(TLLFrame*));
+    TLL_CTX(vm)->invokeTargetStackSize = -1;
     /* P0-15.15: per-VM coroutine scheduler starts empty */
     vm->coroutines = NULL;
     vm->coroutineCount = 0;
     vm->coroutineCapacity = 0;
-    vm->ctx.currentCoroutine = 0;
+    TLL_CTX(vm)->currentCoroutine = 0;
     return vm;
 }
 
@@ -789,25 +802,25 @@ static TLLFrame *create_frame(TLLFunction *fn, int returnReg, TLLClosureEnv *env
 }
 
 static void push_frame(TLLVM *vm, TLLFrame *frame) {
-    if (vm->ctx.callStackSize >= vm->ctx.callStackCapacity) {
-        vm->ctx.callStackCapacity *= 2;
-        vm->ctx.callStack = (TLLFrame**)realloc(vm->ctx.callStack, vm->ctx.callStackCapacity * sizeof(TLLFrame*));
+    if (TLL_CTX(vm)->callStackSize >= TLL_CTX(vm)->callStackCapacity) {
+        TLL_CTX(vm)->callStackCapacity *= 2;
+        TLL_CTX(vm)->callStack = (TLLFrame**)realloc(TLL_CTX(vm)->callStack, TLL_CTX(vm)->callStackCapacity * sizeof(TLLFrame*));
     }
-    vm->ctx.callStack[vm->ctx.callStackSize++] = frame;
-    /* P0-RUNTIME-07-R2: Sync current coroutine callStackSize with vm->ctx.callStackSize.
+    TLL_CTX(vm)->callStack[TLL_CTX(vm)->callStackSize++] = frame;
+    /* P0-RUNTIME-07-R2: Sync current coroutine callStackSize with TLL_CTX(vm)->callStackSize.
      * Prevents double-free: coroutine_destroy() must not re-free frames already
      * freed by OP_RET / natural return. */
-    if (vm->coroutineCount > 0 && vm->ctx.currentCoroutine >= 0 && vm->ctx.currentCoroutine < vm->coroutineCount) {
-        vm->coroutines[vm->ctx.currentCoroutine]->callStackSize = vm->ctx.callStackSize;
+    if (vm->coroutineCount > 0 && TLL_CTX(vm)->currentCoroutine >= 0 && TLL_CTX(vm)->currentCoroutine < vm->coroutineCount) {
+        vm->coroutines[TLL_CTX(vm)->currentCoroutine]->callStackSize = TLL_CTX(vm)->callStackSize;
     }
 }
 
 static TLLFrame *pop_frame(TLLVM *vm) {
-    if (vm->ctx.callStackSize <= 0) return NULL;
-    TLLFrame *f = vm->ctx.callStack[--vm->ctx.callStackSize];
+    if (TLL_CTX(vm)->callStackSize <= 0) return NULL;
+    TLLFrame *f = TLL_CTX(vm)->callStack[--TLL_CTX(vm)->callStackSize];
     /* P0-RUNTIME-07-R2: Sync current coroutine callStackSize after pop. */
-    if (vm->coroutineCount > 0 && vm->ctx.currentCoroutine >= 0 && vm->ctx.currentCoroutine < vm->coroutineCount) {
-        vm->coroutines[vm->ctx.currentCoroutine]->callStackSize = vm->ctx.callStackSize;
+    if (vm->coroutineCount > 0 && TLL_CTX(vm)->currentCoroutine >= 0 && TLL_CTX(vm)->currentCoroutine < vm->coroutineCount) {
+        vm->coroutines[TLL_CTX(vm)->currentCoroutine]->callStackSize = TLL_CTX(vm)->callStackSize;
     }
     return f;
 }
@@ -862,10 +875,10 @@ static void throw_exception(TLLVM *vm, TLLFrame *frame, TLLValue error) {
         return;
     }
     /* Search up the call stack */
-    while (vm->ctx.callStackSize > 1) {
+    while (TLL_CTX(vm)->callStackSize > 1) {
         TLLFrame *f = pop_frame(vm);
         free_frame(f);
-        TLLFrame *parent = vm->ctx.callStack[vm->ctx.callStackSize - 1];
+        TLLFrame *parent = TLL_CTX(vm)->callStack[TLL_CTX(vm)->callStackSize - 1];
         if (parent->tryStackSize > 0) {
             int catchPc = pop_try(parent);
             parent->pc = catchPc;
@@ -959,21 +972,21 @@ static void do_call(TLLVM *vm, TLLFrame *frame, int resultReg, int fnIdx, int ar
 }
 
 static void tll_vm_exec(TLLVM *vm) {
-    int targetStack = (vm->ctx.invokeTargetStackSize < 0) ? 0 : vm->ctx.invokeTargetStackSize;
-    int isInvokeMode = (vm->ctx.invokeTargetStackSize >= 0);
+    int targetStack = (TLL_CTX(vm)->invokeTargetStackSize < 0) ? 0 : TLL_CTX(vm)->invokeTargetStackSize;
+    int isInvokeMode = (TLL_CTX(vm)->invokeTargetStackSize >= 0);
     while (!tll_should_exit) {
         /* If current call stack reached target:
          * - Invoke mode: invoked function returned, just exit this exec call.
          *   (P0-15.15 fix: previously this incorrectly marked the coroutine dead.)
          * - Normal run mode: current coroutine finished; recycle it and switch.
          */
-        if (vm->ctx.callStackSize <= targetStack) {
+        if (TLL_CTX(vm)->callStackSize <= targetStack) {
             if (isInvokeMode) {
                 break;
             }
             /* Normal run: mark current coroutine dead, then yield will recycle it */
-            if (vm->coroutineCount > 0 && vm->ctx.currentCoroutine < vm->coroutineCount) {
-                vm->coroutines[vm->ctx.currentCoroutine]->state = 2; /* dead */
+            if (vm->coroutineCount > 0 && TLL_CTX(vm)->currentCoroutine < vm->coroutineCount) {
+                vm->coroutines[TLL_CTX(vm)->currentCoroutine]->state = 2; /* dead */
             }
             /* If no coroutines left, exit */
             if (vm->coroutineCount == 0) break;
@@ -993,9 +1006,9 @@ static void tll_vm_exec(TLLVM *vm) {
                     while (vm->coroutineCount > 0) {
                         coroutine_destroy(vm, 0);
                     }
-                    vm->ctx.callStack = NULL;
-                    vm->ctx.callStackSize = 0;
-                    vm->ctx.callStackCapacity = 0;
+                    TLL_CTX(vm)->callStack = NULL;
+                    TLL_CTX(vm)->callStackSize = 0;
+                    TLL_CTX(vm)->callStackCapacity = 0;
                     break;
                 }
             }
@@ -1004,10 +1017,10 @@ static void tll_vm_exec(TLLVM *vm) {
              * all remaining non-dead coroutines are only waiting on IO (no
              * runnable, no sleepers), the program should exit instead of
              * looping forever on a dead coroutine. */
-            if (vm->ctx.currentCoroutine >= 0 &&
-                vm->ctx.currentCoroutine < vm->coroutineCount &&
-                vm->coroutines[vm->ctx.currentCoroutine] &&
-                vm->coroutines[vm->ctx.currentCoroutine]->state == 2) {
+            if (TLL_CTX(vm)->currentCoroutine >= 0 &&
+                TLL_CTX(vm)->currentCoroutine < vm->coroutineCount &&
+                vm->coroutines[TLL_CTX(vm)->currentCoroutine] &&
+                vm->coroutines[TLL_CTX(vm)->currentCoroutine]->state == 2) {
                 int onlyIOWaiters = 1;
                 int ci2;
                 for (ci2 = 0; ci2 < vm->coroutineCount; ci2++) {
@@ -1023,19 +1036,19 @@ static void tll_vm_exec(TLLVM *vm) {
                     while (vm->coroutineCount > 0) {
                         coroutine_destroy(vm, 0);
                     }
-                    vm->ctx.callStack = NULL;
-                    vm->ctx.callStackSize = 0;
-                    vm->ctx.callStackCapacity = 0;
+                    TLL_CTX(vm)->callStack = NULL;
+                    TLL_CTX(vm)->callStackSize = 0;
+                    TLL_CTX(vm)->callStackCapacity = 0;
                     break;
                 }
             }
             continue;
         }
-        TLLFrame *frame = vm->ctx.callStack[vm->ctx.callStackSize - 1];
+        TLLFrame *frame = TLL_CTX(vm)->callStack[TLL_CTX(vm)->callStackSize - 1];
         if (frame->pc >= frame->function->instructionCount) {
             TLLFrame *f = pop_frame(vm);
-            if (vm->ctx.callStackSize > 0 && f->returnReg >= 0) {
-                vm->ctx.callStack[vm->ctx.callStackSize - 1]->registers[f->returnReg] = tll_null();
+            if (TLL_CTX(vm)->callStackSize > 0 && f->returnReg >= 0) {
+                TLL_CTX(vm)->callStack[TLL_CTX(vm)->callStackSize - 1]->registers[f->returnReg] = tll_null();
             }
             free_frame(f);
             continue;
@@ -1051,11 +1064,11 @@ static void tll_vm_exec(TLLVM *vm) {
         TLLValue *consts = vm->program->constants;
 
         /* Opcode trace for target coroutine */
-        if (g_schedTraceEnabled && (g_traceTargetCo < 0 || vm->ctx.currentCoroutine == g_traceTargetCo)) {
+        if (g_schedTraceEnabled && (g_traceTargetCo < 0 || TLL_CTX(vm)->currentCoroutine == g_traceTargetCo)) {
             int hasEnv = frame->closureEnv ? 1 : 0;
             int upIdx = -1;
             if (inst->op == 40 || inst->op == 41) upIdx = a; /* OP_LOAD_VAR / OP_STORE_VAR */
-            sched_trace_opcode(vm->ctx.currentCoroutine, vm->ctx.callStackSize - 1,
+            sched_trace_opcode(TLL_CTX(vm)->currentCoroutine, TLL_CTX(vm)->callStackSize - 1,
                     frame->function->name, execPc, inst->op, hasEnv, upIdx);
         }
 
@@ -1079,7 +1092,7 @@ static void tll_vm_exec(TLLVM *vm) {
                 /* Trace all global loads */
                 if (g_schedTraceEnabled) {
                     int valInt = (vm->globals[b].type == TLL_INT) ? (int)vm->globals[b].as.integer : -999999;
-                    sched_trace_record(TRACE_LOAD_GLOBAL, vm->ctx.currentCoroutine, b,
+                    sched_trace_record(TRACE_LOAD_GLOBAL, TLL_CTX(vm)->currentCoroutine, b,
                             valInt, 0, 0, 0, 0,
                             (unsigned long long)(uintptr_t)vm,
                             (unsigned long long)(uintptr_t)vm->globals, 0,
@@ -1096,7 +1109,7 @@ static void tll_vm_exec(TLLVM *vm) {
                 if (g_schedTraceEnabled) {
                     int oldInt = (oldVal.type == TLL_INT) ? (int)oldVal.as.integer : -999999;
                     int newInt = (regs[b].type == TLL_INT) ? (int)regs[b].as.integer : -999999;
-                    sched_trace_record(TRACE_STORE_GLOBAL, vm->ctx.currentCoroutine, a,
+                    sched_trace_record(TRACE_STORE_GLOBAL, TLL_CTX(vm)->currentCoroutine, a,
                             oldInt, newInt, 0, 0, 0,
                             (unsigned long long)(uintptr_t)vm,
                             (unsigned long long)(uintptr_t)vm->globals, 0,
@@ -1380,9 +1393,9 @@ static void tll_vm_exec(TLLVM *vm) {
                 TLLValue retVal = regs[a];
                 int retReg = frame->returnReg;
                 TLLFrame *f = pop_frame(vm);
-                if (vm->ctx.callStackSize > 0 && retReg >= 0) {
+                if (TLL_CTX(vm)->callStackSize > 0 && retReg >= 0) {
                     tll_value_incref(retVal);
-                    vm->ctx.callStack[vm->ctx.callStackSize - 1]->registers[retReg] = retVal;
+                    TLL_CTX(vm)->callStack[TLL_CTX(vm)->callStackSize - 1]->registers[retReg] = retVal;
                 }
                 free_frame(f);
                 break;
@@ -1539,7 +1552,7 @@ static void tll_vm_exec(TLLVM *vm) {
             case OP_YIELD: {
                 coroutine_yield(vm);
                 /* After yield, frame may have changed, re-fetch */
-                frame = vm->ctx.callStack[vm->ctx.callStackSize - 1];
+                frame = TLL_CTX(vm)->callStack[TLL_CTX(vm)->callStackSize - 1];
                 regs = frame->registers;
                 break;
             }
@@ -1554,13 +1567,13 @@ static void tll_vm_exec(TLLVM *vm) {
                 } else if (regs[a].type == TLL_FLOAT) {
                     sleepMs = (long long)regs[a].as.floating;
                 }
-                if (vm->coroutineCount > 0 && vm->ctx.currentCoroutine < vm->coroutineCount) {
-                    TLLCoroutine *co = vm->coroutines[vm->ctx.currentCoroutine];
+                if (vm->coroutineCount > 0 && TLL_CTX(vm)->currentCoroutine < vm->coroutineCount) {
+                    TLLCoroutine *co = vm->coroutines[TLL_CTX(vm)->currentCoroutine];
                     if (co) {
                         long long now = current_time_ms();
                         co->wakeTime = now + sleepMs;
                         sched_trace_record(TRACE_COROUTINE_SLEEP,
-                                vm->ctx.currentCoroutine, -1, -1,
+                                TLL_CTX(vm)->currentCoroutine, -1, -1,
                                 vm->coroutineCount, 0, 0, 0,
                                 (unsigned long long)now, 0, (unsigned long long)co->wakeTime,
                                 co ? co->state : -1);
@@ -1568,7 +1581,7 @@ static void tll_vm_exec(TLLVM *vm) {
                 }
                 coroutine_yield(vm);
                 /* After yield, frame may have changed, re-fetch */
-                frame = vm->ctx.callStack[vm->ctx.callStackSize - 1];
+                frame = TLL_CTX(vm)->callStack[TLL_CTX(vm)->callStackSize - 1];
                 regs = frame->registers;
                 break;
             }
@@ -1581,8 +1594,8 @@ static void tll_vm_exec(TLLVM *vm) {
                  */
                 int fd = 0;
                 if (regs[a].type == TLL_INT) fd = (int)regs[a].as.integer;
-                if (vm->coroutineCount > 0 && vm->ctx.currentCoroutine < vm->coroutineCount) {
-                    TLLCoroutine *co = vm->coroutines[vm->ctx.currentCoroutine];
+                if (vm->coroutineCount > 0 && TLL_CTX(vm)->currentCoroutine < vm->coroutineCount) {
+                    TLLCoroutine *co = vm->coroutines[TLL_CTX(vm)->currentCoroutine];
                     if (co && fd > 0) {
                         co->waitingFd = fd;
                         co->waitingEvents = 1;  /* READ */
@@ -1595,11 +1608,11 @@ static void tll_vm_exec(TLLVM *vm) {
                     }
                 }
                 coroutine_yield(vm);
-                frame = vm->ctx.callStack[vm->ctx.callStackSize - 1];
+                frame = TLL_CTX(vm)->callStack[TLL_CTX(vm)->callStackSize - 1];
                 regs = frame->registers;
                 /* Return waitResult in regs[a]: 1=fd ready, 0=timeout */
-                if (vm->coroutineCount > 0 && vm->ctx.currentCoroutine < vm->coroutineCount) {
-                    TLLCoroutine *co = vm->coroutines[vm->ctx.currentCoroutine];
+                if (vm->coroutineCount > 0 && TLL_CTX(vm)->currentCoroutine < vm->coroutineCount) {
+                    TLLCoroutine *co = vm->coroutines[TLL_CTX(vm)->currentCoroutine];
                     if (co) regs[a] = tll_int(co->waitResult);
                 }
                 break;
@@ -1608,8 +1621,8 @@ static void tll_vm_exec(TLLVM *vm) {
                 /* P0-15.16: Wait for socket fd to become writable. */
                 int fd = 0;
                 if (regs[a].type == TLL_INT) fd = (int)regs[a].as.integer;
-                if (vm->coroutineCount > 0 && vm->ctx.currentCoroutine < vm->coroutineCount) {
-                    TLLCoroutine *co = vm->coroutines[vm->ctx.currentCoroutine];
+                if (vm->coroutineCount > 0 && TLL_CTX(vm)->currentCoroutine < vm->coroutineCount) {
+                    TLLCoroutine *co = vm->coroutines[TLL_CTX(vm)->currentCoroutine];
                     if (co && fd > 0) {
                         co->waitingFd = fd;
                         co->waitingEvents = 2;  /* WRITE */
@@ -1622,11 +1635,11 @@ static void tll_vm_exec(TLLVM *vm) {
                     }
                 }
                 coroutine_yield(vm);
-                frame = vm->ctx.callStack[vm->ctx.callStackSize - 1];
+                frame = TLL_CTX(vm)->callStack[TLL_CTX(vm)->callStackSize - 1];
                 regs = frame->registers;
                 /* Return waitResult in regs[a]: 1=fd ready, 0=timeout */
-                if (vm->coroutineCount > 0 && vm->ctx.currentCoroutine < vm->coroutineCount) {
-                    TLLCoroutine *co = vm->coroutines[vm->ctx.currentCoroutine];
+                if (vm->coroutineCount > 0 && TLL_CTX(vm)->currentCoroutine < vm->coroutineCount) {
+                    TLLCoroutine *co = vm->coroutines[TLL_CTX(vm)->currentCoroutine];
                     if (co) regs[a] = tll_int(co->waitResult);
                 }
                 break;
@@ -1637,14 +1650,14 @@ static void tll_vm_exec(TLLVM *vm) {
                  * Stores the map pointer in coroutine.waitingChannel.
                  * Woken by builtin coroutine.wakeChannel(channelMap).
                  */
-                if (vm->coroutineCount > 0 && vm->ctx.currentCoroutine < vm->coroutineCount) {
-                    TLLCoroutine *co = vm->coroutines[vm->ctx.currentCoroutine];
+                if (vm->coroutineCount > 0 && TLL_CTX(vm)->currentCoroutine < vm->coroutineCount) {
+                    TLLCoroutine *co = vm->coroutines[TLL_CTX(vm)->currentCoroutine];
                     if (co && regs[a].type == TLL_MAP) {
                         co->waitingChannel = (void*)regs[a].as.map;
                     }
                 }
                 coroutine_yield(vm);
-                frame = vm->ctx.callStack[vm->ctx.callStackSize - 1];
+                frame = TLL_CTX(vm)->callStack[TLL_CTX(vm)->callStackSize - 1];
                 regs = frame->registers;
                 break;
             }
@@ -1652,24 +1665,24 @@ static void tll_vm_exec(TLLVM *vm) {
                 /* HALT: mark current coroutine dead, switch to next.
                  * P0-15.15: dead coroutine is recycled in coroutine_yield.
                  */
-                if (vm->coroutineCount > 0 && vm->ctx.currentCoroutine < vm->coroutineCount) {
-                    vm->coroutines[vm->ctx.currentCoroutine]->state = 2; /* dead */
+                if (vm->coroutineCount > 0 && TLL_CTX(vm)->currentCoroutine < vm->coroutineCount) {
+                    vm->coroutines[TLL_CTX(vm)->currentCoroutine]->state = 2; /* dead */
                 }
                 if (vm->coroutineCount <= 1) {
                     /* Only this coroutine remains: save, destroy, exit */
-                    int idx = vm->ctx.currentCoroutine;
+                    int idx = TLL_CTX(vm)->currentCoroutine;
                     if (idx >= 0 && idx < vm->coroutineCount) {
                         coroutine_save_current(vm);
                         coroutine_destroy(vm, idx);
                     }
-                    vm->ctx.callStack = NULL;
-                    vm->ctx.callStackSize = 0;
-                    vm->ctx.callStackCapacity = 0;
+                    TLL_CTX(vm)->callStack = NULL;
+                    TLL_CTX(vm)->callStackSize = 0;
+                    TLL_CTX(vm)->callStackCapacity = 0;
                     return;
                 }
                 coroutine_yield(vm);
                 /* After yield, frame may have changed, re-fetch */
-                frame = vm->ctx.callStack[vm->ctx.callStackSize - 1];
+                frame = TLL_CTX(vm)->callStack[TLL_CTX(vm)->callStackSize - 1];
                 regs = frame->registers;
                 break;
             }
@@ -1728,26 +1741,26 @@ void tll_vm_run(TLLVM *vm) {
 
     /* Create main coroutine wrapping existing callStack */
     TLLCoroutine *mainCo = (TLLCoroutine*)calloc(1, sizeof(TLLCoroutine));
-    mainCo->callStack = vm->ctx.callStack;
-    mainCo->callStackSize = vm->ctx.callStackSize;
-    mainCo->callStackCapacity = vm->ctx.callStackCapacity;
+    mainCo->callStack = TLL_CTX(vm)->callStack;
+    mainCo->callStackSize = TLL_CTX(vm)->callStackSize;
+    mainCo->callStackCapacity = TLL_CTX(vm)->callStackCapacity;
     mainCo->state = 0;
-    mainCo->invokeTargetStackSize = vm->ctx.invokeTargetStackSize;
+    mainCo->invokeTargetStackSize = TLL_CTX(vm)->invokeTargetStackSize;
     mainCo->result = tll_null();
     vm->coroutines[vm->coroutineCount++] = mainCo;
-    vm->ctx.currentCoroutine = 0;
+    TLL_CTX(vm)->currentCoroutine = 0;
 
     tll_vm_exec(vm);
 
     /* P0-15.15: Destroy any remaining coroutines (should be none if all
      * finished naturally, but be defensive). This also frees the main
-     * coroutine's callStack which is shared with vm->ctx.callStack. */
+     * coroutine's callStack which is shared with TLL_CTX(vm)->callStack. */
     while (vm->coroutineCount > 0) {
         coroutine_destroy(vm, 0);
     }
-    vm->ctx.callStack = NULL;
-    vm->ctx.callStackSize = 0;
-    vm->ctx.callStackCapacity = 0;
+    TLL_CTX(vm)->callStack = NULL;
+    TLL_CTX(vm)->callStackSize = 0;
+    TLL_CTX(vm)->callStackCapacity = 0;
 }
 
 /* Invoke a TLL function from builtin context (synchronous callback).
@@ -1776,7 +1789,7 @@ TLLValue tll_vm_invoke(TLLVM *vm, TLLValue fnValue, TLLValue *args, int argCount
     if (fnIdx < 0 || fnIdx >= vm->program->functionCount) return tll_null();
 
     TLLFunction *fn = &vm->program->functions[fnIdx];
-    TLLFrame *parentFrame = vm->ctx.callStack[vm->ctx.callStackSize - 1];
+    TLLFrame *parentFrame = TLL_CTX(vm)->callStack[TLL_CTX(vm)->callStackSize - 1];
     /* P2-01-C-D1: Dynamic INVOKE_RET_REG = last register of parent frame (program never uses it) */
     int INVOKE_RET_REG = parentFrame->registerCount - 1;
 
@@ -1790,11 +1803,11 @@ TLLValue tll_vm_invoke(TLLVM *vm, TLLValue fnValue, TLLValue *args, int argCount
         newFrame->locals[i] = args[i];
     }
 
-    int savedTarget = vm->ctx.invokeTargetStackSize;
-    vm->ctx.invokeTargetStackSize = vm->ctx.callStackSize;
+    int savedTarget = TLL_CTX(vm)->invokeTargetStackSize;
+    TLL_CTX(vm)->invokeTargetStackSize = TLL_CTX(vm)->callStackSize;
     push_frame(vm, newFrame);
     tll_vm_exec(vm);
-    vm->ctx.invokeTargetStackSize = savedTarget;
+    TLL_CTX(vm)->invokeTargetStackSize = savedTarget;
 
     TLLValue result = parentFrame->registers[INVOKE_RET_REG];
     tll_value_incref(result);
@@ -1804,7 +1817,7 @@ TLLValue tll_vm_invoke(TLLVM *vm, TLLValue fnValue, TLLValue *args, int argCount
 void tll_vm_free(TLLVM *vm) {
     /* P0-15.15: Destroy any remaining coroutines.
      * If tll_vm_run was called, all coroutines were already destroyed there
-     * and vm->ctx.callStack was set to NULL. If vm was never run, coroutines
+     * and TLL_CTX(vm)->callStack was set to NULL. If vm was never run, coroutines
      * may be NULL and callStack is owned by the VM directly.
      */
     if (vm->coroutines) {
@@ -1828,16 +1841,288 @@ void tll_vm_free(TLLVM *vm) {
 
     /* Free callStack only if still owned by VM (not transferred to a
      * coroutine and freed there). tll_vm_run sets this to NULL. */
-    if (vm->ctx.callStack) {
-        while (vm->ctx.callStackSize > 0) {
+    if (TLL_CTX(vm)->callStack) {
+        while (TLL_CTX(vm)->callStackSize > 0) {
             TLLFrame *f = pop_frame(vm);
             free_frame(f);
         }
-        free(vm->ctx.callStack);
+        free(TLL_CTX(vm)->callStack);
     }
 
     int i;
     for (i = 0; i < vm->globalCount; i++) tll_value_free(vm->globals[i]);
     free(vm->globals);
     free(vm);
+}
+
+
+/* === P2-01-C-D2: True Multi-Worker Runtime === */
+
+/* Shutdown sentinel value for runnable queue */
+#define TLL_SHUTDOWN_SENTINEL (-1)
+
+/* Initialize global runnable queue (thread-safe) */
+static void tll_runnable_queue_init(TLLRunnableQueue *q) {
+    q->head = NULL;
+    q->tail = NULL;
+    q->count = 0;
+#ifdef _WIN32
+    q->lock = malloc(sizeof(CRITICAL_SECTION)); InitializeCriticalSection((CRITICAL_SECTION*)q->lock);
+    q->sem = CreateSemaphore(NULL, 0, 1000000, NULL);
+#else
+    q->lock = malloc(sizeof(pthread_mutex_t)); pthread_mutex_init((pthread_mutex_t*)q->lock, NULL);
+    pthread_cond_init(&q->cond, NULL);
+#endif
+}
+
+/* Enqueue coroutine index to global runnable queue (thread-safe) */
+static void tll_runnable_queue_enqueue(TLLRunnableQueue *q, int coroutine_idx) {
+    TLLRunnableNode *node = (TLLRunnableNode*)malloc(sizeof(TLLRunnableNode));
+    node->coroutine_idx = coroutine_idx;
+    node->next = NULL;
+#ifdef _WIN32
+    EnterCriticalSection((CRITICAL_SECTION*)q->lock);
+#else
+    pthread_mutex_lock((pthread_mutex_t*)q->lock);
+#endif
+    if (q->tail) {
+        q->tail->next = node;
+    } else {
+        q->head = node;
+    }
+    q->tail = node;
+    q->count++;
+#ifdef _WIN32
+    LeaveCriticalSection((CRITICAL_SECTION*)q->lock);
+    ReleaseSemaphore(q->sem, 1, NULL);
+#else
+    pthread_mutex_unlock((pthread_mutex_t*)q->lock);
+    pthread_cond_signal(&q->cond);
+#endif
+}
+
+/* Dequeue coroutine index from global runnable queue (blocks until available) */
+static int tll_runnable_queue_dequeue(TLLRunnableQueue *q) {
+#ifdef _WIN32
+    WaitForSingleObject(q->sem, INFINITE);
+    EnterCriticalSection((CRITICAL_SECTION*)q->lock);
+#else
+    pthread_mutex_lock((pthread_mutex_t*)q->lock);
+    while (!q->head) {
+        pthread_cond_wait(&q->cond, &q->lock);
+    }
+#endif
+    TLLRunnableNode *node = q->head;
+    if (node) {
+        q->head = node->next;
+        if (!q->head) q->tail = NULL;
+        q->count--;
+    }
+#ifdef _WIN32
+    LeaveCriticalSection((CRITICAL_SECTION*)q->lock);
+#else
+    pthread_mutex_unlock((pthread_mutex_t*)q->lock);
+#endif
+    int idx = node ? node->coroutine_idx : -1;
+    free(node);
+    return idx;
+}
+
+/* Initialize worker execution context */
+static void tll_worker_ctx_init(TLLExecutionContext *ctx) {
+    ctx->callStackCapacity = 64;
+    ctx->callStack = (TLLFrame**)calloc(64, sizeof(TLLFrame*));
+    ctx->callStackSize = 0;
+    ctx->currentCoroutine = -1;
+    ctx->invokeTargetStackSize = -1;
+}
+
+/* Free worker execution context */
+static void tll_worker_ctx_free(TLLExecutionContext *ctx) {
+    if (ctx->callStack) {
+        while (ctx->callStackSize > 0) {
+            TLLFrame *f = ctx->callStack[--ctx->callStackSize];
+            free_frame(f);
+        }
+        free(ctx->callStack);
+        ctx->callStack = NULL;
+    }
+}
+
+/* Worker thread function - executes coroutines from global queue */
+#ifdef _WIN32
+static DWORD WINAPI tll_worker_thread(LPVOID param) {
+#else
+static void *tll_worker_thread(void *param) {
+#endif
+    TLLWorker *worker = (TLLWorker*)param;
+    TLLVM *vm = worker->vm;
+
+    /* Set thread-local current worker - this makes TLL_CTX(vm) use worker->ctx */
+    g_tll_current_worker = worker;
+
+    /* Initialize independent execution context */
+    tll_worker_ctx_init(&worker->ctx);
+
+    worker->running = 1;
+
+    while (!vm->shutdown_requested) {
+        /* Dequeue next runnable coroutine */
+        int coro_idx = tll_runnable_queue_dequeue(&vm->runnable_queue);
+
+        /* Check for shutdown sentinel */
+        if (coro_idx == TLL_SHUTDOWN_SENTINEL) {
+            break;
+        }
+
+        /* Validate coroutine index */
+        if (coro_idx < 0 || coro_idx >= vm->coroutineCount) {
+            continue;
+        }
+
+        TLLCoroutine *coro = vm->coroutines[coro_idx];
+        if (!coro || coro->state == TLL_COROUTINE_COMPLETED) {
+            continue;
+        }
+
+        /* Mark as RUNNING */
+        coro->state = TLL_COROUTINE_RUNNING;
+        worker->ctx.currentCoroutine = coro_idx;
+
+        /* Load coroutine's call stack into worker's independent context */
+        worker->ctx.callStack = coro->callStack;
+        worker->ctx.callStackSize = coro->callStackSize;
+        worker->ctx.callStackCapacity = coro->callStackCapacity;
+        worker->ctx.invokeTargetStackSize = 0; /* stop when call stack empty */
+
+        /* Execute the coroutine */
+        tll_vm_exec(vm);
+
+        /* Save call stack back to coroutine */
+        coro->callStack = worker->ctx.callStack;
+        coro->callStackSize = worker->ctx.callStackSize;
+        coro->callStackCapacity = worker->ctx.callStackCapacity;
+
+        /* Determine final state */
+        if (coro->callStackSize == 0) {
+            coro->state = TLL_COROUTINE_COMPLETED;
+        } else {
+            /* Yielded or waiting - requeue for later execution */
+            coro->state = TLL_COROUTINE_RUNNABLE;
+            tll_runnable_queue_enqueue(&vm->runnable_queue, coro_idx);
+        }
+
+        worker->tasks_completed++;
+        worker->ctx.callStack = NULL;
+        worker->ctx.callStackSize = 0;
+        worker->ctx.currentCoroutine = -1;
+    }
+
+    worker->running = 0;
+    tll_worker_ctx_free(&worker->ctx);
+    g_tll_current_worker = NULL;
+
+#ifdef _WIN32
+    return 0;
+#else
+    return NULL;
+#endif
+}
+
+/* Start N worker threads */
+int tll_runtime_start_workers(TLLVM *vm, int count) {
+    if (vm->multi_worker_initialized) return -1;
+    if (count <= 0 || count > 64) return -1;
+
+    /* Initialize global runnable queue */
+    tll_runnable_queue_init(&vm->runnable_queue);
+
+    /* Initialize coroutine table lock */
+#ifdef _WIN32
+    vm->coroutine_table_lock = malloc(sizeof(CRITICAL_SECTION)); InitializeCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+    vm->coroutine_table_lock = malloc(sizeof(pthread_mutex_t)); pthread_mutex_init((pthread_mutex_t*)vm->coroutine_table_lock, NULL);
+#endif
+
+    /* Allocate worker array */
+    vm->workers = (TLLWorker**)calloc(count, sizeof(TLLWorker*));
+    vm->workerCount = count;
+    vm->shutdown_requested = 0;
+
+    /* Create and start each worker */
+    for (int i = 0; i < count; i++) {
+        TLLWorker *worker = (TLLWorker*)calloc(1, sizeof(TLLWorker));
+        worker->worker_id = i;
+        worker->vm = vm;
+        worker->running = 0;
+        worker->tasks_completed = 0;
+        vm->workers[i] = worker;
+
+#ifdef _WIN32
+        worker->thread = CreateThread(NULL, 0, tll_worker_thread, worker, 0, NULL);
+        if (!worker->thread) {
+            fprintf(stderr, "tllvm: failed to create worker thread %d\n", i);
+            return -1;
+        }
+#else
+        if (pthread_create(&worker->thread, NULL, tll_worker_thread, worker) != 0) {
+            fprintf(stderr, "tllvm: failed to create worker thread %d\n", i);
+            return -1;
+        }
+#endif
+    }
+
+    vm->multi_worker_initialized = 1;
+    fprintf(stderr, "tllvm: started %d worker threads (true multi-worker runtime)\n", count);
+    return 0;
+}
+
+/* Submit a coroutine to the global runnable queue */
+int tll_runtime_submit_coroutine(TLLVM *vm, int coroutine_idx) {
+    if (!vm->multi_worker_initialized) return -1;
+    if (coroutine_idx < 0 || coroutine_idx >= vm->coroutineCount) return -1;
+
+    TLLCoroutine *coro = vm->coroutines[coroutine_idx];
+    if (!coro) return -1;
+
+    coro->state = TLL_COROUTINE_RUNNABLE;
+    tll_runnable_queue_enqueue(&vm->runnable_queue, coroutine_idx);
+    return 0;
+}
+
+/* Shutdown all worker threads */
+void tll_runtime_shutdown_workers(TLLVM *vm) {
+    if (!vm->multi_worker_initialized) return;
+
+    vm->shutdown_requested = 1;
+
+    /* Send shutdown sentinel to wake all workers */
+    for (int i = 0; i < vm->workerCount; i++) {
+        tll_runnable_queue_enqueue(&vm->runnable_queue, TLL_SHUTDOWN_SENTINEL);
+    }
+
+    /* Wait for workers to finish */
+#ifdef _WIN32
+    for (int i = 0; i < vm->workerCount; i++) {
+        if (vm->workers[i] && vm->workers[i]->thread) {
+            WaitForSingleObject(vm->workers[i]->thread, 5000);
+            CloseHandle(vm->workers[i]->thread);
+        }
+    }
+#else
+    for (int i = 0; i < vm->workerCount; i++) {
+        if (vm->workers[i]) {
+            pthread_join(vm->workers[i]->thread, NULL);
+        }
+    }
+#endif
+
+    /* Free workers */
+    for (int i = 0; i < vm->workerCount; i++) {
+        if (vm->workers[i]) free(vm->workers[i]);
+    }
+    free(vm->workers);
+    vm->workers = NULL;
+    vm->workerCount = 0;
+    vm->multi_worker_initialized = 0;
 }

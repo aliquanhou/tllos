@@ -1,0 +1,75 @@
+// P2-01-C-D2: True Multi-Worker Runtime Parallel Test
+// Uses correct coroutine.spawn() syntax with closures.
+
+fn worker_task(task_id: int) -> int {
+    let wid = runtime.currentWorkerId()
+    io.println("TASK_" + convert.toString(task_id) + " START worker=" + convert.toString(wid))
+    // Perform deterministic CPU work to create overlapping execution window
+    let sum = 0
+    let i = 0
+    while i < 100000 {
+        sum = sum + i
+        i = i + 1
+    }
+    io.println("TASK_" + convert.toString(task_id) + " END worker=" + convert.toString(wid) + " sum=" + convert.toString(sum))
+    return wid
+}
+
+fn main() -> void {
+    io.println("=== P2-01-C-D2 Multi-Worker Parallel Test ===")
+    io.println("CPU count: " + convert.toString(runtime.cpuCount()))
+
+    // Start 2 workers (D2-1, D2-2)
+    let rc = runtime.startWorkers(2)
+    io.println("startWorkers(2) = " + convert.toString(rc))
+    io.println("workerCount = " + convert.toString(runtime.workerCount()))
+
+    if rc != 0 {
+        io.println("FAIL: could not start workers")
+        return
+    }
+
+    // Spawn 2 coroutines using correct coroutine.spawn() syntax
+    let co1 = coroutine.spawn(fn() { worker_task(1) })
+    let co2 = coroutine.spawn(fn() { worker_task(2) })
+    io.println("spawned coroutines: " + convert.toString(co1) + ", " + convert.toString(co2))
+
+    // Submit both to worker queue
+    let s1 = runtime.submitCoroutine(co1)
+    let s2 = runtime.submitCoroutine(co2)
+    io.println("submitCoroutine: " + convert.toString(s1) + ", " + convert.toString(s2))
+
+    // Wait for workers to complete (simple polling)
+    let waited = 0
+    while waited < 500 {
+        let t0 = runtime.workerTasksCompleted(0)
+        let t1 = runtime.workerTasksCompleted(1)
+        if t0 + t1 >= 2 {
+            io.println("All tasks completed: worker0=" + convert.toString(t0) + " worker1=" + convert.toString(t1))
+            break
+        }
+        // Small delay to avoid busy-wait
+        let j = 0
+        while j < 100000 { j = j + 1 }
+        waited = waited + 1
+    }
+
+    // Final task counts (D2-6: no loss, no duplicate)
+    let final0 = runtime.workerTasksCompleted(0)
+    let final1 = runtime.workerTasksCompleted(1)
+    io.println("Final tasks completed: worker0=" + convert.toString(final0) + " worker1=" + convert.toString(final1))
+
+    // Shutdown workers
+    runtime.shutdownWorkers()
+    io.println("Workers shutdown")
+
+    // Verify results
+    let total = final0 + final1
+    if total >= 2 {
+        io.println("TEST_RESULT: PASS (" + convert.toString(total) + " tasks completed by workers)")
+    } else {
+        io.println("TEST_RESULT: FAIL (only " + convert.toString(total) + " tasks completed)")
+    }
+}
+
+main()

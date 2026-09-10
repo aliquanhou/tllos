@@ -1,0 +1,67 @@
+// P2-01-C-D2: Concurrency Stress Test - 2 Workers, 100 Tasks
+// Verifies no task loss, no duplicate execution, no crash, no deadlock.
+
+let TOTAL_TASKS = 100
+let completed_count = 0
+
+fn worker_task(task_id: int) -> int {
+    let wid = runtime.currentWorkerId()
+    // Deterministic CPU work
+    let sum = 0
+    let i = 0
+    while i < 10000 {
+        sum = sum + i
+        i = i + 1
+    }
+    return wid
+}
+
+fn main() -> void {
+    io.println("=== P2-01-C-D2 Concurrency Test: 2W/100T ===")
+
+    let rc = runtime.startWorkers(2)
+    if rc != 0 {
+        io.println("FAIL: could not start workers")
+        return
+    }
+    io.println("Workers started: " + convert.toString(runtime.workerCount()))
+
+    // Spawn and submit 100 tasks
+    let i = 0
+    while i < TOTAL_TASKS {
+        let co = coroutine.spawn(fn() { worker_task(i) })
+        runtime.submitCoroutine(co)
+        i = i + 1
+    }
+    io.println("Submitted " + convert.toString(TOTAL_TASKS) + " tasks")
+
+    // Wait for completion
+    let waited = 0
+    while waited < 1000 {
+        let t0 = runtime.workerTasksCompleted(0)
+        let t1 = runtime.workerTasksCompleted(1)
+        if t0 + t1 >= TOTAL_TASKS {
+            io.println("All tasks completed: worker0=" + convert.toString(t0) + " worker1=" + convert.toString(t1))
+            break
+        }
+        let j = 0
+        while j < 50000 { j = j + 1 }
+        waited = waited + 1
+    }
+
+    let final0 = runtime.workerTasksCompleted(0)
+    let final1 = runtime.workerTasksCompleted(1)
+    let total = final0 + final1
+
+    runtime.shutdownWorkers()
+
+    io.println("Final: worker0=" + convert.toString(final0) + " worker1=" + convert.toString(final1) + " total=" + convert.toString(total))
+
+    if total == TOTAL_TASKS {
+        io.println("TEST_RESULT: PASS (" + convert.toString(total) + "/" + convert.toString(TOTAL_TASKS) + " tasks completed, no loss)")
+    } else {
+        io.println("TEST_RESULT: FAIL (only " + convert.toString(total) + "/" + convert.toString(TOTAL_TASKS) + " tasks completed)")
+    }
+}
+
+main()
