@@ -70,7 +70,7 @@ IMPL_COUNT=$(printf '%s\n' "$IMPL_INDICES" | grep -c . 2>/dev/null || echo 0)
 echo "  Implementation explicit idx == N: $IMPL_COUNT"
 
 # 5c. Check every implementation explicit index is declared in spec (prevents undeclared builtins)
-UNDECLARED=$(comm -13 <(printf '%s\n' "$SPEC_INDICES") <(printf '%s\n' "$IMPL_INDICES") 2>/dev/null || true)
+UNDECLARED=$(printf '%s\n' "$IMPL_INDICES" | grep -v -F -x -f <(printf '%s\n' "$SPEC_INDICES") 2>/dev/null || true)
 if [ -n "$UNDECLARED" ]; then
     echo "  FAIL: implementation has indices not declared in spec: $UNDECLARED"
     ERRORS=$((ERRORS + 1))
@@ -80,7 +80,7 @@ fi
 
 # 5d. Check spec extension indices (120+) are all implemented explicitly (Genesis 0-97 covered by range checks in step 4)
 SPEC_EXT=$(printf '%s\n' "$SPEC_INDICES" | awk '$1 >= 120' 2>/dev/null || true)
-MISSING_IMPL=$(comm -23 <(printf '%s\n' "$SPEC_EXT") <(printf '%s\n' "$IMPL_INDICES") 2>/dev/null || true)
+MISSING_IMPL=$(printf '%s\n' "$SPEC_EXT" | grep -v -F -x -f <(printf '%s\n' "$IMPL_INDICES") 2>/dev/null || true)
 if [ -n "$MISSING_IMPL" ]; then
     echo "  FAIL: spec extension indices missing from implementation: $MISSING_IMPL"
     ERRORS=$((ERRORS + 1))
