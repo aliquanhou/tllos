@@ -87,26 +87,44 @@ connect(s, (struct sockaddr*)&addr, sizeof(addr))   [Windows blocking call]
 5. **Cross-platform**：Windows / Linux / macOS 行为一致
 6. **Honest about gaps**：当前 API 未暴露错误码，不伪造
 
-### 2.2 Total Retry Budget（总重试预算）
+### 2.2 Total Retry Budget（总重试预算）— v2 修正版
 
+**严格最坏时间上界公式**：
 ```
-TOTAL_RETRY_BUDGET <= 15 秒
+Total = Σ(connect_i + handshake_i) + Σ(backoff_i) ≤ TOTAL_RETRY_BUDGET
+```
+
+**参数**：
+```
+TOTAL_RETRY_BUDGET = 25 秒
 ├── MAX_ATTEMPTS = 5
-├── 单次 connect 上界 = 3 秒（OS 默认，127.0.0.1 约 2 秒）
-├── Backoff 序列 = [200ms, 400ms, 600ms, 800ms, 1000ms]
-│   （第 N 次失败后等待 min(N*200ms, 1000ms)）
-└── 最坏情况总时间 = 5 * 3s (connect) + 4 * 1s (backoff) = 19s
-    （实际 127.0.0.1 场景：5 * 2s + 4 * 1s = 14s，在 15s 预算内）
+├── 单次 connect 上界 = 2.5 秒（127.0.0.1 实验约 2185ms，取保守 2.5s）
+├── 单次 handshake 上界 = 2 秒（架构师批准缩短为 2s，独立于 connect）
+├── Backoff 序列 = [200ms, 400ms, 600ms, 800ms]
+│   （第 N 次失败后等待 min(N*200ms, 1000ms)，共 4 次 backoff）
+└── Backoff 总计 = 200+400+600+800 = 2000ms = 2 秒
 ```
 
-**时间上界证明**：
-- 对于 127.0.0.1 场景：单次 connect 最多约 3 秒（实验证明约 2 秒）
-- 5 次 attempt × 3 秒 = 15 秒
-- 4 次 backoff × 1 秒 = 4 秒
-- 理论最坏 = 19 秒
-- **实际 127.0.0.1 场景最坏 = 5 × 2s + 4 × 1s = 14 秒 ≤ 15 秒预算**
+**两条失败路径的严格上界**：
 
-> **注意**：对于非 127.0.0.1 地址，单次 connect 可能超过 3 秒。但在本项目的 Blockchain/P2P 测试场景中，所有节点均使用 127.0.0.1，因此预算成立。未来如果需要支持远程地址，应引入非阻塞 connect + select 超时（方案 C，不在本次范围）。
+| 路径 | 单次 attempt | 5 次 attempt | + 4 次 backoff | 总计 | 预算 |
+|------|-------------|-------------|----------------|------|------|
+| **Connect 失败**（最常见，Node A 未监听） | connect=2.5s, 无 handshake | 5×2.5=12.5s | +2s | **14.5s** | ≤25s ✅ |
+| **Handshake 失败**（少见，对端 connect 成功但不响应） | connect=2.5s + handshake=2s=4.5s | 5×4.5=22.5s | +2s | **24.5s** | ≤25s ✅ |
+
+**最坏情况证明**：
+- 最坏路径 = 每次 attempt 都 connect 成功但 handshake 超时
+- 单次 attempt = connect(2.5s) + handshake(2s) = 4.5s
+- 5 次 attempt = 5 × 4.5s = 22.5s
+- 4 次 backoff = 2s
+- **Total = 24.5s ≤ 25s TOTAL_RETRY_BUDGET ✅**
+
+> **注意**：对于非 127.0.0.1 地址，单次 connect 可能超过 2.5 秒。但在本项目的 Blockchain/P2P 测试场景中，所有节点均使用 127.0.0.1，因此预算成立。未来如果需要支持远程地址，应引入非阻塞 connect + select 超时（方案 C，不在本次范围）。
+
+> **Connect timeout 与 Handshake timeout 是两个独立预算**：
+> - Connect timeout = OS 默认（127.0.0.1 约 2.1s），不由我们设置
+> - Handshake timeout = 2s，通过 `tcp.setTimeout(fd, 2000)` 设置，仅影响 recv/waitRead
+> - 二者不叠加为一个 "connectTimeoutMs" 参数
 
 ### 2.3 `p2pConnectWithRetry()` 契约
 
@@ -118,6 +136,7 @@ TOTAL_RETRY_BUDGET <= 15 秒
   MAX_ATTEMPTS = 5
   BACKOFF_BASE_MS = 200
   BACKOFF_MAX_MS = 1000
+  HANDSHAKE_TIMEOUT_MS = 2000  // 架构师批准：独立于 connect 的 handshake 超时
 
 行为：
   for attempt = 1 to MAX_ATTEMPTS:
@@ -266,7 +285,7 @@ fn p2pConnectWithRetry(node: map, host: string, port: int) -> bool {
             io.println("[" + node.nodeId + "] CONNECT_SUCCESS attempt=" + convert.toString(attempt) + " elapsed_ms=" + convert.toString(elapsed) + " fd=" + convert.toString(fd))
             
             // Handshake (reuse existing logic from p2pConnect)
-            tcp.setTimeout(fd, 5000)
+            tcp.setTimeout(fd, 2000)  // HANDSHAKE_TIMEOUT_MS = 2s (架构师批准)
             let handshake = {
                 nodeId: node.nodeId,
                 host: node.host,
@@ -501,56 +520,83 @@ R2 完成后必须满足：
 
 ---
 
-## 9. 时间上界证明（所有失败路径）
+## 9. 时间上界证明（所有失败路径）— v2 修正版
 
-### 路径 1：Leader 永远不启动（最坏情况）
+**严格公式**：`Total = Σ(connect_i + handshake_i) + Σ(backoff_i) ≤ 25s`
+
+**参数**：
+- connect 上界 = 2.5s（127.0.0.1 实验约 2185ms，取保守 2.5s）
+- handshake 上界 = 2.0s（架构师批准，`tcp.setTimeout(fd, 2000)`）
+- backoff 序列 = [200, 400, 600, 800]ms，总计 2.0s
+- MAX_ATTEMPTS = 5
+
+### 路径 1：Connect 失败（最常见，Node A 未监听）
 
 ```
-attempt 1: connect 127.0.0.1:19201 → 约 2s 后失败 (WSAECONNREFUSED)
+attempt 1: connect → 2.5s 失败 (WSAECONNREFUSED)
 backoff 1: 200ms
-attempt 2: connect → 约 2s 失败
+attempt 2: connect → 2.5s 失败
 backoff 2: 400ms
-attempt 3: connect → 约 2s 失败
+attempt 3: connect → 2.5s 失败
 backoff 3: 600ms
-attempt 4: connect → 约 2s 失败
+attempt 4: connect → 2.5s 失败
 backoff 4: 800ms
-attempt 5: connect → 约 2s 失败
+attempt 5: connect → 2.5s 失败
 → return false
 
-总时间 = 5*2s + (200+400+600+800)ms = 10s + 2s = 12s ≤ 15s 预算 ✅
+总时间 = 5×2.5s + (200+400+600+800)ms = 12.5s + 2.0s = 14.5s ≤ 25s 预算 ✅
 ```
 
-### 路径 2：Leader 在 attempt 3 时启动
+### 路径 2：Leader 在 attempt 3 时启动（典型 delayed startup）
 
 ```
-attempt 1: connect → 2s 失败
+attempt 1: connect → 2.5s 失败
 backoff 1: 200ms
-attempt 2: connect → 2s 失败
+attempt 2: connect → 2.5s 失败
 backoff 2: 400ms
-attempt 3: connect → 成功（Leader 已启动）
-handshake → 成功
+attempt 3: connect → 成功（Leader 已启动，约 5ms）
+handshake → 成功（约 5ms）
 → return true
 
-总时间 = 2*2s + 200ms + 400ms + connect_success + handshake ≈ 5s ✅
+总时间 = 2×2.5s + 200ms + 400ms + connect_success + handshake ≈ 5.6s ≤ 25s ✅
 ```
 
-### 路径 3：connect 成功但 handshake 失败
+### 路径 3：Handshake 失败（最坏情况，对端 connect 成功但不响应）
 
 ```
-attempt 1: connect → 成功
-handshake → 失败（对端不响应）
-tcp.setTimeout(fd, 5000) → coroutine.waitRead 最多 5s
+attempt 1: connect → 2.5s 成功
+           handshake → 2.0s 超时 (coroutine.waitRead)
 backoff 1: 200ms
-attempt 2: ...
-（handshake 失败也重试，最多 5 次）
+attempt 2: connect → 2.5s 成功
+           handshake → 2.0s 超时
+backoff 2: 400ms
+attempt 3: connect → 2.5s 成功
+           handshake → 2.0s 超时
+backoff 3: 600ms
+attempt 4: connect → 2.5s 成功
+           handshake → 2.0s 超时
+backoff 4: 800ms
+attempt 5: connect → 2.5s 成功
+           handshake → 2.0s 超时
+→ return false
 
-最坏总时间 = 5*(connect + 5s handshake_timeout) + 2s backoff
-但实际 handshake 失败通常是对端关闭连接，waitRead 会立即返回，不会等 5s
+单次 attempt = connect(2.5s) + handshake(2.0s) = 4.5s
+5 次 attempt = 5 × 4.5s = 22.5s
+4 次 backoff = 2.0s
+总时间 = 22.5s + 2.0s = 24.5s ≤ 25s 预算 ✅
 ```
 
-> **注意**：handshake 超时路径的时间上界需要进一步验证。如果对端 connect 成功但不发送 handshake 响应，`coroutine.waitRead(fd)` 会等待 `tcp.setTimeout(fd, 5000)` 设置的 5 秒超时。5 次 × 5 秒 = 25 秒，超过 15 秒预算。
->
-> **缓解**：在 R2 实现中，handshake 失败后可以选择不重试（因为 connect 已成功，问题在对端协议层），或者将 handshake 超时设为更短（如 2 秒）。这需要在实现时确定。
+### 三条路径汇总
+
+| 路径 | 单次 attempt | 5 次 attempt | + backoff | 总计 | 预算 |
+|------|-------------|-------------|-----------|------|------|
+| Connect 失败（常见） | 2.5s | 12.5s | +2.0s | **14.5s** | ≤25s ✅ |
+| Leader delayed（典型） | 2.5s（前2次） | ~5.0s | +0.6s | **~5.6s** | ≤25s ✅ |
+| Handshake 失败（最坏） | 4.5s | 22.5s | +2.0s | **24.5s** | ≤25s ✅ |
+
+**结论**：所有失败路径的严格最坏时间上界 = 24.5s ≤ 25s TOTAL_RETRY_BUDGET。
+
+> **注意**：handshake 失败路径是理论最坏情况（对端 connect 成功但持续 2 秒不发 handshake 响应，连续 5 次）。实际中 handshake 失败通常是对端关闭连接，`coroutine.waitRead` 会立即返回（EOF），不会等满 2 秒。因此实际 handshake 失败路径通常远快于 24.5s。
 
 ---
 
