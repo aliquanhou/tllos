@@ -421,11 +421,30 @@ static TLLCoroutine *coroutine_create(TLLVM *vm, TLLFunction *fn, TLLValue *args
     }
     co->callStack[co->callStackSize++] = frame;
 
+    /* P2-01-C-D3: Thread-safe coroutine table insertion.
+     * Lock if multi-worker runtime is active to prevent realloc race
+     * with worker threads accessing vm->coroutines[]. */
+    int co_locked = 0;
+    if (vm->coroutine_table_lock) {
+#ifdef _WIN32
+        EnterCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+        pthread_mutex_lock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
+        co_locked = 1;
+    }
     if (vm->coroutineCount >= vm->coroutineCapacity) {
         vm->coroutineCapacity *= 2;
         vm->coroutines = (TLLCoroutine**)realloc(vm->coroutines, vm->coroutineCapacity * sizeof(TLLCoroutine*));
     }
     vm->coroutines[vm->coroutineCount++] = co;
+    if (co_locked) {
+#ifdef _WIN32
+        LeaveCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+        pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
+    }
     return co;
 }
 
@@ -1955,6 +1974,35 @@ static void tll_runnable_queue_enqueue(TLLRunnableQueue *q, int coroutine_idx) {
 #endif
 }
 
+/* P2-01-C-D3: Non-blocking try dequeue.
+ * Returns coroutine index if available, -1 if queue empty.
+ * Used for worker-local queue first-try before falling back to global queue. */
+static int tll_runnable_queue_try_dequeue(TLLRunnableQueue *q) {
+#ifdef _WIN32
+    /* Non-blocking: check semaphore first */
+    DWORD wr = WaitForSingleObject((HANDLE)q->sem, 0);
+    if (wr != WAIT_OBJECT_0) return -1;  /* queue empty */
+    EnterCriticalSection((CRITICAL_SECTION*)q->lock);
+#else
+    if (pthread_mutex_trylock((pthread_mutex_t*)q->lock) != 0) return -1;
+#endif
+    TLLRunnableNode *node = q->head;
+    int idx = -1;
+    if (node) {
+        q->head = node->next;
+        if (!q->head) q->tail = NULL;
+        q->count--;
+        idx = node->coroutine_idx;
+    }
+#ifdef _WIN32
+    LeaveCriticalSection((CRITICAL_SECTION*)q->lock);
+#else
+    pthread_mutex_unlock((pthread_mutex_t*)q->lock);
+#endif
+    if (node) free(node);
+    return idx;
+}
+
 /* Dequeue coroutine index from global runnable queue (blocks until available) */
 static int tll_runnable_queue_dequeue(TLLRunnableQueue *q) {
 #ifdef _WIN32
@@ -2226,18 +2274,31 @@ static void *tll_worker_thread(void *param) {
     /* Initialize independent execution context */
     tll_worker_ctx_init(&worker->ctx);
 
+    /* P2-01-C-D3: Initialize worker-local runnable queue */
+    tll_runnable_queue_init(&worker->local_queue);
+    worker->local_enqueue_count = 0;
+    worker->local_dequeue_count = 0;
+
     worker->running = 1;
 
     while (!vm->shutdown_requested) {
         /* D2-R2: Wake expired sleepers before checking queue */
         tll_wake_expired_sleepers(vm);
 
-        /* Dequeue with timeout to allow periodic timer/IO checks */
-        int coro_idx = tll_runnable_queue_dequeue_timeout(&vm->runnable_queue, 50);
-        if (coro_idx == -1) {
-            /* D2-R3: Check IO readiness when queue is empty */
-            tll_wake_io_ready(vm, 0);
-            continue;
+        /* P2-01-C-D3: Local-first dequeue.
+         * Try worker-local queue first (non-blocking),
+         * then fall back to global queue (with timeout). */
+        int coro_idx = tll_runnable_queue_try_dequeue(&worker->local_queue);
+        if (coro_idx != -1) {
+            worker->local_dequeue_count++;
+        } else {
+            /* Local queue empty — try global queue with timeout */
+            coro_idx = tll_runnable_queue_dequeue_timeout(&vm->runnable_queue, 50);
+            if (coro_idx == -1) {
+                /* D2-R3: Check IO readiness when queue is empty */
+                tll_wake_io_ready(vm, 0);
+                continue;
+            }
         }
 
         /* Check for shutdown sentinel */
@@ -2321,10 +2382,13 @@ static void *tll_worker_thread(void *param) {
         pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
 #endif
 
-        /* Requeue outside the lock to avoid lock contention.
+        /* P2-01-C-D3: Requeue to worker-local queue first.
+         * This worker just executed this coroutine, so cache locality
+         * favors re-executing it on the same worker.
          * Only RUNNABLE coroutines are requeued; WAITING ones stay until woken. */
         if (should_requeue) {
-            tll_runnable_queue_enqueue(&vm->runnable_queue, coro_idx);
+            tll_runnable_queue_enqueue(&worker->local_queue, coro_idx);
+            worker->local_enqueue_count++;
         }
 
         worker->tasks_completed++;
@@ -2334,6 +2398,8 @@ static void *tll_worker_thread(void *param) {
     }
 
     worker->running = 0;
+    /* P2-01-C-D3: Cleanup worker-local runnable queue */
+    tll_runnable_queue_cleanup(&worker->local_queue);
     tll_worker_ctx_free(&worker->ctx);
     g_tll_current_worker = NULL;
 

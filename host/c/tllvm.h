@@ -152,6 +152,10 @@ typedef struct TLLWorker {
     TLLVM *vm;  /* back pointer to shared runtime */
     volatile int running;
     volatile int tasks_completed;
+    /* P2-01-C-D3: Worker-local runnable queue. */
+    TLLRunnableQueue local_queue;
+    volatile int local_enqueue_count;
+    volatile int local_dequeue_count;
 #ifdef _WIN32
     void *thread;
 #else
