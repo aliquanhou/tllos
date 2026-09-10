@@ -184,7 +184,8 @@ void sched_trace_dump(void) {
 #ifdef _WIN32
 #include <malloc.h>  /* MSVC alloca */
 #ifdef _MSC_VER
-/* MSVC: use system winsock2.h */
+/* MSVC: use system winsock2.h. Define FD_SETSIZE before include to support large socket handles. */
+#define FD_SETSIZE 1024
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
@@ -587,6 +588,11 @@ static void coroutine_yield(TLLVM *vm) {
                     if (minWake == 0 || co->wakeTime < minWake) minWake = co->wakeTime;
                     sleepCount++;
                 }
+                /* P0-RUNTIME-08-R2: IO wait deadline also contributes to select() timeout */
+                if (co->waitDeadline > 0) {
+                    if (minWake == 0 || co->waitDeadline < minWake) minWake = co->waitDeadline;
+                    sleepCount++;
+                }
             }
 
             /* Nothing to wait on (only channel-waiters) -> restore self */
@@ -598,6 +604,28 @@ static void coroutine_yield(TLLVM *vm) {
                 coroutine_restore(vm, old);
                 dbg_restore_self++;
                 return;
+            }
+            /* P0-RUNTIME-08-R2: If only IO waiters and no sleepers/timers,
+             * and the current (main) coroutine is dead, do NOT block forever.
+             * This happens when the main coroutine finishes while worker
+             * coroutines are still waiting on IO (e.g. accept loops).
+             * Return to let the VM exit cleanly instead of hanging in select(). */
+            if (ioCount > 0 && sleepCount == 0 && selfDead) {
+                int allNonDeadAreIO = 1;
+                for (i = 0; i < vm->coroutineCount; i++) {
+                    TLLCoroutine *co = vm->coroutines[i];
+                    if (!co || co->state == 2) continue;
+                    if (co->waitingFd <= 0 && co->waitingChannel == NULL) {
+                        allNonDeadAreIO = 0;
+                        break;
+                    }
+                }
+                if (allNonDeadAreIO) {
+                    sched_trace_record(TRACE_RESTORE_SELF, old, old, pass,
+                            vm->coroutineCount, 0, 0, 0,
+                            (unsigned long long)now, 0, 0, -1);
+                    return;
+                }
             }
 
             sched_trace_record(TRACE_TIMER_WAIT, old, -1, pass,
@@ -626,7 +654,35 @@ static void coroutine_yield(TLLVM *vm) {
                         if (isReady) {
                             co->waitingFd = 0;
                             co->waitingEvents = 0;
+                            co->waitDeadline = 0;
                         }
+                    }
+                }
+                /* P0-RUNTIME-08-R2: Wake IO waiters whose waitDeadline has expired.
+                 * This gives coroutine.waitReadWithTimeout() true bounded semantics. */
+                now = current_time_ms();
+                for (i = 0; i < vm->coroutineCount; i++) {
+                    TLLCoroutine *co = vm->coroutines[i];
+                    if (!co || co->waitingFd <= 0) continue;
+                    if (co->waitDeadline > 0 && co->waitDeadline <= now) {
+                        co->waitingFd = 0;
+                        co->waitingEvents = 0;
+                        co->waitDeadline = 0;
+                    }
+                }
+                /* P0-RUNTIME-08-R2: Handle select() SOCKET_ERROR.
+                 * On Windows, if any fd in the set is invalid (not a real socket),
+                 * select() returns SOCKET_ERROR instead of timing out. This causes
+                 * an infinite busy-loop because no IO waiter is woken and no timer
+                 * progresses. Wake all IO waiters to break the loop and let them
+                 * re-evaluate their fd state. */
+                if (ready == SOCKET_ERROR) {
+                    for (i = 0; i < vm->coroutineCount; i++) {
+                        TLLCoroutine *co = vm->coroutines[i];
+                        if (!co || co->waitingFd <= 0) continue;
+                        co->waitingFd = 0;
+                        co->waitingEvents = 0;
+                        co->waitDeadline = 0;
                     }
                 }
             } else {
@@ -931,6 +987,35 @@ static void tll_vm_exec(TLLVM *vm) {
                 }
             }
             coroutine_yield(vm);
+            /* P0-RUNTIME-08-R2: If the current (main) coroutine is dead and
+             * all remaining non-dead coroutines are only waiting on IO (no
+             * runnable, no sleepers), the program should exit instead of
+             * looping forever on a dead coroutine. */
+            if (vm->currentCoroutine >= 0 &&
+                vm->currentCoroutine < vm->coroutineCount &&
+                vm->coroutines[vm->currentCoroutine] &&
+                vm->coroutines[vm->currentCoroutine]->state == 2) {
+                int onlyIOWaiters = 1;
+                int ci2;
+                for (ci2 = 0; ci2 < vm->coroutineCount; ci2++) {
+                    TLLCoroutine *co = vm->coroutines[ci2];
+                    if (!co || co->state == 2) continue;
+                    if (co->waitingFd <= 0 && co->waitingChannel == NULL) {
+                        onlyIOWaiters = 0;
+                        break;
+                    }
+                }
+                if (onlyIOWaiters) {
+                    /* Destroy all coroutines and exit */
+                    while (vm->coroutineCount > 0) {
+                        coroutine_destroy(vm, 0);
+                    }
+                    vm->callStack = NULL;
+                    vm->callStackSize = 0;
+                    vm->callStackCapacity = 0;
+                    break;
+                }
+            }
             continue;
         }
         TLLFrame *frame = vm->callStack[vm->callStackSize - 1];
@@ -1479,6 +1564,7 @@ static void tll_vm_exec(TLLVM *vm) {
                  * Sets current coroutine to WAITING_IO, then yields.
                  * Scheduler will call select() and wake when fd is ready.
                  * operand a = register holding socket fd.
+                 * operand b = timeout in ms (0=no timeout, >0=waitDeadline; P0-RUNTIME-08-R2)
                  */
                 int fd = 0;
                 if (regs[a].type == TLL_INT) fd = (int)regs[a].as.integer;
@@ -1487,6 +1573,12 @@ static void tll_vm_exec(TLLVM *vm) {
                     if (co && fd > 0) {
                         co->waitingFd = fd;
                         co->waitingEvents = 1;  /* READ */
+                        co->waitDeadline = 0;
+                        /* P0-RUNTIME-08-R2: only set deadline when timeout operand is present */
+                        if (inst->operandCount > 1 && regs[b].type == TLL_INT && regs[b].as.integer > 0) {
+                            long long now = current_time_ms();
+                            co->waitDeadline = now + (long long)regs[b].as.integer;
+                        }
                     }
                 }
                 coroutine_yield(vm);

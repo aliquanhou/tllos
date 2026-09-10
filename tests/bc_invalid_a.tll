@@ -1,6 +1,6 @@
 // P0-15.17.1: Invalid Block test - Node A (normal miner + validator)
-from "../../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, submitTransaction, mineBlockFromMempool, printNodeStatus, getNodeStatus
-from "../../stdlib/blockchain" import createTransaction, signTransaction, createBlock, getLatestBlock
+from "../stdlib/blockchain_node" import createBlockchainNode, startNode, stopNode, connectToPeer, submitTransaction, mineBlockFromMempool, printNodeStatus, getNodeStatus
+from "../stdlib/blockchain" import createTransaction, signTransaction, createBlock, getLatestBlock
 
 let node = createBlockchainNode("nodeA", "127.0.0.1", 19401, 1, 50)
 startNode(node)

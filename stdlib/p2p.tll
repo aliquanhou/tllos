@@ -116,7 +116,6 @@ fn p2pConnect(node: map, host: string, port: int) -> bool {
         io.println("[" + node.nodeId + "] Failed to connect to " + host + ":" + convert.toString(port))
         return false
     }
-    tcp.setTimeout(_pc_fd, 5000)
     // Send handshake
     let _pc_handshake = {
         nodeId: node.nodeId,
@@ -126,8 +125,8 @@ fn p2pConnect(node: map, host: string, port: int) -> bool {
     }
     let _pc_msg = encodeMessage("handshake", _pc_handshake)
     tcp.send(_pc_fd, _pc_msg)
-    // Non-blocking wait for handshake response (yields coroutine)
-    coroutine.waitRead(_pc_fd)
+    // Wait for handshake response with 5s bounded timeout (P0-RUNTIME-08-R2)
+    coroutine.waitReadWithTimeout(_pc_fd, 5000)
     let _pc_resp = tcp.tryRecv(_pc_fd, 65536)
     let _pc_decoded = decodeMessages(_pc_resp)
     if arrays.length(_pc_decoded.messages) > 0 {
@@ -177,7 +176,6 @@ fn p2pConnectWithRetry(node: map, host: string, port: int) -> bool {
         if fd >= 0 {
             io.println("[" + node.nodeId + "] CONNECT_SUCCESS attempt=" + convert.toString(attempt) + " elapsed_ms=" + convert.toString(elapsed) + " fd=" + convert.toString(fd))
 
-            tcp.setTimeout(fd, HANDSHAKE_TIMEOUT_MS)
             let _pc_handshake = {
                 nodeId: node.nodeId,
                 host: node.host,
@@ -186,7 +184,7 @@ fn p2pConnectWithRetry(node: map, host: string, port: int) -> bool {
             }
             let _pc_msg = encodeMessage("handshake", _pc_handshake)
             tcp.send(fd, _pc_msg)
-            coroutine.waitRead(fd)
+            coroutine.waitReadWithTimeout(fd, HANDSHAKE_TIMEOUT_MS)
             let _pc_resp = tcp.tryRecv(fd, 65536)
             let _pc_decoded = decodeMessages(_pc_resp)
             if arrays.length(_pc_decoded.messages) > 0 {

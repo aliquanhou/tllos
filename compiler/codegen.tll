@@ -1863,11 +1863,27 @@ fn cg_compileCall(expr: map) -> int {
         return resultReg
     }
 
-    // P0-15.16: coroutine.waitRead(fd) -> WAIT_READ opcode
+    // P0-15.16: coroutine.waitRead(fd) -> WAIT_READ opcode (timeout=0, no deadline)
     if callee["kind"] == "Member" && callee.object["kind"] == "Ident" && callee.object["name"] == "coroutine" && callee["property"] == "waitRead" {
         if arrays.length(args) > 0 {
             let fdReg = cg_compileExpression(arrays.get(args, 0))
-            cg_emit(OP_WAIT_READ, [fdReg])
+            cg_emit(OP_WAIT_READ, [fdReg, 0])
+        }
+        cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
+        return resultReg
+    }
+
+    // P0-RUNTIME-08-R2: coroutine.waitReadWithTimeout(fd, timeoutMs) -> WAIT_READ with deadline
+    if callee["kind"] == "Member" && callee.object["kind"] == "Ident" && callee.object["name"] == "coroutine" && callee["property"] == "waitReadWithTimeout" {
+        if arrays.length(args) > 0 {
+            let fdReg = cg_compileExpression(arrays.get(args, 0))
+            let timeoutReg = 0
+            if arrays.length(args) > 1 {
+                timeoutReg = cg_compileExpression(arrays.get(args, 1))
+            } else {
+                timeoutReg = cg_addConstant(0)
+            }
+            cg_emit(OP_WAIT_READ, [fdReg, timeoutReg])
         }
         cg_emit(OP_LOAD_CONST, [resultReg, cg_addConstant(null)])
         return resultReg

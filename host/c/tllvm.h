@@ -95,6 +95,8 @@ typedef struct {
     int waitingFd;       /* 0=not waiting on IO, >0=socket fd to wait on */
     int waitingEvents;   /* 1=READ, 2=WRITE, 4=ERROR (bitmask) */
     void *waitingChannel; /* NULL=not waiting on channel, else TLLMap* channel pointer */
+    /* P0-RUNTIME-08-R2: IO wait deadline (0=no timeout, >0=ms timestamp; scheduler wakes on expiry) */
+    long long waitDeadline;
 } TLLCoroutine;
 
 /* === VM === */

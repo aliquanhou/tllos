@@ -68,5 +68,6 @@ int main(int argc, char *argv[]) {
         free(prog);
     }
 
+    fflush(stdout);
     return tll_exit_code;
 }
