@@ -1,9 +1,9 @@
 {
   "version": "1.3",
   "frozen": false,
-  "note": "Genesis builtins 0-97 frozen at v1.1. P0-2/P0-3.1 extensions 120-131 active. Spec must match host/c/builtin.c exactly. P0-4 added Lambda/Struct/Enum and TLL stdlib (stdlib/*.tll).",
-  "total_defined": 110,
-  "total_range": "0-97, 120-131",
+  "note": "Genesis builtins 0-97 frozen at v1.1. P0-2/P0-3.1 extensions 120-131 active. P0-RUNTIME-08 transport extensions 132-145 and 221-222 active. Spec must match host/c/builtin.c exactly. P0-4 added Lambda/Struct/Enum and TLL stdlib (stdlib/*.tll).",
+  "total_defined": 126,
+  "total_range": "0-97, 120-145, 221-222",
   "modules": {
     "io": {
       "category": "host_abi",
@@ -71,7 +71,8 @@
         {"name": "isEmpty", "index": 45, "params": ["string"], "return": "bool"},
         {"name": "reverse", "index": 46, "params": ["string"], "return": "string"},
         {"name": "lines", "index": 47, "params": ["string"], "return": "array<string>"},
-        {"name": "words", "index": 48, "params": ["string"], "return": "array<string>"}
+        {"name": "words", "index": 48, "params": ["string"], "return": "array<string>"},
+        {"name": "concatMany", "index": 132, "params": ["array<string>"], "return": "string"}
       ]
     },
     "arrays": {
@@ -185,7 +186,34 @@
       "note": "P0-RUNTIME-08 transport hardening. Non-blocking connect and socket error query for bounded connect timeout (used by coroutine.waitWriteWithTimeout). Not part of Genesis frozen ABI.",
       "functions": [
         {"name": "connectNonBlocking", "index": 221, "params": ["string", "int"], "return": "int"},
-        {"name": "getSocketError", "index": 222, "params": ["int"], "return": "int"}
+        {"name": "getSocketError", "index": 222, "params": ["int"], "return": "int"},
+        {"name": "listen", "index": 133, "params": ["string", "int"], "return": "int"},
+        {"name": "accept", "index": 134, "params": ["int"], "return": "int"},
+        {"name": "connect", "index": 135, "params": ["string", "int"], "return": "int"},
+        {"name": "send", "index": 136, "params": ["int", "string"], "return": "int"},
+        {"name": "recv", "index": 137, "params": ["int", "int"], "return": "string"},
+        {"name": "close", "index": 138, "params": ["int"], "return": "void"},
+        {"name": "setTimeout", "index": 139, "params": ["int", "int"], "return": "bool"},
+        {"name": "tryAccept", "index": 140, "params": ["int", "int"], "return": "int"},
+        {"name": "select", "index": 141, "params": ["array<int>", "int"], "return": "array<int>"},
+        {"name": "tryRecv", "index": 142, "params": ["int", "int"], "return": "string"},
+        {"name": "trySend", "index": 143, "params": ["int", "string"], "return": "int"}
+      ]
+    },
+    "coroutine": {
+      "category": "host_abi",
+      "status": "runtime_extension",
+      "note": "Coroutine runtime primitives. Not part of Genesis frozen ABI.",
+      "functions": [
+        {"name": "wakeChannel", "index": 144, "params": ["map"], "return": "int"}
+      ]
+    },
+    "crypto": {
+      "category": "host_abi",
+      "status": "crypto_extension",
+      "note": "Cryptographic primitives. Not part of Genesis frozen ABI.",
+      "functions": [
+        {"name": "randomBytes", "index": 145, "params": ["int"], "return": "string"}
       ]
     }
   },
