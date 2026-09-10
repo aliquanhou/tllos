@@ -1,0 +1,52 @@
+// Simple test: worker executes coroutine with sleep, verify wakeup
+let phase1_done = 0
+let phase2_done = 0
+let task_worker = -1
+
+fn sleep_task() -> int {
+    task_worker = runtime.currentWorkerId()
+    phase1_done = 1
+    io.println("  phase1 done on worker " + convert.toString(task_worker))
+
+    coroutine.sleep(100)
+
+    phase2_done = 1
+    io.println("  phase2 done on worker " + convert.toString(task_worker))
+    return 0
+}
+
+fn main() -> void {
+    io.println("=== Simple Worker Sleep Wakeup Test ===")
+
+    let rc = runtime.startWorkers(1)
+    io.println("startWorkers: " + convert.toString(rc))
+
+    let co = coroutine.spawn(fn() { sleep_task() })
+    runtime.submitCoroutine(co)
+
+    io.println("submitted, waiting...")
+
+    // Wait for phase2
+    let waited = 0
+    while waited < 100 {
+        if phase2_done == 1 { break }
+        let j = 0
+        while j < 200000 { j = j + 1 }
+        waited = waited + 1
+    }
+
+    io.println("waited=" + convert.toString(waited))
+    io.println("phase1_done=" + convert.toString(phase1_done))
+    io.println("phase2_done=" + convert.toString(phase2_done))
+    io.println("task_worker=" + convert.toString(task_worker))
+
+    runtime.shutdownWorkers()
+
+    if phase2_done == 1 {
+        io.println("TEST_RESULT: PASS - sleep wakeup works")
+    } else {
+        io.println("TEST_RESULT: FAIL - sleep wakeup failed")
+    }
+}
+
+main()

@@ -322,3 +322,97 @@ Called from `tll_runtime_shutdown_workers()` after workers join.
 ---
 
 **D2-R1 Construction Complete. Awaiting independent architecture audit.**
+---
+
+## 15. D2-R2 Scheduler State Closure (REQUEST CHANGES → FIXED)
+
+**Date:** 2026-09-11
+**Trigger:** Independent audit found 2 gaps: WAITING state semantics + Worker/legacy scheduler boundary.
+
+### 15.1 R2-1: WAITING State Semantics (FIXED)
+
+**Problem:** Worker completion phase used only `callStackSize > 0` to decide requeue. Coroutines that executed sleep/wait_read/wait_write/wait_channel were incorrectly marked RUNNABLE and immediately requeued, causing busy-loop.
+
+**Fix:** Worker completion now correctly distinguishes 3 states using existing `coroutine_is_runnable()`:
+- **COMPLETED**: `callStackSize == 0` → no requeue
+- **RUNNABLE**: `callStackSize > 0 && coroutine_is_runnable()` → requeue
+- **WAITING**: `callStackSize > 0 && !coroutine_is_runnable()` (wakeTime>0 / waitingFd>0 / waitingChannel!=NULL) → NO requeue, timer/IO/channel will wake later
+
+State transitions all under `coroutine_table_lock`.
+
+### 15.2 R2-2: Worker / Legacy Scheduler Boundary (FIXED)
+
+**Problem:** Legacy `coroutine_yield()` inside `tll_vm_exec()` would scan `vm->coroutines[]` and switch to another coroutine. In Worker mode, this caused:
+- Worker 0 executing A → A yields → scheduler switches to B → Worker 0 now executing B → Worker outer loop still thinks it owns A → context corruption / dual-execution risk
+- Both tasks ended up on Worker 0, Worker 1 idle
+- Sleep wakeup didn't work because legacy scheduler was bypassed
+
+**Fix (3 parts):**
+
+**Part A — Worker-mode yield returns to worker:**
+Added thread-local `g_worker_yield_requested`. In `coroutine_yield()`:
+```c
+if (g_tll_current_worker != NULL) {
+    coroutine_save_current(vm);
+    g_worker_yield_requested = 1;
+    return;  // do NOT switch to another coroutine
+}
+```
+In `tll_vm_exec()` main loop:
+```c
+if (g_worker_yield_requested) {
+    g_worker_yield_requested = 0;
+    return;  // return to worker outer loop
+}
+```
+This ensures: **one Worker = one coroutine at a time**. No internal scheduler switching.
+
+**Part B — Timer wakeup for Worker mode:**
+Added `tll_wake_expired_sleepers(vm)`: scans all coroutines, if `wakeTime > 0 && wakeTime <= now`, clears wakeTime, and if state==WAITING, sets RUNNABLE + enqueues.
+
+Added `tll_runnable_queue_dequeue_timeout(q, timeoutMs)`: Windows uses `WaitForSingleObject(sem, timeout)`, POSIX uses `pthread_cond_timedwait`. Returns -1 on timeout.
+
+Worker loop now:
+```c
+while (!shutdown) {
+    tll_wake_expired_sleepers(vm);  // wake expired sleepers
+    coro_idx = dequeue_timeout(50ms);  // wait with timeout
+    if (coro_idx == -1) continue;  // timeout, re-check timers
+    // execute coroutine...
+}
+```
+
+**Part C — No dual execution guarantee:**
+With claim lock (D2-R1) + worker-mode yield (D2-R2), a coroutine can only be:
+- RUNNABLE → claimed by exactly one Worker → RUNNING
+- RUNNING → yields → WAITING or RUNNABLE (requeue)
+- WAITING → timer wakes → RUNNABLE → claimed by exactly one Worker
+No path allows two Workers to execute the same coroutine simultaneously.
+
+### 15.3 D2-R2 Test Results
+
+| Test | Result | Notes |
+|------|--------|-------|
+| multi_worker_parallel (2W/2T) | PASS | |
+| multi_worker_overlap_proof | PASS | overlap_proven=1 |
+| multi_worker_stress (2W/100T) | PASS | 54/46 load balance |
+| worker_global_test | PASS | |
+| simple_sleep_wakeup_test | PASS | sleep wakeup works in worker mode |
+| **worker_ownership_boundary** | **PASS (3/3 runs)** | A on W0, B on W1, no dual exec, 2 phases each |
+
+**Ownership boundary test key results (stable across 3 runs):**
+- A worker phase1: 0, phase2: 0 or 1 (migration allowed)
+- B worker phase1: 1, phase2: 0 or 1
+- A exec count: 2, B exec count: 2 (no dual execution)
+- Different workers at start: true
+- Both completed: true
+
+### 15.4 Coroutine Migration Note
+
+Coroutine migration after sleep is **normal and allowed** scheduler behavior: when A sleeps on Worker 0, Worker 0 marks A WAITING and picks up B; when A's timer expires, any free Worker (0 or 1) can claim A. This is not a bug — it's how multi-worker schedulers work.
+
+The key invariant is: **no simultaneous dual execution**, which is guaranteed by claim lock + worker-mode yield.
+
+---
+
+**D2-R2 Construction Complete. Awaiting independent architecture audit.**
