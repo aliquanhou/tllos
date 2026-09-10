@@ -1,20 +1,21 @@
-// P2-01-C-D2-R3.1-final: Wake list >256 coroutines test
+// P2-01-C-D2-R3.1-closure: Wake list 300 coroutines deterministic test
 // Verifies: dynamic wakeList has no 256 cap, all 300 coroutines are woken and executed
+// Uses 1 worker for deterministic global counter, no race conditions
 let completed_count = 0
 let target_count = 300
 
 fn sleep_task(id: int) -> int {
-    coroutine.sleep(50)
-    // Atomic-ish increment via global (single worker in this test)
+    coroutine.sleep(30)
     completed_count = completed_count + 1
     return 0
 }
 
 fn main() -> void {
-    io.println("=== Wake List 300 Coroutines Test (no 256 cap) ===")
+    io.println("=== Wake List 300 Coroutines Deterministic Test (1 worker) ===")
 
-    let rc = runtime.startWorkers(2)
-    io.println("startWorkers: " + convert.toString(rc))
+    // Use 1 worker for deterministic counter, no race conditions
+    let rc = runtime.startWorkers(1)
+    io.println("startWorkers(1): " + convert.toString(rc))
 
     io.println("Submitting 300 coroutines...")
     let i = 0
@@ -25,9 +26,9 @@ fn main() -> void {
     }
     io.println("Submitted 300 coroutines, waiting for completion...")
 
-    // Wait for all to complete
+    // Wait generously for all 300 to complete (30ms sleep + scheduling overhead)
     let waited = 0
-    while waited < 200 {
+    while waited < 500 {
         if completed_count >= target_count { break }
         let j = 0
         while j < 100000 { j = j + 1 }
@@ -40,7 +41,7 @@ fn main() -> void {
     runtime.shutdownWorkers()
 
     if completed_count >= target_count {
-        io.println("TEST_RESULT: PASS - all 300 coroutines woken and executed (no 256 cap)")
+        io.println("TEST_RESULT: PASS - all 300 coroutines woken and executed (300 > 256, no cap)")
     } else {
         io.println("TEST_RESULT: FAIL - only " + convert.toString(completed_count) + " / " + convert.toString(target_count) + " completed")
     }

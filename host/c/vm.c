@@ -497,10 +497,18 @@ static int coroutine_is_runnable(TLLCoroutine *co) {
 int coroutine_wake_channel(TLLVM *vm, void *channelPtr) {
     int woken = 0;
     int i;
-    /* D2-R3.1: Wake list for exact-once enqueue.
-     * Only coroutines that transition WAITING -> RUNNABLE in this call are enqueued. */
-    int *wakeList = (int*)malloc(vm->coroutineCount * sizeof(int));
+    /* D2-R3.1-closure: Dynamically allocated wake list.
+     * FAIL-CLOSED: if malloc fails, do NOT change any coroutine state.
+     * Either all wakes are recorded, or no state transition happens. */
+    int *wakeList = NULL;
     int wakeCount = 0;
+    if (vm->coroutineCount > 0) {
+        wakeList = (int*)malloc(vm->coroutineCount * sizeof(int));
+        if (wakeList == NULL) {
+            /* malloc failed: fail-closed, no state changes, no enqueue */
+            return 0;
+        }
+    }
 
 #ifdef _WIN32
     EnterCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
@@ -515,7 +523,7 @@ int coroutine_wake_channel(TLLVM *vm, void *channelPtr) {
              * Already-RUNNABLE coroutines are NOT enqueued again. */
             if (co->state == TLL_COROUTINE_WAITING) {
                 co->state = TLL_COROUTINE_RUNNABLE;
-                if (wakeList != NULL \&\& wakeCount < vm->coroutineCount) {
+                if (wakeCount < vm->coroutineCount) {
                     wakeList[wakeCount++] = i;
                 }
             }
@@ -2017,9 +2025,17 @@ static int tll_runnable_queue_dequeue_timeout(TLLRunnableQueue *q, int timeoutMs
 static void tll_wake_expired_sleepers(TLLVM *vm) {
     long long now = current_time_ms();
     int i;
-    /* D2-R3.1: Wake list for exact-once enqueue. */
-    int *wakeList = (int*)malloc(vm->coroutineCount * sizeof(int));
+    /* D2-R3.1-closure: Dynamically allocated wake list.
+     * FAIL-CLOSED: if malloc fails, do NOT change any coroutine state. */
+    int *wakeList = NULL;
     int wakeCount = 0;
+    if (vm->coroutineCount > 0) {
+        wakeList = (int*)malloc(vm->coroutineCount * sizeof(int));
+        if (wakeList == NULL) {
+            /* malloc failed: fail-closed, no state changes, no enqueue */
+            return;
+        }
+    }
 
 #ifdef _WIN32
     EnterCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
@@ -2034,7 +2050,7 @@ static void tll_wake_expired_sleepers(TLLVM *vm) {
             /* D2-R3.1: Only record if this is a true WAITING -> RUNNABLE transition. */
             if (co->state == TLL_COROUTINE_WAITING) {
                 co->state = TLL_COROUTINE_RUNNABLE;
-                if (wakeList != NULL \&\& wakeCount < vm->coroutineCount) {
+                if (wakeCount < vm->coroutineCount) {
                     wakeList[wakeCount++] = i;
                 }
             }
@@ -2063,9 +2079,17 @@ static int tll_wake_io_ready(TLLVM *vm, int timeoutMs) {
     int i;
     int ioCount = 0;
     int maxFd = 0;
-    /* D2-R3.1: Wake list for exact-once enqueue. */
-    int *wakeList = (int*)malloc(vm->coroutineCount * sizeof(int));
+    /* D2-R3.1-closure: Dynamically allocated wake list.
+     * FAIL-CLOSED: if malloc fails, do NOT change any coroutine state. */
+    int *wakeList = NULL;
     int wakeCount = 0;
+    if (vm->coroutineCount > 0) {
+        wakeList = (int*)malloc(vm->coroutineCount * sizeof(int));
+        if (wakeList == NULL) {
+            /* malloc failed: fail-closed, no state changes, no enqueue */
+            return 0;
+        }
+    }
     fd_set readfds, writefds, exceptfds;
     FD_ZERO(&readfds);
     FD_ZERO(&writefds);
@@ -2142,7 +2166,7 @@ static int tll_wake_io_ready(TLLVM *vm, int timeoutMs) {
             /* D2-R3.1: Only record if this is a true WAITING -> RUNNABLE transition. */
             if (co->state == TLL_COROUTINE_WAITING) {
                 co->state = TLL_COROUTINE_RUNNABLE;
-                if (wakeList != NULL \&\& wakeCount < vm->coroutineCount) {
+                if (wakeCount < vm->coroutineCount) {
                     wakeList[wakeCount++] = i;
                 }
             }
