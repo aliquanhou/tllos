@@ -11,6 +11,8 @@ Execution Gateway
        ↓
 Execution Engine Core          ← 本层
        ↓
+Runtime Bridge                ← P2-04.2 新增
+       ↓
 Runtime Adapter
        ↓
 TLL Runtime Boundary

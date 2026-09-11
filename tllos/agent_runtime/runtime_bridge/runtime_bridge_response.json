@@ -1,0 +1,84 @@
+{
+  "schema_name": "Runtime Bridge Response",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-11",
+  "description": "Runtime Bridge 返回的响应格式。",
+
+  "required_fields": [
+    "execution_id",
+    "status",
+    "runtime_result",
+    "audit_event"
+  ],
+
+  "fields": {
+    "execution_id": {
+      "type": "string",
+      "description": "执行唯一标识符",
+      "required": true
+    },
+    "status": {
+      "type": "string",
+      "description": "执行状态",
+      "required": true,
+      "enum": [
+        "CREATED",
+        "VALIDATED",
+        "FORWARDED",
+        "COMPLETED",
+        "REJECTED"
+      ]
+    },
+    "runtime_result": {
+      "type": "object",
+      "description": "Runtime 执行结果",
+      "required": true,
+      "fields": {
+        "status": "string (required)",
+        "output": "object (required)"
+      }
+    },
+    "audit_event": {
+      "type": "object",
+      "description": "审计事件",
+      "required": true,
+      "fields": {
+        "event_id": "string (required)",
+        "event_type": "string (required)",
+        "timestamp": "string (required)"
+      }
+    }
+  },
+
+  "example_success": {
+    "execution_id": "exec-001",
+    "status": "COMPLETED",
+    "runtime_result": {
+      "status": "SUCCESS",
+      "output": {
+        "result": "done"
+      }
+    },
+    "audit_event": {
+      "event_id": "evt-001",
+      "event_type": "RUNTIME_RESPONSE_RECEIVED",
+      "timestamp": "2026-09-11T12:00:00Z"
+    }
+  },
+
+  "example_rejected": {
+    "execution_id": "exec-002",
+    "status": "REJECTED",
+    "runtime_result": {
+      "status": "REJECTED",
+      "output": {
+        "reason": "No evidence provided"
+      }
+    },
+    "audit_event": {
+      "event_id": "evt-002",
+      "event_type": "RUNTIME_BRIDGE_VALIDATED",
+      "timestamp": "2026-09-11T12:00:00Z"
+    }
+  }
+}

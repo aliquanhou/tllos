@@ -47,6 +47,26 @@ Runtime Adapter  ← 当前层
 
 ---
 
+## Runtime Bridge Layer (P2-04.2)
+
+**Runtime Bridge 是 Execution Engine 与 Runtime Adapter 之间的必经层。**
+
+所有 Runtime 请求必须经过：
+
+```
+Execution Engine
+       ↓
+Runtime Bridge          ← 不可绕过
+       ↓
+Runtime Adapter
+       ↓
+TLL Runtime
+```
+
+**禁止：** 直接从 Execution Engine 调用 Runtime Adapter，必须经过 Runtime Bridge。
+
+---
+
 ## Execution Engine Bridge (P2-04.1)
 
 ### 调用链

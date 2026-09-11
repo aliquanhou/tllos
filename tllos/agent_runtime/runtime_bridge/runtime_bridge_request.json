@@ -1,0 +1,114 @@
+{
+  "schema_name": "Runtime Bridge Request",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-11",
+  "description": "Runtime Bridge 接收的请求格式。",
+
+  "required_fields": [
+    "agent_id",
+    "task_id",
+    "execution_id",
+    "permission",
+    "evidence",
+    "runtime_target"
+  ],
+
+  "fields": {
+    "agent_id": {
+      "type": "string",
+      "description": "Agent 唯一标识符",
+      "required": true
+    },
+    "task_id": {
+      "type": "string",
+      "description": "任务唯一标识符",
+      "required": true
+    },
+    "execution_id": {
+      "type": "string",
+      "description": "执行唯一标识符",
+      "required": true
+    },
+    "permission": {
+      "type": "object",
+      "description": "权限信息",
+      "required": true,
+      "fields": {
+        "state": "string (required: APPROVED/DENIED)",
+        "name": "string (required)"
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "description": "证据绑定",
+      "required": true,
+      "fields": {
+        "reference": "string (required)",
+        "hash": "string (required)"
+      }
+    },
+    "runtime_target": {
+      "type": "object",
+      "description": "运行时目标",
+      "required": true,
+      "fields": {
+        "type": "string (required: adapter/mock)",
+        "name": "string (required)"
+      }
+    },
+    "operation": {
+      "type": "string",
+      "description": "操作名称",
+      "required": false
+    },
+    "input": {
+      "type": "object",
+      "description": "输入参数",
+      "required": false
+    }
+  },
+
+  "states": [
+    "CREATED",
+    "VALIDATED",
+    "FORWARDED",
+    "COMPLETED",
+    "REJECTED"
+  ],
+
+  "example_valid": {
+    "agent_id": "doubao-a",
+    "task_id": "task-001",
+    "execution_id": "exec-001",
+    "permission": {
+      "state": "APPROVED",
+      "name": "write:evidence"
+    },
+    "evidence": {
+      "reference": "ev-001",
+      "hash": "sha256:abc123..."
+    },
+    "runtime_target": {
+      "type": "mock",
+      "name": "mock_adapter"
+    },
+    "operation": "write_evidence",
+    "input": {
+      "content": "some content"
+    }
+  },
+
+  "example_no_evidence": {
+    "agent_id": "doubao-a",
+    "task_id": "task-002",
+    "execution_id": "exec-002",
+    "permission": {
+      "state": "APPROVED",
+      "name": "write:evidence"
+    },
+    "runtime_target": {
+      "type": "mock",
+      "name": "mock_adapter"
+    }
+  }
+}
