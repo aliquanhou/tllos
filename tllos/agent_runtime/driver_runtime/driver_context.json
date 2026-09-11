@@ -1,0 +1,64 @@
+{
+  "context_name": "Driver Context",
+  "context_version": "1.0.0",
+  "context_date": "2026-09-12",
+  "description": "Driver 执行上下文 Schema 定义。",
+
+  "required_fields": [
+    "execution_id",
+    "agent_identity",
+    "capability",
+    "permission",
+    "runtime_target",
+    "evidence_reference",
+    "governance_reference"
+  ],
+
+  "fields": {
+    "execution_id": {
+      "type": "string",
+      "description": "执行 ID",
+      "required": true
+    },
+    "agent_identity": {
+      "type": "string",
+      "description": "Agent 身份",
+      "required": true
+    },
+    "capability": {
+      "type": "string",
+      "description": "所需能力",
+      "required": true
+    },
+    "permission": {
+      "type": "string",
+      "description": "所需权限",
+      "required": true
+    },
+    "runtime_target": {
+      "type": "string",
+      "description": "运行时目标",
+      "required": true
+    },
+    "evidence_reference": {
+      "type": "string",
+      "description": "证据引用",
+      "required": true
+    },
+    "governance_reference": {
+      "type": "string",
+      "description": "治理引用",
+      "required": true
+    }
+  },
+
+  "rules": [
+    "execution_id 必须唯一",
+    "agent_identity 不能为空",
+    "capability 必须与 Driver 匹配",
+    "permission 必须与 Capability 匹配",
+    "runtime_target 必须是已注册的 Driver",
+    "evidence_reference 必须存在",
+    "governance_reference 必须存在"
+  ]
+}

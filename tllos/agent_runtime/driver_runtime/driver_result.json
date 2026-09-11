@@ -1,0 +1,60 @@
+{
+  "result_name": "Driver Result",
+  "result_version": "1.0.0",
+  "result_date": "2026-09-12",
+  "description": "Driver 执行结果 Schema 定义。",
+
+  "required_fields": [
+    "status",
+    "output",
+    "error",
+    "execution_time",
+    "evidence",
+    "audit_reference"
+  ],
+
+  "fields": {
+    "status": {
+      "type": "string",
+      "enum": ["SUCCESS", "FAILED", "REJECTED", "TIMEOUT"],
+      "description": "执行状态",
+      "required": true
+    },
+    "output": {
+      "type": "string",
+      "description": "执行输出",
+      "required": true
+    },
+    "error": {
+      "type": "string",
+      "description": "错误信息",
+      "required": true
+    },
+    "execution_time": {
+      "type": "number",
+      "description": "执行时间（毫秒）",
+      "required": true
+    },
+    "evidence": {
+      "type": "string",
+      "description": "证据引用",
+      "required": true
+    },
+    "audit_reference": {
+      "type": "string",
+      "description": "审计引用",
+      "required": true
+    }
+  },
+
+  "result_statuses": ["SUCCESS", "FAILED", "REJECTED", "TIMEOUT"],
+
+  "rules": [
+    "status 必须是 4 种之一",
+    "output 不能为空（FAILED 时可为空）",
+    "error 为空表示成功",
+    "execution_time 必须 >= 0",
+    "evidence 不能为空",
+    "audit_reference 不能为空"
+  ]
+}
