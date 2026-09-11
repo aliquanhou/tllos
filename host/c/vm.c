@@ -2285,10 +2285,44 @@ static void *tll_worker_thread(void *param) {
         /* D2-R2: Wake expired sleepers before checking queue */
         tll_wake_expired_sleepers(vm);
 
+        /* P2-01-C-D3-R2-P3: Queue OFF experiment - scan coroutines directly */
+        int coro_idx = -1;
+        if (queue_is_off()) {
+            /* Queue OFF: scan vm->coroutines[] for RUNNABLE coroutine.
+             * No queue node malloc/free involved. */
+#ifdef _WIN32
+            EnterCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+            pthread_mutex_lock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
+            int scan_idx = -1;
+            for (int si = 0; si < vm->coroutineCount; si++) {
+                if (vm->coroutines[si] && vm->coroutines[si]->state == TLL_COROUTINE_RUNNABLE) {
+                    scan_idx = si;
+                    vm->coroutines[si]->state = TLL_COROUTINE_RUNNING;
+                    break;
+                }
+            }
+#ifdef _WIN32
+            LeaveCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+            pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
+            if (scan_idx == -1) {
+                /* No runnable coroutine - sleep briefly then retry */
+#ifdef _WIN32
+                Sleep(1);
+#else
+                usleep(1000);
+#endif
+                continue;
+            }
+            coro_idx = scan_idx;
+        } else {
         /* P2-01-C-D3: Local-first dequeue.
          * Try worker-local queue first (non-blocking),
          * then fall back to global queue (with timeout). */
-        int coro_idx = tll_runnable_queue_try_dequeue(&worker->local_queue);
+        coro_idx = tll_runnable_queue_try_dequeue(&worker->local_queue);
         if (coro_idx != -1) {
             worker->local_dequeue_count++;
         } else {
@@ -2300,6 +2334,7 @@ static void *tll_worker_thread(void *param) {
                 continue;
             }
         }
+        } /* end queue_is_off else */
 
         /* Check for shutdown sentinel */
         if (coro_idx == TLL_SHUTDOWN_SENTINEL) {
@@ -2313,28 +2348,35 @@ static void *tll_worker_thread(void *param) {
 
         /* D2-R1: Claim coroutine exactly-once using coroutine_table_lock.
          * Only RUNNABLE coroutines can be claimed; this prevents two workers
-         * from simultaneously executing the same coroutine. */
+         * from simultaneously executing the same coroutine.
+         * P2-01-C-D3-R2-P3: In Queue OFF mode, claim was already done during scan. */
+        TLLCoroutine *coro = NULL;
+        if (!queue_is_off()) {
 #ifdef _WIN32
-        EnterCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+            EnterCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
 #else
-        pthread_mutex_lock((pthread_mutex_t*)vm->coroutine_table_lock);
+            pthread_mutex_lock((pthread_mutex_t*)vm->coroutine_table_lock);
 #endif
-        TLLCoroutine *coro = vm->coroutines[coro_idx];
-        if (!coro || coro->state != TLL_COROUTINE_RUNNABLE) {
-            /* Already claimed by another worker, completed, or invalid */
+            coro = vm->coroutines[coro_idx];
+            if (!coro || coro->state != TLL_COROUTINE_RUNNABLE) {
+                /* Already claimed by another worker, completed, or invalid */
+#ifdef _WIN32
+                LeaveCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
+#else
+                pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
+#endif
+                continue;
+            }
+            coro->state = TLL_COROUTINE_RUNNING;  /* claim: RUNNABLE -> RUNNING */
 #ifdef _WIN32
             LeaveCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
 #else
             pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
 #endif
-            continue;
+        } else {
+            /* Queue OFF mode: coro was already claimed during scan */
+            coro = vm->coroutines[coro_idx];
         }
-        coro->state = TLL_COROUTINE_RUNNING;  /* claim: RUNNABLE -> RUNNING */
-#ifdef _WIN32
-        LeaveCriticalSection((CRITICAL_SECTION*)vm->coroutine_table_lock);
-#else
-        pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
-#endif
 
         worker->ctx.currentCoroutine = coro_idx;
 
