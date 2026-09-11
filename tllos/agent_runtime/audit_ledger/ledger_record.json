@@ -1,0 +1,76 @@
+{
+  "record_name": "TLL OS Ledger Record",
+  "record_version": "1.0.0",
+  "record_date": "2026-09-11",
+  "record_description": "Audit Ledger 中的一条完整记录。包含事件引用、Agent、任务、证据和完整性信息。",
+
+  "required_fields": {
+    "ledger_id": {
+      "type": "string",
+      "description": "账本记录唯一标识符",
+      "required": true
+    },
+    "event_id": {
+      "type": "string",
+      "description": "对应的 Audit Event ID",
+      "required": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent 标识符",
+      "required": true
+    },
+    "task_id": {
+      "type": "string",
+      "description": "任务标识符",
+      "required": true
+    },
+    "previous_record": {
+      "type": "string",
+      "description": "上一条记录的 ID（首条为 null）",
+      "required": true
+    },
+    "evidence_ref": {
+      "type": "string",
+      "description": "证据引用",
+      "required": false
+    },
+    "integrity": {
+      "type": "string",
+      "description": "完整性校验值",
+      "required": true
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ACTIVE", "ARCHIVED", "REVOKED"],
+      "description": "记录状态",
+      "required": true
+    }
+  },
+
+  "example": {
+    "ledger_id": "led-001",
+    "event_id": "evt-001",
+    "agent_id": "doubao-a",
+    "task_id": "P2-03.4-TEST-001",
+    "previous_record": "led-000",
+    "evidence_ref": "evidence-001",
+    "integrity": "logical_chain_v1",
+    "status": "ACTIVE"
+  },
+
+  "note": {
+    "previous_record": "当前只是逻辑引用，不是区块链哈希链",
+    "integrity": "当前只是逻辑完整性，不是密码学完整性"
+  },
+
+  "validation_rules": [
+    "ledger_id 必须存在",
+    "event_id 必须存在",
+    "agent_id 必须存在",
+    "task_id 必须存在",
+    "previous_record 必须存在（首条为 null 或 genesis）",
+    "integrity 必须存在",
+    "status 必须是规定的 3 种之一"
+  ]
+}

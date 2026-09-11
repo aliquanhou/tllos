@@ -1,0 +1,113 @@
+{
+  "event_name": "TLL OS Audit Event",
+  "event_version": "1.0.0",
+  "event_date": "2026-09-11",
+  "event_description": "Audit Ledger 中的事件格式定义。每个 Agent 行为都对应一个 Audit Event。",
+
+  "event_types": [
+    "AgentRegistered",
+    "CapabilityDeclared",
+    "PermissionRequested",
+    "PermissionGranted",
+    "PermissionDenied",
+    "TaskCreated",
+    "ExecutionRequested",
+    "ExecutionCompleted",
+    "ExecutionFailed",
+    "EvidenceGenerated",
+    "TaskRejected",
+    "AuditReviewed"
+  ],
+
+  "required_fields": {
+    "event_id": {
+      "type": "string",
+      "description": "事件唯一标识符",
+      "required": true
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "AgentRegistered",
+        "CapabilityDeclared",
+        "PermissionRequested",
+        "PermissionGranted",
+        "PermissionDenied",
+        "TaskCreated",
+        "ExecutionRequested",
+        "ExecutionCompleted",
+        "ExecutionFailed",
+        "EvidenceGenerated",
+        "TaskRejected",
+        "AuditReviewed"
+      ],
+      "description": "事件类型",
+      "required": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent 标识符",
+      "required": true
+    },
+    "task_id": {
+      "type": "string",
+      "description": "任务标识符",
+      "required": true
+    },
+    "capability": {
+      "type": "string",
+      "description": "使用的能力",
+      "required": false
+    },
+    "permission": {
+      "type": "string",
+      "description": "使用的权限",
+      "required": false
+    },
+    "action": {
+      "type": "string",
+      "description": "执行的动作",
+      "required": false
+    },
+    "evidence_ref": {
+      "type": "string",
+      "description": "证据引用（ExecutionCompleted 必须有）",
+      "required": false
+    },
+    "status": {
+      "type": "string",
+      "enum": ["SUCCESS", "FAILURE", "PENDING", "REJECTED"],
+      "description": "事件状态",
+      "required": true
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "事件时间",
+      "required": true
+    }
+  },
+
+  "example": {
+    "event_id": "evt-001",
+    "event_type": "ExecutionCompleted",
+    "agent_id": "doubao-a",
+    "task_id": "P2-03.4-TEST-001",
+    "capability": "write_evidence",
+    "permission": "write:evidence",
+    "action": "write_evidence_file",
+    "evidence_ref": "evidence-001",
+    "status": "SUCCESS",
+    "timestamp": "2026-09-11T10:05:00Z"
+  },
+
+  "validation_rules": [
+    "event_id 必须存在",
+    "event_type 必须是规定的 12 种之一",
+    "agent_id 必须存在",
+    "task_id 必须存在",
+    "status 必须是规定的 4 种之一",
+    "ExecutionCompleted 必须有 evidence_ref",
+    "ExecutionRequested 必须有 permission"
+  ]
+}
