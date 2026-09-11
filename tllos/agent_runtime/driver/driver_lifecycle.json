@@ -1,0 +1,48 @@
+{
+  "schema_name": "Driver Lifecycle",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-12",
+  "description": "Driver 生命周期状态机定义。",
+
+  "states": [
+    "REGISTERED",
+    "VALIDATING",
+    "AUTHORIZED",
+    "READY",
+    "EXECUTING",
+    "COMPLETED",
+    "FAILED",
+    "DISABLED"
+  ],
+
+  "normal_transitions": {
+    "REGISTERED": ["VALIDATING"],
+    "VALIDATING": ["AUTHORIZED", "FAILED"],
+    "AUTHORIZED": ["READY", "FAILED"],
+    "READY": ["EXECUTING", "DISABLED"],
+    "EXECUTING": ["COMPLETED", "FAILED"],
+    "COMPLETED": [],
+    "FAILED": [],
+    "DISABLED": []
+  },
+
+  "invalid_transitions": [
+    "REGISTERED -> EXECUTING",
+    "REGISTERED -> COMPLETED",
+    "VALIDATING -> READY",
+    "AUTHORIZED -> EXECUTING",
+    "READY -> COMPLETED",
+    "COMPLETED -> EXECUTING"
+  ],
+
+  "rules": [
+    "Driver 必须从 REGISTERED 开始",
+    "Driver 必须经过 VALIDATING",
+    "Driver 必须经过 AUTHORIZED",
+    "Driver 必须经过 READY",
+    "执行完成必须到 COMPLETED",
+    "执行失败必须到 FAILED",
+    "非法跳转必须 REJECT",
+    "DISABLED 是终态"
+  ]
+}

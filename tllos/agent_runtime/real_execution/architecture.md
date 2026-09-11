@@ -41,6 +41,8 @@ Runtime Adapter
   ↓
 Real Execution              ← P2-05.0
   ↓
+Driver Registry             ← P2-05.1
+  ↓
 Real Runtime / Driver
 ```
 

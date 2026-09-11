@@ -1,0 +1,40 @@
+{
+  "mapping_name": "Driver Capability-Permission Mapping",
+  "mapping_version": "1.0.0",
+  "mapping_date": "2026-09-12",
+  "description": "Driver 能力与权限的映射关系。",
+
+  "mappings": [
+    {
+      "driver_id": "tll.execute",
+      "capability": "tll_execution",
+      "permission": "runtime.execute.tll",
+      "risk_level": "LOW"
+    },
+    {
+      "driver_id": "python.execute",
+      "capability": "python_execution",
+      "permission": "runtime.execute.python",
+      "risk_level": "MEDIUM"
+    },
+    {
+      "driver_id": "shell.execute",
+      "capability": "shell_execution",
+      "permission": "runtime.execute.shell",
+      "risk_level": "HIGH"
+    },
+    {
+      "driver_id": "http.request",
+      "capability": "http_request",
+      "permission": "runtime.request.http",
+      "risk_level": "MEDIUM"
+    }
+  ],
+
+  "rules": [
+    "Capability != Permission",
+    "每个 Driver 必须有对应的 Permission",
+    "Permission 必须与 Capability 匹配",
+    "高风险 Driver 需要额外审批"
+  ]
+}

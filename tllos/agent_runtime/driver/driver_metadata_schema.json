@@ -1,0 +1,66 @@
+{
+  "schema_name": "Driver Metadata",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-12",
+  "description": "Driver 元数据 Schema 定义。",
+
+  "required_fields": [
+    "driver_id",
+    "runtime_type",
+    "capability",
+    "permission",
+    "handler",
+    "evidence",
+    "status"
+  ],
+
+  "fields": {
+    "driver_id": {
+      "type": "string",
+      "description": "Driver 唯一标识符",
+      "required": true
+    },
+    "runtime_type": {
+      "type": "string",
+      "description": "运行时类型",
+      "required": true
+    },
+    "capability": {
+      "type": "string",
+      "description": "Driver 能力",
+      "required": true
+    },
+    "permission": {
+      "type": "string",
+      "description": "所需权限",
+      "required": true
+    },
+    "handler": {
+      "type": "string",
+      "description": "处理函数",
+      "required": true
+    },
+    "evidence": {
+      "type": "string",
+      "description": "证据引用",
+      "required": true
+    },
+    "status": {
+      "type": "string",
+      "description": "Driver 状态",
+      "enum": ["REGISTERED", "VALIDATING", "AUTHORIZED", "READY", "EXECUTING", "COMPLETED", "FAILED", "DISABLED"],
+      "required": true
+    }
+  },
+
+  "driver_statuses": ["REGISTERED", "VALIDATING", "AUTHORIZED", "READY", "EXECUTING", "COMPLETED", "FAILED", "DISABLED"],
+
+  "rules": [
+    "driver_id 必须唯一",
+    "runtime_type 必须是支持的类型",
+    "permission 必须与 capability 匹配",
+    "status 必须是规定的 8 种之一",
+    "未知 driver_id 必须 REJECT",
+    "重复注册必须 REJECT"
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "registry_name": "TLL OS Driver Registry",
+  "registry_version": "1.0.0",
+  "registry_date": "2026-09-12",
+  "description": "Driver 注册中心，管理所有可用 Driver。",
+
+  "drivers": [
+    {
+      "driver_id": "tll.execute",
+      "runtime_type": "tll_runtime",
+      "capability": "tll_execution",
+      "permission": "runtime.execute.tll",
+      "handler": "tll_execute_handler",
+      "evidence": "ev-tll-execute",
+      "status": "REGISTERED"
+    },
+    {
+      "driver_id": "python.execute",
+      "runtime_type": "python_runtime",
+      "capability": "python_execution",
+      "permission": "runtime.execute.python",
+      "handler": "python_execute_handler",
+      "evidence": "ev-python-execute",
+      "status": "REGISTERED"
+    },
+    {
+      "driver_id": "shell.execute",
+      "runtime_type": "shell_command",
+      "capability": "shell_execution",
+      "permission": "runtime.execute.shell",
+      "handler": "shell_execute_handler",
+      "evidence": "ev-shell-execute",
+      "status": "REGISTERED"
+    },
+    {
+      "driver_id": "http.request",
+      "runtime_type": "http_service",
+      "capability": "http_request",
+      "permission": "runtime.request.http",
+      "handler": "http_request_handler",
+      "evidence": "ev-http-request",
+      "status": "REGISTERED"
+    }
+  ],
+
+  "registry_operations": [
+    "register driver",
+    "query driver",
+    "disable driver",
+    "validate driver"
+  ],
+
+  "rules": [
+    "driver_id 必须唯一",
+    "重复注册必须 REJECT",
+    "未知 driver_id 必须 REJECT",
+    "DISABLED 状态的 Driver 不能执行",
+    "REGISTERED 状态的 Driver 不能直接执行"
+  ]
+}
