@@ -219,6 +219,131 @@
 
 ---
 
+## Test 7: Missing Permission (P2-03.3)
+
+**目的：** 验证 Gateway 收到缺少 permission_id 的请求时必须拒绝。
+
+### 测试场景
+
+**场景 A: Gateway 请求缺少 permission_id**
+- Gateway Request: { task_id, agent_id, action, input }
+- 缺少 permission_id
+- 预期：❌ REJECT（MISSING_PERMISSION）
+
+**场景 B: Gateway 请求缺少 task_id**
+- Gateway Request: { permission_id, agent_id, action, input }
+- 缺少 task_id
+- 预期：❌ REJECT（MISSING_TASK_ID）
+
+### 测试结果
+
+| 场景 | 缺少字段 | 预期 | 结果 |
+|------|----------|------|------|
+| A: 缺少 permission_id | permission_id | REJECT | ✅ PASS |
+| B: 缺少 task_id | task_id | REJECT | ✅ PASS |
+
+**Test 7 Result: ✅ PASS**
+
+---
+
+## Test 8: Missing Evidence (P2-03.3)
+
+**目的：** 验证 Gateway 收到 evidence_required=false 的请求时必须拒绝。
+
+### 测试场景
+
+**场景 A: evidence_required = false**
+- Gateway Request: { ..., evidence_required: false }
+- 预期：❌ REJECT（EVIDENCE_REQUIRED）
+
+**场景 B: evidence_required 缺失**
+- Gateway Request: { ... }（没有 evidence_required 字段）
+- 预期：❌ REJECT（MISSING_FIELD）
+
+### 测试结果
+
+| 场景 | evidence_required | 预期 | 结果 |
+|------|-------------------|------|------|
+| A: evidence_required=false | false | REJECT | ✅ PASS |
+| B: evidence_required 缺失 | undefined | REJECT | ✅ PASS |
+
+**Test 8 Result: ✅ PASS**
+
+---
+
+## Test 9: Valid Gateway Request (P2-03.3)
+
+**目的：** 验证合法的 Gateway 请求通过所有检查。
+
+### 测试步骤
+
+1. **Step 1: 创建 Gateway Request**
+   - gateway_request_id: gw-req-001
+   - task_id: P2-03.3-TEST-001
+   - agent_id: doubao-a
+   - capability: write_evidence
+   - permission_id: perm-001 (approved)
+   - action: write_evidence_file
+   - evidence_required: true
+   - 预期：✅ PASS
+
+2. **Step 2: Gateway 检查**
+   - ✅ task_id 存在
+   - ✅ permission_id 存在
+   - ✅ capability 存在
+   - ✅ evidence_required = true
+   - 预期：✅ ALLOWED
+
+3. **Step 3: 转发到 Runtime Adapter**
+   - runtime_request_id: rt-req-001
+   - 预期：✅ PASS
+
+### 测试结果
+
+| Step | 步骤 | 结果 |
+|------|------|------|
+| 1 | 创建 Gateway Request | ✅ PASS |
+| 2 | Gateway 检查 | ✅ PASS |
+| 3 | 转发到 Runtime Adapter | ✅ PASS |
+
+**Test 9 Result: ✅ PASS**
+
+---
+
+## Test 10: Runtime Adapter Boundary (P2-03.3)
+
+**目的：** 验证 Runtime Adapter 只定义接口，不执行 Runtime。
+
+### 测试场景
+
+**场景 A: 接口定义存在**
+- runtime_adapter.md 存在
+- runtime_request.json 存在
+- runtime_result.json 存在
+- 预期：✅ PASS
+
+**场景 B: 不调用 vm.c**
+- 确认：Adapter 没有调用 vm.c
+- 确认：Adapter 没有修改 Runtime Core
+- 预期：✅ PASS
+
+**场景 C: 不直接访问 coroutine/scheduler**
+- 确认：Adapter 没有直接访问 coroutine
+- 确认：Adapter 没有直接访问 scheduler
+- 预期：✅ PASS
+
+### 测试结果
+
+| 场景 | 检查项 | 预期 | 结果 |
+|------|--------|------|------|
+| A: 接口定义存在 | 3 个文件存在 | PASS | ✅ PASS |
+| B: 不调用 vm.c | 无 vm.c 调用 | PASS | ✅ PASS |
+| C: 不访问 coroutine | 无 coroutine 直接访问 | PASS | ✅ PASS |
+
+**Test 10 Result: ✅ PASS**
+
+---
+
 ## 测试总结
 
 | Test | 名称 | Phase | 结果 |
@@ -229,8 +354,12 @@
 | Test 4 | Permission Missing | P2-03.2 | ✅ PASS |
 | Test 5 | Capability Escalation | P2-03.2 | ✅ PASS |
 | Test 6 | Valid Execution Boundary | P2-03.2 | ✅ PASS |
+| Test 7 | Missing Permission | P2-03.3 | ✅ PASS |
+| Test 8 | Missing Evidence | P2-03.3 | ✅ PASS |
+| Test 9 | Valid Gateway Request | P2-03.3 | ✅ PASS |
+| Test 10 | Runtime Adapter Boundary | P2-03.3 | ✅ PASS |
 
-**Overall: 6/6 PASS**
+**Overall: 10/10 PASS**
 
 ---
 

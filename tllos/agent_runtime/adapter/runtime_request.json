@@ -1,0 +1,65 @@
+{
+  "request_name": "TLL OS Runtime Request",
+  "request_version": "1.0.0",
+  "request_date": "2026-09-11",
+  "request_description": "Runtime Adapter 接收的执行请求格式。由 Gateway 转发而来。",
+
+  "required_fields": {
+    "runtime_request_id": {
+      "type": "string",
+      "description": "Runtime 请求唯一标识符",
+      "required": true
+    },
+    "gateway_request_id": {
+      "type": "string",
+      "description": "对应的 Gateway 请求 ID",
+      "required": true
+    },
+    "task_id": {
+      "type": "string",
+      "description": "任务 ID",
+      "required": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent ID",
+      "required": true
+    },
+    "action": {
+      "type": "string",
+      "description": "要执行的动作",
+      "required": true
+    },
+    "input": {
+      "type": "object",
+      "description": "输入参数",
+      "required": true
+    },
+    "requested_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "请求时间",
+      "required": true
+    }
+  },
+
+  "example": {
+    "runtime_request_id": "rt-req-001",
+    "gateway_request_id": "gw-req-001",
+    "task_id": "P2-03.3-TEST-001",
+    "agent_id": "doubao-a",
+    "action": "write_evidence_file",
+    "input": {
+      "file_path": "docs/evidence/P2-03.3-TEST.md"
+    },
+    "requested_at": "2026-09-11T10:05:00Z"
+  },
+
+  "validation_rules": [
+    "runtime_request_id 必须存在",
+    "gateway_request_id 必须存在",
+    "task_id 必须存在",
+    "agent_id 必须存在",
+    "action 必须存在"
+  ]
+}

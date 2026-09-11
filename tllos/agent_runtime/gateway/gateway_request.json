@@ -1,0 +1,71 @@
+{
+  "request_name": "TLL OS Gateway Request",
+  "request_version": "1.0.0",
+  "request_date": "2026-09-11",
+  "request_description": "Agent 通过 Gateway 发起执行请求的格式。必须通过所有前置检查后才能创建。",
+
+  "required_fields": {
+    "gateway_request_id": {
+      "type": "string",
+      "description": "Gateway 请求唯一标识符",
+      "required": true
+    },
+    "task_id": {
+      "type": "string",
+      "description": "任务 ID",
+      "required": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent ID",
+      "required": true
+    },
+    "capability": {
+      "type": "string",
+      "description": "Agent 声明的 capability",
+      "required": true
+    },
+    "permission_id": {
+      "type": "string",
+      "description": "权限 ID（必须是 approved 状态）",
+      "required": true
+    },
+    "action": {
+      "type": "string",
+      "description": "要执行的动作",
+      "required": true
+    },
+    "input": {
+      "type": "object",
+      "description": "输入参数",
+      "required": true
+    },
+    "evidence_required": {
+      "type": "boolean",
+      "description": "是否必须提供证据（必须为 true）",
+      "required": true
+    }
+  },
+
+  "example": {
+    "gateway_request_id": "gw-req-001",
+    "task_id": "P2-03.3-TEST-001",
+    "agent_id": "doubao-a",
+    "capability": "write_evidence",
+    "permission_id": "perm-001",
+    "action": "write_evidence_file",
+    "input": {
+      "file_path": "docs/evidence/P2-03.3-TEST.md"
+    },
+    "evidence_required": true
+  },
+
+  "validation_rules": [
+    "gateway_request_id 必须存在",
+    "task_id 必须存在",
+    "permission_id 必须存在",
+    "capability 必须存在",
+    "evidence_required 必须为 true",
+    "action 必须在 task scope 内"
+  ]
+}

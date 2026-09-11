@@ -1,0 +1,78 @@
+{
+  "response_name": "TLL OS Gateway Response",
+  "response_version": "1.0.0",
+  "response_date": "2026-09-11",
+  "response_description": "Gateway 返回给 Agent 的响应格式。",
+
+  "required_fields": {
+    "gateway_request_id": {
+      "type": "string",
+      "description": "对应的 Gateway 请求 ID",
+      "required": true
+    },
+    "task_id": {
+      "type": "string",
+      "description": "任务 ID",
+      "required": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent ID",
+      "required": true
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ALLOWED", "REJECTED", "ERROR"],
+      "description": "Gateway 响应状态",
+      "required": true
+    },
+    "reason": {
+      "type": "string",
+      "description": "拒绝或错误原因",
+      "required": false
+    },
+    "runtime_request_id": {
+      "type": "string",
+      "description": "转发给 Runtime Adapter 的请求 ID（ALLOWED 时）",
+      "required": false
+    },
+    "evidence_required": {
+      "type": "boolean",
+      "description": "是否要求提供证据",
+      "required": true
+    },
+    "gateway_timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Gateway 处理时间",
+      "required": true
+    }
+  },
+
+  "example_allowed": {
+    "gateway_request_id": "gw-req-001",
+    "task_id": "P2-03.3-TEST-001",
+    "agent_id": "doubao-a",
+    "status": "ALLOWED",
+    "runtime_request_id": "rt-req-001",
+    "evidence_required": true,
+    "gateway_timestamp": "2026-09-11T10:05:00Z"
+  },
+
+  "example_rejected": {
+    "gateway_request_id": "gw-req-002",
+    "task_id": "P2-03.3-TEST-002",
+    "agent_id": "doubao-a",
+    "status": "REJECTED",
+    "reason": "MISSING_PERMISSION",
+    "evidence_required": true,
+    "gateway_timestamp": "2026-09-11T10:06:00Z"
+  },
+
+  "validation_rules": [
+    "status 必须是规定的 3 个值之一",
+    "REJECTED 必须包含 reason",
+    "ALLOWED 必须包含 runtime_request_id",
+    "evidence_required 必须为 true"
+  ]
+}

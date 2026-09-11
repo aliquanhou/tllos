@@ -103,6 +103,70 @@ VALIDATION_RULES = [
             "principles": list
         }
     },
+    {
+        "name": "gateway_request.json",
+        "path": "tllos/agent_runtime/gateway/gateway_request.json",
+        "required_fields": [
+            "request_name",
+            "request_version",
+            "required_fields",
+            "validation_rules"
+        ],
+        "field_types": {
+            "request_name": str,
+            "request_version": str,
+            "required_fields": dict,
+            "validation_rules": list
+        }
+    },
+    {
+        "name": "gateway_response.json",
+        "path": "tllos/agent_runtime/gateway/gateway_response.json",
+        "required_fields": [
+            "response_name",
+            "response_version",
+            "required_fields",
+            "validation_rules"
+        ],
+        "field_types": {
+            "response_name": str,
+            "response_version": str,
+            "required_fields": dict,
+            "validation_rules": list
+        }
+    },
+    {
+        "name": "runtime_request.json",
+        "path": "tllos/agent_runtime/adapter/runtime_request.json",
+        "required_fields": [
+            "request_name",
+            "request_version",
+            "required_fields",
+            "validation_rules"
+        ],
+        "field_types": {
+            "request_name": str,
+            "request_version": str,
+            "required_fields": dict,
+            "validation_rules": list
+        }
+    },
+    {
+        "name": "runtime_result.json",
+        "path": "tllos/agent_runtime/adapter/runtime_result.json",
+        "required_fields": [
+            "result_name",
+            "result_version",
+            "required_fields",
+            "validation_rules"
+        ],
+        "field_types": {
+            "result_name": str,
+            "result_version": str,
+            "required_fields": dict,
+            "validation_rules": list
+        }
+    },
 ]
 
 

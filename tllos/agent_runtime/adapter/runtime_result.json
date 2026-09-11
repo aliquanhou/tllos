@@ -1,0 +1,64 @@
+{
+  "result_name": "TLL OS Runtime Result",
+  "result_version": "1.0.0",
+  "result_date": "2026-09-11",
+  "result_description": "Runtime Adapter 返回的执行结果格式。由 Runtime Core 返回。",
+
+  "required_fields": {
+    "runtime_request_id": {
+      "type": "string",
+      "description": "对应的 Runtime 请求 ID",
+      "required": true
+    },
+    "task_id": {
+      "type": "string",
+      "description": "任务 ID",
+      "required": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent ID",
+      "required": true
+    },
+    "status": {
+      "type": "string",
+      "enum": ["SUCCESS", "FAILURE", "TIMEOUT", "ERROR"],
+      "description": "执行状态",
+      "required": true
+    },
+    "output": {
+      "type": "object",
+      "description": "输出结果",
+      "required": false
+    },
+    "error": {
+      "type": "string",
+      "description": "错误信息（如有）",
+      "required": false
+    },
+    "executed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "执行时间",
+      "required": true
+    }
+  },
+
+  "example": {
+    "runtime_request_id": "rt-req-001",
+    "task_id": "P2-03.3-TEST-001",
+    "agent_id": "doubao-a",
+    "status": "SUCCESS",
+    "output": {
+      "file_written": "docs/evidence/P2-03.3-TEST.md"
+    },
+    "executed_at": "2026-09-11T10:05:30Z"
+  },
+
+  "validation_rules": [
+    "runtime_request_id 必须存在",
+    "status 必须是规定的 4 个值之一",
+    "FAILURE 必须包含 error 字段",
+    "SUCCESS 必须包含 output 字段"
+  ]
+}
