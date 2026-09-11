@@ -1,0 +1,94 @@
+{
+  "schema_name": "Adaptive Feedback",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-12",
+  "description": "Adaptive Execution 的反馈记录格式。",
+
+  "required_fields": [
+    "execution_id",
+    "observation_ref",
+    "metrics_ref",
+    "insight_ref",
+    "feedback_type",
+    "feedback_value",
+    "evidence_ref",
+    "audit_ref"
+  ],
+
+  "fields": {
+    "execution_id": {
+      "type": "string",
+      "description": "执行唯一标识符",
+      "required": true
+    },
+    "observation_ref": {
+      "type": "string",
+      "description": "观察引用",
+      "required": true
+    },
+    "metrics_ref": {
+      "type": "string",
+      "description": "指标引用",
+      "required": true
+    },
+    "insight_ref": {
+      "type": "string",
+      "description": "洞察引用",
+      "required": true
+    },
+    "feedback_type": {
+      "type": "string",
+      "description": "反馈类型",
+      "enum": ["performance", "reliability", "trust", "pattern", "risk"],
+      "required": true
+    },
+    "feedback_value": {
+      "type": "string",
+      "description": "反馈值",
+      "required": true
+    },
+    "evidence_ref": {
+      "type": "string",
+      "description": "证据引用",
+      "required": true
+    },
+    "audit_ref": {
+      "type": "string",
+      "description": "审计引用",
+      "required": true
+    }
+  },
+
+  "feedback_types": ["performance", "reliability", "trust", "pattern", "risk"],
+
+  "binding_rules": [
+    "Feedback 必须绑定 Execution (execution_id)",
+    "Feedback 必须绑定 Observation (observation_ref)",
+    "Feedback 必须绑定 Metrics (metrics_ref)",
+    "Feedback 必须绑定 Insight (insight_ref)",
+    "Feedback 必须绑定 Evidence (evidence_ref)",
+    "Feedback 必须绑定 Audit (audit_ref)"
+  ],
+
+  "example_valid": {
+    "execution_id": "exec-adapt-001",
+    "observation_ref": "obs-001",
+    "metrics_ref": "metrics-001",
+    "insight_ref": "insight-001",
+    "feedback_type": "performance",
+    "feedback_value": "执行时长 12.5s，低于平均水平",
+    "evidence_ref": "ev-adapt-001",
+    "audit_ref": "evt-adapt-001"
+  },
+
+  "example_no_evidence": {
+    "execution_id": "exec-adapt-002",
+    "observation_ref": "obs-002",
+    "metrics_ref": "metrics-002",
+    "insight_ref": "insight-002",
+    "feedback_type": "performance",
+    "feedback_value": "执行时长较长",
+    "evidence_ref": "",
+    "audit_ref": "evt-adapt-002"
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "schema_name": "Adaptation Proposal",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-12",
+  "description": "Adaptive Execution 的优化建议格式。",
+
+  "required_fields": [
+    "proposal_id",
+    "execution_id",
+    "proposal_type",
+    "reason",
+    "evidence_ref",
+    "confidence",
+    "status"
+  ],
+
+  "fields": {
+    "proposal_id": {
+      "type": "string",
+      "description": "建议唯一标识符",
+      "required": true
+    },
+    "execution_id": {
+      "type": "string",
+      "description": "执行 ID",
+      "required": true
+    },
+    "proposal_type": {
+      "type": "string",
+      "description": "建议类型",
+      "enum": ["performance_hint", "reliability_hint", "risk_warning"],
+      "required": true
+    },
+    "reason": {
+      "type": "string",
+      "description": "建议原因",
+      "required": true
+    },
+    "evidence_ref": {
+      "type": "string",
+      "description": "证据引用",
+      "required": true
+    },
+    "confidence": {
+      "type": "number",
+      "description": "置信度 (0-100)",
+      "required": true
+    },
+    "status": {
+      "type": "string",
+      "description": "状态",
+      "enum": ["CREATED", "SUBMITTED", "REVIEWING", "APPROVED", "REJECTED"],
+      "required": true
+    }
+  },
+
+  "allowed_proposal_types": ["performance_hint", "reliability_hint", "risk_warning"],
+
+  "prohibited_proposal_types": ["permission_upgrade", "policy_change", "execution_override"],
+
+  "proposal_statuses": ["CREATED", "SUBMITTED", "REVIEWING", "APPROVED", "REJECTED"],
+
+  "rules": [
+    "Proposal 必须是 performance_hint / reliability_hint / risk_warning",
+    "Proposal 不能是 permission_upgrade / policy_change / execution_override",
+    "Proposal 必须有 evidence_ref",
+    "Proposal 必须经过 Governance Review"
+  ],
+
+  "example_valid": {
+    "proposal_id": "prop-001",
+    "execution_id": "exec-adapt-001",
+    "proposal_type": "performance_hint",
+    "reason": "执行时长 12.5s，建议优化步骤顺序",
+    "evidence_ref": "ev-prop-001",
+    "confidence": 85,
+    "status": "SUBMITTED"
+  },
+
+  "example_prohibited": {
+    "proposal_id": "prop-002",
+    "execution_id": "exec-adapt-002",
+    "proposal_type": "permission_upgrade",
+    "reason": "建议提升权限",
+    "evidence_ref": "ev-prop-002",
+    "confidence": 90,
+    "status": "CREATED"
+  }
+}

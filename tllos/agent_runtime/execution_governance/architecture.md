@@ -108,3 +108,34 @@ SEALED
 ---
 
 *Execution Governance Architecture — P2-04.5*
+
+---
+
+## Adaptive Proposal Review (P2-04.7)
+
+**Governance 增加 Adaptive Proposal Review 职责。**
+
+### 流程
+
+```
+Adaptive Proposal
+       ↓
+Governance Decision
+       ↓
+Approved / Rejected
+```
+
+### 规则
+
+- Adaptive Proposal 必须经过 Governance Review
+- Governance 决定 Proposal 是否批准
+- 未批准的 Proposal 不能执行
+
+### 禁止
+
+- ❌ Adaptive Proposal 直接进入 Execution Engine
+- ❌ Adaptive Proposal 绕过 Governance
+
+---
+
+*Adaptive Proposal Review — P2-04.7*
