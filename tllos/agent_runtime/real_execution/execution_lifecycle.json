@@ -1,0 +1,51 @@
+{
+  "schema_name": "Execution Lifecycle",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-12",
+  "description": "真实执行的生命周期状态机定义。",
+
+  "states": [
+    "REQUESTED",
+    "VALIDATING",
+    "AUTHORIZED",
+    "DISPATCHING",
+    "RUNNING",
+    "OBSERVING",
+    "COMPLETED",
+    "FAILED",
+    "ROLLBACK"
+  ],
+
+  "normal_transitions": {
+    "REQUESTED": ["VALIDATING"],
+    "VALIDATING": ["AUTHORIZED", "FAILED"],
+    "AUTHORIZED": ["DISPATCHING", "FAILED"],
+    "DISPATCHING": ["RUNNING", "FAILED"],
+    "RUNNING": ["OBSERVING", "FAILED"],
+    "OBSERVING": ["COMPLETED", "FAILED"],
+    "COMPLETED": [],
+    "FAILED": ["ROLLBACK"],
+    "ROLLBACK": []
+  },
+
+  "invalid_transitions": [
+    "REQUESTED -> AUTHORIZED",
+    "REQUESTED -> RUNNING",
+    "REQUESTED -> COMPLETED",
+    "AUTHORIZED -> RUNNING",
+    "DISPATCHING -> COMPLETED"
+  ],
+
+  "rules": [
+    "执行必须从 REQUESTED 开始",
+    "执行必须经过 VALIDATING",
+    "执行必须经过 AUTHORIZED",
+    "执行必须经过 DISPATCHING",
+    "执行必须经过 RUNNING",
+    "执行必须经过 OBSERVING",
+    "执行完成必须到 COMPLETED",
+    "执行失败必须到 FAILED",
+    "失败后可以 ROLLBACK",
+    "非法跳转必须 REJECT"
+  ]
+}

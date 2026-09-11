@@ -1,0 +1,87 @@
+{
+  "schema_name": "Execution Driver",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-12",
+  "description": "真实执行驱动的 Schema 定义。",
+
+  "required_fields": [
+    "driver_id",
+    "runtime_type",
+    "permission",
+    "capability",
+    "handler",
+    "evidence"
+  ],
+
+  "fields": {
+    "driver_id": {
+      "type": "string",
+      "description": "驱动唯一标识符",
+      "required": true
+    },
+    "runtime_type": {
+      "type": "string",
+      "description": "运行时类型",
+      "enum": ["tll_runtime", "python_runtime", "shell_command", "http_service"],
+      "required": true
+    },
+    "permission": {
+      "type": "string",
+      "description": "所需权限",
+      "required": true
+    },
+    "capability": {
+      "type": "string",
+      "description": "所需能力",
+      "required": true
+    },
+    "handler": {
+      "type": "string",
+      "description": "处理函数",
+      "required": true
+    },
+    "evidence": {
+      "type": "string",
+      "description": "证据引用",
+      "required": true
+    }
+  },
+
+  "supported_drivers": [
+    {
+      "driver_id": "tll.execute",
+      "runtime_type": "tll_runtime",
+      "permission": "tll/execute",
+      "capability": "tll_execution"
+    },
+    {
+      "driver_id": "python.execute",
+      "runtime_type": "python_runtime",
+      "permission": "python/execute",
+      "capability": "python_execution"
+    },
+    {
+      "driver_id": "shell.execute",
+      "runtime_type": "shell_command",
+      "permission": "shell/execute",
+      "capability": "shell_execution"
+    },
+    {
+      "driver_id": "http.request",
+      "runtime_type": "http_service",
+      "permission": "http/request",
+      "capability": "http_request"
+    }
+  ],
+
+  "rules": [
+    "每个 Driver 必须有 driver_id",
+    "每个 Driver 必须有 runtime_type",
+    "每个 Driver 必须有 permission",
+    "每个 Driver 必须有 capability",
+    "每个 Driver 必须有 handler",
+    "每个 Driver 必须有 evidence",
+    "未知 Driver 必须 REJECT",
+    "无 Permission 的 Driver 必须 REJECT"
+  ]
+}
