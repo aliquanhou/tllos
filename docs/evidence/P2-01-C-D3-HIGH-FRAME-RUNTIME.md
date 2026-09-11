@@ -520,3 +520,108 @@ Next isolation target: **TLLCoroutine object lifetime** - determine if a coro ob
 | vm->coroutines[] realloc is not direct root cause | **PROVEN EXCLUDED** |
 | TLLCoroutine object field race is strongest candidate | **INFERRED** (not yet proven) |
 | TLLFrame object lifecycle issue | **UNVERIFIED** |
+
+## 15. P2-01-C-D3-R2-P3-P4: Coroutine Object Lifetime Isolation (2026-09-11)
+
+### 15.1 P4-1: Full-Path Free Lifecycle Audit
+
+**All free() call sites for TLLCoroutine:**
+
+| Location | Function | Context |
+|----------|----------|---------|
+| line 360 | coroutine_init | free(vm->coroutines) array — initialization only |
+| line 381-387 | coroutine_destroy | free(co->callStack), free(co) — normal destroy path |
+| line 1080 | tll_vm_exec (legacy scheduler) | coroutine_destroy(vm, 0) — all coroutines dead |
+| line 1110 | tll_vm_exec (legacy scheduler) | coroutine_destroy(vm, 0) — all coroutines dead |
+| line 1749 | tll_vm_exec | coroutine_destroy(vm, idx) — **current coroutine completes, only 1 remains** |
+| line 1832 | tll_vm_run | coroutine_destroy(vm, 0) — after exec returns, cleanup |
+| line 1904-1911 | tll_vm_free | direct free(co), free(vm->coroutines) — VM teardown |
+
+**Critical finding (line 1744-1755):**
+```c
+if (vm->coroutineCount <= 1) {
+    int idx = TLL_CTX(vm)->currentCoroutine;
+    if (idx >= 0 && idx < vm->coroutineCount) {
+        coroutine_save_current(vm);
+        coroutine_destroy(vm, idx);  // <-- destroys CURRENT coroutine
+    }
+    TLL_CTX(vm)->callStack = NULL;
+    return;
+}
+```
+
+In Worker mode, after tll_vm_exec returns, the Worker outer loop accesses:
+```c
+coro->callStack = worker->ctx.callStack;  // <-- use-after-free if coro was destroyed!
+coro->callStackSize = ...;
+```
+
+**This is a potential A-class lifetime defect**, but P4-2 experiment below shows it is NOT the primary crash trigger.
+
+### 15.2 P4-2: O1 No-Free Diagnostic Experiment
+
+**Goal:** Determine if object lifetime / use-after-free (early free) is the root cause.
+
+**Method:** Added `D3_TEST_NO_FREE` environment variable. When set:
+- coroutine_destroy() skips all deallocation (free frames, free callStack, free(co))
+- tll_vm_free() skips direct free(co) calls
+- Objects are intentionally leaked for diagnosis
+
+**Results:**
+
+| Task Count | Normal (baseline) | O1 No-Free |
+|-----------|-------------------|------------|
+| 2000 (run 1) | CRASH | CRASH |
+| 2000 (run 2) | CRASH | CRASH |
+| 2000 (run 3) | CRASH | CRASH |
+| 5000 | CRASH | CRASH |
+
+### 15.3 P4-2 Conclusion
+
+**TLLCoroutine object early-free / UAF is PROVEN EXCLUDED as direct root cause.**
+
+Even with NO object deallocation at all (all coroutines leaked intentionally), high-load tests still crash with STATUS_HEAP_CORRUPTION (0xC0000374).
+
+This means:
+- The corruption is NOT caused by freeing an object while another thread holds a reference
+- The corruption must be caused by **concurrent modification of object fields** (data race on TLLCoroutine/TLLFrame struct members)
+- Or by **TLLFrame object lifecycle** (frame allocation/release race)
+- Or by other shared mutable state (globals, heap, etc.)
+
+### 15.4 P4-5: Queue OFF Lock-After-Raw-Pointer Fix
+
+Fixed the Queue OFF diagnostic code:
+- **Before:** released coroutine_table_lock, then re-read `vm->coroutines[coro_idx]` (unsynchronized)
+- **After:** capture `scan_coro` pointer INSIDE the lock, use it after unlock
+
+This ensures the Queue OFF experiment does not introduce its own uncontrolled variable.
+
+### 15.5 Updated Root Cause Candidate Ranking
+
+1. **TLLCoroutine object field data race** (NEW STRONGEST — concurrent modification of coro->state/callStack/etc.)
+2. **TLLFrame object field data race** (concurrent modification of frame fields)
+3. **TLLFrame allocation/release race** (frame_pool_acquire/release unsynchronized)
+4. Shutdown race (not yet isolated)
+5. ~~Queue node lifecycle~~ → **PROVEN EXCLUDED**
+6. ~~vm->coroutines[] realloc~~ → **PROVEN EXCLUDED**
+7. ~~TLLCoroutine early-free / UAF~~ → **PROVEN EXCLUDED** (O1 no-free still crashes)
+
+### 15.6 Key Insight
+
+The corruption is now narrowed to **concurrent data modification**, not object lifetime:
+- Not queue node malloc/free (excluded)
+- Not table realloc (excluded)
+- Not coroutine early-free (excluded)
+- Must be: two threads modifying the same TLLCoroutine or TLLFrame object fields concurrently, causing heap metadata corruption
+
+Next isolation target: **TLLFrame pre-create vs concurrent-create** (F1/F2) to determine if frame allocation is the trigger.
+
+### 15.7 Evidence Classification
+
+| Finding | Level |
+|---------|-------|
+| No-free mode still crashes at 2000/5000 | **PROVEN** |
+| TLLCoroutine early-free / UAF is not direct root cause | **PROVEN EXCLUDED** |
+| tll_vm_exec line 1749 can destroy current coroutine | **OBSERVED** (potential defect, not primary trigger) |
+| TLLCoroutine field data race is strongest candidate | **INFERRED** (not yet proven) |
+| TLLFrame lifecycle/race | **UNVERIFIED** |

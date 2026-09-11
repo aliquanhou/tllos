@@ -371,6 +371,16 @@ static void coroutine_destroy(TLLVM *vm, int idx) {
     TLLCoroutine *co = vm->coroutines[idx];
     if (!co) return;
 
+    /* P4-2 O1: No-free diagnostic mode - skip all deallocation */
+    if (no_free_is_on()) {
+        /* Just remove from array, leak the object intentionally for diagnosis */
+        int last = vm->coroutineCount - 1;
+        if (idx != last) { vm->coroutines[idx] = vm->coroutines[last]; }
+        vm->coroutines[last] = NULL;
+        vm->coroutineCount--;
+        return;
+    }
+
     /* Free all frames in this coroutine's call stack */
     int i;
     for (i = 0; i < co->callStackSize; i++) {
@@ -1896,7 +1906,7 @@ void tll_vm_free(TLLVM *vm) {
     if (vm->coroutines) {
         while (vm->coroutineCount > 0) {
             TLLCoroutine *co = vm->coroutines[0];
-            if (co) {
+            if (co && !no_free_is_on()) {
                 int j;
                 for (j = 0; j < co->callStackSize; j++) {
                     if (co->callStack[j]) free_frame(co->callStack[j]);
@@ -2374,8 +2384,8 @@ static void *tll_worker_thread(void *param) {
             pthread_mutex_unlock((pthread_mutex_t*)vm->coroutine_table_lock);
 #endif
         } else {
-            /* Queue OFF mode: coro was already claimed during scan */
-            coro = vm->coroutines[coro_idx];
+            /* Queue OFF mode: coro was already claimed during scan (P4-5 fix) */
+            coro = scan_coro;
         }
 
         worker->ctx.currentCoroutine = coro_idx;
