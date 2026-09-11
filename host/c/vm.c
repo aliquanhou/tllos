@@ -7,6 +7,9 @@
 static void tll_runnable_queue_enqueue(TLLRunnableQueue *q, int coroutine_idx);
 static void tll_runnable_queue_cleanup(TLLRunnableQueue *q);
 
+/* Forward declaration for worker shutdown (used in tll_vm_free before definition) */
+void tll_runtime_shutdown_workers(TLLVM *vm);
+
 /* Diagnosis switches */
 static int no_free_is_on(void) { return getenv("D3_TEST_NO_FREE") != NULL; }
 static int queue_is_off(void) { return getenv("D3_TEST_QUEUE_OFF") != NULL; }
@@ -611,7 +614,7 @@ static void coroutine_yield(TLLVM *vm) {
      * P0-06-R3: immediate destruction frees the call stack, which may
      * invalidate captured locals referenced by other still-running coroutines.
      * Dead coroutines are collected and destroyed when all coroutines finish. */
-    if (old >= 0 && old < vm->coroutineCount && vm->coroutines[old] && vm->coroutines[old]->state == 2) {
+    if (old >= 0 && old < vm->coroutineCount && vm->coroutines[old] && vm->coroutines[old]->state == TLL_COROUTINE_COMPLETED) {
         selfDead = 1;
     }
 
@@ -684,7 +687,7 @@ static void coroutine_yield(TLLVM *vm) {
 
             for (i = 0; i < vm->coroutineCount; i++) {
                 TLLCoroutine *co = vm->coroutines[i];
-                if (!co || co->state == 2) continue;
+                if (!co || co->state == TLL_COROUTINE_COMPLETED) continue;
                 if (co->waitingFd > 0) {
                     SOCKET s = (SOCKET)co->waitingFd;
                     if (co->waitingEvents & 1) FD_SET(s, &readfds);
@@ -824,7 +827,7 @@ static void coroutine_yield(TLLVM *vm) {
             int hasIO = 0;
             for (i = 0; i < vm->coroutineCount; i++) {
                 TLLCoroutine *co = vm->coroutines[i];
-                if (!co || co->state == 2) continue;
+                if (!co || co->state == TLL_COROUTINE_COMPLETED) continue;
                 if (co->wakeTime > 0) hasSleepers = 1;
                 if (co->waitingFd > 0) hasIO = 1;
             }
@@ -836,7 +839,7 @@ static void coroutine_yield(TLLVM *vm) {
             }
             /* No sleepers and no IO - restore first alive to avoid crash */
             for (i = 0; i < vm->coroutineCount; i++) {
-                if (vm->coroutines[i] && vm->coroutines[i]->state != 2) {
+                if (vm->coroutines[i] && vm->coroutines[i]->state != TLL_COROUTINE_COMPLETED) {
                     coroutine_restore(vm, i);
                     return;
                 }
@@ -1079,7 +1082,7 @@ static void tll_vm_exec(TLLVM *vm) {
             }
             /* Normal run: mark current coroutine dead, then yield will recycle it */
             if (vm->coroutineCount > 0 && TLL_CTX(vm)->currentCoroutine < vm->coroutineCount) {
-                vm->coroutines[TLL_CTX(vm)->currentCoroutine]->state = 2; /* dead */
+                vm->coroutines[TLL_CTX(vm)->currentCoroutine]->state = TLL_COROUTINE_COMPLETED; /* completed */
             }
             /* If no coroutines left, exit */
             if (vm->coroutineCount == 0) break;
@@ -1090,7 +1093,7 @@ static void tll_vm_exec(TLLVM *vm) {
                 int allDead = 1;
                 int ci;
                 for (ci = 0; ci < vm->coroutineCount; ci++) {
-                    if (vm->coroutines[ci] && vm->coroutines[ci]->state != 2) {
+                    if (vm->coroutines[ci] && vm->coroutines[ci]->state != TLL_COROUTINE_COMPLETED) {
                         allDead = 0;
                         break;
                     }
@@ -1113,7 +1116,7 @@ static void tll_vm_exec(TLLVM *vm) {
             if (TLL_CTX(vm)->currentCoroutine >= 0 &&
                 TLL_CTX(vm)->currentCoroutine < vm->coroutineCount &&
                 vm->coroutines[TLL_CTX(vm)->currentCoroutine] &&
-                vm->coroutines[TLL_CTX(vm)->currentCoroutine]->state == 2) {
+                vm->coroutines[TLL_CTX(vm)->currentCoroutine]->state == TLL_COROUTINE_COMPLETED) {
                 int onlyIOWaiters = 1;
                 int ci2;
                 for (ci2 = 0; ci2 < vm->coroutineCount; ci2++) {
@@ -1759,7 +1762,7 @@ static void tll_vm_exec(TLLVM *vm) {
                  * P0-15.15: dead coroutine is recycled in coroutine_yield.
                  */
                 if (vm->coroutineCount > 0 && TLL_CTX(vm)->currentCoroutine < vm->coroutineCount) {
-                    vm->coroutines[TLL_CTX(vm)->currentCoroutine]->state = 2; /* dead */
+                    vm->coroutines[TLL_CTX(vm)->currentCoroutine]->state = TLL_COROUTINE_COMPLETED; /* completed */
                 }
                 if (vm->coroutineCount <= 1) {
                     /* Only this coroutine remains: save, destroy, exit */
@@ -1908,6 +1911,13 @@ TLLValue tll_vm_invoke(TLLVM *vm, TLLValue fnValue, TLLValue *args, int argCount
 }
 
 void tll_vm_free(TLLVM *vm) {
+    /* P2-01-C-D2-WORKER-HANG-RECOVERY: Must shutdown worker threads before
+     * freeing VM. Otherwise workers continue running and access freed memory,
+     * and the process never exits. */
+    if (vm->multi_worker_initialized) {
+        tll_runtime_shutdown_workers(vm);
+    }
+
     /* P0-15.15: Destroy any remaining coroutines.
      * If tll_vm_run was called, all coroutines were already destroyed there
      * and TLL_CTX(vm)->callStack was set to NULL. If vm was never run, coroutines
