@@ -1,0 +1,72 @@
+{
+  "genesis_version": "1.0.0",
+  "genesis_date": "2026-09-11",
+  "genesis_author": "于秋鸿",
+  "os_name": "TLL OS",
+  "os_full_name": "TLL Operating System",
+  "os_tagline": "AI-Native Operating System Foundation",
+  "os_description": "TLL OS 是全球独有的编程语言与操作系统，从底层重新设计 AI Agent 的执行底座。TLL Runtime 是 TLL OS 的核心引擎，为 AI Agent、桌面机器人操作系统提供高并发执行基础设施。",
+  "language_name": "TLL",
+  "language_nature": "全球独有的编程语言，遵循自身发展规律，不与其他品牌混编",
+  "brand": {
+    "official_name": "TLL OS",
+    "short_name": "TLL",
+    "brand_color": null,
+    "transparent_logo": true,
+    "tagline": "AI-Native Operating System Foundation"
+  },
+  "identity_principles": [
+    "TLL OS 是自主设计的操作系统，不基于任何现有操作系统内核修改",
+    "TLL 是自主设计的编程语言，不与其他编程语言品牌混编",
+    "所有能力声明必须有 Evidence 支撑，没有 Evidence 不生成 Claim",
+    "所有 Agent 接入 TLL OS 必须遵循 Agent Contract",
+    "TLL OS 的目标是成为 AI Agent / 桌面机器人操作系统的基础层"
+  ],
+  "architecture_vision": {
+    "top_down": [
+      "Desktop Robot OS (AI Computer)",
+      "Agent Runtime (AI Agent Execution Layer)",
+      "Canonical Layer (Truth Layer / Identity / Engineering Protocol)",
+      "Runtime Core v0 (Sealed Development Baseline)"
+    ],
+    "bottom_up": [
+      "Runtime Core v0: Dynamic Frame + Multi-Worker + High-Frame Execution",
+      "Canonical Layer: Identity + Truth + Engineering Protocol + Agent Contract",
+      "Agent Runtime: Agent Lifecycle + Memory + Tool Calling + Task Scheduling",
+      "Desktop Robot OS: Device Abstraction + Vision + Audio + Sensor + Robot Memory + GUI"
+    ]
+  },
+  "current_status": {
+    "phase": "P2-02 Canonical Layer Genesis",
+    "runtime_core": "v0 SEALED (Conditional)",
+    "runtime_core_commit": "13847f35734c488623a95faf4afc0648b031f2bd",
+    "d2_status": "PASS / RESEALED",
+    "d3_status": "CONDITIONAL SEAL",
+    "known_limitations": [
+      "A-GAP-1: 10K+ coroutine probabilistic crash (MITIGATED, not root-caused)",
+      "Channel/IO E2E tests, ASan, Linux/macOS not verified",
+      "Work Stealing, Atomic Heap, IO Reactor planned for later"
+    ]
+  },
+  "truth_declaration": {
+    "what_we_can_claim": [
+      "TLL Runtime Core v0 已封板（条件封板）",
+      "D2 Multi-Worker 7/7 核心测试通过",
+      "D3 高帧率执行基础设施完成",
+      "Build Integrity 闭环建立",
+      "完整的 Evidence 文档链已建立"
+    ],
+    "what_we_cannot_claim": [
+      "A-GAP-1 已修复（实际：MITIGATED）",
+      "工业级生产 Runtime 已完成（实际：开发基线封板）",
+      "10K+ 高并发稳定（实际：概率性崩溃）",
+      "跨平台生产就绪（实际：仅 Windows 验证）",
+      "所有 corner case 已解决（实际：已知 B-GAP 存在）"
+    ]
+  },
+  "github_repository": {
+    "main": "aliquanhou/tllos",
+    "main_branch": "main",
+    "description": "TLL OS 原生自托管编程语言，C 语言，Runtime Core v0 Sealed"
+  }
+}

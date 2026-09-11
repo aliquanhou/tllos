@@ -1,0 +1,122 @@
+{
+  "protocol_version": "1.0.0",
+  "protocol_date": "2026-09-11",
+  "protocol_author": "于秋鸿",
+
+  "protocol_layers": {
+    "canonical_layer": {
+      "version": "1.0.0",
+      "status": "GENESIS",
+      "description": "TLL OS 的身份证、Truth 层、Engineering Protocol、Agent Contract"
+    },
+    "agent_protocol": {
+      "version": "0.1.0",
+      "status": "DRAFT",
+      "description": "Agent 接入 TLL OS 的协议规范"
+    },
+    "runtime_protocol": {
+      "version": "v0",
+      "status": "SEALED (Conditional)",
+      "description": "Runtime Core v0 的能力接口和行为规范"
+    },
+    "evidence_protocol": {
+      "version": "1.0.0",
+      "status": "ACTIVE",
+      "description": "没有 Evidence 不生成 Claim 的工程协议"
+    }
+  },
+
+  "compatibility": {
+    "runtime_core_v0": {
+      "status": "SEALED DEVELOPMENT BASELINE",
+      "breaking_changes_expected": false,
+      "note": "Runtime Core v0 是开发基线，后续 Canonical Layer 和 Agent Runtime 基于此构建"
+    }
+  },
+
+  "semantic_versioning": {
+    "rules": [
+      "MAJOR: 不兼容的 API 修改",
+      "MINOR: 向下兼容的功能性新增",
+      "PATCH: 向下兼容的问题修正"
+    ],
+    "note": "TLL OS 遵循 Semantic Versioning，但每个阶段（Phase）独立编号"
+  },
+
+  "phase_history": [
+    {
+      "phase": "P0-RUNTIME-07/08",
+      "status": "SEALED",
+      "description": "基础 Runtime（协程、帧、栈）"
+    },
+    {
+      "phase": "P2-01-B11/B12",
+      "status": "SEALED",
+      "description": "所有权系统、Native Target"
+    },
+    {
+      "phase": "P2-01-C",
+      "status": "SEALED (Conditional)",
+      "description": "Runtime Foundation（Dynamic Frame + Multi-Worker + High-Frame Runtime）",
+      "modules": {
+        "D1": "Dynamic Frame - PASS WITH B-GAPS",
+        "D2": "True Multi-Worker - PASS / RESEALED",
+        "D3": "High-Frame Runtime - CONDITIONAL SEAL"
+      }
+    },
+    {
+      "phase": "P2-02",
+      "status": "IN PROGRESS",
+      "description": "Canonical Layer（Identity + Truth + Engineering Protocol + Agent Contract）"
+    }
+  ],
+
+  "future_phases": [
+    {
+      "phase": "P2-03",
+      "name": "Agent Runtime Foundation",
+      "description": "Agent Lifecycle + Memory + Tool Calling + Task Scheduling + Permission Model"
+    },
+    {
+      "phase": "P3",
+      "name": "Desktop Robot OS",
+      "description": "Device Abstraction + Vision + Audio + Sensor Bus + Robot Memory + GUI Compositor"
+    }
+  ],
+
+  "evidence_protocol": {
+    "rule": "没有 Evidence，不生成 Claim",
+    "claim_format": {
+      "claim": "功能/能力声明",
+      "evidence": [
+        "commit SHA",
+        "test result",
+        "CI status",
+        "risk assessment"
+      ],
+      "status": "PASS / FAIL / CONDITIONAL / UNVERIFIED"
+    },
+    "evidence_levels": [
+      {
+        "level": "OBSERVED",
+        "meaning": "观察到的现象，未经严格验证"
+      },
+      {
+        "level": "INFERRED",
+        "meaning": "基于观察的合理推断，未经直接证明"
+      },
+      {
+        "level": "UNVERIFIED",
+        "meaning": "未验证，可能正确也可能不正确"
+      },
+      {
+        "level": "PROVEN",
+        "meaning": "通过实验/测试/审计直接证明"
+      },
+      {
+        "level": "RULED OUT",
+        "meaning": "通过实验/测试排除"
+      }
+    ]
+  }
+}

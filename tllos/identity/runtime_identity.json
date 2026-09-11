@@ -1,0 +1,146 @@
+{
+  "runtime_name": "TLL Runtime",
+  "runtime_version": "v0",
+  "runtime_status": "SEALED DEVELOPMENT BASELINE (Conditional)",
+  "runtime_seal_date": "2026-09-11",
+  "runtime_seal_commit": "13847f35734c488623a95faf4afc0648b031f2bd",
+  "runtime_baseline_branch": "feature/P2-01-C-D3-runtime-high-frame-execution",
+
+  "architecture": {
+    "execution_layer": [
+      "TLLVM (Virtual Machine)",
+      "TLLFrame (Dynamic Frame)",
+      "TLLCoroutine (Coroutine)",
+      "TLLExecutionContext (Per-Worker Context)"
+    ],
+    "scheduler_layer": [
+      "Global Runnable Queue",
+      "Worker Local Queue",
+      "Worker Claim (exactly-once)",
+      "WAIT/WAKE Mechanism (Sleep / IO / Channel)"
+    ],
+    "worker_layer": [
+      "TLLWorker (Worker Thread)",
+      "TLS g_tll_current_worker",
+      "Worker/Legacy Scheduler Boundary",
+      "Shutdown Protocol"
+    ],
+    "safety_layer": [
+      "Coroutine Identity Guard (magic+generation)",
+      "Coroutine Table Lock",
+      "Wake List Exact-Once",
+      "Malloc Fail-Closed",
+      "Build Integrity (Fail-Closed Build)"
+    ]
+  },
+
+  "capabilities": {
+    "dynamic_frame": true,
+    "multi_worker": true,
+    "per_worker_context": true,
+    "global_runnable_queue": true,
+    "local_runnable_queue": true,
+    "context_transfer": true,
+    "coroutine_migration": true,
+    "sleep_wake": true,
+    "io_wait": true,
+    "channel_wait": true,
+    "build_integrity": true,
+    "work_stealing": false,
+    "atomic_heap": false,
+    "io_reactor_advanced": false
+  },
+
+  "test_status": {
+    "d2_core_tests": {
+      "total": 7,
+      "passed": 7,
+      "tests": [
+        "multi_worker_parallel",
+        "multi_worker_overlap_proof",
+        "multi_worker_stress_2w_100t",
+        "worker_global_test",
+        "simple_sleep_wakeup_test",
+        "worker_ownership_boundary",
+        "wake_list_300_coroutines"
+      ]
+    },
+    "d3_infrastructure_tests": {
+      "context_transfer_test": "PASS",
+      "d3_migration_100": "PASS (100 coroutines, exec=200, no dual/lost)",
+      "hello_test": "PASS",
+      "gate2_single_coroutine": "PASS",
+      "gate3_single_worker": "PASS",
+      "gate4_two_workers": "PASS"
+    },
+    "stress_tests": {
+      "100_tasks": "PASS (stable)",
+      "1000_tasks": "PASS (stable)",
+      "5000_tasks": "PASS (stable)",
+      "10000_tasks": "2/3 PASS (probabilistic ACCESS_VIOLATION, A-GAP-1)"
+    }
+  },
+
+  "known_limitations": {
+    "A_GAP_1": {
+      "status": "MITIGATED / ROOT CAUSE PENDING",
+      "trigger": "Concurrent coroutine_create + Worker execution",
+      "crash_location": "TLLCoroutine header offset 0-8",
+      "nature": "Probabilistic crash (~33% at 10K coroutine)",
+      "not_uaf": true,
+      "not_partial_publish": true,
+      "not_memcpy_size_error": true,
+      "exact_writer": "NOT FOUND",
+      "mitigation": "16-byte magic+generation identity guard (layout mitigation, not memory safety fix)",
+      "risk_level": "HIGH at 10K+ concurrency"
+    },
+    "b_gaps": [
+      "Channel/IO E2E TLL tests not verified",
+      "AddressSanitizer not integrated",
+      "Linux/macOS not verified",
+      "Full Native regression not verified",
+      "build_all.bat contains developer-machine absolute path"
+    ]
+  },
+
+  "supported_platforms": [
+    {
+      "os": "Windows",
+      "status": "VERIFIED",
+      "compiler": "MSVC (Visual Studio 2022 Build Tools)"
+    },
+    {
+      "os": "Linux",
+      "status": "NOT VERIFIED"
+    },
+    {
+      "os": "macOS",
+      "status": "NOT VERIFIED"
+    }
+  ],
+
+  "capability_boundaries": {
+    "supported": [
+      "AI Agent execution engine (< 5000 coroutine)",
+      "Desktop Robot OS runtime foundation",
+      "TLL language native self-hosted runtime",
+      "Multi-worker parallel execution",
+      "Coroutine scheduling with WAIT/WAKE"
+    ],
+    "not_recommended": [
+      "10K+ high-concurrency production (A-GAP-1)",
+      "Hard real-time systems",
+      "Cross-platform production deployment"
+    ]
+  },
+
+  "future_requirements": [
+    "Runtime Hardening phase MUST resolve A-GAP-1",
+    "ASan integration",
+    "Cross-platform verification (Linux/macOS)",
+    "Channel/IO E2E tests",
+    "Work Stealing (planned)",
+    "Atomic Heap (planned)",
+    "IO Reactor advanced (planned)"
+  ]
+}

@@ -1,0 +1,215 @@
+{
+  "capability_protocol_version": "1.0.0",
+  "last_updated": "2026-09-11",
+
+  "agent_registry": {
+    "description": "TLL OS 已接入 Agent 注册表",
+    "agents": [
+      {
+        "name": "豆包A",
+        "role": "施工方 (Developer Agent)",
+        "status": "ACTIVE",
+        "responsibilities": [
+          "接收施工令，实现功能",
+          "运行测试，记录结果",
+          "编写 Evidence 文档",
+          "commit + push 到 feature 分支"
+        ],
+        "permissions": [
+          "在 feature 分支上创建和修改代码",
+          "运行测试和构建",
+          "编写 Evidence 文档",
+          "push 到远程 feature 分支"
+        ],
+        "prohibitions": [
+          "直接 push main 分支",
+          "自行宣布 PASS / SEALED",
+          "修改已封板阶段的代码",
+          "扩大施工范围"
+        ],
+        "contract_accepted": true
+      },
+      {
+        "name": "于秋鸿博士",
+        "role": "审计方 + 裁决方 (Architect + Owner)",
+        "status": "ACTIVE",
+        "responsibilities": [
+          "独立审计施工方提交的代码和 Evidence",
+          "给出 PASS / REQUEST CHANGES 裁决",
+          "决定下一阶段的施工方向和范围",
+          "最终裁决任何争议",
+          "决定项目方向和优先级"
+        ],
+        "permissions": [
+          "读取 GitHub 远程仓库的所有代码",
+          "独立运行测试验证",
+          "给出 PASS / REQUEST CHANGES 裁决",
+          "决定项目方向和优先级"
+        ],
+        "prohibitions": [
+          "直接修改代码（只审计，不施工）"
+        ],
+        "contract_accepted": true
+      }
+    ]
+  },
+
+  "capabilities_provided_by_tllos": {
+    "description": "TLL OS 提供给 Agent 的能力列表",
+
+    "runtime_capabilities": {
+      "coroutine_creation": {
+        "status": "PROVEN",
+        "description": "创建协程，分配帧和调用栈",
+        "limits": "并发创建 10K+ 存在概率性崩溃（A-GAP-1）"
+      },
+      "multi_worker_execution": {
+        "status": "PROVEN",
+        "description": "多 Worker 并行执行协程",
+        "limits": "D2 7/7 核心测试 PASS"
+      },
+      "channel_communication": {
+        "status": "PARTIALLY VERIFIED",
+        "description": "Channel 通信，waitingChannel 唤醒",
+        "limits": "E2E TLL 测试未验证（B-GAP）"
+      },
+      "sleep_wake": {
+        "status": "PROVEN",
+        "description": "协程睡眠，wakeTime 到期唤醒"
+      },
+      "io_wait": {
+        "status": "PARTIALLY VERIFIED",
+        "description": "IO 等待，select() + waitingFd 唤醒",
+        "limits": "E2E TLL 测试未验证（B-GAP）"
+      },
+      "context_transfer": {
+        "status": "PROVEN",
+        "description": "协程执行上下文在 Worker 间转移",
+        "test": "context_transfer_test PASS"
+      },
+      "coroutine_migration": {
+        "status": "PROVEN",
+        "description": "协程在 Worker A 执行后，被 Worker B 恢复执行",
+        "test": "d3_migration_100 PASS (100 coroutines, exec=200, no dual/lost)"
+      }
+    },
+
+    "build_capabilities": {
+      "clean_build": {
+        "status": "PROVEN",
+        "description": "Clean Build，Fail-Closed，编译失败立即终止"
+      },
+      "build_provenance": {
+        "status": "PROVEN",
+        "description": "Binary SHA256 记录，Source Commit 可追溯"
+      }
+    },
+
+    "evidence_capabilities": {
+      "evidence_documentation": {
+        "status": "ACTIVE",
+        "description": "完整的 Evidence 文档链，所有阶段有记录"
+      },
+      "independent_audit": {
+        "status": "ACTIVE",
+        "description": "独立审计方直接读取 GitHub 真实代码"
+      }
+    }
+  },
+
+  "capabilities_required_from_agents": {
+    "description": "TLL OS 对接入 Agent 的能力要求",
+
+    "honesty_requirement": {
+      "level": "MANDATORY",
+      "description": "Agent 必须如实报告能力和结果，禁止造假"
+    },
+
+    "evidence_requirement": {
+      "level": "MANDATORY",
+      "description": "Agent 生成 Claim 时必须提供 Evidence（commit SHA + test result + risk assessment）"
+    },
+
+    "protocol_compliance_requirement": {
+      "level": "MANDATORY",
+      "description": "Agent 必须遵守 TLL OS Engineering Protocol"
+    },
+
+    "contract_acceptance_requirement": {
+      "level": "MANDATORY",
+      "description": "Agent 必须接受并遵守 Agent Contract"
+    }
+  },
+
+  "current_capability_boundaries": {
+    "supported_use_cases": [
+      "AI Agent 执行引擎（中低并发，< 5000 coroutine）",
+      "桌面机器人操作系统的 Runtime 底座",
+      "TLL 语言原生自托管运行时"
+    ],
+    "not_supported_use_cases": [
+      "10K+ 高并发生产环境（A-GAP-1）",
+      "硬实时系统",
+      "跨平台生产部署（仅 Windows 验证）"
+    ]
+  },
+
+  "future_capabilities": {
+    "planned": [
+      {
+        "phase": "P2-03",
+        "name": "Agent Runtime Foundation",
+        "description": "Agent Lifecycle + Memory + Tool Calling + Task Scheduling + Permission Model"
+      },
+      {
+        "phase": "P3",
+        "name": "Desktop Robot OS",
+        "description": "Device Abstraction + Vision + Audio + Sensor Bus + Robot Memory + GUI Compositor"
+      }
+    ],
+    "deferred": [
+      {
+        "name": "Work Stealing",
+        "reason": "按计划后置，先稳定再优化"
+      },
+      {
+        "name": "Atomic Heap",
+        "reason": "按计划后置"
+      },
+      {
+        "name": "IO Reactor Advanced",
+        "reason": "按计划后置"
+      }
+    ]
+  },
+
+  "known_limitations_for_agents": [
+    {
+      "id": "A-GAP-1",
+      "severity": "HIGH at 10K+ concurrency",
+      "description": "并发 coroutine_create + Worker 执行导致概率性堆损坏",
+      "status": "MITIGATED",
+      "mitigation": "16-byte magic+generation identity guard",
+      "agent_guidance": "避免在单个 Worker 并发创建超过 5000 个协程"
+    },
+    {
+      "id": "B-GAP-1",
+      "severity": "LOW",
+      "description": "Channel/IO E2E TLL 测试未验证",
+      "status": "OPEN (Non-Blocking)"
+    },
+    {
+      "id": "B-GAP-2",
+      "severity": "LOW",
+      "description": "AddressSanitizer 未集成",
+      "status": "OPEN (Non-Blocking)"
+    },
+    {
+      "id": "B-GAP-3",
+      "severity": "MEDIUM",
+      "description": "Linux/macOS 未验证",
+      "status": "OPEN (Non-Blocking)",
+      "agent_guidance": "当前仅支持 Windows"
+    }
+  ]
+}
