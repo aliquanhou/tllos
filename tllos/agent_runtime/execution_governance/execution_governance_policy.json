@@ -1,0 +1,81 @@
+{
+  "schema_name": "Execution Governance Policy",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-12",
+  "description": "Execution Governance 策略规则定义。",
+
+  "governance_rules": {
+    "rule_1_identity_required": {
+      "rule_id": "R1",
+      "name": "Identity Required",
+      "description": "必须提供 agent_identity",
+      "condition": "agent_identity != null",
+      "on_failure": "REJECT"
+    },
+
+    "rule_2_capability_required": {
+      "rule_id": "R2",
+      "name": "Capability Required",
+      "description": "必须有 capability declared 且 trusted",
+      "condition": "capability.declared == true AND capability.trusted == true",
+      "on_failure": "REJECT"
+    },
+
+    "rule_3_permission_required": {
+      "rule_id": "R3",
+      "name": "Permission Required",
+      "description": "必须有 permission approved",
+      "condition": "permission.state == approved",
+      "on_failure": "REJECT"
+    },
+
+    "rule_4_evidence_required": {
+      "rule_id": "R4",
+      "name": "Evidence Required",
+      "description": "必须绑定 evidence_id",
+      "condition": "evidence_required == true AND evidence_id != null",
+      "on_failure": "REJECT"
+    },
+
+    "rule_5_risk_level": {
+      "rule_id": "R5",
+      "name": "Risk Level",
+      "description": "按风险等级决定审批方式",
+      "risk_levels": {
+        "LOW": {
+          "description": "低风险操作",
+          "approval": "auto_approve"
+        },
+        "MEDIUM": {
+          "description": "中风险操作",
+          "approval": "policy_validation"
+        },
+        "HIGH": {
+          "description": "高风险操作",
+          "approval": "manual_approval_required"
+        },
+        "CRITICAL": {
+          "description": "关键风险",
+          "approval": "reject_by_default"
+        }
+      }
+    }
+  },
+
+  "risk_levels": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+
+  "approval_modes": {
+    "auto_approve": "自动批准",
+    "policy_validation": "策略验证",
+    "manual_approval_required": "需要人工批准",
+    "reject_by_default": "默认拒绝"
+  },
+
+  "default_policy": {
+    "unrecognized_risk": "REJECT",
+    "missing_identity": "REJECT",
+    "missing_capability": "REJECT",
+    "missing_permission": "REJECT",
+    "missing_evidence": "REJECT"
+  }
+}

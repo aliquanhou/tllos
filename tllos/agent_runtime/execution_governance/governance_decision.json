@@ -1,0 +1,111 @@
+{
+  "schema_name": "Governance Decision",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-12",
+  "description": "Governance Decision 格式定义。",
+
+  "required_fields": [
+    "execution_id",
+    "agent_id",
+    "decision",
+    "reason",
+    "risk_level",
+    "policy_checks",
+    "evidence_binding",
+    "timestamp"
+  ],
+
+  "fields": {
+    "execution_id": {
+      "type": "string",
+      "description": "执行唯一标识符",
+      "required": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "执行 Agent",
+      "required": true
+    },
+    "decision": {
+      "type": "string",
+      "description": "决策结果",
+      "enum": ["APPROVE", "REJECT", "HOLD"],
+      "required": true
+    },
+    "reason": {
+      "type": "string",
+      "description": "决策原因",
+      "required": true
+    },
+    "risk_level": {
+      "type": "string",
+      "description": "风险等级",
+      "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+      "required": true
+    },
+    "policy_checks": {
+      "type": "array",
+      "description": "策略检查结果",
+      "required": true,
+      "items": {
+        "rule_id": "string (required)",
+        "rule_name": "string (required)",
+        "result": "PASS / FAIL (required)"
+      }
+    },
+    "evidence_binding": {
+      "type": "string",
+      "description": "证据绑定引用",
+      "required": true
+    },
+    "timestamp": {
+      "type": "string",
+      "description": "时间戳",
+      "required": true
+    }
+  },
+
+  "decision_types": ["APPROVE", "REJECT", "HOLD"],
+
+  "example_approve": {
+    "execution_id": "exec-gov-001",
+    "agent_id": "doubao-a",
+    "decision": "APPROVE",
+    "reason": "All policy checks passed",
+    "risk_level": "LOW",
+    "policy_checks": [
+      {"rule_id": "R1", "rule_name": "Identity Required", "result": "PASS"},
+      {"rule_id": "R2", "rule_name": "Capability Required", "result": "PASS"},
+      {"rule_id": "R3", "rule_name": "Permission Required", "result": "PASS"},
+      {"rule_id": "R4", "rule_name": "Evidence Required", "result": "PASS"}
+    ],
+    "evidence_binding": "ev-gov-001",
+    "timestamp": "2026-09-12T12:00:00Z"
+  },
+
+  "example_reject": {
+    "execution_id": "exec-gov-002",
+    "agent_id": "unknown-agent",
+    "decision": "REJECT",
+    "reason": "Identity not provided",
+    "risk_level": "MEDIUM",
+    "policy_checks": [
+      {"rule_id": "R1", "rule_name": "Identity Required", "result": "FAIL"}
+    ],
+    "evidence_binding": "ev-gov-002",
+    "timestamp": "2026-09-12T12:05:00Z"
+  },
+
+  "example_critical_reject": {
+    "execution_id": "exec-gov-003",
+    "agent_id": "doubao-a",
+    "decision": "REJECT",
+    "reason": "CRITICAL risk rejected by default",
+    "risk_level": "CRITICAL",
+    "policy_checks": [
+      {"rule_id": "R5", "rule_name": "Risk Level", "result": "FAIL"}
+    ],
+    "evidence_binding": "ev-gov-003",
+    "timestamp": "2026-09-12T12:10:00Z"
+  }
+}

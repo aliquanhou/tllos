@@ -88,3 +88,42 @@ COMPLETED
 ---
 
 *Execution Orchestrator Architecture — P2-04.4*
+
+---
+
+## Execution Governance Integration (P2-04.5)
+
+**Orchestrator 不直接执行，必须先经过 Governance。**
+
+### 调用链
+
+**Before:**
+```
+Plan
+  ↓
+Orchestrator
+  ↓
+Runtime Adapter
+```
+
+**After:**
+```
+Plan
+  ↓
+Orchestrator
+  ↓
+Governance                ← P2-04.5 新增
+  ↓
+Execution Boundary
+  ↓
+Runtime Adapter
+```
+
+### 规则
+
+- ❌ Plan → Runtime（直接调用禁止）
+- ✅ Plan → Orchestrator → Governance → Boundary → Adapter
+
+---
+
+*Execution Governance Integration — P2-04.5*

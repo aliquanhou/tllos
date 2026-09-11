@@ -1,0 +1,70 @@
+{
+  "schema_name": "Execution Governance State",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-12",
+  "description": "Execution Governance 状态机定义。",
+
+  "states": [
+    "CREATED",
+    "EVALUATING",
+    "APPROVED",
+    "REJECTED",
+    "EXECUTED",
+    "VERIFIED",
+    "SEALED"
+  ],
+
+  "state_transitions": {
+    "CREATED": ["EVALUATING", "REJECTED"],
+    "EVALUATING": ["APPROVED", "REJECTED", "EXECUTED"],
+    "APPROVED": ["EXECUTED", "REJECTED"],
+    "EXECUTED": ["VERIFIED", "REJECTED"],
+    "VERIFIED": ["SEALED", "REJECTED"],
+    "SEALED": [],
+    "REJECTED": []
+  },
+
+  "illegal_transitions": [
+    "CREATED -> EXECUTED",
+    "CREATED -> VERIFIED",
+    "CREATED -> SEALED",
+    "EVALUATING -> SEALED",
+    "REJECTED -> EXECUTED",
+    "REJECTED -> APPROVED",
+    "EXECUTED -> CREATED",
+    "APPROVED -> EVALUATING"
+  ],
+
+  "terminal_states": ["SEALED", "REJECTED"],
+
+  "state_descriptions": {
+    "CREATED": "治理请求已创建",
+    "EVALUATING": "正在评估",
+    "APPROVED": "已批准",
+    "REJECTED": "已拒绝",
+    "EXECUTED": "已执行",
+    "VERIFIED": "已验证",
+    "SEALED": "已封板"
+  },
+
+  "example_valid_flow": [
+    "CREATED",
+    "EVALUATING",
+    "APPROVED",
+    "EXECUTED",
+    "VERIFIED",
+    "SEALED"
+  ],
+
+  "example_rejected_flow": [
+    "CREATED",
+    "EVALUATING",
+    "REJECTED"
+  ],
+
+  "example_illegal_transition": {
+    "from": "CREATED",
+    "to": "EXECUTED",
+    "reason": "必须先经过 EVALUATING 和 APPROVED"
+  }
+}
