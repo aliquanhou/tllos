@@ -1,0 +1,73 @@
+{
+  "evidence_type": "execution_evidence",
+  "evidence_version": "1.0.0",
+  "evidence_date": "2026-09-11",
+  "description": "Execution Engine 执行证据格式定义。",
+
+  "fields": {
+    "execution_id": {
+      "type": "string",
+      "description": "执行唯一标识符",
+      "required": true
+    },
+    "task_id": {
+      "type": "string",
+      "description": "任务标识符",
+      "required": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent 标识符",
+      "required": true
+    },
+    "action": {
+      "type": "string",
+      "description": "执行的动作",
+      "required": true
+    },
+    "result": {
+      "type": "string",
+      "description": "执行结果摘要",
+      "required": true
+    },
+    "timestamp": {
+      "type": "string",
+      "description": "执行完成时间（ISO 8601）",
+      "required": true
+    },
+    "audit_reference": {
+      "type": "string",
+      "description": "Audit Ledger 记录引用",
+      "required": true
+    },
+    "commit_sha": {
+      "type": "string",
+      "description": "执行时的代码 commit SHA（如果适用）",
+      "required": false
+    },
+    "validator_result": {
+      "type": "string",
+      "description": "Validator 运行结果",
+      "required": false
+    }
+  },
+
+  "example_valid": {
+    "execution_id": "exec-001",
+    "task_id": "task-001",
+    "agent_id": "doubao-a",
+    "action": "create_evidence_file",
+    "result": "SUCCESS",
+    "timestamp": "2026-09-11T12:00:00Z",
+    "audit_reference": "led-001",
+    "commit_sha": "340405a",
+    "validator_result": "PASS"
+  },
+
+  "rules": [
+    "所有 COMPLETED 状态的执行必须生成 Execution Evidence",
+    "Execution Evidence 必须绑定 Audit Ledger 记录",
+    "evidence_required=true 的任务必须有 evidence_ref",
+    "REJECTED 状态不需要 Execution Evidence"
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "request_type": "execution_request",
+  "request_version": "1.0.0",
+  "description": "Execution Engine 请求格式定义。",
+
+  "fields": {
+    "execution_id": {
+      "type": "string",
+      "description": "执行唯一标识符",
+      "required": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent 标识符",
+      "required": true
+    },
+    "task_id": {
+      "type": "string",
+      "description": "任务标识符",
+      "required": true
+    },
+    "capability": {
+      "type": "string",
+      "description": "所需能力名称",
+      "required": true
+    },
+    "permission": {
+      "type": "string",
+      "description": "所需权限",
+      "required": true
+    },
+    "evidence_required": {
+      "type": "boolean",
+      "description": "是否要求执行完成后生成证据",
+      "required": true
+    },
+    "action": {
+      "type": "string",
+      "description": "要执行的动作",
+      "required": true
+    },
+    "input": {
+      "type": "object",
+      "description": "执行输入参数",
+      "required": false
+    }
+  },
+
+  "example_valid": {
+    "execution_id": "exec-001",
+    "agent_id": "doubao-a",
+    "task_id": "task-001",
+    "capability": "write_evidence",
+    "permission": "write:evidence",
+    "evidence_required": true,
+    "action": "create_evidence_file",
+    "input": {
+      "file": "test.md"
+    }
+  },
+
+  "example_missing_permission": {
+    "execution_id": "exec-002",
+    "agent_id": "doubao-a",
+    "task_id": "task-002",
+    "capability": "write_evidence",
+    "evidence_required": true,
+    "action": "create_evidence_file"
+  }
+}

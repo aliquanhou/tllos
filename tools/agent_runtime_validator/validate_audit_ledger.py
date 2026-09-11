@@ -32,7 +32,13 @@ VALID_EVENT_TYPES = [
     "ExecutionFailed",
     "EvidenceGenerated",
     "TaskRejected",
-    "AuditReviewed"
+    "AuditReviewed",
+    "EXECUTION_CREATED",
+    "EXECUTION_AUTHORIZED",
+    "EXECUTION_STARTED",
+    "EXECUTION_COMPLETED",
+    "EXECUTION_FAILED",
+    "EXECUTION_REJECTED"
 ]
 
 VALID_STATUSES = ["SUCCESS", "FAILURE", "PENDING", "REJECTED"]

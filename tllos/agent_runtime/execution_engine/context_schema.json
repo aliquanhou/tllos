@@ -1,0 +1,111 @@
+{
+  "schema_name": "Execution Context Schema",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-11",
+  "description": "Execution Context 数据模型定义。",
+
+  "required_fields": [
+    "execution_id",
+    "agent_id",
+    "task_id",
+    "capability",
+    "permission",
+    "evidence_required",
+    "status"
+  ],
+
+  "fields": {
+    "execution_id": {
+      "type": "string",
+      "description": "执行唯一标识符",
+      "required": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent 标识符",
+      "required": true
+    },
+    "task_id": {
+      "type": "string",
+      "description": "任务标识符",
+      "required": true
+    },
+    "capability": {
+      "type": "string",
+      "description": "所需能力名称",
+      "required": true
+    },
+    "permission": {
+      "type": "string",
+      "description": "所需权限",
+      "required": true
+    },
+    "evidence_required": {
+      "type": "boolean",
+      "description": "是否要求执行完成后生成证据",
+      "required": true
+    },
+    "status": {
+      "type": "string",
+      "description": "当前状态",
+      "required": true,
+      "enum": [
+        "CREATED",
+        "AUTHORIZED",
+        "RUNNING",
+        "COMPLETED",
+        "REJECTED",
+        "FAILED",
+        "AUDIT_REQUIRED"
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "description": "创建时间（ISO 8601）",
+      "required": false
+    },
+    "updated_at": {
+      "type": "string",
+      "description": "更新时间（ISO 8601）",
+      "required": false
+    }
+  },
+
+  "state_transitions": {
+    "CREATED": ["AUTHORIZED", "REJECTED"],
+    "AUTHORIZED": ["RUNNING", "REJECTED"],
+    "RUNNING": ["COMPLETED", "FAILED", "AUDIT_REQUIRED"],
+    "COMPLETED": [],
+    "REJECTED": [],
+    "FAILED": [],
+    "AUDIT_REQUIRED": ["COMPLETED", "FAILED"]
+  },
+
+  "illegal_transitions": [
+    "CREATED -> RUNNING",
+    "CREATED -> COMPLETED",
+    "AUTHORIZED -> COMPLETED",
+    "COMPLETED -> *",
+    "REJECTED -> *",
+    "FAILED -> *"
+  ],
+
+  "example_valid": {
+    "execution_id": "exec-001",
+    "agent_id": "doubao-a",
+    "task_id": "task-001",
+    "capability": "write_evidence",
+    "permission": "write:evidence",
+    "evidence_required": true,
+    "status": "CREATED"
+  },
+
+  "example_missing_permission": {
+    "execution_id": "exec-002",
+    "agent_id": "doubao-a",
+    "task_id": "task-002",
+    "capability": "write_evidence",
+    "evidence_required": true,
+    "status": "CREATED"
+  }
+}

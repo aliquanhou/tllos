@@ -1,0 +1,71 @@
+{
+  "response_type": "execution_response",
+  "response_version": "1.0.0",
+  "description": "Execution Engine 响应格式定义。",
+
+  "fields": {
+    "execution_id": {
+      "type": "string",
+      "description": "执行唯一标识符（与请求对应）",
+      "required": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent 标识符",
+      "required": true
+    },
+    "task_id": {
+      "type": "string",
+      "description": "任务标识符",
+      "required": true
+    },
+    "status": {
+      "type": "string",
+      "description": "执行状态",
+      "required": true,
+      "enum": ["COMPLETED", "FAILED", "REJECTED", "AUDIT_REQUIRED"]
+    },
+    "result": {
+      "type": "object",
+      "description": "执行结果",
+      "required": false
+    },
+    "evidence_ref": {
+      "type": "string",
+      "description": "证据引用（如果 evidence_required=true）",
+      "required": false
+    },
+    "error": {
+      "type": "string",
+      "description": "错误信息（如果失败）",
+      "required": false
+    },
+    "timestamp": {
+      "type": "string",
+      "description": "响应时间戳",
+      "required": true
+    }
+  },
+
+  "example_completed": {
+    "execution_id": "exec-001",
+    "agent_id": "doubao-a",
+    "task_id": "task-001",
+    "status": "COMPLETED",
+    "result": {
+      "success": true,
+      "output": "File created"
+    },
+    "evidence_ref": "evidence-001",
+    "timestamp": "2026-09-11T12:00:00Z"
+  },
+
+  "example_rejected": {
+    "execution_id": "exec-002",
+    "agent_id": "doubao-a",
+    "task_id": "task-002",
+    "status": "REJECTED",
+    "error": "Permission required but not provided",
+    "timestamp": "2026-09-11T12:00:00Z"
+  }
+}
