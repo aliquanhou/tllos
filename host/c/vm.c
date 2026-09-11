@@ -2,6 +2,16 @@
  * This is the Host/Bootstrap layer. Language semantics live in runtime/vm.tll.
  */
 #include "tllvm.h"
+
+/* Forward declarations for queue functions (used before definition) */
+static void tll_runnable_queue_enqueue(TLLRunnableQueue *q, int coroutine_idx);
+static void tll_runnable_queue_cleanup(TLLRunnableQueue *q);
+
+/* Diagnosis switches */
+static int no_free_is_on(void) { return getenv("D3_TEST_NO_FREE") != NULL; }
+static int queue_is_off(void) { return getenv("D3_TEST_QUEUE_OFF") != NULL; }
+static int prealloc_table_is_on(void) { return getenv("D3_TEST_PREALLOC_TABLE") != NULL; }
+static int disable_frame_pool_is_on(void) { return getenv("D3_TEST_DISABLE_FRAME_POOL") != NULL; }
 #include <stdint.h>
 
 
@@ -2385,7 +2395,7 @@ static void *tll_worker_thread(void *param) {
 #endif
         } else {
             /* Queue OFF mode: coro was already claimed during scan (P4-5 fix) */
-            coro = scan_coro;
+            coro = vm->coroutines[coro_idx];
         }
 
         worker->ctx.currentCoroutine = coro_idx;
