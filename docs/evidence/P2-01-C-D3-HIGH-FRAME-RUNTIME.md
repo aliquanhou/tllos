@@ -625,3 +625,89 @@ Next isolation target: **TLLFrame pre-create vs concurrent-create** (F1/F2) to d
 | tll_vm_exec line 1749 can destroy current coroutine | **OBSERVED** (potential defect, not primary trigger) |
 | TLLCoroutine field data race is strongest candidate | **INFERRED** (not yet proven) |
 | TLLFrame lifecycle/race | **UNVERIFIED** |
+
+## 16. P2-01-C-D3-R2-P3-P4-4: Frame Isolation F1/F2/F3 (2026-09-11)
+
+### 16.1 Experiment Setup
+
+**Goal:** Determine if TLLFrame allocation / Frame Pool is the root cause of heap corruption.
+
+**Three experiments:**
+- **F1:** Frame all pre-created (before Worker start) — NOT YET COMPLETED
+- **F2:** Normal dynamic Frame (baseline, Frame Pool ON)
+- **F3:** Frame Pool OFF (always allocate fresh frame, always free on release)
+
+**F3 implementation:** Added `D3_TEST_DISABLE_FRAME_POOL` env var:
+- frame_pool_acquire(): skip pool, always calloc fresh frame + arrays
+- frame_pool_release(): skip pool, always free frame + arrays
+
+### 16.2 F2 vs F3 Results
+
+| Task Count | F2 (Pool ON, baseline) | F3 (Pool OFF) |
+|-----------|------------------------|----------------|
+| 2000 run 1 | **PASS** | CRASH |
+| 2000 run 2 | CRASH | CRASH |
+| 2000 run 3 | CRASH | CRASH |
+| 5000 | CRASH | CRASH |
+| 10000 | CRASH | CRASH |
+
+### 16.3 F2/F3 Conclusion
+
+**Frame Pool is PROVEN EXCLUDED as direct root cause.**
+
+Even with Frame Pool completely OFF (every frame allocated fresh, every frame freed immediately on release), high-load tests (5000/10000) still crash with STATUS_HEAP_CORRUPTION (0xC0000374).
+
+Observations:
+- F3 (Pool OFF) crashes more frequently at 2000 tasks (3/3 vs 2/3) — likely due to increased allocation pressure
+- But both F2 and F3 crash at 5000/10000 — Frame Pool presence/absence does not determine crash
+- The Frame Pool is a real thread-safety defect (unsynchronized global state), but it is NOT the primary crash trigger
+
+### 16.4 Frame Internal Lifecycle Audit
+
+**TLLFrame structure fields:**
+- registers (TLLValue*) — dynamically allocated, size = registerCount
+- argStack (TLLValue*) — dynamically allocated, capacity 64
+- tryStack (int*) — dynamically allocated, capacity 16
+- locals (TLLValue*) — dynamically allocated (optional)
+- parent (TLLFrame*) — pointer to parent frame
+- function (TLLFunction*) — pointer to function metadata
+- returnAddr (int) — bytecode return address
+- registerCount, argStackSize, argStackCapacity, tryStackSize, tryStackCapacity, localCapacity, localCount
+
+**Frame lifecycle:**
+1. create_frame() → frame_pool_acquire() → calloc frame + arrays
+2. push to callStack (worker->ctx.callStack or coro->callStack)
+3. tll_vm_exec() executes bytecode using frame->registers, frame->argStack, frame->tryStack
+4. pop_frame() → frame_pool_release() → return to pool or free
+
+**Key question:** Can two threads access the same TLLFrame concurrently?
+- In Worker mode, each worker has its own callStack (worker->ctx.callStack)
+- During coroutine yield, callStack is saved back to coro->callStack
+- During coroutine resume, coro->callStack is loaded into worker->ctx.callStack
+- If two workers claim the same coroutine (should be prevented by claim lock), they could share frames
+- Frame Pool is global and unsynchronized — two workers can acquire/release frames concurrently
+
+But F3 (Pool OFF) proves that even without Frame Pool sharing, crashes still occur. So the corruption is not caused by Frame Pool sharing alone.
+
+### 16.5 Updated Root Cause Candidate Ranking
+
+1. **TLLCoroutine object field data race** (STRONGEST — concurrent modification of coro->state/callStack/callStackSize)
+2. **TLLFrame object field data race** (concurrent modification of frame->registers/argStack during execution)
+3. **Worker context / callStack sharing race** (coroutine yield/resume transferring callStack between workers)
+4. Shutdown race (not yet isolated)
+5. ~~Queue node lifecycle~~ → PROVEN EXCLUDED
+6. ~~vm->coroutines[] realloc~~ → PROVEN EXCLUDED
+7. ~~TLLCoroutine early-free / UAF~~ → PROVEN EXCLUDED
+8. ~~Frame Pool~~ → PROVEN EXCLUDED (F3 still crashes)
+
+### 16.6 Evidence Classification
+
+| Finding | Level |
+|---------|-------|
+| F3 (Frame Pool OFF) still crashes at 5000/10000 | **PROVEN** |
+| Frame Pool is not direct root cause | **PROVEN EXCLUDED** |
+| F3 crashes more frequently at 2000 (3/3 vs 2/3) | **OBSERVED** (allocation pressure) |
+| TLLCoroutine field data race is strongest candidate | **INFERRED** |
+| TLLFrame field data race | **UNVERIFIED** |
+| Worker context / callStack sharing race | **UNVERIFIED** |
+| F1 (all frames pre-created) | **NOT YET COMPLETED** |
