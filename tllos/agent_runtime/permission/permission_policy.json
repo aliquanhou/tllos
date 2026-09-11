@@ -1,0 +1,71 @@
+{
+  "policy_name": "TLL OS Agent Permission Policy",
+  "policy_version": "1.0.0",
+  "policy_date": "2026-09-11",
+  "policy_description": "TLL OS Agent 权限策略定义。定义权限状态机和权限粒度。",
+
+  "permission_states": {
+    "requested": {
+      "description": "Agent 申请了权限，等待批准",
+      "set_by": "agent",
+      "can_transition_to": ["approved", "rejected"]
+    },
+    "approved": {
+      "description": "系统批准了权限，可以使用",
+      "set_by": "owner",
+      "can_transition_to": ["executed", "revoked", "expired"]
+    },
+    "executed": {
+      "description": "权限已被使用",
+      "set_by": "system",
+      "can_transition_to": []
+    },
+    "rejected": {
+      "description": "权限被拒绝",
+      "set_by": "owner",
+      "can_transition_to": ["requested"]
+    },
+    "revoked": {
+      "description": "权限被撤销",
+      "set_by": "owner",
+      "can_transition_to": ["requested"]
+    },
+    "expired": {
+      "description": "权限已过期",
+      "set_by": "system",
+      "can_transition_to": ["requested"]
+    }
+  },
+
+  "permissions": {
+    "read:canonical": {
+      "description": "读取 Canonical Layer 文件",
+      "scope": ["tllos/identity/*.json", "tllos/truth/*.md", "tllos/truth/*.json"]
+    },
+    "write:evidence": {
+      "description": "写 Evidence 文档",
+      "scope": ["docs/evidence/*.md"]
+    },
+    "write:code": {
+      "description": "修改代码文件",
+      "scope": ["host/c/*.c", "host/c/*.h", "tllos/agent_runtime/*.json", "tllos/agent_runtime/*.md"]
+    },
+    "execute:test": {
+      "description": "运行测试",
+      "scope": ["python test_*.py", "python tools/*/*.py"]
+    },
+    "execute:build": {
+      "description": "运行构建",
+      "scope": ["build_all.bat"]
+    }
+  },
+
+  "rules": [
+    "Agent 不能自行将 requested 变为 approved",
+    "Agent 不能自行将 approved 变为 executed",
+    "无 approved 状态下不能执行任务",
+    "权限不能超出 Capability 范围",
+    "默认无权限",
+    "最小权限原则"
+  ]
+}

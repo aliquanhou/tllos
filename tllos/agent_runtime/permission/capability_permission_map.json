@@ -1,0 +1,75 @@
+{
+  "map_name": "TLL OS Capability-Permission Map",
+  "map_version": "1.0.0",
+  "map_date": "2026-09-11",
+  "map_description": "Capability 与 Permission 的绑定关系。Capability ≠ Permission，Capability 是 Agent 声明的能力，Permission 是系统授予的权限。",
+
+  "principles": [
+    "Capability ≠ Permission",
+    "一个 Capability 可以对应多个 Permission",
+    "一个 Permission 可以被多个 Capability 使用",
+    "Permission 不能超出 Capability 范围",
+    "最小权限原则：默认只授予必要的 Permission"
+  ],
+
+  "capability_permission_map": {
+    "read_canonical": {
+      "description": "读取 Canonical Layer 文件",
+      "permissions": [
+        "read:canonical"
+      ]
+    },
+    "write_evidence": {
+      "description": "写 Evidence 文档",
+      "permissions": [
+        "write:evidence"
+      ]
+    },
+    "read_code": {
+      "description": "读取代码文件",
+      "permissions": [
+        "read:canonical"
+      ]
+    },
+    "write_agent_runtime": {
+      "description": "修改 Agent Runtime 协议文件",
+      "permissions": [
+        "write:code"
+      ],
+      "scope": ["tllos/agent_runtime/*.json", "tllos/agent_runtime/*.md", "tools/agent_runtime_validator/*.py"]
+    },
+    "run_tests": {
+      "description": "运行测试",
+      "permissions": [
+        "execute:test"
+      ]
+    },
+    "run_build": {
+      "description": "运行构建",
+      "permissions": [
+        "execute:build"
+      ],
+      "risk_level": "HIGH"
+    }
+  },
+
+  "examples": {
+    "correct": {
+      "agent_capability": "write_evidence",
+      "requested_permission": "write:evidence",
+      "result": "ALLOW"
+    },
+    "incorrect_capability_not_permission": {
+      "agent_capability": "filesystem",
+      "requested_permission": "write_all",
+      "result": "REJECT",
+      "reason": "Capability 太宽泛，Permission 超出 Capability 范围"
+    },
+    "incorrect_escalation": {
+      "agent_capability": "read_code",
+      "requested_permission": "write:code",
+      "result": "REJECT",
+      "reason": "read_code 不包含 write:code 权限"
+    }
+  }
+}

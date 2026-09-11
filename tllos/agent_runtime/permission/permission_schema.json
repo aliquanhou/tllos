@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tllos.dev/schema/agent_runtime/permission.schema.json",
+  "title": "TLL OS Agent Permission Schema",
+  "description": "Agent 权限声明 Schema。Agent 申请权限时必须符合此 Schema。",
+
+  "type": "object",
+  "required": [
+    "permission_id",
+    "agent_id",
+    "permission_type",
+    "state",
+    "requested_at"
+  ],
+
+  "properties": {
+    "permission_id": {
+      "type": "string",
+      "description": "权限唯一标识符"
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent 标识符"
+    },
+    "permission_type": {
+      "type": "string",
+      "enum": [
+        "read:canonical",
+        "write:evidence",
+        "write:code",
+        "execute:test",
+        "execute:build"
+      ],
+      "description": "权限类型"
+    },
+    "state": {
+      "type": "string",
+      "enum": ["requested", "approved", "executed", "rejected", "revoked", "expired"],
+      "description": "权限状态"
+    },
+    "scope": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "权限范围（文件路径模式）"
+    },
+    "requested_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "申请时间"
+    },
+    "approved_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "批准时间（由系统设置）"
+    },
+    "approved_by": {
+      "type": "string",
+      "description": "批准人（由系统设置）"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "过期时间"
+    }
+  },
+
+  "additionalProperties": true,
+
+  "examples": [
+    {
+      "permission_id": "perm-001",
+      "agent_id": "doubao-a",
+      "permission_type": "write:evidence",
+      "state": "requested",
+      "scope": ["docs/evidence/*.md"],
+      "requested_at": "2026-09-11T10:00:00Z"
+    }
+  ]
+}

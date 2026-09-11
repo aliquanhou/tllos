@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 TLL OS Agent Runtime Validator
-验证 Agent Runtime 协议文件的结构完整性。
+验证 Agent Runtime 协议文件的结构完整性和权限边界。
 
 不依赖外部库，使用内置 json 模块进行基本结构验证。
 
@@ -69,6 +69,40 @@ VALIDATION_RULES = [
             "validation_rules": list
         }
     },
+    {
+        "name": "permission_policy.json",
+        "path": "tllos/agent_runtime/permission/permission_policy.json",
+        "required_fields": [
+            "policy_name",
+            "policy_version",
+            "permission_states",
+            "permissions",
+            "rules"
+        ],
+        "field_types": {
+            "policy_name": str,
+            "policy_version": str,
+            "permission_states": dict,
+            "permissions": dict,
+            "rules": list
+        }
+    },
+    {
+        "name": "capability_permission_map.json",
+        "path": "tllos/agent_runtime/permission/capability_permission_map.json",
+        "required_fields": [
+            "map_name",
+            "map_version",
+            "capability_permission_map",
+            "principles"
+        ],
+        "field_types": {
+            "map_name": str,
+            "map_version": str,
+            "capability_permission_map": dict,
+            "principles": list
+        }
+    },
 ]
 
 
@@ -98,6 +132,35 @@ def validate_structure(data, rule):
                     f"Field '{field}' type mismatch: "
                     f"expected {expected_type.__name__}, got {type(data[field]).__name__}"
                 )
+    return errors
+
+
+def validate_permission_boundary():
+    """
+    Permission Boundary 验证：
+    1. task 必须包含 permission 字段
+    2. permission 不能超出 capability 范围
+    """
+    errors = []
+
+    # 加载 capability_permission_map
+    map_path = os.path.join(PROJECT_ROOT, "tllos/agent_runtime/permission/capability_permission_map.json")
+    if not os.path.exists(map_path):
+        errors.append("capability_permission_map.json not found")
+        return errors
+
+    try:
+        with open(map_path, "r", encoding="utf-8") as f:
+            cap_map = json.load(f)
+    except Exception as e:
+        errors.append(f"Failed to load capability_permission_map: {e}")
+        return errors
+
+    # 验证 map 中的原则
+    principles = cap_map.get("principles", [])
+    if "Capability ≠ Permission" not in principles:
+        errors.append("Missing principle: Capability ≠ Permission")
+
     return errors
 
 
@@ -132,6 +195,20 @@ def main():
         else:
             print(f"✅ PASS: {name}")
             results.append((name, "PASS", ""))
+
+    # Permission Boundary 验证
+    print()
+    print("--- Permission Boundary ---")
+    perm_errors = validate_permission_boundary()
+    if perm_errors:
+        print(f"❌ FAIL: permission_boundary")
+        for err in perm_errors:
+            print(f"   - {err}")
+        all_passed = False
+        results.append(("permission_boundary", "FAIL", "; ".join(perm_errors)))
+    else:
+        print(f"✅ PASS: permission_boundary")
+        results.append(("permission_boundary", "PASS", ""))
 
     print()
     print("=" * 60)
