@@ -64,7 +64,7 @@
     "agents": [
       {
         "path": "tllos/agents/agent_contract.md",
-        "sha256": "c79bb85989d56eda7c5b3d63009c3dbd8b02c7b0cd89d8015066faa5a32d7e2c",
+        "sha256": "d11c436b9379be752e7976c78ef15df3ecf55b7d687905c3bd9f2bf0a171131f",
         "description": "Agent 宪法"
       },
       {
