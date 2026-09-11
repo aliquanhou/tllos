@@ -711,3 +711,154 @@ But F3 (Pool OFF) proves that even without Frame Pool sharing, crashes still occ
 | TLLFrame field data race | **UNVERIFIED** |
 | Worker context / callStack sharing race | **UNVERIFIED** |
 | F1 (all frames pre-created) | **NOT YET COMPLETED** |
+
+## 17. P2-01-C-D3-R2-P5: Execution Context Ownership Isolation (2026-09-11)
+
+### 17.1 P5-1: Ownership Matrix
+
+**TLLWorker.ctx fields:**
+
+| Field | Owner | Read By | Write By | Sync | Lifetime |
+|-------|-------|---------|---------|------|----------|
+| callStack | WORKER-OWNED | tll_vm_exec, push_frame, pop_frame, coroutine_save_current | push_frame (realloc), coroutine_restore, Worker load | NONE (worker-local) | Borrowed from coroutine during execution |
+| callStackSize | WORKER-OWNED | tll_vm_exec, push_frame, pop_frame | push_frame, pop_frame | NONE | Transferred to coroutine on save |
+| callStackCapacity | WORKER-OWNED | push_frame | push_frame (realloc) | NONE | Transferred to coroutine on save |
+| currentCoroutine | WORKER-OWNED | tll_vm_exec, push_frame, pop_frame, coroutine_save_current | Worker claim, coroutine_restore | NONE | Index into vm->coroutines[] |
+| invokeTargetStackSize | WORKER-OWNED | tll_vm_exec | Worker claim | NONE | Worker-local |
+
+**TLLCoroutine fields:**
+
+| Field | Owner | Read By | Write By | Sync | Violation Found |
+|-------|-------|---------|---------|------|-----------------|
+| callStack | COROUTINE-OWNED | Worker load (line 2394), coroutine_restore (481), coroutine_destroy (391) | Worker save (2403), coroutine_save_current (465), coroutine_create (419) | **NONE on Worker save (2403)** | ⚠️ Worker save without lock |
+| callStackSize | COROUTINE-OWNED | Worker load (2395), state transition (2419), coroutine_destroy (386) | Worker save (2404), **push_frame (892)**, **pop_frame (901)**, coroutine_save_current (466) | **NONE on push/pop_frame direct write** | ⚠️ **push/pop_frame directly write coro->callStackSize without lock** |
+| callStackCapacity | COROUTINE-OWNED | Worker load (2396) | Worker save (2405), coroutine_save_current (467) | **NONE on Worker save** | ⚠️ Worker save without lock |
+| state | LOCK-PROTECTED | Worker claim, wake path, state transition | Worker claim (RUNNABLE→RUNNING), state transition (RUNNING→COMPLETED/RUNNABLE/WAITING), wake path (WAITING→RUNNABLE) | coroutine_table_lock | ✅ Protected |
+| wakeTime | LOCK-PROTECTED | tll_wake_expired_sleepers | tll_wake_expired_sleepers (clear), OP_SLEEP (set) | coroutine_table_lock in wake path | ⚠️ OP_SLEEP sets wakeTime without lock (but during worker execution) |
+| waitingFd | LOCK-PROTECTED | tll_wake_io_ready, coroutine_is_runnable | OP_WAIT_READ/WRITE (set), tll_wake_io_ready (clear) | coroutine_table_lock in wake path | ⚠️ OP_WAIT sets without lock |
+| waitingChannel | LOCK-PROTECTED | coroutine_wake_channel, coroutine_is_runnable | OP_WAIT_CHANNEL (set), coroutine_wake_channel (clear) | coroutine_table_lock in wake path | ⚠️ OP_WAIT sets without lock |
+
+### 17.2 P5-2: callStack Write Timeline
+
+**All 39 write points for callStack/callStackSize/callStackCapacity:**
+
+| Phase | Location | Write | Lock? | Owner |
+|-------|----------|-------|-------|-------|
+| CREATE | coroutine_create (418-420) | co->callStack = calloc, size=0, cap=64 | N/A (new object) | MAIN-THREAD |
+| CREATE | coroutine_create (432) | co->callStack[size++] = frame | N/A | MAIN-THREAD |
+| **EXEC** | **push_frame (885)** | **realloc(worker->ctx.callStack)** | **NONE** | **WORKER** |
+| **EXEC** | **push_frame (892)** | **coro->callStackSize = ctx->callStackSize** | **NONE** | **⚠️ DIRECT CORO WRITE** |
+| **EXEC** | **pop_frame (901)** | **coro->callStackSize = ctx->callStackSize** | **NONE** | **⚠️ DIRECT CORO WRITE** |
+| EXEC | tll_vm_exec (1092-1094) | ctx->callStack = NULL, size=0, cap=0 | NONE | WORKER |
+| EXEC | tll_vm_exec (1122-1124) | ctx->callStack = NULL, size=0, cap=0 | NONE | WORKER |
+| EXEC | tll_vm_exec (1761-1763) | ctx->callStack = NULL, size=0, cap=0 | NONE | WORKER |
+| SAVE | coroutine_save_current (465-467) | co->callStack = ctx->callStack, size, cap | NONE | TRANSFER |
+| RESTORE | coroutine_restore (481-483) | ctx->callStack = co->callStack, size, cap | NONE | TRANSFER |
+| **WORKER** | **Worker load (2394-2396)** | **ctx->callStack = coro->callStack** | **claim lock held before** | TRANSFER |
+| **WORKER** | **Worker save (2403-2405)** | **coro->callStack = ctx->callStack, size, cap** | **NONE** | **⚠️ SAVE WITHOUT LOCK** |
+| **WORKER** | **State transition (2419)** | **reads coro->callStackSize** | **coroutine_table_lock** | READ |
+| RUN | tll_vm_run (1827-1829) | mainCo->callStack = ctx->callStack, size, cap | NONE | TRANSFER |
+| RUN | tll_vm_run (1844-1846) | ctx->callStack = NULL, size=0, cap=0 | NONE | WORKER |
+| CTX INIT | tll_worker_ctx_init (2253-2255) | ctx->callStack = NULL, size=0, cap=0 | NONE | WORKER |
+| CTX INIT | (2267-2269) | ctx->callStack = NULL, size=0, cap=0 | NONE | WORKER |
+| FREE | coroutine_destroy (391) | free(co->callStack) | N/A (object dying) | N/A |
+| FREE | tll_vm_free (1914) | free(co->callStack) | N/A | N/A |
+
+### 17.3 Critical Ownership Violations Found
+
+**Violation 1: push_frame/pop_frame directly write coro->callStackSize without lock (lines 892, 901)**
+
+```c
+static void push_frame(TLLVM *vm, TLLFrame *frame) {
+    // ... realloc worker->ctx.callStack ...
+    // P0-RUNTIME-07-R2: Sync current coroutine callStackSize
+    if (vm->coroutineCount > 0 && ...) {
+        vm->coroutines[currentCoroutine]->callStackSize = ctx->callStackSize;  // ⚠️ NO LOCK
+    }
+}
+```
+
+**Risk:** During worker execution, another thread (main thread creating coroutines, or another worker's wake path) may access coro->callStackSize concurrently. While the coroutine is RUNNING, other workers should not claim it, but the main thread's coroutine_create does not touch this specific coroutine. The direct write bypasses the ownership transfer protocol.
+
+**Violation 2: Worker save callStack to coro without lock (lines 2403-2405)**
+
+```c
+/* Execute the coroutine */
+tll_vm_exec(vm);
+
+/* Save call stack back to coroutine */
+coro->callStack = worker->ctx.callStack;        // ⚠️ NO LOCK
+coro->callStackSize = worker->ctx.callStackSize; // ⚠️ NO LOCK
+coro->callStackCapacity = worker->ctx.callStackCapacity; // ⚠️ NO LOCK
+
+// ... later, under coroutine_table_lock:
+if (coro->callStackSize == 0) { coro->state = COMPLETED; }
+```
+
+**Risk:** Between tll_vm_exec return and state transition (which is under lock), the coroutine state is still RUNNING. The save writes callStack pointer without synchronization. If a wake path or another worker reads coro->callStack during this window, it may see an inconsistent state.
+
+**Violation 3: push_frame realloc frees old callStack while coro->callStack still points to it**
+
+```c
+// Worker load (line 2394): worker->ctx.callStack = coro->callStack;
+// Both point to same memory.
+
+// push_frame (line 885): worker->ctx.callStack = realloc(worker->ctx.callStack, ...);
+// Old callStack is FREED by realloc.
+// But coro->callStack STILL POINTS TO OLD (now freed) memory!
+
+// Worker save (line 2403): coro->callStack = worker->ctx.callStack;
+// Now coro->callStack points to new memory.
+```
+
+**Risk:** During tll_vm_exec execution, after push_frame calls realloc but before Worker save, coro->callStack is a dangling pointer to freed memory. If any other thread reads coro->callStack during this window, it is a use-after-free.
+
+**Current analysis:** While the coroutine is RUNNING, no other worker should access its callStack (claim lock prevents claim). The wake path does not read callStack. The main thread's coroutine_create does not touch this coroutine. So in practice, this window may not be exploited by current code paths. However, it is a latent ownership violation that could be triggered by future code changes.
+
+### 17.4 P5-3: Minimal Transfer Test (NOT YET RUN)
+
+Planned test: 2 Workers, 100 coroutines, force:
+- Worker A claims C, executes, yields
+- Worker B resumes C
+- Verify C.owner, C.state, C.callStack throughout transfer
+
+This test requires instrumentation to track ownership transitions. Not yet implemented.
+
+### 17.5 Evidence Classification
+
+| Finding | Level |
+|---------|-------|
+| push_frame/pop_frame directly write coro->callStackSize without lock | **OBSERVED** (code audit) |
+| Worker save callStack to coro without lock | **OBSERVED** (code audit) |
+| push_frame realloc leaves coro->callStack dangling during execution | **OBSERVED** (code audit) |
+| These violations are the direct cause of heap corruption | **UNVERIFIED** (not yet proven by reproduction) |
+| No other thread accesses coro->callStack during RUNNING state | **INFERRED** (based on current code paths) |
+| F1 (all pre-created) would further isolate creation-time vs execution-time | **PENDING** |
+
+### 17.6 Current Root Cause Tree
+
+```
+Concurrent coroutine_create
+    │
+    ├── Queue node              ❌ EXCLUDED
+    ├── Table realloc           ❌ EXCLUDED
+    ├── Coroutine early-free    ❌ EXCLUDED
+    ├── Frame Pool              ❌ EXCLUDED
+    │
+    └── Execution-time state
+            │
+            ├── Coroutine field ownership     ← ⚠️ VIOLATIONS FOUND
+            │   ├── push/pop_frame direct coro write (no lock)
+            │   ├── Worker save without lock
+            │   └── realloc leaves coro->callStack dangling
+            │
+            ├── Worker ctx ownership          ← ⚠️ VIOLATIONS FOUND
+            │   └── callStack transfer protocol incomplete
+            │
+            ├── callStack transfer            ← ⚠️ VIOLATIONS FOUND
+            │
+            ├── TLLFrame concurrent access     ← OPEN
+            └── Shutdown                       ← POSTPONED
+```
+
+**Exact corruption point: NOT YET PROVEN.** Multiple ownership violations found in callStack/ctx transfer protocol, but not yet proven which one causes the observed STATUS_HEAP_CORRUPTION.
