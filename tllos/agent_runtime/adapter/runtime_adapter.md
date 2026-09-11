@@ -44,3 +44,58 @@ Runtime Adapter  ← 当前层
 ---
 
 *Runtime Adapter Layer — P2-03.3*
+
+---
+
+## Execution Engine Bridge (P2-04.1)
+
+### 调用链
+
+```
+Execution Engine Core
+        ↓
+Runtime Adapter Interface
+        ↓
+TLL Runtime Boundary
+```
+
+### 接口定义
+
+**输入：RuntimeRequest**
+
+```json
+{
+  "execution_id": "exec-001",
+  "agent_id": "doubao-a",
+  "task_id": "task-001",
+  "action": "some_action",
+  "input": {}
+}
+```
+
+**输出：RuntimeResult**
+
+```json
+{
+  "execution_id": "exec-001",
+  "status": "SUCCESS",
+  "result": {},
+  "timestamp": "2026-09-11T12:00:00Z"
+}
+```
+
+### 当前状态
+
+- ✅ Mock Adapter 可用（用于测试）
+- ❌ 真实 Runtime 执行 NOT IMPLEMENTED
+- ❌ 直接修改 VM 禁止
+
+### 边界
+
+Execution Engine → Runtime Adapter → TLL Runtime Boundary
+
+Execution Engine 不直接调用 VM，必须通过 Runtime Adapter。
+
+---
+
+*Execution Engine Bridge — P2-04.1*

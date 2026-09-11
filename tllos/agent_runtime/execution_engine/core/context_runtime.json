@@ -1,0 +1,124 @@
+{
+  "schema_name": "Execution Context Runtime Model",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-11",
+  "description": "Execution Engine Core 的运行时上下文模型。",
+
+  "required_fields": [
+    "execution_id",
+    "agent_identity",
+    "capability_id",
+    "permission_set",
+    "runtime_target",
+    "audit_reference",
+    "evidence_reference",
+    "created_at"
+  ],
+
+  "fields": {
+    "execution_id": {
+      "type": "string",
+      "description": "执行唯一标识符",
+      "required": true
+    },
+    "agent_identity": {
+      "type": "object",
+      "description": "Agent 身份信息",
+      "required": true,
+      "fields": {
+        "agent_id": "string (required)",
+        "agent_type": "string (required)",
+        "registered": "boolean (required)"
+      }
+    },
+    "capability_id": {
+      "type": "string",
+      "description": "能力标识符",
+      "required": true
+    },
+    "permission_set": {
+      "type": "array",
+      "description": "权限集合",
+      "required": true,
+      "items": "string (permission name)"
+    },
+    "runtime_target": {
+      "type": "object",
+      "description": "运行时目标",
+      "required": true,
+      "fields": {
+        "type": "string (required: adapter/mock/direct)",
+        "target": "string (required)"
+      }
+    },
+    "audit_reference": {
+      "type": "string",
+      "description": "Audit Ledger 记录引用",
+      "required": true
+    },
+    "evidence_reference": {
+      "type": "string",
+      "description": "证据引用",
+      "required": true
+    },
+    "created_at": {
+      "type": "string",
+      "description": "创建时间（ISO 8601）",
+      "required": true
+    },
+    "status": {
+      "type": "string",
+      "description": "当前状态",
+      "required": false,
+      "enum": [
+        "CREATED",
+        "VALIDATED",
+        "AUTHORIZED",
+        "EXECUTING",
+        "COMPLETED",
+        "RECORDED",
+        "REJECTED",
+        "FAILED"
+      ]
+    }
+  },
+
+  "rules": [
+    "没有 agent_identity -> REJECT",
+    "没有 permission_set -> REJECT",
+    "没有 evidence_reference -> REJECT",
+    "没有 audit_reference -> REJECT"
+  ],
+
+  "example_valid": {
+    "execution_id": "exec-core-001",
+    "agent_identity": {
+      "agent_id": "doubao-a",
+      "agent_type": "construction_agent",
+      "registered": true
+    },
+    "capability_id": "write_evidence",
+    "permission_set": ["write:evidence"],
+    "runtime_target": {
+      "type": "adapter",
+      "target": "mock_adapter"
+    },
+    "audit_reference": "led-core-001",
+    "evidence_reference": "ev-core-001",
+    "created_at": "2026-09-11T12:00:00Z",
+    "status": "CREATED"
+  },
+
+  "example_no_identity": {
+    "execution_id": "exec-core-002",
+    "capability_id": "write_evidence",
+    "permission_set": ["write:evidence"],
+    "runtime_target": {
+      "type": "adapter",
+      "target": "mock_adapter"
+    },
+    "audit_reference": "led-core-002",
+    "evidence_reference": "ev-core-002",
+    "created_at": "2026-09-11T12:00:00Z"
+  }
+}
