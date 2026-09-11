@@ -15,6 +15,10 @@
 
   "integrity_algorithm": "SHA256",
 
+  "integrity_level": "git_anchored_integrity",
+  "cryptographic_identity": false,
+  "integrity_level_description": "当前完整性等级为 Git Anchored Integrity：Canonical 文件的完整性由 Git commit SHA 和 Git 仓库状态保证，而非数字签名。未来加入 Ed25519 签名 + Trusted Key + Signed Genesis 后，才升级为 Cryptographic Identity。",
+
   "note": "本 manifest 不包含自身的 hash（避免循环引用）。本 manifest 的完整性由 Git commit SHA 和 Git 仓库状态保证。未来可增加数字签名机制（GAP-1）。",
 
   "files": {

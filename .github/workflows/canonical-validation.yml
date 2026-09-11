@@ -1,0 +1,36 @@
+# TLL OS Canonical Validation CI Gate
+# 验证 Canonical Layer JSON 文件结构完整性
+# 任何 push 如果破坏了 Canonical Layer 结构，CI 会自动 FAIL
+
+name: Canonical Validation
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate-canonical:
+    runs-on: ubuntu-latest
+    name: Validate Canonical Layer JSON
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run Canonical Validator
+        run: |
+          python tools/canonical_validator/validate_json.py
+
+      - name: Validation Result
+        run: |
+          echo "Canonical Validation completed successfully."
