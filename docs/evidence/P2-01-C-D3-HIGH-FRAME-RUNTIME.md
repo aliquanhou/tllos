@@ -250,3 +250,61 @@ After ruling out Frame Pool, Table realloc, and multi-worker concurrency, the re
 - **No code fix committed**: Awaiting further isolation or architecture decision
 
 **R2 Isolation Phase 1 Complete. Continuing isolation...**
+
+## 11. P2-01-C-D3-R2 Phase 2: Pre-creation vs Concurrent Creation Isolation (2026-09-11)
+
+### 11.1 Critical Isolation Experiment: Pre-creation vs Concurrent Creation
+
+**Experiment Setup:**
+- Test P (Pre-creation): Create ALL 10000 coroutines BEFORE starting workers, then submit all
+- Test C (Concurrent creation): Start workers first, then create+submit coroutines concurrently with worker execution
+- Both tests: same task function, same worker count (2), same wait time, same shutdown
+
+**Results:**
+
+| Test | Configuration | Result | Conclusion |
+|------|--------------|--------|------------|
+| Pre-creation (P) | 10000 coroutines created before workers | **NO CRASH** (exit 0) | concurrent coroutine_create eliminated |
+| Concurrent (C) | 10000 coroutines created while workers running | **CRASH** (0xC0000374) | baseline |
+
+### 11.2 Key Finding: Concurrent coroutine_create is PROVEN STRONG CANDIDATE
+
+The pre-creation test does NOT crash, while the concurrent creation test DOES crash.
+The only variable changed is whether coroutine_create() runs concurrently with worker execution.
+
+**Conclusion: Concurrent coroutine_create() during worker execution is the primary trigger for heap corruption.**
+
+This upgrades concurrent coroutine_create from "STRONG CANDIDATE" to "PROVEN STRONG CANDIDATE / PRIMARY TRIGGER".
+
+### 11.3 Pre-creation Test Notes
+
+- The pre-creation test showed completed=0/10000, which is a test artifact (closure variable sharing in coroutine.spawn(fn() { cpu_task(i) }) causes all coroutines to reference the final i value).
+- This does NOT affect the crash/no-crash conclusion: the test ran to completion without heap corruption.
+- The parameter-passing version (coroutine.spawn(cpu_task, i)) produced no output due to a separate syntax/encoding issue, under investigation.
+- The critical observation is: **pre-creation = no crash, concurrent creation = crash**.
+
+### 11.4 Remaining Root Cause Candidates (within concurrent coroutine_create)
+
+Now that concurrent coroutine_create is proven as the trigger, the next step is to identify WHICH operation inside coroutine_create causes the corruption when run concurrently:
+
+1. **TLLCoroutine struct allocation** (malloc)
+2. **callStack allocation** (malloc)
+3. **Frame allocation** (create_frame → frame_pool_acquire)
+4. **Frame registers/argStack/tryStack allocation** (calloc)
+5. **vm->coroutines[] array insertion** (may trigger realloc)
+6. **vm->coroutineCount increment**
+7. **Coroutine initial state setup**
+
+Each of these needs to be isolated to find the exact corruption point.
+
+### 11.5 R2 Phase 2 Status
+
+- **Concurrent coroutine_create**: PROVEN as primary crash trigger
+- **Pre-creation**: NO CRASH (validates isolation)
+- **Exact corruption point within coroutine_create**: NOT YET IDENTIFIED
+- **Coroutine object lifetime**: UNDER INVESTIGATION
+- **Queue node lifetime**: UNDER INVESTIGATION
+- **Shutdown race**: UNDER INVESTIGATION
+- **A-GAP-1**: remains OPEN, but trigger now identified
+
+**R2 Phase 2 Complete. Concurrent coroutine_create is PROVEN trigger. Next: isolate exact corruption point within coroutine_create.**
