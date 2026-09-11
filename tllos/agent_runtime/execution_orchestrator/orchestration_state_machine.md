@@ -1,0 +1,74 @@
+# Orchestration State Machine
+
+## 状态定义
+
+```
+CREATED
+  ↓
+VALIDATING
+  ↓
+APPROVED
+  ↓
+SCHEDULED
+  ↓
+EXECUTING
+  ↓
+COLLECTING_EVIDENCE
+  ↓
+AUDITING
+  ↓
+COMPLETED
+```
+
+异常状态：REJECTED / FAILED
+
+---
+
+## 状态说明
+
+| 状态 | 说明 |
+|------|------|
+| CREATED | 编排计划已创建 |
+| VALIDATING | 正在验证 |
+| APPROVED | 已批准 |
+| SCHEDULED | 已调度 |
+| EXECUTING | 正在执行 |
+| COLLECTING_EVIDENCE | 正在收集证据 |
+| AUDITING | 正在审计 |
+| COMPLETED | 已完成（终态） |
+| REJECTED | 已拒绝（异常终态） |
+| FAILED | 执行失败（异常终态） |
+
+---
+
+## 状态转换规则
+
+| 当前状态 | 允许转换到 |
+|---------|-----------|
+| CREATED | VALIDATING, REJECTED |
+| VALIDATING | APPROVED, REJECTED |
+| APPROVED | SCHEDULED, REJECTED |
+| SCHEDULED | EXECUTING, REJECTED |
+| EXECUTING | COLLECTING_EVIDENCE, FAILED |
+| COLLECTING_EVIDENCE | AUDITING, FAILED |
+| AUDITING | COMPLETED, FAILED |
+| COMPLETED | （终态） |
+| REJECTED | （终态） |
+| FAILED | （终态） |
+
+---
+
+## 非法状态转换
+
+- ❌ CREATED → COMPLETED
+- ❌ CREATED → EXECUTING
+- ❌ VALIDATING → EXECUTING
+- ❌ APPROVED → EXECUTING
+- ❌ SCHEDULED → COMPLETED
+- ❌ EXECUTING → COMPLETED（必须先 COLLECTING_EVIDENCE 和 AUDITING）
+- ❌ COLLECTING_EVIDENCE → COMPLETED
+- ❌ AUDITING → （除 COMPLETED / FAILED 外）
+
+---
+
+*Orchestration State Machine — P2-04.4*

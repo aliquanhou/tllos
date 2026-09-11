@@ -119,3 +119,49 @@ Execution Engine 不直接调用 VM，必须通过 Runtime Adapter。
 ---
 
 *Execution Engine Bridge — P2-04.1*
+
+---
+
+## Execution Orchestrator Integration (P2-04.4)
+
+**Runtime Adapter 接收 Orchestration Command。**
+
+### 调用链
+
+```
+Execution Orchestrator
+       ↓
+Runtime Adapter
+       ↓
+TLL Runtime
+```
+
+### 规则
+
+- ❌ Runtime Adapter **不接收**未经 Orchestrator 的直接调用
+- ✅ Runtime Adapter **只接收**来自 Execution Orchestrator 的命令
+
+```
+Direct Runtime Call
+        |
+        X
+        |
+ Orchestrator Required
+```
+
+### 输入：Orchestration Command
+
+```json
+{
+  "orchestration_id": "orch-001",
+  "step_id": "step-001",
+  "action": "write_evidence",
+  "target": "mock_adapter",
+  "input": {},
+  "evidence_ref": "ev-step-001"
+}
+```
+
+---
+
+*Execution Orchestrator Integration — P2-04.4*

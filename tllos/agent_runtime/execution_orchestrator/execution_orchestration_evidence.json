@@ -1,0 +1,137 @@
+{
+  "schema_name": "Execution Orchestration Evidence",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-12",
+  "description": "Execution Orchestrator 的证据链格式。",
+
+  "required_fields": [
+    "orchestration_id",
+    "execution_plan",
+    "steps",
+    "evidence_chain",
+    "audit_events"
+  ],
+
+  "fields": {
+    "orchestration_id": {
+      "type": "string",
+      "description": "编排唯一标识符",
+      "required": true
+    },
+    "execution_plan": {
+      "type": "object",
+      "description": "执行计划",
+      "required": true,
+      "fields": {
+        "plan_id": "string (required)",
+        "agent_id": "string (required)",
+        "task_id": "string (required)"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "description": "执行步骤列表",
+      "required": true,
+      "items": {
+        "step_id": "string (required)",
+        "action": "string (required)",
+        "status": "string (required)"
+      }
+    },
+    "evidence_chain": {
+      "type": "array",
+      "description": "证据链",
+      "required": true,
+      "items": {
+        "step_id": "string (required)",
+        "evidence_ref": "string (required)",
+        "hash": "string (required)"
+      }
+    },
+    "audit_events": {
+      "type": "array",
+      "description": "审计事件列表",
+      "required": true,
+      "items": {
+        "event_id": "string (required)",
+        "event_type": "string (required)",
+        "timestamp": "string (required)"
+      }
+    }
+  },
+
+  "rules": [
+    "没有 evidence_chain 禁止 COMPLETED",
+    "每个 step 必须有对应的 evidence_ref",
+    "每个 step 必须有对应的 audit_event"
+  ],
+
+  "example_valid": {
+    "orchestration_id": "orch-001",
+    "execution_plan": {
+      "plan_id": "plan-001",
+      "agent_id": "doubao-a",
+      "task_id": "task-001"
+    },
+    "steps": [
+      {
+        "step_id": "step-001",
+        "action": "write_evidence",
+        "status": "SUCCESS"
+      },
+      {
+        "step_id": "step-002",
+        "action": "read_file",
+        "status": "SUCCESS"
+      }
+    ],
+    "evidence_chain": [
+      {
+        "step_id": "step-001",
+        "evidence_ref": "ev-step-001",
+        "hash": "sha256:abc123..."
+      },
+      {
+        "step_id": "step-002",
+        "evidence_ref": "ev-step-002",
+        "hash": "sha256:def456..."
+      }
+    ],
+    "audit_events": [
+      {
+        "event_id": "evt-001",
+        "event_type": "ORCHESTRATION_STARTED",
+        "timestamp": "2026-09-12T12:00:00Z"
+      },
+      {
+        "event_id": "evt-002",
+        "event_type": "ORCHESTRATION_COMPLETED",
+        "timestamp": "2026-09-12T12:05:00Z"
+      }
+    ]
+  },
+
+  "example_no_evidence": {
+    "orchestration_id": "orch-002",
+    "execution_plan": {
+      "plan_id": "plan-002",
+      "agent_id": "doubao-a",
+      "task_id": "task-002"
+    },
+    "steps": [
+      {
+        "step_id": "step-001",
+        "action": "write_evidence",
+        "status": "SUCCESS"
+      }
+    ],
+    "evidence_chain": [],
+    "audit_events": [
+      {
+        "event_id": "evt-003",
+        "event_type": "ORCHESTRATION_COMPLETED",
+        "timestamp": "2026-09-12T12:00:00Z"
+      }
+    ]
+  }
+}

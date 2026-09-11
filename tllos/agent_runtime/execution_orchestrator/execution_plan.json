@@ -1,0 +1,115 @@
+{
+  "schema_name": "Execution Plan",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-12",
+  "description": "Execution Orchestrator 的执行计划格式。",
+
+  "required_fields": [
+    "plan_id",
+    "agent_id",
+    "task_id",
+    "steps",
+    "required_permissions",
+    "evidence_required",
+    "audit_required"
+  ],
+
+  "fields": {
+    "plan_id": {
+      "type": "string",
+      "description": "计划唯一标识符",
+      "required": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "执行 Agent",
+      "required": true
+    },
+    "task_id": {
+      "type": "string",
+      "description": "任务 ID",
+      "required": true
+    },
+    "steps": {
+      "type": "array",
+      "description": "执行步骤列表",
+      "required": true,
+      "items": {
+        "step_id": "string (required)",
+        "action": "string (required)",
+        "target": "string (required)",
+        "status": "string (required)",
+        "evidence_ref": "string (required)"
+      }
+    },
+    "required_permissions": {
+      "type": "array",
+      "description": "所需权限列表",
+      "required": true,
+      "items": "string (permission name)"
+    },
+    "evidence_required": {
+      "type": "boolean",
+      "description": "是否需要证据",
+      "required": true
+    },
+    "audit_required": {
+      "type": "boolean",
+      "description": "是否需要审计",
+      "required": true
+    }
+  },
+
+  "step_statuses": [
+    "CREATED",
+    "VALIDATED",
+    "READY",
+    "EXECUTING",
+    "SUCCESS",
+    "FAILED",
+    "REJECTED"
+  ],
+
+  "example_valid": {
+    "plan_id": "plan-001",
+    "agent_id": "doubao-a",
+    "task_id": "task-001",
+    "steps": [
+      {
+        "step_id": "step-001",
+        "action": "write_evidence",
+        "target": "mock_adapter",
+        "status": "READY",
+        "evidence_ref": "ev-step-001"
+      },
+      {
+        "step_id": "step-002",
+        "action": "read_file",
+        "target": "mock_adapter",
+        "status": "CREATED",
+        "evidence_ref": "ev-step-002"
+      }
+    ],
+    "required_permissions": ["write:evidence", "read:file"],
+    "evidence_required": true,
+    "audit_required": true
+  },
+
+  "example_no_permissions": {
+    "plan_id": "plan-002",
+    "agent_id": "doubao-a",
+    "task_id": "task-002",
+    "steps": [
+      {
+        "step_id": "step-001",
+        "action": "write_evidence",
+        "target": "mock_adapter",
+        "status": "READY",
+        "evidence_ref": "ev-step-001"
+      }
+    ],
+    "required_permissions": [],
+    "evidence_required": true,
+    "audit_required": true
+  }
+}

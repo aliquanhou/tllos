@@ -62,3 +62,41 @@ Audit
 ---
 
 *Execution Gateway Layer — P2-03.3*
+
+---
+
+## Execution Orchestrator Integration (P2-04.4)
+
+**Gateway 不直接执行。**
+
+### 调用链
+
+```
+Gateway
+  ↓
+Execution Boundary
+  ↓
+Execution Orchestrator          ← P2-04.4 新增
+  ↓
+Runtime Adapter
+```
+
+### Gateway Response（增加 Orchestrator 字段）
+
+```json
+{
+  "orchestration_id": "orch-001",
+  "execution_plan_id": "plan-001",
+  "next_stage": "orchestrator"
+}
+```
+
+### 规则
+
+- Gateway 不直接调用 Runtime Adapter
+- Gateway 将请求转发给 Execution Orchestrator
+- 多步骤任务必须经过 Orchestrator
+
+---
+
+*Execution Gateway Orchestrator Integration — P2-04.4*
