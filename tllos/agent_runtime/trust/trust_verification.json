@@ -1,0 +1,112 @@
+{
+  "verification_name": "TLL OS Trust Chain Verification",
+  "verification_version": "1.0.0",
+  "verification_date": "2026-09-11",
+  "verification_description": "验证一次 Agent 行为是否形成完整可信链。",
+
+  "required_chain_elements": {
+    "identity": {
+      "agent_id": {
+        "type": "string",
+        "description": "Agent 标识符",
+        "required": true
+      },
+      "agent_registered": {
+        "type": "boolean",
+        "description": "Agent 是否已注册",
+        "required": true
+      }
+    },
+    "capability": {
+      "capability_name": {
+        "type": "string",
+        "description": "能力名称",
+        "required": true
+      },
+      "capability_declared": {
+        "type": "boolean",
+        "description": "能力是否已声明",
+        "required": true
+      }
+    },
+    "permission": {
+      "permission_id": {
+        "type": "string",
+        "description": "权限 ID",
+        "required": true
+      },
+      "permission_granted": {
+        "type": "boolean",
+        "description": "权限是否已批准",
+        "required": true
+      },
+      "permission_in_capability": {
+        "type": "boolean",
+        "description": "权限是否在能力范围内",
+        "required": true
+      }
+    },
+    "execution": {
+      "execution_id": {
+        "type": "string",
+        "description": "执行请求 ID",
+        "required": true
+      },
+      "execution_completed": {
+        "type": "boolean",
+        "description": "执行是否完成",
+        "required": true
+      }
+    },
+    "evidence": {
+      "evidence_ref": {
+        "type": "string",
+        "description": "证据引用",
+        "required": true
+      },
+      "evidence_valid": {
+        "type": "boolean",
+        "description": "证据是否有效",
+        "required": true
+      }
+    },
+    "audit_ledger": {
+      "ledger_id": {
+        "type": "string",
+        "description": "账本记录 ID",
+        "required": true
+      },
+      "ledger_recorded": {
+        "type": "boolean",
+        "description": "是否已记录到账本",
+        "required": true
+      }
+    }
+  },
+
+  "example_valid": {
+    "agent_id": "doubao-a",
+    "task_id": "task-001",
+    "capability": "write_evidence",
+    "permission": "write:evidence",
+    "execution": "exec-001",
+    "evidence": "evidence-001",
+    "audit_record": "led-001"
+  },
+
+  "example_missing_evidence": {
+    "agent_id": "doubao-a",
+    "task_id": "task-002",
+    "capability": "write_evidence",
+    "permission": "write:evidence",
+    "execution": "exec-002"
+  },
+
+  "validation_rules": [
+    "六层必须全部存在",
+    "permission 必须在 capability 范围内",
+    "execution 必须完成",
+    "evidence 必须有效",
+    "audit_record 必须存在"
+  ]
+}

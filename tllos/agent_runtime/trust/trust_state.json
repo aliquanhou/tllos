@@ -1,0 +1,65 @@
+{
+  "state_name": "TLL OS Agent Trust State Model",
+  "state_version": "1.0.0",
+  "state_date": "2026-09-11",
+  "state_description": "Agent 信任状态机。定义 Agent 从创建到验证通过的完整状态流转。",
+
+  "states": {
+    "UNKNOWN": {
+      "description": "未知状态，Agent 刚被创建，尚未注册",
+      "can_transition_to": ["IDENTIFIED"],
+      "next_trigger": "AgentRegistered"
+    },
+    "IDENTIFIED": {
+      "description": "已识别，Agent 已完成身份注册",
+      "can_transition_to": ["CAPABILITY_DECLARED"],
+      "next_trigger": "CapabilityDeclared"
+    },
+    "CAPABILITY_DECLARED": {
+      "description": "能力已声明，Agent 声明了自己的能力",
+      "can_transition_to": ["PERMISSION_GRANTED"],
+      "next_trigger": "PermissionGranted"
+    },
+    "PERMISSION_GRANTED": {
+      "description": "权限已批准，Agent 被授予了必要的权限",
+      "can_transition_to": ["EXECUTED"],
+      "next_trigger": "ExecutionCompleted"
+    },
+    "EXECUTED": {
+      "description": "已执行，Agent 完成了任务执行",
+      "can_transition_to": ["VERIFIED"],
+      "next_trigger": "AuditReviewed"
+    },
+    "VERIFIED": {
+      "description": "已验证，Agent 的执行已通过审计验证",
+      "can_transition_to": [],
+      "next_trigger": null
+    }
+  },
+
+  "illegal_transitions": [
+    "UNKNOWN → EXECUTED",
+    "UNKNOWN → VERIFIED",
+    "UNKNOWN → PERMISSION_GRANTED",
+    "IDENTIFIED → EXECUTED",
+    "IDENTIFIED → VERIFIED",
+    "CAPABILITY_DECLARED → VERIFIED",
+    "PERMISSION_GRANTED → VERIFIED"
+  ],
+
+  "state_descriptions": {
+    "UNKNOWN": "Agent 尚未注册，身份未知",
+    "IDENTIFIED": "Agent 已注册，身份已确认",
+    "CAPABILITY_DECLARED": "Agent 已声明自己的能力",
+    "PERMISSION_GRANTED": "Agent 已获得必要权限",
+    "EXECUTED": "Agent 已完成任务执行",
+    "VERIFIED": "Agent 的执行已通过审计验证"
+  },
+
+  "validation_rules": [
+    "状态必须按顺序流转",
+    "禁止非法跳转",
+    "每次跳转必须有对应事件",
+    "VERIFIED 是终态"
+  ]
+}

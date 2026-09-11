@@ -1,0 +1,67 @@
+{
+  "rules_name": "TLL OS Trust Verification Rules",
+  "rules_version": "1.0.0",
+  "rules_date": "2026-09-11",
+  "rules_description": "Trust Chain 验证规则集。",
+
+  "rules": [
+    {
+      "rule_id": "R001",
+      "name": "完整性检查",
+      "description": "六层必须全部存在",
+      "check": "identity + capability + permission + execution + evidence + audit_ledger",
+      "fail_result": "REJECT"
+    },
+    {
+      "rule_id": "R002",
+      "name": "权限一致性检查",
+      "description": "permission 必须在 capability 范围内",
+      "check": "permission_in_capability == true",
+      "fail_result": "REJECT"
+    },
+    {
+      "rule_id": "R003",
+      "name": "执行完成检查",
+      "description": "execution 必须已完成",
+      "check": "execution_completed == true",
+      "fail_result": "REJECT"
+    },
+    {
+      "rule_id": "R004",
+      "name": "证据有效性检查",
+      "description": "evidence 必须有效",
+      "check": "evidence_valid == true",
+      "fail_result": "REJECT"
+    },
+    {
+      "rule_id": "R005",
+      "name": "账本记录检查",
+      "description": "必须已记录到 Audit Ledger",
+      "check": "ledger_recorded == true",
+      "fail_result": "REJECT"
+    },
+    {
+      "rule_id": "R006",
+      "name": "状态顺序检查",
+      "description": "状态必须按顺序跳转",
+      "check": "UNKNOWN → IDENTIFIED → CAPABILITY_DECLARED → PERMISSION_GRANTED → EXECUTED → VERIFIED",
+      "fail_result": "REJECT"
+    }
+  ],
+
+  "status_transitions": {
+    "UNKNOWN": ["IDENTIFIED"],
+    "IDENTIFIED": ["CAPABILITY_DECLARED"],
+    "CAPABILITY_DECLARED": ["PERMISSION_GRANTED"],
+    "PERMISSION_GRANTED": ["EXECUTED"],
+    "EXECUTED": ["VERIFIED"],
+    "VERIFIED": []
+  },
+
+  "illegal_transitions": [
+    "UNKNOWN → EXECUTED",
+    "UNKNOWN → VERIFIED",
+    "CAPABILITY_DECLARED → VERIFIED",
+    "PERMISSION_GRANTED → VERIFIED"
+  ]
+}
