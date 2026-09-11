@@ -90,6 +90,9 @@ typedef struct {
 
 /* === Coroutine (P0-15.14 VM-level, P0-15.15 per-VM scheduler + unified timer, P0-15.16 IO-aware) === */
 typedef struct {
+    /* P2-01-C-D3-A-GAP1: Coroutine Identity Guard */
+    unsigned long long magic;       /* P2-01-C-D3-A-GAP1: Coroutine Identity Guard */
+    unsigned long long generation;  /* monotonically increasing creation counter */
     TLLFrame **callStack;
     int callStackSize;
     int callStackCapacity;
@@ -108,6 +111,9 @@ typedef struct {
 
 /* === Execution Context (P2-01-C-D1: per-worker execution-local state) === */
 typedef struct {
+    /* P2-01-C-D3-A-GAP1: Coroutine Identity Guard */
+    unsigned long long magic;       /* P2-01-C-D3-A-GAP1: Coroutine Identity Guard */
+    unsigned long long generation;  /* monotonically increasing creation counter */
     TLLFrame **callStack;
     int callStackSize;
     int callStackCapacity;

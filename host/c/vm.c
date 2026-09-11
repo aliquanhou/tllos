@@ -375,6 +375,11 @@ static void coroutine_init(TLLVM *vm) {
     vm->coroutines = (TLLCoroutine**)calloc(16, sizeof(TLLCoroutine*));
 }
 
+/* P2-01-C-D3-A-GAP1: Coroutine Identity Guard constants */
+#define TLL_CORO_MAGIC_ALIVE  0x544C4C434F524FULL  /* 'TLLCORO' */
+#define TLL_CORO_MAGIC_DEAD   0xDEADDEADDEADDEADULL
+static uint64_t g_coro_generation = 0;
+
 /* Destroy a coroutine: free all frames (return to pool), free callStack,
  * free result, free struct, swap-remove from scheduler array.
  * P0-15.15: Proper lifecycle recycling.
@@ -406,6 +411,8 @@ static void coroutine_destroy(TLLVM *vm, int idx) {
     /* Free result value (may hold references to arrays/maps/strings) */
     tll_value_free(co->result);
 
+    /* P2-01-C-D3-A-GAP1: Mark as dead before free */
+    co->magic = TLL_CORO_MAGIC_DEAD;
     /* Free the coroutine struct itself */
     free(co);
 
@@ -428,6 +435,8 @@ static void coroutine_destroy(TLLVM *vm, int idx) {
 
 static TLLCoroutine *coroutine_create(TLLVM *vm, TLLFunction *fn, TLLValue *args, int argCount, TLLClosureEnv *env) {
     TLLCoroutine *co = (TLLCoroutine*)calloc(1, sizeof(TLLCoroutine));
+    co->magic = TLL_CORO_MAGIC_ALIVE;
+    co->generation = ++g_coro_generation;
     co->callStackCapacity = 64;
     co->callStack = (TLLFrame**)calloc(64, sizeof(TLLFrame*));
     co->callStackSize = 0;
@@ -2409,6 +2418,13 @@ static void *tll_worker_thread(void *param) {
         }
 
         worker->ctx.currentCoroutine = coro_idx;
+
+        /* P2-01-C-D3-A-GAP1: Coroutine Identity Guard - verify alive before use */
+        if (coro->magic != TLL_CORO_MAGIC_ALIVE) {
+            fprintf(stderr, "[CORO-GUARD] ASSERT FAIL: idx=%d magic=0x%llx gen=%llu state=%d\n",
+                    coro_idx, (unsigned long long)coro->magic, (unsigned long long)coro->generation, coro->state);
+            abort();
+        }
 
         /* Load coroutine's call stack into worker's independent context */
         worker->ctx.callStack = coro->callStack;
