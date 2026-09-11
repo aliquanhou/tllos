@@ -464,3 +464,59 @@ Next isolation target: **Coroutine Table matrix** (D1-D4):
 - D4: dynamic realloc + workers
 
 If D3 PASS and D4 CRASH → vm->coroutines[] relocation becomes PROVEN ROOT CAUSE CANDIDATE.
+
+## 14. P2-01-C-D3-R2-P3 Phase 3: Coroutine Table Prealloc Isolation (2026-09-11)
+
+### 14.1 Experiment Setup
+
+**Goal:** Isolate whether vm->coroutines[] realloc is the root cause of heap corruption.
+
+**Method:** Added `D3_TEST_PREALLOC_TABLE` environment variable. When set:
+- In `tll_runtime_start_workers()`, before creating workers, preallocate `vm->coroutines[]` to 65536 slots
+- Set `vm->coroutineCapacity = 65536`
+- During worker execution, `coroutine_create()` will NOT trigger realloc (up to 65536 coroutines)
+
+### 14.2 Results
+
+| Task Count | Dynamic Table (baseline) | Prealloc Table (65536) |
+|-----------|--------------------------|------------------------|
+| 2000 (run 1) | CRASH | CRASH |
+| 2000 (run 2) | CRASH | CRASH |
+| 2000 (run 3) | CRASH | CRASH |
+| 5000 | CRASH | CRASH |
+
+### 14.3 Conclusion
+
+**vm->coroutines[] realloc is PROVEN EXCLUDED as direct root cause.**
+
+Even with coroutine table fully preallocated (no realloc during worker execution), high-load tests still crash with STATUS_HEAP_CORRUPTION (0xC0000374).
+
+This means:
+- realloc(vm->coroutines) is NOT the primary corruption source
+- The vm->coroutines[] pointer remains stable during execution
+- The corruption must be in object-level access: TLLCoroutine*, TLLFrame*, or their fields
+- The "use-after-free of vm->coroutines[] pointer" hypothesis is now ruled out
+
+### 14.4 Updated Root Cause Candidate Ranking
+
+1. **TLLCoroutine object field race** (NEW STRONGEST - concurrent access to coro->callStack/state/etc.)
+2. **TLLFrame object lifecycle** (frame allocation/release during concurrent execution)
+3. Frame Pool race (real defect, but ruled out as direct cause)
+4. Shutdown race (not yet tested in isolation)
+5. Queue node lifecycle (PROVEN EXCLUDED)
+6. vm->coroutines[] realloc (**PROVEN EXCLUDED**)
+
+### 14.5 Key Insight
+
+The corruption is NOT at the table-pointer level (realloc), but at the **object level**. Multiple threads may be accessing the same TLLCoroutine or TLLFrame object concurrently, or an object may be freed while another thread still holds a reference.
+
+Next isolation target: **TLLCoroutine object lifetime** - determine if a coro object can be modified/freed while a worker still holds a raw pointer to it.
+
+### 14.6 Evidence Classification
+
+| Finding | Level |
+|---------|-------|
+| Prealloc table still crashes at 2000/5000 | **PROVEN** |
+| vm->coroutines[] realloc is not direct root cause | **PROVEN EXCLUDED** |
+| TLLCoroutine object field race is strongest candidate | **INFERRED** (not yet proven) |
+| TLLFrame object lifecycle issue | **UNVERIFIED** |

@@ -2467,6 +2467,16 @@ int tll_runtime_start_workers(TLLVM *vm, int count) {
     vm->coroutine_table_lock = malloc(sizeof(pthread_mutex_t)); pthread_mutex_init((pthread_mutex_t*)vm->coroutine_table_lock, NULL);
 #endif
 
+    /* P2-01-C-D3-R2-P3: Preallocate coroutine table to avoid realloc during worker execution */
+    if (prealloc_table_is_on()) {
+        int prealloc_size = 65536;
+        vm->coroutines = (TLLCoroutine**)realloc(vm->coroutines, prealloc_size * sizeof(TLLCoroutine*));
+        if (vm->coroutines) {
+            memset(vm->coroutines + vm->coroutineCount, 0, (prealloc_size - vm->coroutineCount) * sizeof(TLLCoroutine*));
+            vm->coroutineCapacity = prealloc_size;
+        }
+    }
+
     /* Allocate worker array */
     vm->workers = (TLLWorker**)calloc(count, sizeof(TLLWorker*));
     vm->workerCount = count;
