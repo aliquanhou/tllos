@@ -1,0 +1,107 @@
+{
+  "manifest_version": "1.1.0",
+  "manifest_date": "2026-09-11",
+  "manifest_author": "于秋鸿",
+  "manifest_description": "TLL OS Canonical Layer Integrity Manifest — 记录所有 Canonical 文件的 SHA256 hash，用于验证文件完整性和检测未授权修改。本 manifest 自身的完整性由 Git commit 保证。",
+
+  "protocol_version_binding": {
+    "canonical_layer_version": "1.1.0",
+    "agent_protocol_version": "0.1.0",
+    "runtime_protocol_version": "v0",
+    "evidence_protocol_version": "1.0.0",
+    "runtime_core_commit": "13847f35734c488623a95faf4afc0648b031f2bd",
+    "runtime_core_status": "SEALED DEVELOPMENT BASELINE (Conditional)"
+  },
+
+  "integrity_algorithm": "SHA256",
+
+  "note": "本 manifest 不包含自身的 hash（避免循环引用）。本 manifest 的完整性由 Git commit SHA 和 Git 仓库状态保证。未来可增加数字签名机制（GAP-1）。",
+
+  "files": {
+    "identity": [
+      {
+        "path": "tllos/identity/genesis.json",
+        "sha256": "c9507618b513e57290854b195fecba6bcd4a0ee4f4afc5ccc8c7cdcadede6483",
+        "description": "TLL OS 创世纪身份证"
+      },
+      {
+        "path": "tllos/identity/runtime_identity.json",
+        "sha256": "b8ce2d0cbf26ec9b52515c86d971d2ef61a4b4c36d478e1f4f1bcda50fcb5a28",
+        "description": "Runtime Core v0 身份信息"
+      },
+      {
+        "path": "tllos/identity/protocol_version.json",
+        "sha256": "e1525835e53c5d857d1811a7f269d450278f557476641826d593ba06e80b5abd",
+        "description": "协议版本信息"
+      }
+    ],
+    "truth": [
+      {
+        "path": "tllos/truth/architecture.md",
+        "sha256": "5d656faad304c2205a8ecdbf74297adb1efa762a169be013db24dfba5af8149f",
+        "description": "TLL OS 架构真相"
+      },
+      {
+        "path": "tllos/truth/evidence_rules.md",
+        "sha256": "11c5c1b8b6b2002177fd824ffeb2c131717c34510118f60ea05105ba39afedc6",
+        "description": "证据规范"
+      },
+      {
+        "path": "tllos/truth/engineering_protocol.md",
+        "sha256": "450b9c8678b362dffd16beeb3e66a7afd0e2604670584b91bd2fb557c0d99146",
+        "description": "工程协议"
+      },
+      {
+        "path": "tllos/truth/evidence_index.json",
+        "sha256": "7894d1891e10dee6aa0bf8135dfcda8b0bd4396cd81a920a49bc0d6622b00b48",
+        "description": "Evidence 索引（按阶段组织所有 Evidence 文档）"
+      }
+    ],
+    "agents": [
+      {
+        "path": "tllos/agents/agent_contract.md",
+        "sha256": "c79bb85989d56eda7c5b3d63009c3dbd8b02c7b0cd89d8015066faa5a32d7e2c",
+        "description": "Agent 宪法"
+      },
+      {
+        "path": "tllos/agents/agent_capability.json",
+        "sha256": "da5e9ab0aa9d89d8b9d7a3fbfe3acf3e75de6765372aa995a2bc0f4d964f6885",
+        "description": "Agent 能力描述"
+      }
+    ]
+  },
+
+  "integrity_check_instructions": {
+    "description": "验证 Canonical Layer 文件完整性的步骤",
+    "steps": [
+      "1. 读取 genesis.json（TLL OS 入口）",
+      "2. 读取 canonical_manifest.json（本文件）",
+      "3. 对每个 listed file 计算 SHA256 hash",
+      "4. 对比计算结果与 manifest 中记录的 sha256",
+      "5. 如果所有 hash 匹配 → Canonical Layer 完整性验证通过",
+      "6. 如果任何 hash 不匹配 → 文件被修改，需要审计"
+    ],
+    "note": "本 manifest 本身的 hash 不在列表中（避免循环引用）。本 manifest 的完整性由 Git commit SHA 保证。验证时应同时确认 Git commit 是否被独立审计方确认。"
+  },
+
+  "future_enhancements": [
+    {
+      "id": "GAP-1",
+      "description": "Genesis 文件需要数字签名机制（GPG / minisign）",
+      "status": "PLANNED",
+      "phase": "未来"
+    },
+    {
+      "id": "GAP-2",
+      "description": "Agent Capability 需要机器可读 Schema（permission / resource / api / risk_level / evidence_required）",
+      "status": "PLANNED",
+      "phase": "P2-03 Agent Runtime"
+    },
+    {
+      "id": "GAP-3",
+      "description": "Canonical Layer 最终应被 Runtime 查询，而非静态文档库",
+      "status": "PLANNED",
+      "phase": "未来"
+    }
+  ]
+}

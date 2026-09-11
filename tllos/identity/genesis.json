@@ -22,6 +22,12 @@
     "所有 Agent 接入 TLL OS 必须遵循 Agent Contract",
     "TLL OS 的目标是成为 AI Agent / 桌面机器人操作系统的基础层"
   ],
+  "canonical_integrity": {
+    "manifest_path": "tllos/identity/canonical_manifest.json",
+    "manifest_algorithm": "SHA256",
+    "description": "本 Genesis 文件的完整性由 canonical_manifest.json 中的 hash 记录。验证 Canonical Layer 完整性时，应首先读取本文件，然后读取 canonical_manifest.json，对比所有文件的 SHA256 hash。",
+    "evidence_index_path": "tllos/truth/evidence_index.json"
+  },
   "architecture_vision": {
     "top_down": [
       "Desktop Robot OS (AI Computer)",

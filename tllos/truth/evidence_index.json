@@ -1,0 +1,226 @@
+{
+  "index_version": "1.0.0",
+  "index_date": "2026-09-11",
+  "index_description": "TLL OS 所有 Evidence 文档的索引 — 按阶段组织，记录每个 Evidence 的位置、commit、状态。",
+
+  "phases": [
+    {
+      "phase": "P0-RUNTIME-07/08",
+      "status": "SEALED",
+      "description": "基础 Runtime（协程、帧、栈）",
+      "evidence_docs": []
+    },
+    {
+      "phase": "P2-01-B11/B12",
+      "status": "SEALED",
+      "description": "所有权系统、Native Target",
+      "evidence_docs": []
+    },
+    {
+      "phase": "P2-01-C",
+      "status": "SEALED (Conditional)",
+      "description": "Runtime Foundation（Dynamic Frame + Multi-Worker + High-Frame Runtime）",
+      "modules": [
+        {
+          "module": "D1 Dynamic Frame",
+          "status": "PASS WITH B-GAPS",
+          "evidence_docs": []
+        },
+        {
+          "module": "D2 True Multi-Worker",
+          "status": "PASS / RESEALED",
+          "baseline_commit": "e1b6e8fa6dff687a7cfd58bea8abb970f4b28d44",
+          "evidence_docs": [
+            {
+              "path": "docs/evidence/P2-01-C-D2-TRUE-MULTI-WORKER.md",
+              "description": "D2 完整 Evidence",
+              "commit": "e1b6e8f"
+            },
+            {
+              "path": "docs/evidence/P2-01-C-D2-WORKER-HANG-RECOVERY.md",
+              "description": "D2 Worker HANG Recovery",
+              "commit": "abdb420"
+            },
+            {
+              "path": "docs/evidence/P2-01-C-D2-REVALIDATION.md",
+              "description": "D2 Revalidation (7/7)",
+              "commit": "e1b6e8f"
+            }
+          ]
+        },
+        {
+          "module": "D3 High-Frame Runtime",
+          "status": "CONDITIONAL SEAL",
+          "baseline_commit": "437ff8bd0bf5694b3b8df1e2b4d4baf56dcc3cc3",
+          "evidence_docs": [
+            {
+              "path": "docs/evidence/P2-01-C-D3-BUILD-INTEGRITY-RECOVERY.md",
+              "description": "Build Integrity Recovery",
+              "commit": "ec6c914"
+            },
+            {
+              "path": "docs/evidence/P2-01-C-D3-HIGH-FRAME-RUNTIME.md",
+              "description": "D3 完整 Evidence",
+              "commit": "0723eac"
+            },
+            {
+              "path": "docs/evidence/P2-01-C-D3-A-GAP1-ROOT-CAUSE.md",
+              "description": "A-GAP1 Root Cause Isolation",
+              "commit": "364c917"
+            },
+            {
+              "path": "docs/evidence/P2-01-C-D3-A-GAP1-SOURCE-TRACE.md",
+              "description": "A-GAP1 Source Trace",
+              "commit": "5849d0c"
+            },
+            {
+              "path": "docs/evidence/P2-01-C-D3-A-GAP1-FINAL-SOURCE-PROOF.md",
+              "description": "A-GAP1 Final Source Proof",
+              "commit": "4357eb0"
+            },
+            {
+              "path": "docs/evidence/P2-01-C-D3-SEAL-CONDITION.md",
+              "description": "D3 Conditional Seal",
+              "commit": "437ff8b"
+            }
+          ]
+        },
+        {
+          "module": "Runtime Core v0 Final Seal",
+          "status": "SEALED (Conditional)",
+          "baseline_commit": "13847f35734c488623a95faf4afc0648b031f2bd",
+          "evidence_docs": [
+            {
+              "path": "docs/evidence/P2-01-C-RUNTIME-CORE-V0-SEAL.md",
+              "description": "Runtime Core v0 总封板文档",
+              "commit": "13847f3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "phase": "P2-02",
+      "status": "IN PROGRESS",
+      "description": "Canonical Layer（Identity + Truth + Engineering Protocol + Agent Contract）",
+      "modules": [
+        {
+          "module": "P2-02.0 Canonical Layer Genesis",
+          "status": "PASS (Architecture Level), Waiting Final Seal",
+          "evidence_docs": [
+            {
+              "path": "tllos/identity/genesis.json",
+              "description": "TLL OS 创世纪身份证",
+              "commit": "3c44e6d"
+            },
+            {
+              "path": "tllos/identity/runtime_identity.json",
+              "description": "Runtime Core v0 身份信息",
+              "commit": "3c44e6d"
+            },
+            {
+              "path": "tllos/identity/protocol_version.json",
+              "description": "协议版本信息",
+              "commit": "3c44e6d"
+            },
+            {
+              "path": "tllos/truth/architecture.md",
+              "description": "TLL OS 架构真相",
+              "commit": "3c44e6d"
+            },
+            {
+              "path": "tllos/truth/evidence_rules.md",
+              "description": "证据规范",
+              "commit": "3c44e6d"
+            },
+            {
+              "path": "tllos/truth/engineering_protocol.md",
+              "description": "工程协议",
+              "commit": "3c44e6d"
+            },
+            {
+              "path": "tllos/agents/agent_contract.md",
+              "description": "Agent 宪法",
+              "commit": "3c44e6d"
+            },
+            {
+              "path": "tllos/agents/agent_capability.json",
+              "description": "Agent 能力描述",
+              "commit": "3c44e6d"
+            }
+          ]
+        },
+        {
+          "module": "P2-02.1 Canonical Integrity Hardening",
+          "status": "IN PROGRESS",
+          "evidence_docs": [
+            {
+              "path": "tllos/identity/canonical_manifest.json",
+              "description": "Canonical Integrity Manifest",
+              "commit": "(当前提交)"
+            },
+            {
+              "path": "tllos/truth/evidence_index.json",
+              "description": "Evidence 索引",
+              "commit": "(当前提交)"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+
+  "known_gaps_index": {
+    "A-GAPs": [
+      {
+        "id": "A-GAP-1",
+        "description": "10K+ coroutine 概率性堆损坏",
+        "status": "MITIGATED / ROOT CAUSE PENDING",
+        "phase": "D3",
+        "risk_level": "HIGH at 10K+ concurrency"
+      }
+    ],
+    "B-GAPs": [
+      {
+        "id": "B-GAP-1",
+        "description": "Channel/IO E2E TLL 测试未验证",
+        "status": "OPEN (Non-Blocking)"
+      },
+      {
+        "id": "B-GAP-2",
+        "description": "AddressSanitizer 未集成",
+        "status": "OPEN (Non-Blocking)"
+      },
+      {
+        "id": "B-GAP-3",
+        "description": "Linux/macOS 未验证",
+        "status": "OPEN (Non-Blocking)"
+      },
+      {
+        "id": "B-GAP-4",
+        "description": "build_all.bat 含开发者机器绝对路径",
+        "status": "OPEN (Non-Blocking)"
+      }
+    ],
+    "Canonical Layer Gaps": [
+      {
+        "id": "GAP-1",
+        "description": "Genesis 文件需要数字签名机制",
+        "status": "PLANNED",
+        "phase": "未来"
+      },
+      {
+        "id": "GAP-2",
+        "description": "Agent Capability 需要机器可读 Schema",
+        "status": "PLANNED",
+        "phase": "P2-03 Agent Runtime"
+      },
+      {
+        "id": "GAP-3",
+        "description": "Canonical Layer 最终应被 Runtime 查询，而非静态文档库",
+        "status": "PLANNED",
+        "phase": "未来"
+      }
+    ]
+  }
+}
