@@ -1,0 +1,102 @@
+{
+  "schema_name": "Execution Result Validation",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-11",
+  "description": "Execution Result 验证格式。",
+
+  "required_fields": [
+    "execution_id",
+    "agent_id",
+    "runtime_target",
+    "permission",
+    "evidence",
+    "audit_event",
+    "result_hash",
+    "status"
+  ],
+
+  "fields": {
+    "execution_id": {
+      "type": "string",
+      "description": "执行唯一标识符",
+      "required": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent 唯一标识符",
+      "required": true
+    },
+    "runtime_target": {
+      "type": "string",
+      "description": "Runtime Target",
+      "required": true
+    },
+    "permission": {
+      "type": "string",
+      "description": "执行权限",
+      "required": true
+    },
+    "evidence": {
+      "type": "object",
+      "description": "证据绑定",
+      "required": true,
+      "fields": {
+        "reference": "string (required)",
+        "hash": "string (required)"
+      }
+    },
+    "audit_event": {
+      "type": "object",
+      "description": "审计事件",
+      "required": true,
+      "fields": {
+        "event_id": "string (required)",
+        "event_type": "string (required)",
+        "timestamp": "string (required)"
+      }
+    },
+    "result_hash": {
+      "type": "string",
+      "description": "结果哈希",
+      "required": true
+    },
+    "status": {
+      "type": "string",
+      "description": "执行状态",
+      "required": true,
+      "enum": ["SUCCESS", "FAILED", "REJECTED", "CANCELLED"]
+    }
+  },
+
+  "example_valid": {
+    "execution_id": "exec-001",
+    "agent_id": "doubao-a",
+    "runtime_target": "mock_adapter",
+    "permission": "write:evidence",
+    "evidence": {
+      "reference": "ev-001",
+      "hash": "sha256:abc123..."
+    },
+    "audit_event": {
+      "event_id": "evt-001",
+      "event_type": "EXECUTION_COMPLETED",
+      "timestamp": "2026-09-11T12:00:00Z"
+    },
+    "result_hash": "sha256:def456...",
+    "status": "SUCCESS"
+  },
+
+  "example_no_evidence": {
+    "execution_id": "exec-002",
+    "agent_id": "doubao-a",
+    "runtime_target": "mock_adapter",
+    "permission": "write:evidence",
+    "audit_event": {
+      "event_id": "evt-002",
+      "event_type": "EXECUTION_COMPLETED",
+      "timestamp": "2026-09-11T12:00:00Z"
+    },
+    "result_hash": "sha256:ghi789...",
+    "status": "SUCCESS"
+  }
+}

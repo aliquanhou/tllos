@@ -1,0 +1,70 @@
+{
+  "schema_name": "Runtime Target",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-11",
+  "description": "Runtime Target 注册格式。",
+
+  "required_fields": [
+    "target_id",
+    "runtime_type",
+    "version",
+    "capabilities",
+    "status",
+    "security_level"
+  ],
+
+  "fields": {
+    "target_id": {
+      "type": "string",
+      "description": "Target 唯一标识符",
+      "required": true
+    },
+    "runtime_type": {
+      "type": "string",
+      "description": "Runtime 类型",
+      "required": true,
+      "enum": ["vm", "mock", "adapter"]
+    },
+    "version": {
+      "type": "string",
+      "description": "Runtime 版本",
+      "required": true
+    },
+    "capabilities": {
+      "type": "array",
+      "description": "支持的能力列表",
+      "required": true,
+      "items": "string (capability name)"
+    },
+    "status": {
+      "type": "string",
+      "description": "Target 状态",
+      "required": true,
+      "enum": ["AVAILABLE", "DISABLED", "DEPRECATED", "BLOCKED"]
+    },
+    "security_level": {
+      "type": "string",
+      "description": "安全等级",
+      "required": true,
+      "enum": ["LOW", "MEDIUM", "HIGH", "RESTRICTED"]
+    }
+  },
+
+  "example_valid": {
+    "target_id": "mock_adapter",
+    "runtime_type": "mock",
+    "version": "1.0.0",
+    "capabilities": ["write_evidence", "read_file"],
+    "status": "AVAILABLE",
+    "security_level": "LOW"
+  },
+
+  "example_blocked": {
+    "target_id": "unknown_target",
+    "runtime_type": "unknown",
+    "version": "0.0.0",
+    "capabilities": [],
+    "status": "BLOCKED",
+    "security_level": "RESTRICTED"
+  }
+}

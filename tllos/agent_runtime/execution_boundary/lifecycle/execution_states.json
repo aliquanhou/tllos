@@ -1,0 +1,44 @@
+{
+  "schema_name": "Execution States",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-11",
+  "description": "Execution Lifecycle 状态定义。",
+
+  "states": [
+    "CREATED",
+    "VALIDATING",
+    "AUTHORIZED",
+    "READY",
+    "EXECUTING",
+    "COMPLETED",
+    "REJECTED",
+    "FAILED",
+    "CANCELLED"
+  ],
+
+  "valid_transitions": {
+    "CREATED": ["VALIDATING", "REJECTED"],
+    "VALIDATING": ["AUTHORIZED", "REJECTED"],
+    "AUTHORIZED": ["READY", "REJECTED"],
+    "READY": ["EXECUTING", "CANCELLED"],
+    "EXECUTING": ["COMPLETED", "FAILED"],
+    "COMPLETED": [],
+    "REJECTED": [],
+    "FAILED": [],
+    "CANCELLED": []
+  },
+
+  "terminal_states": ["COMPLETED", "REJECTED", "FAILED", "CANCELLED"],
+
+  "invalid_transitions": [
+    ["CREATED", "COMPLETED"],
+    ["CREATED", "EXECUTING"],
+    ["VALIDATING", "EXECUTING"],
+    ["VALIDATING", "COMPLETED"],
+    ["AUTHORIZED", "EXECUTING"],
+    ["AUTHORIZED", "COMPLETED"],
+    ["READY", "COMPLETED"],
+    ["EXECUTING", "CREATED"],
+    ["COMPLETED", "EXECUTING"]
+  ]
+}

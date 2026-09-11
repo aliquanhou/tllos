@@ -1,0 +1,66 @@
+{
+  "schema_name": "Execution Policy",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-11",
+  "description": "Execution Policy 验证规则。",
+
+  "required_checks": [
+    "identity_verified",
+    "capability_declared",
+    "permission_approved",
+    "evidence_present",
+    "runtime_target_registered",
+    "policy_approved"
+  ],
+
+  "checks": {
+    "identity_verified": {
+      "description": "Agent 身份已验证",
+      "required": true
+    },
+    "capability_declared": {
+      "description": "Agent 能力已声明",
+      "required": true
+    },
+    "permission_approved": {
+      "description": "执行权限已批准",
+      "required": true
+    },
+    "evidence_present": {
+      "description": "Evidence 已提供",
+      "required": true
+    },
+    "runtime_target_registered": {
+      "description": "Runtime Target 已注册",
+      "required": true
+    },
+    "policy_approved": {
+      "description": "Policy 已批准",
+      "required": true
+    }
+  },
+
+  "rules": [
+    "所有 check 必须通过才能执行",
+    "任一 check 失败则 REJECT",
+    "Permission 不等于 Execution Permission"
+  ],
+
+  "example_allowed": {
+    "identity_verified": true,
+    "capability_declared": true,
+    "permission_approved": true,
+    "evidence_present": true,
+    "runtime_target_registered": true,
+    "policy_approved": true
+  },
+
+  "example_rejected": {
+    "identity_verified": true,
+    "capability_declared": true,
+    "permission_approved": true,
+    "evidence_present": false,
+    "runtime_target_registered": true,
+    "policy_approved": true
+  }
+}
