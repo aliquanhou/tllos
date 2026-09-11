@@ -1,0 +1,74 @@
+{
+  "schema_name": "Execution Metrics",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-12",
+  "description": "Execution Intelligence 的指标模型。",
+
+  "required_fields": [
+    "execution_id",
+    "performance",
+    "reliability",
+    "trust"
+  ],
+
+  "metrics_categories": {
+    "performance": {
+      "description": "性能指标",
+      "fields": {
+        "execution_duration": "number (execution duration in seconds)",
+        "step_count": "number (number of steps)",
+        "retry_count": "number (number of retries)"
+      }
+    },
+    "reliability": {
+      "description": "可靠性指标",
+      "fields": {
+        "failure_count": "number (number of failures)",
+        "rollback_count": "number (number of rollbacks)",
+        "validation_pass_rate": "number (validation pass rate 0-100)"
+      }
+    },
+    "trust": {
+      "description": "信任指标",
+      "fields": {
+        "evidence_quality": "number (evidence quality score 0-100)",
+        "governance_compliance": "number (governance compliance score 0-100)",
+        "audit_integrity": "number (audit integrity score 0-100)"
+      }
+    }
+  },
+
+  "prohibited_metrics": [
+    "agent_score",
+    "agent_rank",
+    "trust_upgrade"
+  ],
+
+  "prohibited_reason": "P2-04.6 只观察，不治理。禁止生成治理类指标。",
+
+  "example_valid": {
+    "execution_id": "exec-int-001",
+    "performance": {
+      "execution_duration": 12.5,
+      "step_count": 5,
+      "retry_count": 0
+    },
+    "reliability": {
+      "failure_count": 0,
+      "rollback_count": 0,
+      "validation_pass_rate": 100
+    },
+    "trust": {
+      "evidence_quality": 95,
+      "governance_compliance": 100,
+      "audit_integrity": 100
+    }
+  },
+
+  "example_fake_metrics": {
+    "execution_id": "exec-int-002",
+    "agent_score": 85,
+    "agent_rank": 1,
+    "trust_upgrade": true
+  }
+}

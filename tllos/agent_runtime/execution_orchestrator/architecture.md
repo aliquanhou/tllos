@@ -127,3 +127,45 @@ Runtime Adapter
 ---
 
 *Execution Governance Integration — P2-04.5*
+
+---
+
+## Execution Intelligence Integration (P2-04.6)
+
+**Orchestrator 不直接分析，必须经过 Intelligence Hook。**
+
+### 流程升级
+
+**Before:**
+```
+Plan
+  ↓
+Execute
+  ↓
+Audit
+```
+
+**After:**
+```
+Plan
+  ↓
+Execute
+  ↓
+Observe
+  ↓
+Audit
+  ↓
+Analyze
+  ↓
+Insight
+```
+
+### Intelligence Hook
+
+- Intelligence Hook 在 Audit 之后执行
+- Intelligence 只观察、分析，不修改执行结果
+- Insight 只是建议，不自动执行
+
+---
+
+*Execution Intelligence Integration — P2-04.6*

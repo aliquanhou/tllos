@@ -1,0 +1,75 @@
+{
+  "schema_name": "Execution Insight",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-12",
+  "description": "Execution Intelligence 的洞察输出格式。",
+
+  "required_fields": [
+    "execution_id",
+    "insights"
+  ],
+
+  "fields": {
+    "execution_id": {
+      "type": "string",
+      "description": "执行唯一标识符",
+      "required": true
+    },
+    "insights": {
+      "type": "array",
+      "description": "洞察列表",
+      "required": true,
+      "items": {
+        "type": "object",
+        "required": ["type", "description", "evidence_ref"],
+        "fields": {
+          "type": "string (insight type)",
+          "description": "string (insight description)",
+          "evidence_ref": "string (evidence reference, required)"
+        }
+      }
+    }
+  },
+
+  "insight_types": [
+    "performance",
+    "reliability",
+    "trust",
+    "pattern",
+    "risk"
+  ],
+
+  "rules": [
+    "每个 Insight 必须有 evidence_ref",
+    "每个 Insight 必须有 Audit Reference",
+    "Insight 不改变执行结果",
+    "Insight 只是建议，不自动执行"
+  ],
+
+  "example_valid": {
+    "execution_id": "exec-int-001",
+    "insights": [
+      {
+        "type": "performance",
+        "description": "执行时长 12.5 秒，低于平均水平",
+        "evidence_ref": "ev-int-001"
+      },
+      {
+        "type": "reliability",
+        "description": "验证通过率 100%，无失败",
+        "evidence_ref": "ev-int-002"
+      }
+    ]
+  },
+
+  "example_no_evidence": {
+    "execution_id": "exec-int-002",
+    "insights": [
+      {
+        "type": "performance",
+        "description": "执行时长较长，建议优化",
+        "evidence_ref": ""
+      }
+    ]
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "schema_name": "Execution Observation",
+  "schema_version": "1.0.0",
+  "schema_date": "2026-09-12",
+  "description": "Execution Intelligence 的观察记录格式。",
+
+  "required_fields": [
+    "execution_id",
+    "agent_id",
+    "task_id",
+    "execution_stage",
+    "timestamp",
+    "input_state",
+    "output_state",
+    "evidence_ref",
+    "audit_ref"
+  ],
+
+  "fields": {
+    "execution_id": {
+      "type": "string",
+      "description": "执行唯一标识符",
+      "required": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "执行 Agent",
+      "required": true
+    },
+    "task_id": {
+      "type": "string",
+      "description": "任务 ID",
+      "required": true
+    },
+    "execution_stage": {
+      "type": "string",
+      "description": "执行阶段",
+      "enum": ["CREATED", "VALIDATED", "AUTHORIZED", "EXECUTING", "COMPLETED", "FAILED"],
+      "required": true
+    },
+    "timestamp": {
+      "type": "string",
+      "description": "时间戳",
+      "required": true
+    },
+    "input_state": {
+      "type": "string",
+      "description": "输入状态",
+      "required": true
+    },
+    "output_state": {
+      "type": "string",
+      "description": "输出状态",
+      "required": true
+    },
+    "evidence_ref": {
+      "type": "string",
+      "description": "证据引用",
+      "required": true
+    },
+    "audit_ref": {
+      "type": "string",
+      "description": "审计引用",
+      "required": true
+    }
+  },
+
+  "execution_stages": ["CREATED", "VALIDATED", "AUTHORIZED", "EXECUTING", "COMPLETED", "FAILED"],
+
+  "binding_rules": [
+    "Observation 必须绑定 Execution (execution_id)",
+    "Observation 必须绑定 Evidence (evidence_ref)",
+    "Observation 必须绑定 Audit (audit_ref)"
+  ],
+
+  "example_valid": {
+    "execution_id": "exec-int-001",
+    "agent_id": "doubao-a",
+    "task_id": "task-int-001",
+    "execution_stage": "COMPLETED",
+    "timestamp": "2026-09-12T12:00:00Z",
+    "input_state": "CREATED",
+    "output_state": "COMPLETED",
+    "evidence_ref": "ev-int-001",
+    "audit_ref": "evt-int-001"
+  },
+
+  "example_no_evidence": {
+    "execution_id": "exec-int-002",
+    "agent_id": "doubao-a",
+    "task_id": "task-int-002",
+    "execution_stage": "COMPLETED",
+    "timestamp": "2026-09-12T12:05:00Z",
+    "input_state": "CREATED",
+    "output_state": "COMPLETED",
+    "evidence_ref": "",
+    "audit_ref": "evt-int-002"
+  }
+}
