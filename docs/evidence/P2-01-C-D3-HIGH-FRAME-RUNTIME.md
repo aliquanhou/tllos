@@ -308,3 +308,97 @@ Each of these needs to be isolated to find the exact corruption point.
 - **A-GAP-1**: remains OPEN, but trigger now identified
 
 **R2 Phase 2 Complete. Concurrent coroutine_create is PROVEN trigger. Next: isolate exact corruption point within coroutine_create.**
+
+## 12. P2-01-C-D3-R2-P3: Exact Corruption Point Isolation (2026-09-11)
+
+### 12.1 coroutine_create() Full Lifecycle Audit
+
+```
+coroutine_create()
+  ├─ calloc(TLLCoroutine)              [SAFE - per-object allocation]
+  ├─ calloc(callStack[64])             [SAFE - per-object allocation]
+  ├─ state = 0 (RUNNABLE)              [SAFE - object-local]
+  ├─ create_frame(fn, -1, env)
+  │   ├─ frame_pool_acquire()          [UNSAFE - global pool, no lock]
+  │   ├─ calloc(registers)             [SAFE - per-frame allocation]
+  │   ├─ calloc(argStack)              [SAFE]
+  │   └─ calloc(tryStack)              [SAFE]
+  ├─ co->callStack[0] = frame          [SAFE - object-local]
+  ├─ [lock] coroutine_table_lock       [LOCKED - if multi-worker active]
+  ├─ realloc(vm->coroutines[])         [LOCKED - but workers may read without lock]
+  ├─ vm->coroutines[count++] = co      [LOCKED]
+  └─ [unlock]
+```
+
+### 12.2 vm->coroutines[] Full-Path Access Audit
+
+**Access points WITH coroutine_table_lock:**
+- coroutine_create (realloc + insert)
+- Worker claim (RUNNABLE → RUNNING)
+- runtime.submitCoroutine
+- tll_wake_expired_sleepers
+- tll_wake_io_ready
+- coroutine_wake_channel
+
+**Access points WITHOUT lock (CRITICAL FINDING):**
+- **coroutine_save_current** (line 452-453): `vm->coroutines[currentCoroutine]`
+- **coroutine_restore** (line 468-469): `vm->coroutines[idx]`
+- **tll_vm_exec** (lines 881, 890, 1061-1062, 1094-1096, 1643-1644, 1670-1671, 1687-1688, 1697-1698, 1714-1715, 1726-1727, 1741-1742): frequent `vm->coroutines[currentCoroutine]` access during execution
+
+**Total: 15+ unsynchronized access points in tll_vm_exec alone.**
+
+### 12.3 Hypothesis: vm->coroutines[] Use-After-Free
+
+The unsynchronized access pattern creates a potential use-after-free:
+
+```
+Worker thread (tll_vm_exec):
+  1. Read vm->coroutines pointer (old value)
+  2. [preempted]
+
+Main thread (coroutine_create):
+  3. realloc(vm->coroutines) → vm->coroutines points to NEW memory
+  4. OLD memory is freed
+
+Worker thread (resumes):
+  5. Use OLD vm->coroutines pointer → access freed memory → HEAP CORRUPTION
+```
+
+### 12.4 Experiment: current_coro Pointer Cache (save/restore only)
+
+**Modification:** Added `TLLWorker->current_coro` cached pointer, modified only `coroutine_save_current` and `coroutine_restore` to use cached pointer instead of `vm->coroutines[]`.
+
+**Result:** 2000-task test still crashes 3/3 runs (0xC0000374).
+
+**Conclusion:** Modifying only save/restore is insufficient. The 15+ unsynchronized access points in `tll_vm_exec` itself remain. Full caching of current_coro throughout tll_vm_exec may be needed, OR the root cause may be elsewhere.
+
+### 12.5 Evidence Classification
+
+| Finding | Level |
+|---------|-------|
+| Concurrent coroutine_create triggers crash | **PROVEN TRIGGER** |
+| Pre-creation (no concurrent create) = no crash | **PROVEN** |
+| Frame Pool not direct cause (disabled still crashes) | **PROVEN** |
+| Coroutine table realloc not direct cause (preallocated still crashes) | **PROVEN** |
+| Worker↔Worker concurrency not direct cause (1W still crashes) | **PROVEN** |
+| vm->coroutines[] has 15+ unsynchronized access points in tll_vm_exec | **OBSERVED** |
+| vm->coroutines[] use-after-free is exact root cause | **UNVERIFIED** (hypothesis) |
+| current_coro full cache would fix crash | **UNVERIFIED** (not yet tested) |
+
+### 12.6 Remaining Candidates for Exact Root Cause
+
+1. **vm->coroutines[] use-after-free** during tll_vm_exec (strongest hypothesis)
+2. **Frame Pool race** (ruled out as direct cause, but still a real defect)
+3. **TLLCoroutine object lifetime** (coro pointer invalidated during execution)
+4. **Queue node lifetime** (enqueue/dequeue/free race)
+5. **Shutdown race** (worker still executing while main frees resources)
+
+### 12.7 R2-P3 Status
+
+- **coroutine_create lifecycle**: AUDITED
+- **vm->coroutines[] full-path**: AUDITED - 15+ unsynchronized access points found
+- **current_coro cache (save/restore only)**: TESTED - insufficient
+- **Exact corruption point**: NOT YET PROVEN
+- **A-GAP-1**: remains OPEN
+
+**R2-P3 Phase 1 Complete. Next: full current_coro caching throughout tll_vm_exec, or isolate Queue/Shutdown candidates.**
