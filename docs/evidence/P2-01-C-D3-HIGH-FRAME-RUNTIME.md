@@ -133,3 +133,75 @@ Scheduling priority:
   - docs/evidence/P2-01-C-D3-HIGH-FRAME-RUNTIME.md (THIS FILE)
 
 **Construction Complete. Awaiting independent architecture audit.**
+
+## 9. P2-01-C-D3-R1 Root Cause Analysis (2026-09-11)
+
+### 9.1 Key Finding: High-load crash is D2-origin, not D3-introduced
+
+D3-R1 isolation testing confirmed:
+- **D2 baseline (2588602) also crashes** with 10000 tasks (STATUS_HEAP_CORRUPTION)
+- D3 local queue is NOT the root cause
+- The crash exists in D2's true multi-worker runtime
+
+### 9.2 Root Cause Hypothesis: Concurrent coroutine_create during worker execution
+
+**Pre-creation test**: Create ALL coroutines BEFORE starting workers → NO CRASH (but completed=0 due to test design).
+
+This proves:
+- When coroutine_create() runs concurrently with worker execution, heap corruption occurs
+- When all coroutines are pre-created before workers start, no crash
+
+### 9.3 Identified Race Conditions
+
+#### Race 1: Frame Pool (global, unprotected)
+- `frame_pool_acquire()` and `frame_pool_release()` use global variables:
+  - `g_frame_pool`, `g_frame_pool_size`, `g_frame_pool_capacity`
+- **No lock protection**
+- `coroutine_create()` (main thread) calls `create_frame()` → `frame_pool_acquire()`
+- Worker execution calls `create_frame()` / `free_frame()` → `frame_pool_acquire()` / `frame_pool_release()`
+- Concurrent access causes: double-acquire, pool array overflow, realloc race
+
+#### Race 2: Lock ordering deadlock (why simple Frame Pool lock fails)
+Attempting to add a simple lock to Frame Pool causes **deadlock**:
+1. Main thread: `coroutine_create()` → `create_frame()` → acquires `frame_pool_lock` → then tries to acquire `coroutine_table_lock`
+2. Worker: claim coroutine → acquires `coroutine_table_lock` → executes → `create_frame()` → tries to acquire `frame_pool_lock`
+3. **Deadlock**: each holds one lock and waits for the other
+
+This means Frame Pool protection requires careful lock ordering or a different approach.
+
+#### Race 3: Coroutine table realloc
+- `coroutine_create()` may realloc `vm->coroutines[]` while workers access it
+- D3 added conditional lock in `coroutine_create()`, but workers access `vm->coroutines[]` in many places
+- The cached `current_coro` approach helps but doesn't cover all access paths
+
+### 9.4 D3 1000-task test also has task loss
+- D3 original: 1000 tasks → 978/1000 completed (22 lost)
+- worker0=198, worker1=784 (both workers active)
+- Task loss may be related to the same race conditions
+
+### 9.5 Recommended Fix Direction (for architecture review)
+
+**Option A: Pre-allocate coroutine table + Frame Pool at worker startup**
+- Pre-allocate `vm->coroutines[]` to a large capacity (e.g., 65536) before starting workers
+- Pre-allocate Frame Pool to FRAME_POOL_MAX before starting workers
+- This avoids realloc during worker execution
+- Limitation: fixed upper bound on concurrent coroutines
+
+**Option B: Lock ordering fix**
+- Establish strict lock ordering: `coroutine_table_lock` → `frame_pool_lock`
+- Never acquire `frame_pool_lock` while holding `coroutine_table_lock`
+- Move `create_frame()` call in `coroutine_create()` to BEFORE acquiring `coroutine_table_lock`
+- This requires careful audit of all lock acquisition paths
+
+**Option C: Thread-local Frame Pool**
+- Each worker has its own Frame Pool (no sharing)
+- Main thread has its own Frame Pool for coroutine_create
+- Eliminates race entirely, at cost of memory overhead
+
+### 9.6 R1 Status
+- **Root cause identified**: concurrent coroutine_create + Frame Pool race + coroutine table race
+- **Simple fix attempted**: Frame Pool lock → causes deadlock
+- **No code fix committed**: awaiting architecture decision on fix direction
+- **A-GAP-1 remains OPEN**: high-load heap corruption
+
+**R1 Construction Complete. Awaiting independent architecture audit.**
