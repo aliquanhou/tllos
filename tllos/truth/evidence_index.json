@@ -198,6 +198,49 @@
             {
               "path": "docs/evidence/P2-02.2-AGENT-READINESS-HARDENING.md",
               "description": "P2-02.2 Evidence 报告",
+              "commit": "9dbf1ea"
+            }
+          ]
+        },
+        {
+          "module": "P2-02.2 Close GAPs",
+          "status": "PASS",
+          "evidence_docs": [
+            {
+              "path": "tools/canonical_validator/validate_json.py",
+              "description": "Canonical Validator",
+              "commit": "a49058b"
+            },
+            {
+              "path": ".github/workflows/canonical-validation.yml",
+              "description": "CI Gate",
+              "commit": "a49058b"
+            },
+            {
+              "path": "docs/evidence/P2-02.2-CLOSE-GAPS.md",
+              "description": "GAP Closure Evidence",
+              "commit": "a49058b"
+            }
+          ]
+        },
+        {
+          "module": "P2-02.3 Seal Preparation",
+          "status": "PASS",
+          "evidence_docs": [
+            {
+              "path": "docs/evidence/P2-02.3-CANONICAL-SEAL-READINESS.md",
+              "description": "Seal Preparation Evidence",
+              "commit": "b311bc2"
+            }
+          ]
+        },
+        {
+          "module": "P2-02.4 Canonical Layer Final Seal",
+          "status": "SEALED BASELINE",
+          "evidence_docs": [
+            {
+              "path": "docs/evidence/P2-02-CANONICAL-LAYER-V1-FINAL-SEAL.md",
+              "description": "Canonical Layer v1.0 Final Seal Evidence",
               "commit": "(当前提交)"
             }
           ]
