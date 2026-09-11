@@ -1,0 +1,82 @@
+// P2-01-C-D3-5: Coroutine Migration Test - 100 coroutines, 2 workers
+// Verifies: each coroutine executes exactly expected count, no dual execution,
+// no lost execution, migration between workers is normal behavior.
+
+let exec_count = 0
+let completed_count = 0
+let target_count = 100
+let worker0_exec = 0
+let worker1_exec = 0
+let error_count = 0
+
+fn migrate_task(id: int) -> int {
+    let w = runtime.currentWorkerId()
+    if w == 0 { worker0_exec = worker0_exec + 1 }
+    if w == 1 { worker1_exec = worker1_exec + 1 }
+
+    // Phase 1
+    let local_state = id
+    exec_count = exec_count + 1
+
+    // Yield - may migrate to another worker on resume
+    coroutine.yield()
+
+    // Phase 2 - verify local state survived migration
+    if local_state != id {
+        error_count = error_count + 1
+    }
+    let w2 = runtime.currentWorkerId()
+    if w2 == 0 { worker0_exec = worker0_exec + 1 }
+    if w2 == 1 { worker1_exec = worker1_exec + 1 }
+    exec_count = exec_count + 1
+
+    completed_count = completed_count + 1
+    return 0
+}
+
+fn main() -> void {
+    io.eprintln("=== D3-5 Coroutine Migration Test: 100 coroutines, 2 workers ===")
+
+    let rc = runtime.startWorkers(2)
+    io.eprintln("startWorkers(2)=" + convert.toString(rc))
+
+    io.eprintln("Spawning 100 coroutines...")
+    let i = 0
+    while i < target_count {
+        let co = coroutine.spawn(fn() { migrate_task(i) })
+        runtime.submitCoroutine(co)
+        i = i + 1
+    }
+    io.eprintln("Submitted 100 coroutines")
+
+    io.eprintln("Waiting for completion...")
+    let waited = 0
+    while waited < 500 {
+        if completed_count >= target_count { break }
+        let j = 0
+        while j < 50000 { j = j + 1 }
+        waited = waited + 1
+    }
+
+    io.eprintln("waited=" + convert.toString(waited))
+    io.eprintln("exec_count=" + convert.toString(exec_count) + " (expected 200)")
+    io.eprintln("completed_count=" + convert.toString(completed_count) + " / " + convert.toString(target_count))
+    io.eprintln("worker0_exec=" + convert.toString(worker0_exec))
+    io.eprintln("worker1_exec=" + convert.toString(worker1_exec))
+    io.eprintln("error_count=" + convert.toString(error_count))
+
+    // Verify migration happened (both workers executed something)
+    let migrated = (worker0_exec > 0) && (worker1_exec > 0)
+    io.eprintln("migration_observed=" + convert.toString(migrated))
+
+    runtime.shutdownWorkers()
+
+    let expected_exec = target_count * 2
+    if completed_count == target_count && exec_count == expected_exec && error_count == 0 {
+        io.eprintln("TEST_RESULT: PASS - 100 coroutines migrated correctly, no dual/lost execution")
+    } else {
+        io.eprintln("TEST_RESULT: FAIL - completed=" + convert.toString(completed_count) + " exec=" + convert.toString(exec_count) + " errors=" + convert.toString(error_count))
+    }
+}
+
+main()

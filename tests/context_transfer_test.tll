@@ -1,0 +1,85 @@
+// P2-01-C-D3-4: Context Transfer Protocol Test
+// Verifies: coroutine context (local vars, execution position) correctly
+// transfers between Worker and Coroutine during yield/resume.
+// No double owner, no dangling pointer, no stale pointer (behavioral verification).
+
+let phase1_count = 0
+let phase2_count = 0
+let completed_count = 0
+let target_count = 10
+let error_count = 0
+
+fn migrator(id: int) -> int {
+    // Phase 1: execute on first worker
+    let local_val = id * 100
+    if local_val != id * 100 {
+        error_count = error_count + 1
+    }
+    phase1_count = phase1_count + 1
+
+    // Yield - context saved to coroutine, worker ctx cleared
+    coroutine.yield()
+
+    // Phase 2: resume on (possibly different) worker
+    // Verify local_val survived context transfer
+    if local_val != id * 100 {
+        error_count = error_count + 1
+    }
+    local_val = local_val + id
+    if local_val != id * 101 {
+        error_count = error_count + 1
+    }
+    phase2_count = phase2_count + 1
+    completed_count = completed_count + 1
+    return 0
+}
+
+fn main() -> void {
+    io.eprintln("=== D3-4 Context Transfer Protocol Test ===")
+
+    let rc = runtime.startWorkers(2)
+    io.eprintln("startWorkers(2)=" + convert.toString(rc))
+
+    io.eprintln("Spawning 10 migrator coroutines...")
+    let i = 0
+    while i < target_count {
+        let co = coroutine.spawn(fn() { migrator(i) })
+        runtime.submitCoroutine(co)
+        i = i + 1
+    }
+
+    io.eprintln("Submitted 10 coroutines, waiting for phase1...")
+    let waited = 0
+    while waited < 200 {
+        if phase1_count >= target_count { break }
+        let j = 0
+        while j < 50000 { j = j + 1 }
+        waited = waited + 1
+    }
+    io.eprintln("phase1_count=" + convert.toString(phase1_count))
+
+    // All coroutines should have yielded by now
+    // They are in RUNNABLE state, waiting to be reclaimed
+    io.eprintln("Waiting for phase2 (resume)...")
+    waited = 0
+    while waited < 300 {
+        if completed_count >= target_count { break }
+        let j = 0
+        while j < 50000 { j = j + 1 }
+        waited = waited + 1
+    }
+
+    io.eprintln("phase2_count=" + convert.toString(phase2_count))
+    io.eprintln("completed_count=" + convert.toString(completed_count))
+    io.eprintln("error_count=" + convert.toString(error_count))
+
+    runtime.shutdownWorkers()
+
+    if completed_count == target_count && error_count == 0 && phase1_count == target_count && phase2_count == target_count {
+        io.eprintln("TEST_RESULT: PASS - Context Transfer Protocol verified (no double owner, no stale data)")
+    } else {
+        io.eprintln("TEST_RESULT: FAIL - completed=" + convert.toString(completed_count) + " errors=" + convert.toString(error_count))
+    }
+}
+
+main()

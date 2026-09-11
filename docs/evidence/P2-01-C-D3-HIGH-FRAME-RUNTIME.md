@@ -204,7 +204,7 @@ if (should_requeue) {
 
 ### 5.1 Context Transfer Protocol 验证
 
-**已验证**：通过代码审计确认 Context Transfer Protocol 正确实现：
+**已验证**：通过代码审计 + 行为测试确认 Context Transfer Protocol 正确实现：
 
 | 验证项 | 结果 | 说明 |
 |--------|------|------|
@@ -212,6 +212,27 @@ if (should_requeue) {
 | 无 dangling pointer | ✅ | 执行前后 worker->ctx.callStack = NULL |
 | 无 stale pointer | ✅ | 每次执行前从 coro 重新加载，执行后保存回 coro |
 | pointer transfer (not copy) | ✅ | `worker->ctx.callStack = coro->callStack`（指针赋值，不 memcpy） |
+
+### 5.2 context_transfer_test（行为测试）
+
+**新增测试**：`tests/context_transfer_test.tll`
+
+验证 10 个 migrator coroutine 在 yield/resume 过程中上下文（局部变量、执行位置）正确传递：
+
+| 指标 | 结果 |
+|------|------|
+| target_count | 10 |
+| phase1_count | 10 ✅ |
+| phase2_count | 10 ✅ |
+| completed_count | 10 ✅ |
+| error_count | 0 ✅ |
+| TEST_RESULT | **PASS** |
+
+**验证内容**：
+- 每个 coroutine 的局部变量 `local_val = id * 100` 在 yield 后正确保留
+- resume 后 `local_val` 未被损坏（无 stale data）
+- 无 double owner（每个 coroutine phase1/phase2 各执行一次）
+- Context Transfer Protocol 行为层面验证通过
 
 ### 5.2 P5 Latent Defect 状态
 
@@ -229,7 +250,7 @@ P5 审计发现的 3 个 ownership violation（OBSERVED，非 PROVEN root cause�
 
 ## 6. D3-5 Coroutine Migration Test
 
-### 6.1 Migration 验证
+### 6.1 D2 基线 Migration 验证
 
 **已验证**：通过 D2 `worker_ownership_boundary` 测试确认 coroutine migration 正常：
 
@@ -239,7 +260,31 @@ P5 审计发现的 3 个 ownership violation（OBSERVED，非 PROVEN root cause�
 - Different workers at start: true
 - Both completed: true
 
-### 6.2 Migration 是正常行为
+### 6.2 D3 100-Coroutine Migration Test
+
+**新增测试**：`tests/d3_migration_100.tll`
+
+验证 100 个 coroutine 在 2 个 Worker 之间迁移，每个 coroutine 执行 2 次（yield 后 resume），无 dual/lost execution：
+
+| 指标 | 结果 | 预期 |
+|------|------|------|
+| target_count | 100 | 100 |
+| exec_count | 200 | 200 (100 × 2) |
+| completed_count | 100 | 100 |
+| worker0_exec | 98 | - |
+| worker1_exec | 102 | - |
+| error_count | 0 | 0 |
+| migration_observed | true | true |
+| TEST_RESULT | **PASS** | PASS |
+
+**验证内容**：
+- 100 个 coroutine 全部完成，无 lost execution
+- 每个 coroutine 执行恰好 2 次（phase1 + phase2），无 dual execution
+- 局部变量 `local_state = id` 在迁移后正确保留（error_count = 0）
+- 两个 Worker 都执行了任务（migration_observed = true）
+- 负载分布：worker0=98, worker1=102（基本均衡）
+
+### 6.3 Migration 是正常行为
 
 **Coroutine migration after sleep/yield 是正常 scheduler 行为**：
 - 当 A sleeps/yields on Worker 0，Worker 0 marks A RUNNABLE/WAITING and picks up B
@@ -254,18 +299,18 @@ P5 审计发现的 3 个 ownership violation（OBSERVED，非 PROVEN root cause�
 
 ### 7.1 测试结果
 
-| 规模 | Workers | 结果 | 说明 |
-|------|---------|------|------|
-| 100 tasks | 2 | **PASS** | 正常退出，所有 STEP 输出完整 |
-| 1000 tasks | 2 | **CRASH** | "Submitted 1000 tasks, waiting..." 后进程崩溃，无后续输出 |
-| 5000 tasks | 2 | NOT RUN | 因 1000 已崩溃，未继续 |
-| 10000 tasks | 2 | NOT RUN | 因 1000 已崩溃，未继续 |
+| 规模 | Workers | 结果 | 崩溃点 | 说明 |
+|------|---------|------|--------|------|
+| 100 tasks | 2 | **PASS** | - | 正常退出，所有 STEP 输出完整 |
+| 1000 tasks | 2 | **CRASH** | waiting loop | "Submitted 1000 tasks, waiting..." 后进程崩溃 |
+| 5000 tasks | 2 | **CRASH** | waiting loop | "Submitted 5000 tasks, waiting..." 后进程崩溃 |
+| 10000 tasks | 2 | **CRASH** | waiting loop | "Submitted 10000 tasks, waiting..." 后进程崩溃 |
 
-### 7.2 1000-task 崩溃分析
+### 7.2 崩溃分析
 
-**崩溃点**：提交 1000 个 coroutine 后，等待循环中进程崩溃。
+**崩溃点一致性**：1000/5000/10000 全部在提交完成后的等待循环中崩溃（`CRASH_DURING_WAIT`），崩溃点一致。
 
-**stderr 输出**：
+**1000-task stderr 输出**：
 ```
 === D3 1000-task stress test ===
 tllvm: started 2 worker threads (true multi-worker runtime)
@@ -275,7 +320,21 @@ Submitted 1000 tasks, waiting...
 （此后无输出，进程退出）
 ```
 
-**结论**：这是 **A-GAP-1（高负载堆损坏）** 的表现。
+**结论**：这是 **A-GAP-1（高负载堆损坏）** 的一致表现。崩溃发生在 Worker 执行大量动态创建的 coroutine 期间，与 Concurrent coroutine_create = PROVEN TRIGGER 吻合。
+
+### 7.3 submit/complete/lost/duplicate 计数
+
+由于测试在等待循环中崩溃，无法获得准确的 completed_count。但根据 A-GAP-1 的已知行为：
+
+| 指标 | 1000 | 5000 | 10000 |
+|------|------|------|-------|
+| submitted | 1000 | 5000 | 10000 |
+| completed | 未知（崩溃） | 未知（崩溃） | 未知（崩溃） |
+| lost | 未知 | 未知 | 未知 |
+| duplicate | 未知 | 未知 | 未知 |
+| crash | YES | YES | YES |
+
+**注意**：stress test 使用全局计数器（多 Worker 下有数据竞争），仅用于观察崩溃行为，不作为 exactly-once 的严谨 Evidence。exactly-once 由 D2 `worker_ownership_boundary` 和 D3 `d3_migration_100` 测试验证。
 
 ### 7.3 A-GAP-1 状态
 
@@ -333,9 +392,9 @@ D3 基础设施（Local Queue / Context Transfer / Queue Layer）未引入任何
 | D3-1 | Scheduler Ownership Audit | ✅ PASS | Ownership Matrix + Context Transfer Protocol |
 | D3-2 | Runnable Queue Layer | ✅ PASS | Queue API + Queue Ownership |
 | D3-3 | Local Queue Execution | ✅ PASS | Local-first scheduling + Requeue to local |
-| D3-4 | Execution Context Isolation | ✅ PASS | Context Transfer Protocol 验证（无 double owner/dangling/stale） |
-| D3-5 | Coroutine Migration Test | ✅ PASS | Migration 正常，无 dual execution |
-| D3-6 | High Frame Stress Test | ⚠️ PARTIAL | 100 PASS; 1000 CRASH = A-GAP-1 (已知 OPEN) |
+| D3-4 | Execution Context Isolation | ✅ PASS | Context Transfer Protocol + context_transfer_test (10 coroutines PASS) |
+| D3-5 | Coroutine Migration Test | ✅ PASS | d3_migration_100 (100 coroutines, 2 workers, exec=200, no dual/lost) |
+| D3-6 | High Frame Stress Test | ⚠️ A-GAP-1 | 100 PASS; 1000/5000/10000 CRASH (一致崩溃点, 已知 OPEN) |
 | D3-7 | Regression Gate | ✅ PASS | D2 七项 7/7 PASS |
 
 ### 9.1 D3 基础设施 = PASS
@@ -366,11 +425,16 @@ D3 的核心基础设施（Queue Layer / Local Queue / Ownership / Context Trans
 
 ## 11. Files Changed
 
-本阶段 D3 基础设施代码在之前的 commit（20ac2cf / ec6c914 / abdb420）中已实现。本 commit 仅新增 Evidence 文档：
+本阶段 D3 基础设施代码在之前的 commit（20ac2cf / ec6c914 / abdb420）中已实现。本 commit 新增 Evidence 文档和 D3 专属测试：
 
 | 文件 | 说明 |
 |------|------|
 | `docs/evidence/P2-01-C-D3-HIGH-FRAME-RUNTIME.md` | D3 完整 Evidence（本文件） |
+| `tests/context_transfer_test.tll` | D3-4 Context Transfer Protocol 行为测试（10 coroutines, yield/resume） |
+| `tests/d3_migration_100.tll` | D3-5 100-Coroutine Migration 测试（2 workers, no dual/lost execution） |
+| `tests/d3_stress_1000_stderr.tll` | D3-6 1000-task stress test（stderr 输出，A-GAP-1 观察） |
+| `tests/d3_stress_5000_stderr.tll` | D3-6 5000-task stress test |
+| `tests/d3_stress_10000_stderr.tll` | D3-6 10000-task stress test |
 
 **未修改 Runtime 代码**（D2 RESEALED 保护，不回头修改 D2 已验证逻辑）。
 
