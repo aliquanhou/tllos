@@ -1,0 +1,61 @@
+{
+  "capability_name": "Desktop Capability Model",
+  "capability_version": "1.0.0",
+  "capability_date": "2026-09-12",
+  "description": "Desktop Agent 能力定义。",
+
+  "capabilities": [
+    {
+      "capability_id": "screen.observe",
+      "permission": "desktop.screen.observe",
+      "risk_level": "LOW",
+      "evidence_required": true
+    },
+    {
+      "capability_id": "mouse.move",
+      "permission": "desktop.mouse.move",
+      "risk_level": "LOW",
+      "evidence_required": true
+    },
+    {
+      "capability_id": "mouse.click",
+      "permission": "desktop.mouse.click",
+      "risk_level": "MEDIUM",
+      "evidence_required": true
+    },
+    {
+      "capability_id": "keyboard.type",
+      "permission": "desktop.keyboard.type",
+      "risk_level": "MEDIUM",
+      "evidence_required": true
+    },
+    {
+      "capability_id": "window.manage",
+      "permission": "desktop.window.manage",
+      "risk_level": "MEDIUM",
+      "evidence_required": true
+    },
+    {
+      "capability_id": "process.manage",
+      "permission": "desktop.process.manage",
+      "risk_level": "HIGH",
+      "evidence_required": true
+    },
+    {
+      "capability_id": "file.access",
+      "permission": "desktop.file.access",
+      "risk_level": "MEDIUM",
+      "evidence_required": true
+    }
+  ],
+
+  "risk_levels": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+
+  "rules": [
+    "每个能力必须有 permission",
+    "每个能力必须有 risk_level",
+    "每个能力必须 evidence_required",
+    "CRITICAL 级别默认拒绝",
+    "HIGH 级别必须人工审批"
+  ]
+}

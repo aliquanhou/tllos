@@ -1,0 +1,63 @@
+{
+  "context_name": "Desktop Context",
+  "context_version": "1.0.0",
+  "context_date": "2026-09-12",
+  "description": "Desktop Agent 上下文模型。",
+
+  "required_fields": [
+    "os",
+    "device",
+    "window",
+    "application",
+    "session",
+    "user",
+    "timestamp"
+  ],
+
+  "fields": {
+    "os": {
+      "type": "string",
+      "description": "操作系统",
+      "enum": ["windows", "linux", "macos"],
+      "required": true
+    },
+    "device": {
+      "type": "string",
+      "description": "设备标识",
+      "required": true
+    },
+    "window": {
+      "type": "string",
+      "description": "当前窗口",
+      "required": true
+    },
+    "application": {
+      "type": "string",
+      "description": "当前应用",
+      "required": true
+    },
+    "session": {
+      "type": "string",
+      "description": "会话标识",
+      "required": true
+    },
+    "user": {
+      "type": "string",
+      "description": "用户标识",
+      "required": true
+    },
+    "timestamp": {
+      "type": "number",
+      "description": "时间戳",
+      "required": true
+    }
+  },
+
+  "rules": [
+    "os 必须是 3 种之一",
+    "device 不能为空",
+    "window 不能为空",
+    "application 不能为空",
+    "timestamp 必须 >= 0"
+  ]
+}

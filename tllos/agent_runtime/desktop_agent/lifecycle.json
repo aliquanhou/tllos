@@ -1,0 +1,50 @@
+{
+  "lifecycle_name": "Desktop Action Lifecycle",
+  "lifecycle_version": "1.0.0",
+  "lifecycle_date": "2026-09-12",
+  "description": "Desktop Agent 动作生命周期状态机。",
+
+  "states": [
+    "REQUESTED",
+    "VALIDATING",
+    "AUTHORIZED",
+    "PREPARING",
+    "EXECUTING",
+    "OBSERVING",
+    "COMPLETED",
+    "FAILED",
+    "ROLLBACK"
+  ],
+
+  "normal_transitions": {
+    "REQUESTED": ["VALIDATING"],
+    "VALIDATING": ["AUTHORIZED", "FAILED"],
+    "AUTHORIZED": ["PREPARING", "FAILED"],
+    "PREPARING": ["EXECUTING", "FAILED"],
+    "EXECUTING": ["OBSERVING", "FAILED"],
+    "OBSERVING": ["COMPLETED", "FAILED"],
+    "COMPLETED": [],
+    "FAILED": ["ROLLBACK"],
+    "ROLLBACK": []
+  },
+
+  "invalid_transitions": [
+    "REQUESTED -> AUTHORIZED",
+    "REQUESTED -> EXECUTING",
+    "REQUESTED -> COMPLETED",
+    "AUTHORIZED -> EXECUTING",
+    "PREPARING -> OBSERVING",
+    "EXECUTING -> COMPLETED",
+    "COMPLETED -> EXECUTING"
+  ],
+
+  "rules": [
+    "动作必须从 REQUESTED 开始",
+    "必须经过 VALIDATING",
+    "必须经过 AUTHORIZED",
+    "必须经过 PREPARING",
+    "执行完成必须到 COMPLETED",
+    "执行失败必须到 FAILED",
+    "非法跳转必须 REJECT"
+  ]
+}

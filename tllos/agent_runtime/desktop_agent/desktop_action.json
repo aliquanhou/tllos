@@ -1,0 +1,56 @@
+{
+  "action_name": "Desktop Action",
+  "action_version": "1.0.0",
+  "action_date": "2026-09-12",
+  "description": "Desktop Agent 动作模型。",
+
+  "required_fields": [
+    "action_id",
+    "capability",
+    "target",
+    "parameters",
+    "permission",
+    "evidence"
+  ],
+
+  "fields": {
+    "action_id": {
+      "type": "string",
+      "description": "动作 ID",
+      "required": true
+    },
+    "capability": {
+      "type": "string",
+      "description": "所需能力",
+      "required": true
+    },
+    "target": {
+      "type": "string",
+      "description": "操作目标",
+      "required": true
+    },
+    "parameters": {
+      "type": "object",
+      "description": "操作参数",
+      "required": true
+    },
+    "permission": {
+      "type": "string",
+      "description": "所需权限",
+      "required": true
+    },
+    "evidence": {
+      "type": "string",
+      "description": "证据引用",
+      "required": true
+    }
+  },
+
+  "rules": [
+    "action_id 必须唯一",
+    "capability 必须与 Permission 匹配",
+    "permission 不能为空",
+    "evidence 不能为空",
+    "target 不能为空"
+  ]
+}
