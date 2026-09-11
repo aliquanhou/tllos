@@ -1,0 +1,87 @@
+{
+  "project": "TLL OS",
+  "component": "Agent Runtime",
+  "version": "1.0.0",
+  "status": "seal_candidate",
+  "seal_date": "2026-09-11",
+  "baseline_commit": "998d80ded14ae0afee42a4dbdec4f1d1b51d9abc",
+
+  "layers": {
+    "layer_1_identity": {
+      "name": "Identity Adapter",
+      "status": "PASS",
+      "phase": "P2-03.0"
+    },
+    "layer_2_capability": {
+      "name": "Capability Manager",
+      "status": "PASS",
+      "phase": "P2-03.1"
+    },
+    "layer_3_permission": {
+      "name": "Permission Model",
+      "status": "PASS",
+      "phase": "P2-03.2"
+    },
+    "layer_4_gateway": {
+      "name": "Execution Gateway",
+      "status": "PASS",
+      "phase": "P2-03.3"
+    },
+    "layer_5_adapter": {
+      "name": "Runtime Adapter",
+      "status": "PASS",
+      "phase": "P2-03.3"
+    },
+    "layer_6_ledger": {
+      "name": "Audit Ledger",
+      "status": "PASS",
+      "phase": "P2-03.4"
+    },
+    "layer_7_trust": {
+      "name": "Trust Verification",
+      "status": "PASS",
+      "phase": "P2-03.5"
+    }
+  },
+
+  "integrity": {
+    "type": "git_anchored_integrity",
+    "cryptographic_identity": false,
+    "description": "Integrity based on Git commits + SHA256 hashing. Not cryptographic identity."
+  },
+
+  "known_gaps": [
+    {
+      "gap": "Cryptographic Identity",
+      "status": "PLANNED",
+      "description": "No digital signature or trusted key infrastructure."
+    },
+    {
+      "gap": "Real Sandbox",
+      "status": "PLANNED",
+      "description": "No runtime sandbox or process isolation."
+    },
+    {
+      "gap": "Real Execution Engine",
+      "status": "PLANNED",
+      "description": "Protocol layer only, no actual execution engine implemented."
+    },
+    {
+      "gap": "Distributed Trust",
+      "status": "PLANNED",
+      "description": "No distributed trust network or consensus."
+    },
+    {
+      "gap": "Multi-Agent Network",
+      "status": "PLANNED",
+      "description": "No multi-agent coordination or communication."
+    },
+    {
+      "gap": "Runtime Enforcement",
+      "status": "PLANNED",
+      "description": "No runtime enforcement of permissions or policies."
+    }
+  ],
+
+  "boundary_declaration": "Agent Runtime Foundation v1 defines trust boundary. It does not provide autonomous execution."
+}

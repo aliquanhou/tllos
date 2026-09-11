@@ -50,7 +50,7 @@ def validate_json_file(file_path, required_fields=None):
             if field not in data:
                 return False, f"Missing required field: '{field}'"
 
-    return True, "OK"
+    return True, data
 
 
 def check_layer(name, md_files, json_files):
@@ -167,6 +167,41 @@ def main():
         total_failed += failed
         layer_results.append((layer["name"], failed == 0))
         print()
+
+    # Manifest Validation
+    print("--- Manifest Validation ---")
+    manifest_errors = []
+
+    manifest_ok, manifest_data = validate_json_file("tllos/agent_runtime/agent_runtime_manifest.json")
+    if not manifest_ok:
+        manifest_errors.append(f"  ❌ Manifest: {manifest_data}")
+    else:
+        # Check version
+        if manifest_data.get("version") != "1.0.0":
+            manifest_errors.append(f"  ❌ Manifest version must be 1.0.0, got: {manifest_data.get('version')}")
+
+        # Check cryptographic_identity must be false
+        integrity = manifest_data.get("integrity", {})
+        if integrity.get("cryptographic_identity") is not False:
+            manifest_errors.append(f"  ❌ cryptographic_identity must be false")
+
+        # Check known_gaps must exist
+        if "known_gaps" not in manifest_data:
+            manifest_errors.append(f"  ❌ known_gaps must exist")
+        elif len(manifest_data["known_gaps"]) == 0:
+            manifest_errors.append(f"  ❌ known_gaps cannot be empty")
+
+    if manifest_errors:
+        print(f"  ❌ FAIL ({len(manifest_errors)} errors)")
+        for err in manifest_errors:
+            print(err)
+        total_failed += len(manifest_errors)
+        layer_results.append(("Manifest", False))
+    else:
+        print(f"  ✅ PASS")
+        total_passed += 1
+        layer_results.append(("Manifest", True))
+    print()
 
     print("=" * 60)
     if total_failed == 0:
