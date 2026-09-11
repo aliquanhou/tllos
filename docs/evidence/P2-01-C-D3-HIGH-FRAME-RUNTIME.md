@@ -205,3 +205,48 @@ This means Frame Pool protection requires careful lock ordering or a different a
 - **A-GAP-1 remains OPEN**: high-load heap corruption
 
 **R1 Construction Complete. Awaiting independent architecture audit.**
+
+## 10. P2-01-C-D3-R2 Root Cause Isolation (2026-09-11)
+
+### 10.1 Isolation Matrix Results
+
+| Experiment | Configuration | Result | Conclusion |
+|------------|--------------|--------|------------|
+| Frame Pool ENABLED | default, 10000 tasks, 2W | CRASH (0xC0000374) | Baseline |
+| Frame Pool DISABLED | D3_TEST_DISABLE_FRAME_POOL=1, 10000 tasks, 2W | CRASH (0xC0000374) | **Frame Pool RULED OUT** |
+| Table dynamic | default, 10000 tasks, 2W | CRASH | Baseline |
+| Table preallocated | D3_TEST_PREALLOC_COROUTINE_TABLE=1 (65536), 10000 tasks, 2W | CRASH | **Table realloc RULED OUT** |
+| 2 Workers | default, 10000 tasks | CRASH | Baseline |
+| 1 Worker | startWorkers(1), 10000 tasks | CRASH | **Multi-worker concurrency RULED OUT** |
+| 1000 tasks (run 1) | default, 2W | CRASH | Unstable |
+| 1000 tasks (run 2) | default, 2W | CRASH | Unstable |
+| 1000 tasks (run 3) | default, 2W | PASS (987/1000) | Unstable |
+
+### 10.2 Key Findings
+
+1. **Frame Pool is NOT the root cause**: Disabling Frame Pool entirely (every frame allocated/fresh freed) still crashes at 10000 tasks. The Frame Pool race is a real thread-safety defect, but not the cause of this particular heap corruption.
+
+2. **Coroutine table realloc is NOT the root cause**: Pre-allocating the table to 65536 entries before starting workers still crashes. The realloc race is also a real defect, but not the root cause.
+
+3. **Multi-worker concurrency is NOT the root cause**: Even with 1 Worker, 10000 tasks still crash. The issue is main-thread coroutine_create() concurrent with worker execution, not worker-vs-worker concurrency.
+
+4. **1000-task test is unstable**: 2/3 runs crash, 1/3 passes with 987/1000 completed. This confirms a race condition that manifests probabilistically.
+
+### 10.3 Remaining Root Cause Candidates
+
+After ruling out Frame Pool, Table realloc, and multi-worker concurrency, the remaining candidates are:
+
+1. **Coroutine object lifecycle**: TLLCoroutine* may be modified/freed while worker holds a reference
+2. **Queue node allocation/free**: TLLRunnableNode malloc/free race between enqueue/dequeue
+3. **Shutdown race**: Worker still executing while main thread frees resources
+4. **Other global state**: globals array, heap objects, or other shared mutable state
+
+### 10.4 R2 Status
+
+- **Candidates ruled out**: Frame Pool, Coroutine table realloc, Multi-worker concurrency
+- **Candidates remaining**: Coroutine lifecycle, Queue node, Shutdown, Other global state
+- **Root cause**: Still INFERRED / not yet PROVEN
+- **A-GAP-1**: Remains OPEN
+- **No code fix committed**: Awaiting further isolation or architecture decision
+
+**R2 Isolation Phase 1 Complete. Continuing isolation...**
