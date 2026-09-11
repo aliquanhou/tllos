@@ -1,11 +1,11 @@
 {
-  "manifest_version": "1.1.0",
+  "manifest_version": "1.0.0",
   "manifest_date": "2026-09-11",
   "manifest_author": "于秋鸿",
   "manifest_description": "TLL OS Canonical Layer Integrity Manifest — 记录所有 Canonical 文件的 SHA256 hash，用于验证文件完整性和检测未授权修改。本 manifest 自身的完整性由 Git commit 保证。",
 
   "protocol_version_binding": {
-    "canonical_layer_version": "1.1.0",
+    "canonical_layer_version": "1.0.0",
     "agent_protocol_version": "0.1.0",
     "runtime_protocol_version": "v0",
     "evidence_protocol_version": "1.0.0",
