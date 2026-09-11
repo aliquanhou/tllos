@@ -1,0 +1,135 @@
+{
+  "contract_name": "TLL OS Task Contract v1",
+  "contract_version": "1.0.0",
+  "contract_date": "2026-09-11",
+  "contract_description": "TLL OS 任务契约格式。每个任务必须包含完整的契约信息，才能被分发和执行。",
+
+  "required_fields": {
+    "task_id": {
+      "type": "string",
+      "description": "任务唯一标识符",
+      "required": true
+    },
+    "scope": {
+      "type": "object",
+      "description": "任务范围",
+      "required": true,
+      "properties": {
+        "allowed_files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "允许修改的文件路径"
+        },
+        "forbidden_files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "禁止修改的文件路径"
+        },
+        "phase": {
+          "type": "string",
+          "description": "所属阶段"
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "description": "任务输入",
+      "required": true,
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "任务描述"
+        },
+        "baseline_commit": {
+          "type": "string",
+          "description": "基线 Commit SHA"
+        },
+        "constraints": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "约束条件"
+        }
+      }
+    },
+    "expected_output": {
+      "type": "object",
+      "description": "预期输出",
+      "required": true,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["code", "document", "test", "config"],
+          "description": "输出类型"
+        },
+        "files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "预期生成的文件"
+        }
+      }
+    },
+    "evidence_requirement": {
+      "type": "object",
+      "description": "证据要求",
+      "required": true,
+      "properties": {
+        "required": {
+          "type": "boolean",
+          "description": "是否必须提供证据"
+        },
+        "type": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["test_result", "build_log", "commit_sha", "manual_verify"]
+          },
+          "description": "证据类型要求"
+        }
+      }
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+      "description": "风险等级",
+      "required": true
+    }
+  },
+
+  "example": {
+    "task_id": "P2-03-TEST-001",
+    "scope": {
+      "allowed_files": ["docs/evidence/*.md", "tllos/agent_runtime/*.json"],
+      "forbidden_files": ["host/c/*.c", "host/c/*.h", "tllos/identity/*.json"],
+      "phase": "P2-03 Phase 1"
+    },
+    "input": {
+      "description": "创建 Agent Runtime 基础协议文件",
+      "baseline_commit": "8691fba54518ded21c5ce86afddf2b6c07c16425",
+      "constraints": [
+        "不修改 Runtime Core",
+        "不修改 Canonical Layer 已封板文件"
+      ]
+    },
+    "expected_output": {
+      "type": "document",
+      "files": [
+        "tllos/agent_runtime/boot_protocol.json",
+        "tllos/agent_runtime/capability_declaration.schema.json",
+        "docs/evidence/P2-03-*.md"
+      ]
+    },
+    "evidence_requirement": {
+      "required": true,
+      "type": ["test_result", "commit_sha"]
+    },
+    "risk_level": "LOW"
+  },
+
+  "validation_rules": [
+    "任务必须有明确的 task_id",
+    "任务必须有明确的 scope（allowed_files + forbidden_files）",
+    "任务必须有 evidence_requirement",
+    "任务必须有 risk_level",
+    "越权任务必须拒绝"
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "record_name": "TLL OS Evidence Record v1",
+  "record_version": "1.0.0",
+  "record_date": "2026-09-11",
+  "record_description": "Agent 执行任务后必须提交的证据记录格式。没有 Evidence，不生成 Claim。",
+
+  "required_fields": {
+    "task_id": {
+      "type": "string",
+      "description": "任务唯一标识符",
+      "required": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent 标识符",
+      "required": true
+    },
+    "claim": {
+      "type": "string",
+      "description": "Agent 的声明",
+      "required": true
+    },
+    "evidence": {
+      "type": "object",
+      "description": "证据",
+      "required": true,
+      "properties": {
+        "commit_sha": {
+          "type": "string",
+          "description": "Commit SHA"
+        },
+        "test_results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "test_name": { "type": "string" },
+              "result": { "type": "string", "enum": ["PASS", "FAIL", "SKIP"] },
+              "details": { "type": "string" }
+            }
+          },
+          "description": "测试结果"
+        },
+        "build_log": {
+          "type": "string",
+          "description": "构建日志"
+        },
+        "manual_verification": {
+          "type": "string",
+          "description": "人工验证说明"
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["OBSERVED", "INFERRED", "UNVERIFIED", "PROVEN", "RULED_OUT", "FAIL"],
+      "description": "状态等级",
+      "required": true
+    },
+    "audit_result": {
+      "type": "object",
+      "description": "审计结果",
+      "required": false,
+      "properties": {
+        "auditor": { "type": "string" },
+        "verdict": { "type": "string", "enum": ["PASS", "REQUEST CHANGES", "SEALED"] },
+        "comments": { "type": "string" },
+        "audit_date": { "type": "string", "format": "date" }
+      }
+    }
+  },
+
+  "example": {
+    "task_id": "P2-03-TEST-001",
+    "agent_id": "doubao-a",
+    "claim": "Agent Runtime 基础协议文件已创建完成",
+    "evidence": {
+      "commit_sha": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "test_results": [
+        {
+          "test_name": "boot_flow_test",
+          "result": "PASS",
+          "details": "7 steps completed in order"
+        },
+        {
+          "test_name": "capability_boundary_test",
+          "result": "PASS",
+          "details": "越权任务被拒绝"
+        }
+      ],
+      "build_log": "",
+      "manual_verification": "目录结构已确认"
+    },
+    "status": "OBSERVED",
+    "audit_result": {
+      "auditor": "于秋鸿博士",
+      "verdict": "PASS",
+      "comments": "协议骨架符合设计",
+      "audit_date": "2026-09-11"
+    }
+  },
+
+  "validation_rules": [
+    "没有 evidence 字段的记录无效",
+    "status 必须是规定的 5 个等级之一",
+    "audit_result 由审计方填写，施工方不得自行填写",
+    "施工方不得自行宣布 SEALED"
+  ]
+}

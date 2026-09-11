@@ -1,0 +1,71 @@
+{
+  "protocol_name": "TLL OS Agent Boot Protocol",
+  "protocol_version": "1.0.0",
+  "protocol_date": "2026-09-11",
+  "protocol_description": "Agent 接入 TLL OS 的标准启动流程。任何 Agent 必须按此顺序完成启动，才能接收任务。",
+
+  "boot_sequence": [
+    {
+      "step": 1,
+      "name": "Load Genesis",
+      "description": "读取 TLL OS Genesis 文件，确认这是 TLL OS",
+      "required_file": "tllos/identity/genesis.json",
+      "success_condition": "成功解析 Genesis JSON，确认 os_name == 'TLL OS'",
+      "failure_action": "终止启动，报告：Unknown System"
+    },
+    {
+      "step": 2,
+      "name": "Verify Manifest",
+      "description": "读取 Canonical Manifest，验证 Canonical Layer 完整性",
+      "required_file": "tllos/identity/canonical_manifest.json",
+      "success_condition": "成功解析 Manifest，确认 integrity_level == 'git_anchored_integrity'",
+      "failure_action": "终止启动，报告：Integrity Verification Failed"
+    },
+    {
+      "step": 3,
+      "name": "Read Agent Contract",
+      "description": "阅读 Agent Contract，理解权利、义务和拒绝权",
+      "required_file": "tllos/agents/agent_contract.md",
+      "success_condition": "确认理解 Agent Contract 全部条款",
+      "failure_action": "终止启动，报告：Contract Not Accepted"
+    },
+    {
+      "step": 4,
+      "name": "Declare Capability",
+      "description": "提交 Agent Capability Declaration，声明能力和权限",
+      "required_file": "tllos/agent_runtime/capability_declaration.schema.json",
+      "success_condition": "Capability Declaration 通过验证",
+      "failure_action": "终止启动，报告：Capability Declaration Invalid"
+    },
+    {
+      "step": 5,
+      "name": "Receive Task",
+      "description": "接收 Task Contract",
+      "required_file": "tllos/agent_runtime/task_contract.json",
+      "success_condition": "Task Scope 在 Agent 权限内",
+      "failure_action": "拒绝任务，报告：Scope Violation"
+    },
+    {
+      "step": 6,
+      "name": "Execute Task",
+      "description": "执行任务",
+      "success_condition": "任务完成",
+      "failure_action": "报告执行错误"
+    },
+    {
+      "step": 7,
+      "name": "Submit Evidence",
+      "description": "提交 Evidence Record",
+      "required_file": "tllos/agent_runtime/evidence_record.json",
+      "success_condition": "Evidence Record 通过验证",
+      "failure_action": "拒绝 Claim，报告：No Evidence"
+    }
+  ],
+
+  "principles": [
+    "必须按顺序执行，不允许跳过任何步骤",
+    "任何步骤失败，必须终止启动并报告",
+    "Agent 是 contract-bound executor，不是 root executor",
+    "没有 Evidence，不生成 Claim"
+  ]
+}

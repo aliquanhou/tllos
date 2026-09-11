@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tllos.dev/schema/agent_runtime/capability_declaration.schema.json",
+  "title": "TLL OS Agent Capability Declaration Schema",
+  "description": "Agent 接入 TLL OS 时必须提交的能力声明格式。Agent 必须显式声明能力，默认无权限。",
+
+  "type": "object",
+  "required": [
+    "agent_id",
+    "agent_type",
+    "available_tools",
+    "permission_scope",
+    "risk_level"
+  ],
+
+  "properties": {
+    "agent_id": {
+      "type": "string",
+      "description": "Agent 唯一标识符"
+    },
+
+    "agent_type": {
+      "type": "string",
+      "enum": ["developer", "architect", "owner", "tool", "external"],
+      "description": "Agent 类型"
+    },
+
+    "available_tools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Agent 可用工具列表"
+    },
+
+    "permission_scope": {
+      "type": "object",
+      "required": ["read", "write", "execute"],
+      "properties": {
+        "read": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["canonical", "evidence", "runtime", "all"]
+          },
+          "description": "可读范围"
+        },
+        "write": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["evidence", "docs", "code", "none"],
+            "description": "可写范围"
+          }
+        },
+        "execute": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["tests", "build", "scripts", "none"]
+          },
+          "description": "可执行范围"
+        }
+      },
+      "description": "权限范围"
+    },
+
+    "risk_level": {
+      "type": "string",
+      "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+      "description": "风险等级"
+    },
+
+    "contract_accepted": {
+      "type": "boolean",
+      "description": "是否接受 Agent Contract"
+    },
+
+    "declaration_date": {
+      "type": "string",
+      "format": "date",
+      "description": "声明日期"
+    }
+  },
+
+  "additionalProperties": true,
+
+  "examples": [
+    {
+      "agent_id": "doubao-a",
+      "agent_type": "developer",
+      "available_tools": ["code_edit", "test_run", "evidence_write"],
+      "permission_scope": {
+        "read": ["canonical", "evidence"],
+        "write": ["evidence", "docs", "code"],
+        "execute": ["tests", "build"]
+      },
+      "risk_level": "MEDIUM",
+      "contract_accepted": true,
+      "declaration_date": "2026-09-11"
+    }
+  ]
+}
