@@ -1,5 +1,5 @@
 {
-  "manifest_version": "1.0.0",
+  "manifest_version": "1.0.1",
   "manifest_date": "2026-09-11",
   "manifest_author": "于秋鸿",
   "manifest_description": "TLL OS Canonical Layer Integrity Manifest — 记录所有 Canonical 文件的 SHA256 hash，用于验证文件完整性和检测未授权修改。本 manifest 自身的完整性由 Git commit 保证。",
@@ -53,7 +53,7 @@
       },
       {
         "path": "tllos/truth/evidence_index.json",
-        "sha256": "7894d1891e10dee6aa0bf8135dfcda8b0bd4396cd81a920a49bc0d6622b00b48",
+        "sha256": "8e48c39c65578af7a4571502402443637208a625082c03bbe4226068a749e554",
         "description": "Evidence 索引（按阶段组织所有 Evidence 文档）"
       }
     ],
@@ -67,6 +67,33 @@
         "path": "tllos/agents/agent_capability.json",
         "sha256": "da5e9ab0aa9d89d8b9d7a3fbfe3acf3e75de6765372aa995a2bc0f4d964f6885",
         "description": "Agent 能力描述"
+      },
+      {
+        "path": "tllos/agents/agent_entry_protocol.json",
+        "sha256": "6f151fd20e3bd383e0be9f297197205bccaddfde6cfb543b827be91235f2c076",
+        "description": "Agent 接入协议（Boot Sequence）"
+      }
+    ],
+    "schema": [
+      {
+        "path": "tllos/schema/genesis.schema.json",
+        "sha256": "b8a688542793aabc0d915101bc4940a336a9c473b3de290872c62b1dbc60d2a0",
+        "description": "Genesis JSON Schema"
+      },
+      {
+        "path": "tllos/schema/manifest.schema.json",
+        "sha256": "c6266cf6f208c1c3a69a2e519b77ae09406560c22900e94b783184c28bf3e041",
+        "description": "Canonical Manifest JSON Schema"
+      },
+      {
+        "path": "tllos/schema/agent_capability.schema.json",
+        "sha256": "3fcdc7e6de7e93e0f6d4c31ae98b20da1ec87a1acf2158e79c5c4ad0e1187f60",
+        "description": "Agent Capability JSON Schema"
+      },
+      {
+        "path": "tllos/schema/evidence.schema.json",
+        "sha256": "69b43419629df38a90525af84d210f35474f919db9146e721b2429133ca16383",
+        "description": "Evidence Index JSON Schema"
       }
     ]
   },
@@ -94,8 +121,8 @@
     {
       "id": "GAP-2",
       "description": "Agent Capability 需要机器可读 Schema（permission / resource / api / risk_level / evidence_required）",
-      "status": "PLANNED",
-      "phase": "P2-03 Agent Runtime"
+      "status": "PARTIALLY ADDRESSED",
+      "phase": "P2-02.2 已创建基础 Schema"
     },
     {
       "id": "GAP-3",

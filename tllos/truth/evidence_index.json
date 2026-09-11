@@ -152,16 +152,52 @@
         },
         {
           "module": "P2-02.1 Canonical Integrity Hardening",
-          "status": "IN PROGRESS",
+          "status": "PASS / READY TO SEAL",
           "evidence_docs": [
             {
               "path": "tllos/identity/canonical_manifest.json",
               "description": "Canonical Integrity Manifest",
-              "commit": "(当前提交)"
+              "commit": "f48c75f / 6e699ce"
             },
             {
               "path": "tllos/truth/evidence_index.json",
               "description": "Evidence 索引",
+              "commit": "f48c75f"
+            }
+          ]
+        },
+        {
+          "module": "P2-02.2 Agent Readiness Hardening",
+          "status": "IN PROGRESS",
+          "evidence_docs": [
+            {
+              "path": "tllos/agents/agent_entry_protocol.json",
+              "description": "Agent 接入协议（Boot Sequence）",
+              "commit": "(当前提交)"
+            },
+            {
+              "path": "tllos/schema/genesis.schema.json",
+              "description": "Genesis JSON Schema",
+              "commit": "(当前提交)"
+            },
+            {
+              "path": "tllos/schema/manifest.schema.json",
+              "description": "Canonical Manifest JSON Schema",
+              "commit": "(当前提交)"
+            },
+            {
+              "path": "tllos/schema/agent_capability.schema.json",
+              "description": "Agent Capability JSON Schema",
+              "commit": "(当前提交)"
+            },
+            {
+              "path": "tllos/schema/evidence.schema.json",
+              "description": "Evidence Index JSON Schema",
+              "commit": "(当前提交)"
+            },
+            {
+              "path": "docs/evidence/P2-02.2-AGENT-READINESS-HARDENING.md",
+              "description": "P2-02.2 Evidence 报告",
               "commit": "(当前提交)"
             }
           ]

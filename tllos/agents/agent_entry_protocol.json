@@ -1,0 +1,133 @@
+{
+  "protocol_name": "TLL OS Agent Entry Protocol",
+  "protocol_version": "1.0.0",
+  "protocol_date": "2026-09-11",
+  "protocol_description": "定义 AI Agent 第一次接入 TLL OS 时必须遵循的完整流程。任何 Agent（Claude / 豆包 / OpenClaw / Codex / 机器人 Agent）接入 TLL OS 前，必须按本协议完成 boot sequence。",
+
+  "boot_sequence": [
+    {
+      "step": 1,
+      "name": "read_genesis",
+      "description": "读取 TLL OS Genesis 文件，确认这是 TLL OS",
+      "file": "tllos/identity/genesis.json",
+      "verification": "检查 os_name == 'TLL OS'，genesis_version 存在",
+      "success_criteria": "确认这是 TLL OS，不是其他系统"
+    },
+    {
+      "step": 2,
+      "name": "verify_manifest",
+      "description": "读取 canonical manifest，验证所有 Canonical 文件完整性",
+      "file": "tllos/identity/canonical_manifest.json",
+      "verification": "对每个 listed file 计算 SHA256，对比 manifest 中记录的 hash",
+      "success_criteria": "所有 hash 匹配，Canonical Layer 未被篡改"
+    },
+    {
+      "step": 3,
+      "name": "read_truth",
+      "description": "读取 Truth Layer，理解 TLL OS 的真实架构和已知限制",
+      "files": [
+        "tllos/truth/architecture.md",
+        "tllos/truth/evidence_rules.md",
+        "tllos/truth/engineering_protocol.md",
+        "tllos/truth/evidence_index.json"
+      ],
+      "verification": "理解：Runtime Core v0 能力边界、A-GAP-1 状态、工程协议",
+      "success_criteria": "知道 TLL OS 能做什么、不能做什么、已知风险是什么"
+    },
+    {
+      "step": 4,
+      "name": "read_contract",
+      "description": "读取 Agent Contract，理解 Agent 的权利和义务",
+      "files": [
+        "tllos/agents/agent_contract.md",
+        "tllos/agents/agent_capability.json"
+      ],
+      "verification": "理解：诚实义务、Evidence 义务、禁止行为、责任分级",
+      "success_criteria": "知道作为 TLL OS Agent 可以做什么、不能做什么"
+    },
+    {
+      "step": 5,
+      "name": "declare_capability",
+      "description": "Agent 声明自己的能力类型和角色",
+      "agent_types": [
+        {
+          "type": "developer",
+          "description": "施工方 Agent，接收施工令，实现功能，提交 Evidence",
+          "permissions": ["feature branch development", "test execution", "evidence documentation", "push to feature branch"],
+          "prohibitions": ["push to main", "self-declare PASS/SEALED", "modify sealed phases"]
+        },
+        {
+          "type": "architect",
+          "description": "审计方 Agent，独立审计代码和 Evidence",
+          "permissions": ["read all code", "run tests independently", "PASS/REQUEST CHANGES decision"],
+          "prohibitions": ["direct code modification"]
+        },
+        {
+          "type": "owner",
+          "description": "裁决方，最终决策权",
+          "permissions": ["final decision on all disputes", "project direction", "priority decision"],
+          "prohibitions": ["micro-management of implementation details"]
+        }
+      ],
+      "success_criteria": "Agent 明确自己的角色、权限、禁止行为"
+    },
+    {
+      "step": 6,
+      "name": "request_task",
+      "description": "Agent 接收施工令，开始执行任务",
+      "verification": "施工令明确：基线 commit、目标、范围、禁止事项",
+      "success_criteria": "Agent 在明确边界内开始施工"
+    }
+  ],
+
+  "entry_requirements": {
+    "must_complete": [
+      "Identity Verification (确认这是 TLL OS)",
+      "Integrity Verification (确认 Canonical Layer 未被篡改)",
+      "Truth Loading (理解架构、规则、已知限制)",
+      "Contract Acceptance (同意遵守 Agent Contract)",
+      "Capability Declaration (声明角色和能力)"
+    ],
+    "prohibited": [
+      "不读 Genesis 就声称了解 TLL OS",
+      "不验证完整性就信任 Canonical Layer",
+      "不读 Truth 就生成 Claim",
+      "不接受 Contract 就开始施工",
+      "不声明角色就跨权操作"
+    ]
+  },
+
+  "verification_protocol": {
+    "description": "Agent 接入 TLL OS 后的持续验证要求",
+    "rules": [
+      "每次生成 Claim 必须提供 Evidence",
+      "每个阶段完成后必须等待独立审计",
+      "已知限制必须如实报告，不得隐瞒",
+      "封板阶段不得随意修改",
+      "发现新的 GAP 必须记录，不得掩盖"
+    ]
+  },
+
+  "exit_protocol": {
+    "description": "Agent 退出 TLL OS 的要求",
+    "rules": [
+      "所有未提交的修改必须 commit 或放弃",
+      "所有 Evidence 必须完整记录",
+      "离开前确认没有遗留未完成的任务",
+      "交接文档必须清晰（如适用）"
+    ]
+  },
+
+  "known_gaps": [
+    {
+      "id": "GAP-1",
+      "description": "数字签名机制未实现（当前仅 Git commit + SHA256 file hash）",
+      "status": "PLANNED"
+    },
+    {
+      "id": "GAP-2",
+      "description": "Agent Capability 机器可读 Schema 未完整实现",
+      "status": "PLANNED"
+    }
+  ]
+}

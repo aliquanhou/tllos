@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tllos.dev/schema/genesis.schema.json",
+  "title": "TLL OS Genesis Schema",
+  "description": "Schema 验证 TLL OS Genesis 文件格式。验证通过即可确认这是 TLL OS。",
+  "type": "object",
+  "required": [
+    "genesis_version",
+    "genesis_date",
+    "os_name",
+    "os_full_name",
+    "os_tagline",
+    "os_description",
+    "language_name",
+    "language_nature",
+    "identity_principles",
+    "architecture_vision",
+    "current_status",
+    "truth_declaration"
+  ],
+  "properties": {
+    "genesis_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Genesis 语义化版本号"
+    },
+    "genesis_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Genesis 日期 YYYY-MM-DD"
+    },
+    "genesis_author": {
+      "type": "string",
+      "description": "Genesis 作者"
+    },
+    "os_name": {
+      "type": "string",
+      "const": "TLL OS",
+      "description": "操作系统名称，必须是 TLL OS"
+    },
+    "os_full_name": {
+      "type": "string",
+      "description": "操作系统全名"
+    },
+    "os_tagline": {
+      "type": "string",
+      "description": "操作系统标语"
+    },
+    "os_description": {
+      "type": "string",
+      "description": "操作系统描述"
+    },
+    "language_name": {
+      "type": "string",
+      "const": "TLL",
+      "description": "编程语言名称，必须是 TLL"
+    },
+    "language_nature": {
+      "type": "string",
+      "description": "编程语言性质描述"
+    },
+    "brand": {
+      "type": "object",
+      "description": "品牌信息"
+    },
+    "identity_principles": {
+      "type": "array",
+      "items": {"type": "string"},
+      "minItems": 1,
+      "description": "身份原则列表"
+    },
+    "architecture_vision": {
+      "type": "object",
+      "properties": {
+        "top_down": {"type": "array", "items": {"type": "string"}},
+        "bottom_up": {"type": "array", "items": {"type": "string"}}
+      },
+      "description": "架构愿景"
+    },
+    "current_status": {
+      "type": "object",
+      "description": "当前项目状态"
+    },
+    "truth_declaration": {
+      "type": "object",
+      "properties": {
+        "what_we_can_claim": {"type": "array", "items": {"type": "string"}},
+        "what_we_cannot_claim": {"type": "array", "items": {"type": "string"}}
+      },
+      "description": "真相声明（能说什么、不能说什么）"
+    },
+    "canonical_integrity": {
+      "type": "object",
+      "properties": {
+        "manifest_path": {"type": "string"},
+        "manifest_algorithm": {"type": "string"},
+        "evidence_index_path": {"type": "string"}
+      },
+      "description": "Canonical 完整性引用"
+    },
+    "github_repository": {
+      "type": "object",
+      "description": "GitHub 仓库信息"
+    }
+  },
+  "additionalProperties": true
+}

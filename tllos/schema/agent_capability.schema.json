@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tllos.dev/schema/agent_capability.schema.json",
+  "title": "TLL OS Agent Capability Schema",
+  "description": "Schema 验证 Agent Capability 文件格式。验证通过即可确认 Agent 能力描述格式正确。",
+  "type": "object",
+  "required": [
+    "capability_protocol_version",
+    "agent_registry",
+    "capabilities_provided_by_tllos",
+    "capabilities_required_from_agents",
+    "current_capability_boundaries"
+  ],
+  "properties": {
+    "capability_protocol_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Capability 协议版本号"
+    },
+    "last_updated": {
+      "type": "string",
+      "format": "date",
+      "description": "最后更新日期"
+    },
+    "agent_registry": {
+      "type": "object",
+      "required": ["agents"],
+      "properties": {
+        "description": {"type": "string"},
+        "agents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "role", "status", "contract_accepted"],
+            "properties": {
+              "name": {"type": "string"},
+              "role": {"type": "string"},
+              "status": {"type": "string", "enum": ["ACTIVE", "INACTIVE", "PENDING"]},
+              "responsibilities": {"type": "array", "items": {"type": "string"}},
+              "permissions": {"type": "array", "items": {"type": "string"}},
+              "prohibitions": {"type": "array", "items": {"type": "string"}},
+              "contract_accepted": {"type": "boolean"}
+            }
+          }
+        }
+      },
+      "description": "Agent 注册表"
+    },
+    "capabilities_provided_by_tllos": {
+      "type": "object",
+      "description": "TLL OS 提供的能力列表"
+    },
+    "capabilities_required_from_agents": {
+      "type": "object",
+      "description": "TLL OS 对接入 Agent 的要求"
+    },
+    "current_capability_boundaries": {
+      "type": "object",
+      "properties": {
+        "supported_use_cases": {"type": "array", "items": {"type": "string"}},
+        "not_supported_use_cases": {"type": "array", "items": {"type": "string"}}
+      },
+      "description": "当前能力边界"
+    },
+    "future_capabilities": {
+      "type": "object",
+      "description": "未来能力规划"
+    },
+    "known_limitations_for_agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "description", "status"],
+        "properties": {
+          "id": {"type": "string"},
+          "severity": {"type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]},
+          "description": {"type": "string"},
+          "status": {"type": "string"},
+          "mitigation": {"type": "string"},
+          "agent_guidance": {"type": "string"}
+        }
+      },
+      "description": "Agent 须知的已知限制"
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tllos.dev/schema/manifest.schema.json",
+  "title": "TLL OS Canonical Manifest Schema",
+  "description": "Schema 验证 Canonical Integrity Manifest 文件格式。验证通过即可确认 Canonical Layer 完整性清单格式正确。",
+  "type": "object",
+  "required": [
+    "manifest_version",
+    "manifest_date",
+    "protocol_version_binding",
+    "integrity_algorithm",
+    "files"
+  ],
+  "properties": {
+    "manifest_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Manifest 语义化版本号"
+    },
+    "manifest_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Manifest 日期"
+    },
+    "manifest_author": {
+      "type": "string",
+      "description": "Manifest 作者"
+    },
+    "manifest_description": {
+      "type": "string",
+      "description": "Manifest 描述"
+    },
+    "protocol_version_binding": {
+      "type": "object",
+      "required": [
+        "canonical_layer_version",
+        "agent_protocol_version",
+        "runtime_protocol_version",
+        "evidence_protocol_version",
+        "runtime_core_commit"
+      ],
+      "properties": {
+        "canonical_layer_version": {"type": "string"},
+        "agent_protocol_version": {"type": "string"},
+        "runtime_protocol_version": {"type": "string"},
+        "evidence_protocol_version": {"type": "string"},
+        "runtime_core_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "runtime_core_status": {"type": "string"}
+      },
+      "description": "协议版本绑定"
+    },
+    "integrity_algorithm": {
+      "type": "string",
+      "enum": ["SHA256", "SHA384", "SHA512"],
+      "description": "完整性校验算法"
+    },
+    "note": {
+      "type": "string",
+      "description": "注意事项"
+    },
+    "files": {
+      "type": "object",
+      "required": ["identity", "truth", "agents"],
+      "properties": {
+        "identity": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "sha256"],
+            "properties": {
+              "path": {"type": "string"},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "description": {"type": "string"}
+            }
+          }
+        },
+        "truth": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "sha256"],
+            "properties": {
+              "path": {"type": "string"},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "description": {"type": "string"}
+            }
+          }
+        },
+        "agents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "sha256"],
+            "properties": {
+              "path": {"type": "string"},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "description": {"type": "string"}
+            }
+          }
+        }
+      },
+      "description": "Canonical 文件清单及 hash"
+    },
+    "integrity_check_instructions": {
+      "type": "object",
+      "description": "完整性验证步骤说明"
+    },
+    "future_enhancements": {
+      "type": "array",
+      "items": {"type": "object"},
+      "description": "未来增强计划"
+    }
+  },
+  "additionalProperties": true
+}

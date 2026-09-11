@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tllos.dev/schema/evidence.schema.json",
+  "title": "TLL OS Evidence Index Schema",
+  "description": "Schema 验证 Evidence Index 文件格式。验证通过即可确认 Evidence 索引格式正确。",
+  "type": "object",
+  "required": ["index_version", "index_date", "phases"],
+  "properties": {
+    "index_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Index 版本号"
+    },
+    "index_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Index 日期"
+    },
+    "index_description": {
+      "type": "string",
+      "description": "Index 描述"
+    },
+    "phases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["phase", "status", "description"],
+        "properties": {
+          "phase": {"type": "string"},
+          "status": {
+            "type": "string",
+            "enum": ["SEALED", "PASS", "CONDITIONAL SEAL", "IN PROGRESS", "PAUSED", "FAILED"]
+          },
+          "description": {"type": "string"},
+          "baseline_commit": {"type": "string"},
+          "evidence_docs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["path", "description", "commit"],
+              "properties": {
+                "path": {"type": "string"},
+                "description": {"type": "string"},
+                "commit": {"type": "string"}
+              }
+            }
+          },
+          "modules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "module": {"type": "string"},
+                "status": {"type": "string"},
+                "evidence_docs": {"type": "array"}
+              }
+            }
+          }
+        }
+      },
+      "description": "按阶段组织的 Evidence 列表"
+    },
+    "known_gaps_index": {
+      "type": "object",
+      "properties": {
+        "A-GAPs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "description", "status"],
+            "properties": {
+              "id": {"type": "string"},
+              "description": {"type": "string"},
+              "status": {"type": "string"},
+              "phase": {"type": "string"},
+              "risk_level": {"type": "string"}
+            }
+          }
+        },
+        "B-GAPs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "description", "status"],
+            "properties": {
+              "id": {"type": "string"},
+              "description": {"type": "string"},
+              "status": {"type": "string"}
+            }
+          }
+        },
+        "Canonical Layer Gaps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "description", "status"],
+            "properties": {
+              "id": {"type": "string"},
+              "description": {"type": "string"},
+              "status": {"type": "string"},
+              "phase": {"type": "string"}
+            }
+          }
+        }
+      },
+      "description": "已知 GAP 索引"
+    }
+  },
+  "additionalProperties": true
+}
