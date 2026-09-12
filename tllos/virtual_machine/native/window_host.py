@@ -253,13 +253,11 @@ class TLLENativeWindowHost:
     def _on_keydown(self, vkey):
         """Handle key down."""
         if vkey == VK_RETURN:
-            # Submit command
             if self.input_buffer.strip() and hasattr(self, 'desktop') and self.desktop:
                 cmd = self.input_buffer.strip()
                 self.desktop.add_chat("user", cmd)
                 self.desktop.log_event(f"主人: {cmd[:20]}")
                 result = self.desktop.submit_command(cmd)
-                # Add agent response
                 thinking = result.get('thinking', '已收到') if result else '已收到'
                 self.desktop.add_chat("agent", f"收到: {thinking[:30]}")
                 self.input_buffer = ""
@@ -268,8 +266,35 @@ class TLLENativeWindowHost:
         elif vkey == VK_BACK:
             self.input_buffer = self.input_buffer[:-1]
             self.user32.InvalidateRect(self.hwnd, None, False)
+        elif vkey == 0x43:  # 'C'
+            # Check if Ctrl is pressed
+            if self.user32.GetKeyState(VK_CONTROL) & 0x8000:
+                self._copy_chat()
         elif vkey == VK_ESCAPE:
             self.running = False
+
+    def _copy_chat(self):
+        """Copy chat history to clipboard."""
+        if not hasattr(self, 'desktop') or not self.desktop:
+            return
+        lines = ["=== TLL OS 聊天记录 ==="]
+        for role, text in self.desktop.chat_history:
+            name = "主人" if role == "user" else "TLL"
+            lines.append(f"{name}: {text}")
+        content = "\n".join(lines)
+        # Copy to clipboard via Win32
+        CF_UNICODETEXT = 13
+        hGlobal = self.kernel32.GlobalAlloc(0x0002, (len(content) + 1) * 2)
+        if not hGlobal:
+            return
+        lpGlobal = self.kernel32.GlobalLock(hGlobal)
+        ctypes.memmove(lpGlobal, content.encode('utf-16-le'), (len(content) + 1) * 2)
+        self.kernel32.GlobalUnlock(hGlobal)
+        if self.user32.OpenClipboard(self.hwnd):
+            self.user32.EmptyClipboard()
+            self.user32.SetClipboardData(CF_UNICODETEXT, hGlobal)
+            self.user32.CloseClipboard()
+            print("Chat copied to clipboard")
 
     def _on_mouse_click(self, wparam, lparam):
         """Handle left mouse click."""
