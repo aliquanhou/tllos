@@ -20,6 +20,9 @@ from .recovery_manager import TLLRecoveryManager, Checkpoint
 from .agent_spawner import TLLAgentSpawner, AgentRecord
 from .world_model import TLLWorldModel, WorldObject
 from .constitution import TLLAgentConstitution, ConstitutionalRule
+from .experience_memory import TLLExperienceMemory, Experience
+from .constitution_learning import TLLConstitutionLearning, RuleProposal
+from .family_protocol import TLLAgentFamilyProtocol, AgentFamilyRelation
 from .agent_boot import TLLAgent
 
 __all__ = [
@@ -38,5 +41,8 @@ __all__ = [
     "TLLAgentSpawner", "AgentRecord",
     "TLLWorldModel", "WorldObject",
     "TLLAgentConstitution", "ConstitutionalRule",
+    "TLLExperienceMemory", "Experience",
+    "TLLConstitutionLearning", "RuleProposal",
+    "TLLAgentFamilyProtocol", "AgentFamilyRelation",
     "TLLAgent",
 ]
