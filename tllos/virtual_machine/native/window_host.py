@@ -105,6 +105,7 @@ class TLLENativeWindowHost:
         self.hwnd = None
         self.running = False
         self.input_buffer = ""
+        self.input_focused = True
         self.input_callback = on_command_callback
 
         # Persistent WNDPROC callback (prevent GC from freeing it)
@@ -264,22 +265,32 @@ class TLLENativeWindowHost:
 
     def _on_mouse_click(self, wparam, lparam):
         """Handle left mouse click."""
-        # Extract x, y from lparam
         x = lparam & 0xFFFF
         y = (lparam >> 16) & 0xFFFF
         if x >= 32768: x -= 65536
         if y >= 32768: y -= 65536
 
-        print(f"Mouse click at ({x}, {y})")
-
         # Check button clicks
+        clicked = False
         if hasattr(self, 'desktop') and self.desktop and hasattr(self.desktop, 'buttons'):
             for label, bx, by, bw, bh in self.desktop.buttons:
                 if bx <= x <= bx + bw and by <= y <= by + bh:
-                    print(f"Button clicked: {label}")
                     self._handle_button(label)
-                    self.user32.InvalidateRect(self.hwnd, None, True)
+                    clicked = True
                     break
+
+        # If not a button click, check if clicked in input area
+        if not clicked and hasattr(self, 'desktop') and self.desktop:
+            # Input bar is at bottom: y = height - 56 to height - 16
+            if y > self.height - 60:
+                # Focus input
+                print(f"Input focused at ({x}, {y})")
+                self.input_focused = True
+                self.user32.SetFocus(self.hwnd)
+            else:
+                self.input_focused = False
+
+        self.user32.InvalidateRect(self.hwnd, None, False)
 
     def _handle_button(self, label: str):
         """Handle button click action."""

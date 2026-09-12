@@ -185,9 +185,9 @@ class TLLExecutionDesktop:
                     *text_sec, size='small')
 
         # === Bottom: Input bar ===
-        iy = self.height - 56
-        ih = 40
-        self.fb.fill_rect(rx, iy, rw, ih, *panel)
+        iy = self.height - 60
+        ih = 44
+        self.fb.fill_rect(rx, iy, rw, ih, 30, 40, 60)
         self.fb.draw_rect(rx, iy, rw, ih, *primary)
 
         input_text = ""
@@ -195,16 +195,17 @@ class TLLExecutionDesktop:
             input_text = self._window_input
 
         if input_text:
-            self.text_renderer.draw_text(rx + 16, iy + 12, input_text, *text_pri, size='small')
+            self.text_renderer.draw_text(rx + 16, iy + 14, input_text, *text_pri, size='medium')
         else:
-            self.text_renderer.draw_text(rx + 16, iy + 12, "输入指令，按 Enter 发送...", *text_mute, size='small')
+            self.text_renderer.draw_text(rx + 16, iy + 14, "输入指令，按 Enter 发送...", *text_mute, size='medium')
 
-        # Send button
-        btn_x = rx + rw - 44
-        self.fb.fill_rect(btn_x, iy + 4, 36, 32, *alive)
-        self.text_renderer.draw_text(btn_x + 10, iy + 12, "↑", *panel, size='small')
+        # Send button - bigger and clearer
+        btn_x = rx + rw - 52
+        self.fb.fill_rect(btn_x, iy + 5, 44, 34, *alive)
+        self.fb.draw_rect(btn_x, iy + 5, 44, 34, 0, 150, 80)
+        self.text_renderer.draw_text(btn_x + 12, iy + 13, "发送", 5, 8, 18, size='small')
 
-        self.buttons = [("send", btn_x, iy + 4, 36, 32)]
+        self.buttons = [("send", btn_x, iy + 5, 44, 34)]
 
         self.fb.commit()
         frame_hash = self.fb.buffer_hash
