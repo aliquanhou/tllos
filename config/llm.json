@@ -1,5 +1,5 @@
 {
-  "api_key": "",
-  "base_url": "https://ark.cn-beijing.volces.com/api/v3/chat/completions",
-  "model": "doubao-pro-4k"
+  "api_key": "sk-79a31de7771141d09b588e8a016a4e61",
+  "base_url": "https://api.deepseek.com/v1/chat/completions",
+  "model": "deepseek-chat"
 }
