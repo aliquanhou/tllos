@@ -1,0 +1,33 @@
+{
+  "plan_id": "plan-20260912-131523-354896",
+  "goal_id": "goal-20260912-131523-354721",
+  "steps": [
+    {
+      "step_id": "step-1",
+      "action_type": "OPEN_APP",
+      "target": "notepad",
+      "status": "PENDING"
+    },
+    {
+      "step_id": "step-2",
+      "action_type": "TYPE_TEXT",
+      "target": "notepad",
+      "parameters": {
+        "text": "Hello TLL"
+      },
+      "status": "PENDING"
+    },
+    {
+      "step_id": "step-3",
+      "action_type": "VERIFY",
+      "target": "screen",
+      "parameters": {
+        "check": "Hello TLL visible"
+      },
+      "status": "PENDING"
+    }
+  ],
+  "current_step": 0,
+  "status": "CREATED",
+  "schema_version": "1.0"
+}

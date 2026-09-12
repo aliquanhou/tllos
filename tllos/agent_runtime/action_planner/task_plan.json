@@ -1,0 +1,17 @@
+{
+  "plan_id": "",
+  "goal_id": "",
+  "steps": [
+    {
+      "step_id": "",
+      "action_type": "",
+      "target": "",
+      "parameters": {},
+      "status": "PENDING",
+      "evidence_ref": ""
+    }
+  ],
+  "current_step": 0,
+  "status": "CREATED",
+  "schema_version": "1.0"
+}

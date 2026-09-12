@@ -1,0 +1,13 @@
+{
+  "goal_id": "goal-20260912-131523-354721",
+  "objective": "Open notepad and type Hello TLL",
+  "constraints": [
+    "no_admin",
+    "no_save"
+  ],
+  "success_condition": "text Hello TLL visible in notepad",
+  "risk_level": "MEDIUM",
+  "approval_required": false,
+  "status": "CREATED",
+  "schema_version": "1.0"
+}

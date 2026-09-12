@@ -1,0 +1,16 @@
+{
+  "grounding_id": "",
+  "target_description": "",
+  "matched_objects": [
+    {
+      "object_id": "",
+      "type": "",
+      "position": {},
+      "confidence": 0.0,
+      "match_reason": ""
+    }
+  ],
+  "selected_object": "",
+  "confidence_threshold": 0.5,
+  "schema_version": "1.0"
+}

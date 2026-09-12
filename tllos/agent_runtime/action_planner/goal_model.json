@@ -1,0 +1,10 @@
+{
+  "goal_id": "",
+  "objective": "",
+  "constraints": [],
+  "success_condition": "",
+  "risk_level": "LOW",
+  "approval_required": false,
+  "status": "CREATED",
+  "schema_version": "1.0"
+}
