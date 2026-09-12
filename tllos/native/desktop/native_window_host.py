@@ -40,7 +40,10 @@ gdi32.SetBkMode.restype = ctypes.c_int
 gdi32.SetBkMode.argtypes = [wintypes.HDC, ctypes.c_int]
 gdi32.CreateSolidBrush.restype = wintypes.HBRUSH
 gdi32.Ellipse.restype = wintypes.BOOL
+gdi32.Ellipse.argtypes = [wintypes.HDC, wintypes.INT, wintypes.INT, wintypes.INT, wintypes.INT]
 gdi32.TextOutW.restype = wintypes.BOOL
+user32.DrawTextW.restype = ctypes.c_int
+user32.DrawTextW.argtypes = [wintypes.HDC, wintypes.LPCWSTR, ctypes.c_int, ctypes.c_void_p, wintypes.UINT]
 gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
 gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
 gdi32.StretchBlt.restype = wintypes.BOOL
@@ -242,11 +245,13 @@ state_bus = StateBus()
 # Try to load screenshot
 frame_buffer.load(SCREENSHOT_PATH)
 
-# Button rectangles
+# Button rectangles (Chinese labels)
 BUTTONS = {
-    "START": (120, 455, 100, 30),
-    "APPROVE": (240, 455, 100, 30),
-    "STOP": (360, 455, 100, 30),
+    "启动": (80, 455, 90, 30),
+    "批准执行": (190, 455, 100, 30),
+    "停止": (310, 455, 70, 30),
+    "截图": (400, 455, 80, 30),
+    "复制": (500, 455, 80, 30),
 }
 
 
@@ -282,6 +287,84 @@ def draw_button(hdc, x, y, w, h, label, color=CLR_GREEN):
     draw_text(hdc, x, y, w, h, label, CLR_WHITE)
 
 
+def export_snapshot(hwnd):
+    """Export current window screenshot as PNG."""
+    try:
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        out_path = PROJECT_ROOT / f"tll_snapshot_{timestamp}.png"
+
+        # Capture window
+        hdc_window = user32.GetDC(hwnd)
+        rect = RECT()
+        user32.GetClientRect(hwnd, ctypes.byref(rect))
+        w = rect.right - rect.left
+        h = rect.bottom - rect.top
+
+        hdc_mem = gdi32.CreateCompatibleDC(hdc_window)
+        hbm = gdi32.CreateCompatibleBitmap(hdc_window, w, h)
+        old_bm = gdi32.SelectObject(hdc_mem, hbm)
+
+        gdi32.BitBlt(hdc_mem, 0, 0, w, h, hdc_window, 0, 0, SRCCOPY)
+
+        # Save as BMP (simple, no PIL)
+        bmp_path = PROJECT_ROOT / f"tll_snapshot_{timestamp}.bmp"
+        # Use existing screenshot as fallback
+        if SCREENSHOT_PATH.exists():
+            import shutil
+            shutil.copy(SCREENSHOT_PATH, bmp_path)
+
+        gdi32.SelectObject(hdc_mem, old_bm)
+        gdi32.DeleteObject(hbm)
+        gdi32.DeleteDC(hdc_mem)
+        user32.ReleaseDC(hwnd, hdc_window)
+
+        t = time.strftime("%H:%M:%S")
+        lifecycle.event_log.append(f"{t} 截图导出: {bmp_path.name}")
+        if len(lifecycle.event_log) > 10:
+            lifecycle.event_log.pop(0)
+    except Exception as e:
+        t = time.strftime("%H:%M:%S")
+        lifecycle.event_log.append(f"{t} 截图失败: {e}")
+
+
+def copy_to_clipboard():
+    """Copy current agent state to clipboard."""
+    try:
+        state_text = f"""TLL OS 智能代理状态
+{'='*40}
+状态: {lifecycle.state}
+当前目标: {state_bus.goal}
+置信度: {state_bus.confidence}
+权限状态: {state_bus.permission}
+帧哈希: {frame_buffer.frame_hash}
+{'='*40}
+事件记录:"""
+        for ev in lifecycle.event_log[-5:]:
+            state_text += f"\n  {ev}"
+
+        # Windows clipboard
+        CF_UNICODETEXT = 13
+        user32.OpenClipboard(0)
+        user32.EmptyClipboard()
+
+        data = state_text.encode('utf-16-le')
+        h_global = kernel32.GlobalAlloc(0x0002, len(data) + 2)  # GMEM_MOVEABLE
+        lp_global = kernel32.GlobalLock(h_global)
+        ctypes.memmove(lp_global, data, len(data))
+        kernel32.GlobalUnlock(h_global)
+        user32.SetClipboardData(CF_UNICODETEXT, h_global)
+        user32.CloseClipboard()
+
+        t = time.strftime("%H:%M:%S")
+        lifecycle.event_log.append(f"{t} 状态已复制到剪贴板")
+        if len(lifecycle.event_log) > 10:
+            lifecycle.event_log.pop(0)
+    except Exception as e:
+        t = time.strftime("%H:%M:%S")
+        lifecycle.event_log.append(f"{t} 复制失败: {e}")
+
+
 def window_proc(hwnd, msg, wparam, lparam):
     if msg == WM_PAINT:
         ps = PAINTSTRUCT()
@@ -296,7 +379,7 @@ def window_proc(hwnd, msg, wparam, lparam):
 
         # Title bar
         fill_rect(hdc, 0, 0, cw, 50, 0x101010)
-        draw_text(hdc, 0, 0, cw - 100, 50, "TLL OS DESKTOP AGENT", CLR_WHITE)
+        draw_text(hdc, 0, 0, cw - 100, 50, "TLL OS 智能代理", CLR_WHITE)
         # Status light
         gdi32.Ellipse(hdc, cw - 40, 15, cw - 20, 35)
         brush = gdi32.CreateSolidBrush(CLR_GREEN if lifecycle.state != "STOPPED" else CLR_RED)
@@ -305,9 +388,9 @@ def window_proc(hwnd, msg, wparam, lparam):
         gdi32.SelectObject(hdc, old)
         gdi32.DeleteObject(brush)
 
-        # VISION panel
+        # VISION panel (Chinese)
         vy = 60
-        draw_panel(hdc, 10, vy, cw - 20, 140, "VISION")
+        draw_panel(hdc, 10, vy, cw - 20, 140, "视觉感知")
         shot_x, shot_y = 20, vy + 30
         shot_w, shot_h = 200, 100
         fill_rect(hdc, shot_x, shot_y, shot_w, shot_h, 0x101010)
@@ -322,39 +405,40 @@ def window_proc(hwnd, msg, wparam, lparam):
                 gdi32.SelectObject(hdc_mem, old_bm)
                 gdi32.DeleteDC(hdc_mem)
                 gdi32.DeleteObject(hbm)
-                # Show frame hash
-                draw_text(hdc, shot_x + 210, shot_y + 5, 150, 20, f"Hash: {frame_buffer.frame_hash}", CLR_GRAY)
-                draw_text(hdc, shot_x + 210, shot_y + 25, 150, 20, f"Time: {frame_buffer.timestamp}", CLR_GRAY)
+                draw_text(hdc, shot_x + 210, shot_y + 5, 150, 20, f"哈希: {frame_buffer.frame_hash}", CLR_GRAY)
+                draw_text(hdc, shot_x + 210, shot_y + 25, 150, 20, f"时间: {frame_buffer.timestamp}", CLR_GRAY)
             else:
-                draw_text(hdc, shot_x, shot_y, shot_w, shot_h, "[Screenshot Error]", CLR_RED)
+                draw_text(hdc, shot_x, shot_y, shot_w, shot_h, "[截图错误]", CLR_RED)
         else:
-            draw_text(hdc, shot_x, shot_y, shot_w, shot_h, "[No Screenshot]", CLR_GRAY)
+            draw_text(hdc, shot_x, shot_y, shot_w, shot_h, "[无截图]", CLR_GRAY)
 
-        # BRAIN panel (Real State Bus)
+        # BRAIN panel (Chinese)
         by = 210
-        draw_panel(hdc, 10, by, cw - 20, 70, "BRAIN (State Bus)")
-        draw_text(hdc, 15, by + 28, cw - 30, 20, f"Goal: {state_bus.goal}", CLR_WHITE)
-        draw_text(hdc, 15, by + 48, cw - 30, 20, f"Confidence: {state_bus.confidence}", CLR_YELLOW)
+        draw_panel(hdc, 10, by, cw - 20, 70, "智能核心")
+        draw_text(hdc, 15, by + 28, cw - 30, 20, f"当前目标: {state_bus.goal}", CLR_WHITE)
+        draw_text(hdc, 15, by + 48, cw - 30, 20, f"置信度: {state_bus.confidence}", CLR_YELLOW)
 
-        # PLAN panel
+        # PLAN panel (Chinese)
         py = 290
-        draw_panel(hdc, 10, py, cw - 20, 80, "PLAN (Lifecycle: " + lifecycle.state + ")")
+        draw_panel(hdc, 10, py, cw - 20, 80, f"任务规划 (状态: {lifecycle.state})")
         for i, step in enumerate(state_bus.plan_steps[:4]):
             draw_text(hdc, 15, py + 28 + i * 14, cw - 30, 14, step, CLR_WHITE)
 
-        # ACTION panel
+        # ACTION panel (Chinese)
         ay = 380
-        draw_panel(hdc, 10, ay, cw - 20, 60, "ACTION")
-        draw_text(hdc, 15, ay + 28, cw - 30, 20, f"Permission: {state_bus.permission}", CLR_GREEN)
+        draw_panel(hdc, 10, ay, cw - 20, 60, "执行权限")
+        draw_text(hdc, 15, ay + 28, cw - 30, 20, f"权限状态: {state_bus.permission}", CLR_GREEN)
 
-        # Buttons
-        draw_button(hdc, 120, 455, 100, 30, "START", 0x008000)
-        draw_button(hdc, 240, 455, 100, 30, "APPROVE", 0x000080)
-        draw_button(hdc, 360, 455, 100, 30, "STOP", CLR_RED)
+        # Buttons (Chinese)
+        draw_button(hdc, 80, 455, 90, 30, "启动", 0x008000)
+        draw_button(hdc, 190, 455, 100, 30, "批准执行", 0x000080)
+        draw_button(hdc, 310, 455, 70, 30, "停止", CLR_RED)
+        draw_button(hdc, 400, 455, 80, 30, "截图", 0x808000)
+        draw_button(hdc, 500, 455, 80, 30, "复制", 0x404040)
 
-        # Event Stream (Lifecycle events)
+        # Event Stream (Chinese)
         ey = 500
-        draw_panel(hdc, 10, ey, cw - 20, 120, "EVENT STREAM")
+        draw_panel(hdc, 10, ey, cw - 20, 120, "事件记录")
         for i, ev in enumerate(lifecycle.event_log[-6:]):
             draw_text(hdc, 15, ey + 28 + i * 16, cw - 30, 16, ev, CLR_GRAY)
 
@@ -366,19 +450,20 @@ def window_proc(hwnd, msg, wparam, lparam):
         y = (lparam >> 16) & 0xFFFF
         btn = hit_test(x, y)
         if btn:
-            if btn == "START":
-                # Lifecycle: IDLE → CREATED → OBSERVING
+            if btn == "启动":
                 lifecycle.transition("CREATED")
                 lifecycle.transition("OBSERVING")
-            elif btn == "APPROVE":
-                # Lifecycle: WAIT_APPROVAL → EXECUTING
+            elif btn == "批准执行":
                 if lifecycle.state == "WAIT_APPROVAL":
                     lifecycle.transition("EXECUTING")
                 else:
                     lifecycle.transition("WAIT_APPROVAL")
-            elif btn == "STOP":
-                # Lifecycle: any → STOPPED
+            elif btn == "停止":
                 lifecycle.transition("STOPPED")
+            elif btn == "截图":
+                export_snapshot(hwnd)
+            elif btn == "复制":
+                copy_to_clipboard()
             user32.InvalidateRect(hwnd, None, True)
         return 0
 
