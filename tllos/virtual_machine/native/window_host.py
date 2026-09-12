@@ -181,6 +181,9 @@ class TLLENativeWindowHost:
             elif msg == WM_CHAR:
                 self._on_char(wparam)
                 return 0
+            elif msg == 0x0286:  # WM_IME_CHAR
+                self._on_char(wparam)
+                return 0
             elif msg == WM_DESTROY:
                 self.running = False
                 self.user32.PostQuitMessage(0)
@@ -242,8 +245,8 @@ class TLLENativeWindowHost:
             self.user32.EndPaint(hwnd, ctypes.byref(ps))
 
     def _on_char(self, char_code):
-        """Handle char input."""
-        if 32 <= char_code <= 126:  # Printable ASCII
+        """Handle char input (Unicode)."""
+        if char_code >= 32:  # All printable Unicode (Chinese, etc.)
             self.input_buffer += chr(char_code)
             self.user32.InvalidateRect(self.hwnd, None, False)
 
