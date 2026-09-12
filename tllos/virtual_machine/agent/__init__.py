@@ -18,6 +18,8 @@ from .agent_self import TLLAgentSelf, AgentSelfState
 from .risk_evaluator import TLLActionRiskEvaluator, RiskAssessment
 from .recovery_manager import TLLRecoveryManager, Checkpoint
 from .agent_spawner import TLLAgentSpawner, AgentRecord
+from .world_model import TLLWorldModel, WorldObject
+from .constitution import TLLAgentConstitution, ConstitutionalRule
 from .agent_boot import TLLAgent
 
 __all__ = [
@@ -34,5 +36,7 @@ __all__ = [
     "TLLActionRiskEvaluator", "RiskAssessment",
     "TLLRecoveryManager", "Checkpoint",
     "TLLAgentSpawner", "AgentRecord",
+    "TLLWorldModel", "WorldObject",
+    "TLLAgentConstitution", "ConstitutionalRule",
     "TLLAgent",
 ]
