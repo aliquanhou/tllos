@@ -190,6 +190,12 @@ class TLLENativeWindowHost:
             elif msg == WM_LBUTTONDOWN:
                 self._on_mouse_click(wparam, lparam)
                 return 0
+            elif msg == WM_TIMER:
+                # Timer: update desktop render
+                if hasattr(self, 'desktop') and self.desktop:
+                    self.desktop.render()
+                    self.user32.InvalidateRect(self.hwnd, None, False)
+                return 0
         except Exception as e:
             print(f"WndProc error: {e}")
             return 0
@@ -276,14 +282,18 @@ class TLLENativeWindowHost:
         if label == "停止":
             self.running = False
             self.user32.PostQuitMessage(0)
-        elif label == "启动":
-            if self.desktop:
+            return
+
+        if self.desktop:
+            if label == "启动":
                 self.desktop.submit_command("启动代理")
-        elif label == "批准":
-            if self.desktop:
+            elif label == "批准":
                 self.desktop.submit_command("批准执行")
-        elif label == "暂停":
-            print("暂停按钮")
+            elif label == "暂停":
+                print("暂停")
+            # Re-render immediately
+            self.desktop.render()
+            self.user32.InvalidateRect(self.hwnd, None, False)
 
     def create_window(self):
         """Create the native window."""
@@ -320,13 +330,18 @@ class TLLENativeWindowHost:
 
         print("TLL OS Window Loop: Started")
 
+        # Initial render
+        if hasattr(self, 'desktop') and self.desktop:
+            self.desktop.render()
+
+        # Set timer for periodic UI update (500ms)
+        self.user32.SetTimer(self.hwnd, 1, 500, None)
+
         while self.running:
-            # Use PeekMessageW with no argtypes override (safest)
             bRet = self.user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 1)
 
             if bRet == 0:
-                # No message - sleep briefly
-                time.sleep(0.03)
+                time.sleep(0.01)
                 continue
 
             if msg.message == 0x0012:  # WM_QUIT
