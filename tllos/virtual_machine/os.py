@@ -12,6 +12,8 @@ from typing import List, Dict, Optional
 from .virtual_hardware import VirtualHardware
 from .window_manager import TLLWindowManager
 from .renderer import TLLRenderer, TLLDisplayBuffer
+from .framebuffer import TLLFramebuffer
+from .desktop_surface import TLLDesktopSurface
 
 
 @dataclass
@@ -31,6 +33,8 @@ class TLLOSVirtualMachine:
         self.window_manager: Optional[TLLWindowManager] = None
         self.renderer: Optional[TLLRenderer] = None
         self.display_buffer: Optional[TLLDisplayBuffer] = None
+        self.framebuffer: Optional[TLLFramebuffer] = None
+        self.desktop_surface: Optional[TLLDesktopSurface] = None
         self.boot_steps: List[BootStep] = []
         self.boot_time: Optional[float] = None
         self.state: str = "POWERED_OFF"
@@ -50,6 +54,11 @@ class TLLOSVirtualMachine:
         self.window_manager = TLLWindowManager(self.hardware.display)
         self.renderer = TLLRenderer(self.hardware.display, self.window_manager)
         self.display_buffer = TLLDisplayBuffer(self.hardware.display)
+        self.framebuffer = TLLFramebuffer(
+            width=self.hardware.display.width,
+            height=self.hardware.display.height
+        )
+        self.desktop_surface = TLLDesktopSurface(self.framebuffer)
         self._complete_step(2, "OK")
 
         # Step 3: Window Manager
@@ -62,9 +71,10 @@ class TLLOSVirtualMachine:
         )
         self._complete_step(3, "OK")
 
-        # Step 4: Renderer
-        self._add_step(4, "Renderer")
+        # Step 4: Renderer + Desktop Surface
+        self._add_step(4, "Renderer + Desktop Surface")
         render_result = self.display_buffer.commit(self.renderer)
+        desktop_result = self.desktop_surface.render_desktop()
         self._complete_step(4, "OK")
 
         # Step 5: Agent Core
@@ -84,6 +94,7 @@ class TLLOSVirtualMachine:
             "boot_time_s": round(time.time() - self.boot_time, 3),
             "hardware": hw_result,
             "render": render_result,
+            "desktop": desktop_result,
             "windows": self.window_manager.get_windows() if self.window_manager else [],
             "boot_steps": [
                 {"step": s.step, "name": s.name, "status": s.status,

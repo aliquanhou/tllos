@@ -9,6 +9,8 @@ No dependency on Windows API or external GUI frameworks.
 from .virtual_hardware import VirtualHardware, VirtualCPU, VirtualMemory, VirtualDisplay, VirtualInput, VirtualStorage
 from .window_manager import TLLWindowManager, TLLWindow
 from .renderer import TLLRenderer, TLLDisplayBuffer, DisplayFrame
+from .framebuffer import TLLFramebuffer
+from .desktop_surface import TLLDesktopSurface
 from .os import TLLOSVirtualMachine
 
 __version__ = "0.1.0"
@@ -17,5 +19,6 @@ __all__ = [
     "VirtualDisplay", "VirtualInput", "VirtualStorage",
     "TLLWindowManager", "TLLWindow",
     "TLLRenderer", "TLLDisplayBuffer", "DisplayFrame",
+    "TLLFramebuffer", "TLLDesktopSurface",
     "TLLOSVirtualMachine",
 ]
