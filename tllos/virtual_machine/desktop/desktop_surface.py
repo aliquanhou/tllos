@@ -59,6 +59,7 @@ class TLLExecutionDesktop:
         self.frame_count = 0
         self.start_time = time.time()
         self.event_log = []  # [(timestamp, message)]
+        self.chat_history = []  # [("user"/"agent", text)]
 
     def log_event(self, msg: str):
         """Log an event to the visible event stream."""
@@ -66,6 +67,12 @@ class TLLExecutionDesktop:
         self.event_log.append((ts, msg))
         if len(self.event_log) > 8:
             self.event_log = self.event_log[-8:]
+
+    def add_chat(self, role: str, text: str):
+        """Add a chat message to history."""
+        self.chat_history.append((role, text))
+        if len(self.chat_history) > 10:
+            self.chat_history = self.chat_history[-10:]
 
     def render(self) -> Dict:
         """Render TLL Agent Reality Console."""
@@ -139,58 +146,25 @@ class TLLExecutionDesktop:
         self.fb.fill_rect(rx, ry, rw, self.height - ry - 70, *panel)
         self.fb.draw_rect(rx, ry, rw, self.height - ry - 70, *primary)
 
-        self.text_renderer.draw_text(rx + 16, ry + 10, "COGNITIVE STREAM", *primary, size='medium')
+        self.text_renderer.draw_text(rx + 16, ry + 10, "对话", *primary, size='medium')
 
-        # Cognitive steps
-        cy = ry + 40
-        if self.live_loop:
-            status = self.live_loop.get_status()
-            goal = status.get('goal') or '等待指令'
-            thinking = status.get('thinking') or '空闲'
-
-            # Step 1: Goal
-            self.text_renderer.draw_text(rx + 16, cy, "● 目标", *alive, size='small')
-            self.text_renderer.draw_text(rx + 120, cy, goal, *text_pri, size='small')
-            cy += 24
-
-            # Step 2: Understanding
-            self.text_renderer.draw_text(rx + 16, cy, "● 思考", *primary, size='small')
-            self.text_renderer.draw_text(rx + 120, cy, thinking, *text_sec, size='small')
-            cy += 24
-
-            # Step 3: Plan
-            self.text_renderer.draw_text(rx + 16, cy, "● 计划", *creation, size='small')
-            cy += 20
-            if self.live_loop.current_plan:
-                for i, step in enumerate(self.live_loop.current_plan[:5]):
-                    done = i < self.live_loop.current_step
-                    mark = "✓" if done else "○"
-                    c = alive if done else text_mute
-                    self.text_renderer.draw_text(rx + 130, cy, f"{mark} {step}", *c, size='small')
-                    cy += 18
-            else:
-                self.text_renderer.draw_text(rx + 130, cy, "（暂无计划）", *text_mute, size='small')
-                cy += 18
-            cy += 6
-
-            # Step 4: Risk
-            self.text_renderer.draw_text(rx + 16, cy, "● 风险", *warn, size='small')
-            risk_level = "LOW"
-            if self.approval_gate and self.approval_gate.has_pending():
-                req = self.approval_gate.get_pending()[0]
-                risk_level = req.risk_level
-                self.text_renderer.draw_text(rx + 120, cy, f"等待批准: {req.action[:20]}", *warn, size='small')
-            else:
-                self.text_renderer.draw_text(rx + 120, cy, "无待处理", *text_sec, size='small')
-            cy += 24
-
-            # Step 5: Evidence
-            self.text_renderer.draw_text(rx + 16, cy, "● 证据", *alive, size='small')
-            if self.evidence_system:
-                stats = self.evidence_system.get_stats()
-                self.text_renderer.draw_text(rx + 120, cy,
-                    f"记录: {stats['total_records']} | 已批准: {stats['approved_count']}",
-                    *text_sec, size='small')
+        # Chat history
+        cy = ry + 36
+        if self.chat_history:
+            for role, text in self.chat_history[-6:]:
+                if role == "user":
+                    # User message - right aligned
+                    self.text_renderer.draw_text(rx + 200, cy, f"主人: {text[:40]}", *alive, size='small')
+                else:
+                    # Agent message - left aligned
+                    self.text_renderer.draw_text(rx + 16, cy, f"代理: {text[:40]}", *text_pri, size='small')
+                cy += 22
+        else:
+            # Welcome message
+            self.text_renderer.draw_text(rx + 16, cy, "TLL OS 智能代理已就绪", *text_sec, size='medium')
+            cy += 28
+            self.text_renderer.draw_text(rx + 16, cy, "在下方输入指令开始对话", *text_mute, size='small')
+            cy += 28
 
         # === Event Stream ===
         ey = ry + rw - 180

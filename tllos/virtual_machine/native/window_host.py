@@ -253,9 +253,14 @@ class TLLENativeWindowHost:
             # Submit command
             if self.input_buffer.strip() and hasattr(self, 'desktop') and self.desktop:
                 cmd = self.input_buffer.strip()
-                self.desktop.log_event(f"回车发送: {cmd[:30]}")
-                self.desktop.submit_command(cmd)
+                self.desktop.add_chat("user", cmd)
+                self.desktop.log_event(f"主人: {cmd[:20]}")
+                result = self.desktop.submit_command(cmd)
+                # Add agent response
+                thinking = result.get('thinking', '已收到') if result else '已收到'
+                self.desktop.add_chat("agent", f"收到: {thinking[:30]}")
                 self.input_buffer = ""
+                self.desktop.render()
                 self.user32.InvalidateRect(self.hwnd, None, False)
         elif vkey == VK_BACK:
             self.input_buffer = self.input_buffer[:-1]
@@ -301,8 +306,11 @@ class TLLENativeWindowHost:
             # Submit input buffer
             if self.input_buffer.strip():
                 cmd = self.input_buffer.strip()
-                self.desktop.log_event(f"发送: {cmd[:30]}")
-                self.desktop.submit_command(cmd)
+                self.desktop.add_chat("user", cmd)
+                self.desktop.log_event(f"发送: {cmd[:20]}")
+                result = self.desktop.submit_command(cmd)
+                thinking = result.get('thinking', '已收到') if result else '已收到'
+                self.desktop.add_chat("agent", f"收到: {thinking[:30]}")
                 self.input_buffer = ""
                 self.desktop.render()
                 self.user32.InvalidateRect(self.hwnd, None, False)
