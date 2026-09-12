@@ -257,9 +257,11 @@ class TLLENativeWindowHost:
                 cmd = self.input_buffer.strip()
                 self.desktop.add_chat("user", cmd)
                 self.desktop.log_event(f"主人: {cmd[:20]}")
-                result = self.desktop.submit_command(cmd)
-                thinking = result.get('thinking', '已收到') if result else '已收到'
-                self.desktop.add_chat("agent", f"收到: {thinking[:30]}")
+                # Get real reply from LLM bridge
+                reply = "收到"
+                if hasattr(self.desktop, 'llm_bridge') and self.desktop.llm_bridge:
+                    reply = self.desktop.llm_bridge.chat(cmd)
+                self.desktop.add_chat("agent", reply)
                 self.input_buffer = ""
                 self.desktop.render()
                 self.user32.InvalidateRect(self.hwnd, None, False)
@@ -328,14 +330,14 @@ class TLLENativeWindowHost:
             return
 
         if label == "send":
-            # Submit input buffer
             if self.input_buffer.strip():
                 cmd = self.input_buffer.strip()
                 self.desktop.add_chat("user", cmd)
                 self.desktop.log_event(f"发送: {cmd[:20]}")
-                result = self.desktop.submit_command(cmd)
-                thinking = result.get('thinking', '已收到') if result else '已收到'
-                self.desktop.add_chat("agent", f"收到: {thinking[:30]}")
+                reply = "收到"
+                if hasattr(self.desktop, 'llm_bridge') and self.desktop.llm_bridge:
+                    reply = self.desktop.llm_bridge.chat(cmd)
+                self.desktop.add_chat("agent", reply)
                 self.input_buffer = ""
                 self.desktop.render()
                 self.user32.InvalidateRect(self.hwnd, None, False)
