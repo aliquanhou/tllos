@@ -2,16 +2,16 @@
 """
 TLL OS Desktop Package
 
-Reality Control Center with Agent Live Loop.
+Execution Desktop with full agent pipeline.
 """
 
 from .theme.theme import TLLFlatTheme
 from .layout.layout_manager import TLLLayoutManager, PanelRect
-from .desktop_surface import TLLControlCenterDesktop
+from .desktop_surface import TLLExecutionDesktop
 
 __all__ = [
     "TLLFlatTheme",
     "TLLLayoutManager",
     "PanelRect",
-    "TLLControlCenterDesktop",
+    "TLLExecutionDesktop",
 ]

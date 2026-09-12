@@ -25,6 +25,10 @@ from .constitution_learning import TLLConstitutionLearning, RuleProposal
 from .family_protocol import TLLAgentFamilyProtocol, AgentFamilyRelation
 from .agent_boot import TLLAgent
 from .agent_live_loop import TLLAgentLiveLoop
+from .input_manager import TLLInputManager, TLLCommand
+from .llm_bridge_v2 import TLLLLMBridge, TLLMockLLMProvider
+from .approval_gate import TLLApprovalGate, TLLApprovalRequest
+from .evidence_system import TLLEvidenceSystem, TLLActionEvidence
 
 __all__ = [
     "TLLToolRegistry", "Tool",
@@ -47,4 +51,8 @@ __all__ = [
     "TLLAgentFamilyProtocol", "AgentFamilyRelation",
     "TLLAgent",
     "TLLAgentLiveLoop",
+    "TLLInputManager", "TLLCommand",
+    "TLLLLMBridge", "TLLMockLLMProvider",
+    "TLLApprovalGate", "TLLApprovalRequest",
+    "TLLEvidenceSystem", "TLLActionEvidence",
 ]
