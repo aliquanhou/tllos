@@ -1,22 +1,22 @@
-# P2-12.1 Desktop Cockpit Tests
+# P2-12.2 Desktop Cockpit Reality Tests
 
-## Test Suite: 139-144
+## Test Suite: 145-150
 
 | Test | Name | Description | Expected |
 |------|------|-------------|----------|
-| 139 | GUI Launch | main_window.py imports successfully | Import OK |
-| 140 | Monitor Support | --monitor parameter works | Window positions correctly |
-| 141 | Vision Display | Vision widget reads frames/*.json | Frame + objects displayed |
-| 142 | Reasoning Display | Reasoning widget reads latest_reasoning.json | Goal + confidence displayed |
-| 143 | Action Boundary | Cockpit does NOT import pyautogui directly | No direct pyautogui |
-| 144 | Replay | Replay module reads audit events | Events displayed correctly |
+| 145 | Screenshot Preview | QPixmap loads frame.png | Real image displayed |
+| 146 | Replay Buttons | Prev/Replay/Next buttons exist | Buttons rendered |
+| 147 | Event Stream | Timeline shows live events | Events flowing |
+| 148 | Approval Boundary | APPROVE/DENY buttons exist | Buttons rendered |
+| 149 | Evidence Binding | Hash displayed | SHA256 shown |
+| 150 | Complete Cockpit | All widgets integrated | Full cockpit works |
 
 ## Validation
 
-All tests verified via `validate_desktop_cockpit.py` (5/5 Gates).
+All tests verified via `validate_cockpit_reality.py` (5/5 Gates).
 
 ## Status
 
 ✅ 6/6 PASS
 
-*P2-12.1 Desktop Cockpit Tests v1.0*
+*P2-12.2 Desktop Cockpit Reality Tests v1.0*

@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QGroupBox, QLabel, QPushButton, QGridLayout, QTextEdit
 )
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QPixmap
 
 from theme import DARK_THEME
 from state_controller import StateController
@@ -42,19 +42,37 @@ class StatusWidget(QGroupBox):
 class VisionWidget(QGroupBox):
     def __init__(self):
         super().__init__("👁 VISION")
-        layout = QGridLayout()
+        layout = QVBoxLayout()
+        # Screenshot preview
+        self.screenshot_label = QLabel("No screenshot")
+        self.screenshot_label.setAlignment(Qt.AlignCenter)
+        self.screenshot_label.setMinimumSize(320, 180)
+        self.screenshot_label.setStyleSheet("border: 1px solid #333; background: #000;")
+        layout.addWidget(self.screenshot_label)
+        # Info labels
         self.frame_label = QLabel("Frame: --")
         self.objects_label = QLabel("Objects: 0")
         self.hash_label = QLabel("Hash: --")
-        layout.addWidget(self.frame_label, 0, 0)
-        layout.addWidget(self.objects_label, 1, 0)
-        layout.addWidget(self.hash_label, 2, 0)
+        layout.addWidget(self.frame_label)
+        layout.addWidget(self.objects_label)
+        layout.addWidget(self.hash_label)
         self.setLayout(layout)
 
-    def update_data(self, vision):
+    def update_data(self, vision, screenshot_path=None):
         self.frame_label.setText(f"Frame: {vision.get('frame', '--')}")
         self.objects_label.setText(f"Objects: {vision.get('objects', 0)}")
         self.hash_label.setText(f"Hash: {vision.get('hash', '--')}")
+        # Load screenshot if available
+        if screenshot_path and Path(screenshot_path).exists():
+            pixmap = QPixmap(str(screenshot_path))
+            if not pixmap.isNull():
+                scaled = pixmap.scaled(320, 180, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                self.screenshot_label.setPixmap(scaled)
+                self.screenshot_label.setText("")
+            else:
+                self.screenshot_label.setText("Failed to load image")
+        else:
+            self.screenshot_label.setText("No screenshot")
 
 
 class ReasoningWidget(QGroupBox):
@@ -146,6 +164,19 @@ class TimelineWidget(QGroupBox):
         self.timeline.setPlainText("\n".join(lines))
 
 
+class ReplayWidget(QGroupBox):
+    def __init__(self):
+        super().__init__("⏮ REPLAY")
+        layout = QHBoxLayout()
+        self.prev_btn = QPushButton("⏮ Prev")
+        self.play_btn = QPushButton("▶ Replay")
+        self.next_btn = QPushButton("Next ⏭")
+        layout.addWidget(self.prev_btn)
+        layout.addWidget(self.play_btn)
+        layout.addWidget(self.next_btn)
+        self.setLayout(layout)
+
+
 class ControlPanel(QGroupBox):
     def __init__(self):
         super().__init__("CONTROLS")
@@ -190,6 +221,7 @@ class CockpitWindow(QMainWindow):
         self.action_widget = ActionWidget()
         self.evidence_widget = EvidenceWidget()
         self.timeline_widget = TimelineWidget()
+        self.replay_widget = ReplayWidget()
         self.control_panel = ControlPanel()
 
         main_layout.addWidget(self.status_widget)
@@ -199,6 +231,7 @@ class CockpitWindow(QMainWindow):
         main_layout.addWidget(self.action_widget)
         main_layout.addWidget(self.evidence_widget)
         main_layout.addWidget(self.timeline_widget)
+        main_layout.addWidget(self.replay_widget)
         main_layout.addWidget(self.control_panel)
 
         # Timer for refresh
@@ -225,7 +258,14 @@ class CockpitWindow(QMainWindow):
 
     def refresh(self):
         state = self.controller.get_full_state()
-        self.vision_widget.update_data(state['vision'])
+        # Find latest screenshot PNG
+        frames_dir = PROJECT_ROOT / "tllos" / "agent_runtime" / "desktop_vision_runtime" / "frames"
+        screenshot_path = None
+        if frames_dir.exists():
+            png_files = sorted(frames_dir.glob("*.png"), key=lambda f: f.stat().st_mtime, reverse=True)
+            if png_files:
+                screenshot_path = png_files[0]
+        self.vision_widget.update_data(state['vision'], screenshot_path)
         self.reasoning_widget.update_data(state['reasoning'])
         self.plan_widget.update_data(state['plan'])
         self.action_widget.update_data(state['action'])
