@@ -1,132 +1,93 @@
 #!/usr/bin/env python3
 """
-TLL OS Text Rendering Engine
+TLL OS Text Rendering Engine (Native Version)
 
-Pure Python text rendering via PIL.
-No Windows Font API, no Qt, no WebView.
+Renders text using TLL Native Font Runtime.
+No PIL font, no Windows font files.
+Pure Python bitmap rendering.
 """
 
 import hashlib
-from pathlib import Path
 from typing import Tuple, Optional
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from pathlib import Path
 
 from .framebuffer import TLLFramebuffer
+from .fonts.tll_font import TLLFont
 
 
 class TLLTextRenderer:
-    """TLL OS Text Renderer - renders text to framebuffer."""
+    """TLL OS Text Renderer - Native font rendering."""
 
     def __init__(self, framebuffer: TLLFramebuffer):
         self.fb = framebuffer
-        self._font_cache = {}
-        self._load_default_font()
-
-    def _load_default_font(self):
-        """Load default font (English + Chinese if available)."""
-        # Try to find a font that supports Chinese
-        font_paths = [
-            # Common Windows fonts (but we're not using Windows API, just file)
-            "C:/Windows/Fonts/msyh.ttc",  # Microsoft YaHei
-            "C:/Windows/Fonts/simhei.ttf",  # SimHei
-            "C:/Windows/Fonts/arial.ttf",  # Arial fallback
-        ]
-
-        self.font_small = None
-        self.font_medium = None
-        self.font_large = None
-
-        for path in font_paths:
-            if Path(path).exists():
-                try:
-                    self.font_small = ImageFont.truetype(path, 12)
-                    self.font_medium = ImageFont.truetype(path, 16)
-                    self.font_large = ImageFont.truetype(path, 24)
-                    self.font_path = path
-                    break
-                except Exception:
-                    continue
-
-        # Fallback to PIL default
-        if self.font_small is None:
-            self.font_small = ImageFont.load_default()
-            self.font_medium = ImageFont.load_default()
-            self.font_large = ImageFont.load_default()
-            self.font_path = "PIL-default"
+        self.font = TLLFont()
+        self.font_name = self.font.font_name
 
     def draw_text(self, x: int, y: int, text: str,
                   r: int = 255, g: int = 255, b: int = 255,
                   size: str = "medium") -> dict:
-        """Draw text at position on framebuffer."""
-        # Select font
-        if size == "small":
-            font = self.font_small
-        elif size == "large":
-            font = self.font_large
-        else:
-            font = self.font_medium
+        """Draw text at position on framebuffer using native font."""
+        cursor_x = x
+        cursor_y = y
 
-        # Create a PIL image for text rendering
-        # First, measure text
-        dummy_img = Image.new('RGB', (1, 1))
-        draw = ImageDraw.Draw(dummy_img)
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
+        for char in text:
+            glyph = self.font.get_glyph(char)
+            if glyph is None:
+                cursor_x += 9  # Skip unknown chars
+                continue
 
-        if text_w == 0 or text_h == 0:
-            return {"text": text, "width": 0, "height": 0}
+            gh, gw = glyph.shape
 
-        # Create text image
-        text_img = Image.new('RGB', (text_w + 2, text_h + 2), (0, 0, 0))
-        text_draw = ImageDraw.Draw(text_img)
-        text_draw.text((1, 1), text, fill=(r, g, b), font=font)
+            # Scale based on size
+            if size == "small":
+                scale = 1
+            elif size == "large":
+                scale = 2
+            else:
+                scale = 1
 
-        # Convert to numpy array
-        text_array = np.array(text_img)
+            # Draw glyph pixels
+            for gy in range(gh):
+                for gx in range(gw):
+                    if glyph[gy, gx]:
+                        # Scale up if needed
+                        for sy in range(scale):
+                            for sx in range(scale):
+                                px = cursor_x + gx * scale + sx
+                                py = cursor_y + gy * scale + sy
+                                if 0 <= px < self.fb.width and 0 <= py < self.fb.height:
+                                    self.fb.buffer[py, px] = [r, g, b]
 
-        # Blit to framebuffer
-        h, w = text_array.shape[:2]
-        x1 = max(0, x)
-        y1 = max(0, y)
-        x2 = min(self.fb.width, x + w)
-        y2 = min(self.fb.height, y + h)
+            cursor_x += gw * scale + 1  # 1px spacing
 
-        if x1 < x2 and y1 < y2:
-            # Only copy non-black pixels (transparent background)
-            region = text_array[:y2-y1, :x2-x1]
-            mask = region.sum(axis=2) > 0  # non-black pixels
-            self.fb.buffer[y1:y2, x1:x2][mask] = region[mask]
+        # Calculate text hash
+        text_hash = hashlib.sha256(text.encode() + size.encode()).hexdigest()[:12]
 
-        # Hash the rendered text
-        text_hash = hashlib.sha256(text.encode() + str(font.size).encode()).hexdigest()[:12]
+        # Calculate actual width
+        actual_width = 0
+        for char in text:
+            glyph = self.font.get_glyph(char)
+            if glyph is not None:
+                gh, gw = glyph.shape
+                scale = 2 if size == "large" else 1
+                actual_width += gw * scale + 1
 
         return {
             "text": text,
-            "width": text_w,
-            "height": text_h,
+            "width": actual_width,
+            "height": 16,
             "x": x, "y": y,
             "hash": text_hash,
-            "font": self.font_path
+            "font": self.font_name
         }
 
     def draw_text_center(self, cx: int, y: int, text: str,
                          r: int = 255, g: int = 255, b: int = 255,
                          size: str = "medium") -> dict:
         """Draw centered text."""
-        # Measure first
-        if size == "small":
-            font = self.font_small
-        elif size == "large":
-            font = self.font_large
-        else:
-            font = self.font_medium
-
-        dummy_img = Image.new('RGB', (1, 1))
-        draw = ImageDraw.Draw(dummy_img)
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_w = bbox[2] - bbox[0]
-
-        x = cx - text_w // 2
+        width, _ = self.font.get_text_dimensions(text)
+        if size == "large":
+            width *= 2
+        x = cx - width // 2
         return self.draw_text(x, y, text, r, g, b, size)
