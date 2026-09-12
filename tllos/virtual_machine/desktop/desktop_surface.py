@@ -70,6 +70,7 @@ class TLLExecutionDesktop:
         self._render_approval_panel()
         self._render_evidence_panel()
         self._render_command_panel()
+        self._render_buttons()
 
         self.fb.commit()
         frame_hash = self.fb.buffer_hash
@@ -175,7 +176,7 @@ class TLLExecutionDesktop:
         x, y, w, h = 24, 392, self.width - 48, 70
         self.fb.fill_rect(x, y, w, h, *TLLFlatTheme.TLL_PANEL)
         self.fb.draw_rect(x, y, w, h, *TLLFlatTheme.TLL_CREATION)
-        self.text_renderer.draw_text(x + 16, y + 6, "⌨ COMMAND",
+        self.text_renderer.draw_text(x + 16, y + 6, "COMMAND",
                                      *TLLFlatTheme.TLL_CREATION, size='medium')
 
         if self.input_manager and self.input_manager.command_history:
@@ -187,6 +188,33 @@ class TLLExecutionDesktop:
             self.text_renderer.draw_text(x + 16, y + 32,
                               "> Waiting for owner command...",
                               *TLLFlatTheme.TLL_TEXT_MUTED, size='small')
+
+    def _render_buttons(self):
+        """Control buttons at bottom."""
+        btn_y = 478
+        btn_h = 30
+        btn_w = 100
+        gap = 12
+        start_x = 24
+
+        buttons = [
+            ("START", TLLFlatTheme.TLL_ALIVE),
+            ("PAUSE", TLLFlatTheme.TLL_WARNING),
+            ("APPROVE", TLLFlatTheme.TLL_PRIMARY),
+            ("STOP", TLLFlatTheme.TLL_DANGER),
+        ]
+
+        self.buttons = []  # Store button rects for click detection
+
+        for i, (label, color) in enumerate(buttons):
+            bx = start_x + i * (btn_w + gap)
+            self.fb.fill_rect(bx, btn_y, btn_w, btn_h, *color)
+            self.fb.draw_rect(bx, btn_y, btn_w, btn_h, 255, 255, 255)
+            # Draw button text centered
+            text_x = bx + btn_w // 2 - len(label) * 4
+            self.text_renderer.draw_text(text_x, btn_y + 8, label,
+                                         5, 8, 18, size='small')
+            self.buttons.append((label, bx, btn_y, btn_w, btn_h))
 
     def submit_command(self, command: str) -> Dict:
         """Submit command through full pipeline."""

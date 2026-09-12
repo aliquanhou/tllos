@@ -22,6 +22,7 @@ WM_KEYDOWN = 0x0100
 WM_CHAR = 0x0102
 WM_CLOSE = 0x0010
 WM_TIMER = 0x0113
+WM_LBUTTONDOWN = 0x0201
 VK_RETURN = 0x0D
 VK_BACK = 0x08
 VK_ESCAPE = 0x1B
@@ -186,6 +187,9 @@ class TLLENativeWindowHost:
             elif msg == WM_CLOSE:
                 self.user32.DestroyWindow(hwnd)
                 return 0
+            elif msg == WM_LBUTTONDOWN:
+                self._on_mouse_click(wparam, lparam)
+                return 0
         except Exception as e:
             print(f"WndProc error: {e}")
             return 0
@@ -247,6 +251,39 @@ class TLLENativeWindowHost:
         if 32 <= char_code <= 126:  # Printable ASCII
             self.input_buffer += chr(char_code)
             self.user32.InvalidateRect(self.hwnd, None, True)
+
+    def _on_mouse_click(self, wparam, lparam):
+        """Handle left mouse click."""
+        # Extract x, y from lparam
+        x = lparam & 0xFFFF
+        y = (lparam >> 16) & 0xFFFF
+        if x >= 32768: x -= 65536
+        if y >= 32768: y -= 65536
+
+        print(f"Mouse click at ({x}, {y})")
+
+        # Check button clicks
+        if hasattr(self, 'desktop') and self.desktop and hasattr(self.desktop, 'buttons'):
+            for label, bx, by, bw, bh in self.desktop.buttons:
+                if bx <= x <= bx + bw and by <= y <= by + bh:
+                    print(f"Button clicked: {label}")
+                    self._handle_button(label)
+                    self.user32.InvalidateRect(self.hwnd, None, True)
+                    break
+
+    def _handle_button(self, label: str):
+        """Handle button click action."""
+        if label == "STOP":
+            self.running = False
+            self.user32.PostQuitMessage(0)
+        elif label == "START":
+            if self.desktop:
+                self.desktop.submit_command("Start agent")
+        elif label == "APPROVE":
+            if self.desktop:
+                self.desktop.submit_command("Approve action")
+        elif label == "PAUSE":
+            print("Pause clicked")
 
     def create_window(self):
         """Create the native window."""

@@ -139,6 +139,7 @@ def main():
             framebuffer=fb,
             title="TLL OS - tll-agent-0"
         )
+        window.desktop = desktop  # Link desktop for button clicks
         window.create_window()
         print("Window created. Running...")
         window.run()
