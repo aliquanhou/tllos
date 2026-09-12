@@ -1,18 +1,14 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 TLL OS Vision Runtime Validator
-楠岃瘉 Vision Runtime 鐨勫崗璁畬鏁存€с€?
+Validate Vision Runtime protocol integrity.
+
 Gates:
 - Gate 1: Dependency
 - Gate 2: Capture
 - Gate 3: Evidence
 - Gate 4: Lifecycle
 - Gate 5: Ledger
-
-鐢ㄦ硶锛?    python tools/agent_runtime_validator/validate_vision_runtime.py
-
-閫€鍑虹爜锛?    0: 鍏ㄩ儴楠岃瘉閫氳繃
-    1: 瀛樺湪楠岃瘉澶辫触
 """
 
 import json
@@ -43,7 +39,7 @@ def check_file_exists(file_path):
 
 
 def check_dependencies():
-    """妫€鏌ヨ瑙夊簱鏄惁鍙敤銆?""
+    """Check if vision libraries are available."""
     deps = []
     try:
         from PIL import Image, ImageGrab
@@ -86,16 +82,16 @@ def main():
     deps = check_dependencies()
     dep_ok = True
     for name, available in deps:
-        status = "鉁? if available else "鉂?
-        print(f"  {status} {name}")
+        status = "PASS" if available else "FAIL"
+        print(f"  [{status}] {name}")
         if not available:
             dep_ok = False
 
     if dep_ok:
-        print(f"  鉁?PASS: All dependencies available")
+        print(f"  >> PASS: All dependencies available")
         results.append(("Gate 1: Dependency", "PASS"))
     else:
-        print(f"  鉂?FAIL: Some dependencies missing")
+        print(f"  >> FAIL: Some dependencies missing")
         all_passed = False
         results.append(("Gate 1: Dependency", "FAIL"))
 
@@ -104,10 +100,10 @@ def main():
     print("--- Gate 2: Capture ---")
     capture_script = "tllos/agent_runtime/desktop_vision_runtime/screen_capture_runtime.py"
     if check_file_exists(capture_script):
-        print(f"  鉁?PASS: screen_capture_runtime.py exists")
+        print(f"  >> PASS: screen_capture_runtime.py exists")
         results.append(("Gate 2: Capture", "PASS"))
     else:
-        print(f"  鉂?FAIL: screen_capture_runtime.py missing")
+        print(f"  >> FAIL: screen_capture_runtime.py missing")
         all_passed = False
         results.append(("Gate 2: Capture", "FAIL"))
 
@@ -116,16 +112,16 @@ def main():
     print("--- Gate 3: Evidence ---")
     ok, frame = validate_json_file("tllos/agent_runtime/desktop_vision_runtime/frame_buffer.json")
     if not ok:
-        print(f"  鉂?FAIL: {frame}")
+        print(f"  >> FAIL: {frame}")
         all_passed = False
         results.append(("Gate 3: Evidence", "FAIL"))
     else:
         required = frame.get("required_fields", [])
         if "hash" in required and "evidence_ref" in required:
-            print(f"  鉁?PASS: Frame evidence fields present")
+            print(f"  >> PASS: Frame evidence fields present")
             results.append(("Gate 3: Evidence", "PASS"))
         else:
-            print(f"  鉂?FAIL: Evidence fields incomplete")
+            print(f"  >> FAIL: Evidence fields incomplete")
             all_passed = False
             results.append(("Gate 3: Evidence", "FAIL"))
 
@@ -134,7 +130,7 @@ def main():
     print("--- Gate 4: Lifecycle ---")
     ok, context = validate_json_file("tllos/agent_runtime/desktop_vision_runtime/vision_context.json")
     if not ok:
-        print(f"  鉂?FAIL: {context}")
+        print(f"  >> FAIL: {context}")
         all_passed = False
         results.append(("Gate 4: Lifecycle", "FAIL"))
     else:
@@ -142,11 +138,11 @@ def main():
         required_states = ["CREATED", "INITIALIZED", "RUNNING", "COMPLETED", "FAILED"]
         missing = [s for s in required_states if s not in status_values]
         if missing:
-            print(f"  鉂?FAIL: missing states: {missing}")
+            print(f"  >> FAIL: missing states: {missing}")
             all_passed = False
             results.append(("Gate 4: Lifecycle", "FAIL"))
         else:
-            print(f"  鉁?PASS: Vision lifecycle valid, {len(status_values)} states")
+            print(f"  >> PASS: Vision lifecycle valid, {len(status_values)} states")
             results.append(("Gate 4: Lifecycle", "PASS"))
 
     # Gate 5: Ledger
@@ -154,7 +150,7 @@ def main():
     print("--- Gate 5: Ledger ---")
     ok, audit = validate_json_file("tllos/agent_runtime/audit_ledger/audit_event.json")
     if not ok:
-        print(f"  鉂?FAIL: {audit}")
+        print(f"  >> FAIL: {audit}")
         all_passed = False
         results.append(("Gate 5: Ledger", "FAIL"))
     else:
@@ -162,11 +158,11 @@ def main():
         required_events = ["SCREEN_CAPTURE_STARTED", "FRAME_HASH_GENERATED", "FRAME_STORED"]
         missing = [e for e in required_events if e not in event_types]
         if missing:
-            print(f"  鉂?FAIL: missing events: {missing}")
+            print(f"  >> FAIL: missing events: {missing}")
             all_passed = False
             results.append(("Gate 5: Ledger", "FAIL"))
         else:
-            print(f"  鉁?PASS: ledger events present, {len(event_types)} total")
+            print(f"  >> PASS: ledger events present, {len(event_types)} total")
             results.append(("Gate 5: Ledger", "PASS"))
 
     # Check directory structure
@@ -184,9 +180,9 @@ def main():
     ]
     for file_path in vision_files:
         if check_file_exists(file_path):
-            print(f"  鉁?PASS: {file_path}")
+            print(f"  [PASS] {file_path}")
         else:
-            print(f"  鉂?FAIL: {file_path} not found")
+            print(f"  [FAIL] {file_path} not found")
             all_passed = False
 
     print()
