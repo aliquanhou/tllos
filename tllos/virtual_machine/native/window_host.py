@@ -39,7 +39,29 @@ DIB_RGB_COLORS = 0
 BI_RGB = 0
 
 
+# Window procedure type
+WNDPROC = ctypes.WINFUNCTYPE(
+    ctypes.c_long, wintypes.HWND, wintypes.UINT,
+    wintypes.WPARAM, wintypes.LPARAM
+)
+
+
 # Custom structs
+class WNDCLASSW(ctypes.Structure):
+    _fields_ = [
+        ("style", wintypes.UINT),
+        ("lpfnWndProc", WNDPROC),
+        ("cbClsExtra", ctypes.c_int),
+        ("cbWndExtra", ctypes.c_int),
+        ("hInstance", wintypes.HINSTANCE),
+        ("hIcon", wintypes.HANDLE),
+        ("hCursor", wintypes.HANDLE),
+        ("hbrBackground", wintypes.HBRUSH),
+        ("lpszMenuName", wintypes.LPCWSTR),
+        ("lpszClassName", wintypes.LPCWSTR),
+    ]
+
+
 class PAINTSTRUCT(ctypes.Structure):
     _fields_ = [
         ("hdc", wintypes.HDC),
@@ -87,6 +109,7 @@ class TLLENativeWindowHost:
         # Win32
         self.user32 = ctypes.windll.user32
         self.gdi32 = ctypes.windll.gdi32
+        self.kernel32 = ctypes.windll.kernel32
 
         # Set up function signatures
         self._setup_win32_signatures()
@@ -116,6 +139,15 @@ class TLLENativeWindowHost:
         self.user32.GetMessageW.argtypes = [
             ctypes.POINTER(wintypes.MSG), wintypes.HWND,
             wintypes.UINT, wintypes.UINT
+        ]
+
+        # gdi32 signatures
+        self.gdi32.SetDIBitsToDevice.restype = ctypes.c_int
+        self.gdi32.SetDIBitsToDevice.argtypes = [
+            wintypes.HDC, ctypes.c_int, ctypes.c_int,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            ctypes.c_uint, ctypes.c_uint, ctypes.c_void_p,
+            ctypes.c_void_p, wintypes.UINT
         ]
 
     def _wnd_proc(self, hwnd, msg, wparam, lparam):
@@ -189,12 +221,10 @@ class TLLENativeWindowHost:
     def create_window(self):
         """Create the native window."""
         # Register window class
-        wc = wintypes.WNDCLASSW()
-        wc.lpfnWndProc = ctypes.WINFUNCTYPE(
-            ctypes.c_long, wintypes.HWND, wintypes.UINT,
-            wintypes.WPARAM, wintypes.LPARAM
-        )(self._wnd_proc)
-        wc.hInstance = self.user32.GetModuleHandleW(None)
+        wc = WNDCLASSW()
+        wc.style = CS_HREDRAW | CS_VREDRAW
+        wc.lpfnWndProc = WNDPROC(self._wnd_proc)
+        wc.hInstance = self.kernel32.GetModuleHandleW(None)
         wc.lpszClassName = "TLLOSWindow"
 
         self.user32.RegisterClassW(ctypes.byref(wc))
