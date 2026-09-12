@@ -95,104 +95,68 @@ class TLLExecutionDesktop:
         self.frame_count += 1
 
         # === Top bar ===
-        self.fb.fill_rect(0, 0, self.width, 44, *panel)
-        self.fb.draw_rect(0, 43, self.width, 1, *primary)
-        self.text_renderer.draw_text(20, 12, "TLL OS", *primary, size='large')
-        self.text_renderer.draw_text(120, 14, "Agent Reality Console", *text_sec, size='small')
+        self.fb.fill_rect(0, 0, self.width, 48, *panel)
+        self.fb.draw_rect(0, 47, self.width, 1, *primary)
+        self.text_renderer.draw_text(20, 14, "TLL OS", *primary, size='large')
+        self.text_renderer.draw_text(130, 16, "智能代理 · 在线", *alive, size='medium')
 
-        # === Left sidebar (260px) ===
-        sw = 260
+        # === Left sidebar (200px) ===
+        sw = 200
         sx = 0
-        sy = 44
+        sy = 48
 
-        # Agent State panel
+        # Agent State
         ay = sy + 12
-        self.fb.fill_rect(sx + 12, ay, sw - 24, 110, *panel)
-        self.fb.draw_rect(sx + 12, ay, sw - 24, 110, *alive)
-        self.text_renderer.draw_text(sx + 24, ay + 8, "AGENT STATE", *alive, size='small')
-
+        self.fb.fill_rect(sx + 10, ay, sw - 20, 100, *panel)
+        self.fb.draw_rect(sx + 10, ay, sw - 20, 100, *alive)
+        self.text_renderer.draw_text(sx + 20, ay + 8, "Agent", *alive, size='medium')
         if self.agent_self:
             health = self.agent_self.get_health_summary()
-            self.text_renderer.draw_text(sx + 24, ay + 30, f"ID: tll-agent-0", *text_pri, size='small')
-            self.text_renderer.draw_text(sx + 24, ay + 48, f"状态: {health.get('survival', 'UNKNOWN')}", *alive, size='small')
-            self.text_renderer.draw_text(sx + 24, ay + 66, f"能量: {health.get('energy', 0)}%", *text_pri, size='small')
-            self.text_renderer.draw_text(sx + 24, ay + 84, f"风险: {health.get('risk_level', 'LOW')}", *warn, size='small')
+            self.text_renderer.draw_text(sx + 20, ay + 34, "状态: 在线", *alive, size='small')
+            self.text_renderer.draw_text(sx + 20, ay + 54, f"能量: {health.get('energy', 0)}%", *text_pri, size='small')
+            self.text_renderer.draw_text(sx + 20, ay + 74, "LLM: DeepSeek", *text_sec, size='small')
 
-        # Capability panel
-        cy = ay + 120
-        self.fb.fill_rect(sx + 12, cy, sw - 24, 80, *panel)
-        self.fb.draw_rect(sx + 12, cy, sw - 24, 80, *primary)
-        self.text_renderer.draw_text(sx + 24, cy + 8, "CAPABILITIES", *primary, size='small')
-        if self.tool_runtime:
-            n = len(self.tool_runtime.tool_handlers)
-            self.text_renderer.draw_text(sx + 24, cy + 30, f"工具: {n} 个", *text_pri, size='small')
-            self.text_renderer.draw_text(sx + 24, cy + 48, "✓ 文件 ✓ 进程 ✓ 代码", *text_sec, size='small')
-            self.text_renderer.draw_text(sx + 24, cy + 66, "✓ 应用 ✓ 存储 ✓ 网络", *text_sec, size='small')
-
-        # World Model panel
-        wy = cy + 100
-        self.fb.fill_rect(sx + 12, wy, sw - 24, 90, *panel)
-        self.fb.draw_rect(sx + 12, wy, sw - 24, 90, *creation)
-        self.text_renderer.draw_text(sx + 24, wy + 8, "WORLD MODEL", *creation, size='small')
-        if self.world_model:
-            ws = self.world_model.get_world_summary()
-            self.text_renderer.draw_text(sx + 24, wy + 30, f"对象: {ws.get('total_objects', 0)}", *text_pri, size='small')
-            self.text_renderer.draw_text(sx + 24, wy + 48, f"依赖: {ws.get('total_dependencies', 0)}", *text_pri, size='small')
-            self.text_renderer.draw_text(sx + 24, wy + 66, "DB → Backend → App", *text_sec, size='small')
-
-        # Agent Store panel
-        ay = wy + 110
-        self.fb.fill_rect(sx + 12, ay, sw - 24, 80, *panel)
-        self.fb.draw_rect(sx + 12, ay, sw - 24, 80, *alive)
-        self.text_renderer.draw_text(sx + 24, ay + 8, "AGENT STORE", *alive, size='small')
+        # Agent Store
+        sy2 = ay + 116
+        self.fb.fill_rect(sx + 10, sy2, sw - 20, 80, *panel)
+        self.fb.draw_rect(sx + 10, sy2, sw - 20, 80, *primary)
+        self.text_renderer.draw_text(sx + 20, sy2 + 8, "已安装", *primary, size='medium')
         if self.agent_registry:
             agents = self.agent_registry.list_agents()
-            self.text_renderer.draw_text(sx + 24, ay + 30, f"已安装: {len(agents)} 个", *text_pri, size='small')
+            self.text_renderer.draw_text(sx + 20, sy2 + 36, f"Agent: {len(agents)}", *text_pri, size='small')
             for i, ag in enumerate(agents[:2]):
-                self.text_renderer.draw_text(sx + 24, ay + 50 + i * 16,
-                    f"● {ag['name']}", *text_sec, size='small')
-        else:
-            self.text_renderer.draw_text(sx + 24, ay + 30, "无已安装 Agent", *text_mute, size='small')
+                self.text_renderer.draw_text(sx + 20, sy2 + 56 + i * 16,
+                    f"● {ag['name'][:12]}", *text_sec, size='small')
 
-        # === Right: Cognitive Stream ===
-        rx = sw + 16
-        rw = self.width - sw - 32
+        # === Right: Chat area ===
+        rx = sw + 12
+        rw = self.width - sw - 24
         ry = 56
+        rh = self.height - ry - 70
 
-        # Panel background
-        self.fb.fill_rect(rx, ry, rw, self.height - ry - 70, *panel)
-        self.fb.draw_rect(rx, ry, rw, self.height - ry - 70, *primary)
+        # Chat background
+        self.fb.fill_rect(rx, ry, rw, rh, *panel)
+        self.fb.draw_rect(rx, ry, rw, rh, *primary)
 
-        self.text_renderer.draw_text(rx + 16, ry + 10, "对话", *primary, size='medium')
+        self.text_renderer.draw_text(rx + 20, ry + 12, "对话", *primary, size='medium')
 
-        # Chat history
-        cy = ry + 36
+        # Chat messages - larger font, more lines
+        cy = ry + 44
         if self.chat_history:
-            for role, text in self.chat_history[-6:]:
+            for role, text in self.chat_history[-8:]:
                 if role == "user":
-                    # User message - right aligned
-                    self.text_renderer.draw_text(rx + 200, cy, f"主人: {text[:40]}", *alive, size='small')
+                    self.text_renderer.draw_text(rx + 20, cy, f"我: {text[:55]}", *alive, size='medium')
                 else:
-                    # Agent message - left aligned
-                    self.text_renderer.draw_text(rx + 16, cy, f"代理: {text[:40]}", *text_pri, size='small')
-                cy += 22
+                    self.text_renderer.draw_text(rx + 20, cy, f"TLL: {text[:55]}", *text_pri, size='medium')
+                cy += 28
         else:
-            # Welcome message
-            self.text_renderer.draw_text(rx + 16, cy, "TLL OS 智能代理已就绪", *text_sec, size='medium')
-            cy += 28
-            self.text_renderer.draw_text(rx + 16, cy, "在下方输入指令开始对话", *text_mute, size='small')
-            cy += 28
-
-        # === Event Stream ===
-        ey = ry + rw - 180
-        if self.event_log:
-            self.text_renderer.draw_text(rx + 16, ey, "EVENT STREAM", *creation, size='small')
-            for i, (ts, msg) in enumerate(self.event_log[-6:]):
-                self.text_renderer.draw_text(rx + 16, ey + 18 + i * 16,
-                    f"{ts} {msg[:50]}", *text_sec, size='small')
+            self.text_renderer.draw_text(rx + 20, cy, "你好！我是 TLL OS 智能代理", *text_sec, size='medium')
+            cy += 32
+            self.text_renderer.draw_text(rx + 20, cy, "在下方输入框和我对话", *text_mute, size='small')
+            cy += 32
 
         # === Bottom: Input bar ===
-        iy = self.height - 60
+        iy = self.height - 56
         ih = 44
         self.fb.fill_rect(rx, iy, rw, ih, 30, 40, 60)
         self.fb.draw_rect(rx, iy, rw, ih, *primary)
@@ -202,17 +166,17 @@ class TLLExecutionDesktop:
             input_text = self._window_input
 
         if input_text:
-            self.text_renderer.draw_text(rx + 16, iy + 14, input_text, *text_pri, size='medium')
+            self.text_renderer.draw_text(rx + 16, iy + 12, input_text, *text_pri, size='medium')
         else:
-            self.text_renderer.draw_text(rx + 16, iy + 14, "输入指令，按 Enter 发送...", *text_mute, size='medium')
+            self.text_renderer.draw_text(rx + 16, iy + 12, "输入消息...", *text_mute, size='medium')
 
-        # Send button - bigger and clearer
-        btn_x = rx + rw - 52
-        self.fb.fill_rect(btn_x, iy + 5, 44, 34, *alive)
-        self.fb.draw_rect(btn_x, iy + 5, 44, 34, 0, 150, 80)
-        self.text_renderer.draw_text(btn_x + 12, iy + 13, "发送", 5, 8, 18, size='small')
+        # Send button
+        btn_x = rx + rw - 56
+        self.fb.fill_rect(btn_x, iy + 4, 48, 36, *alive)
+        self.fb.draw_rect(btn_x, iy + 4, 48, 36, 0, 150, 80)
+        self.text_renderer.draw_text(btn_x + 10, iy + 12, "发送", 5, 8, 18, size='medium')
 
-        self.buttons = [("send", btn_x, iy + 5, 44, 34)]
+        self.buttons = [("send", btn_x, iy + 4, 48, 36)]
 
         self.fb.commit()
         frame_hash = self.fb.buffer_hash
