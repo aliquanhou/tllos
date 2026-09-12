@@ -22,6 +22,7 @@ from ..agent.input_manager import TLLInputManager
 from ..agent.llm_bridge_v2 import TLLLLMBridge
 from ..agent.approval_gate import TLLApprovalGate
 from ..agent.evidence_system import TLLEvidenceSystem
+from ..agent.agent_registry import TLLAgentRegistry
 
 
 class TLLExecutionDesktop:
@@ -37,7 +38,8 @@ class TLLExecutionDesktop:
                  input_manager: TLLInputManager = None,
                  llm_bridge: TLLLLMBridge = None,
                  approval_gate: TLLApprovalGate = None,
-                 evidence_system: TLLEvidenceSystem = None):
+                 evidence_system: TLLEvidenceSystem = None,
+                 agent_registry: TLLAgentRegistry = None):
         self.fb = framebuffer
         self.width = framebuffer.width
         self.height = framebuffer.height
@@ -55,6 +57,7 @@ class TLLExecutionDesktop:
         self.llm_bridge = llm_bridge
         self.approval_gate = approval_gate
         self.evidence_system = evidence_system
+        self.agent_registry = agent_registry
 
         self.frame_count = 0
         self.start_time = time.time()
@@ -134,8 +137,22 @@ class TLLExecutionDesktop:
         if self.world_model:
             ws = self.world_model.get_world_summary()
             self.text_renderer.draw_text(sx + 24, wy + 30, f"对象: {ws.get('total_objects', 0)}", *text_pri, size='small')
-            self.text_renderer.draw_text(sx + 24, wy + 48, f"依赖关系: {ws.get('total_dependencies', 0)}", *text_pri, size='small')
+            self.text_renderer.draw_text(sx + 24, wy + 48, f"依赖: {ws.get('total_dependencies', 0)}", *text_pri, size='small')
             self.text_renderer.draw_text(sx + 24, wy + 66, "DB → Backend → App", *text_sec, size='small')
+
+        # Agent Store panel
+        ay = wy + 110
+        self.fb.fill_rect(sx + 12, ay, sw - 24, 80, *panel)
+        self.fb.draw_rect(sx + 12, ay, sw - 24, 80, *alive)
+        self.text_renderer.draw_text(sx + 24, ay + 8, "AGENT STORE", *alive, size='small')
+        if self.agent_registry:
+            agents = self.agent_registry.list_agents()
+            self.text_renderer.draw_text(sx + 24, ay + 30, f"已安装: {len(agents)} 个", *text_pri, size='small')
+            for i, ag in enumerate(agents[:2]):
+                self.text_renderer.draw_text(sx + 24, ay + 50 + i * 16,
+                    f"● {ag['name']}", *text_sec, size='small')
+        else:
+            self.text_renderer.draw_text(sx + 24, ay + 30, "无已安装 Agent", *text_mute, size='small')
 
         # === Right: Cognitive Stream ===
         rx = sw + 16

@@ -98,11 +98,18 @@ def main():
     print("   Agent: tll-agent-0 ALIVE")
 
     print("🖥 Execution Desktop...")
+    from tllos.virtual_machine.agent.agent_registry import TLLAgentRegistry
+    registry = TLLAgentRegistry(str(PROJECT_ROOT / "packages"))
+    # Install Doubao Agent
+    result = registry.install(str(PROJECT_ROOT / "packages" / "doubao-agent"))
+    print(f"   Agent Registry: {len(registry.list_agents())} installed")
+
     desktop = TLLExecutionDesktop(
         framebuffer=fb, agent_self=agent_self, world_model=world,
         experience=experience, app_runtime=app_runtime, tool_runtime=tool_runtime,
         live_loop=live_loop, input_manager=input_manager, llm_bridge=llm_bridge,
-        approval_gate=approval_gate, evidence_system=evidence_system
+        approval_gate=approval_gate, evidence_system=evidence_system,
+        agent_registry=registry
     )
 
     # Initial render

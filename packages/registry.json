@@ -1,0 +1,21 @@
+{
+  "Doubao Agent": {
+    "manifest": {
+      "name": "Doubao Agent",
+      "type": "agent",
+      "version": "1.0",
+      "provider": "doubao",
+      "runtime": "tll-agent-runtime",
+      "description": "豆包助手 - TLL OS 第一个入住的 Agent"
+    },
+    "path": "C:\\Users\\Administrator\\Doubao\\tllos\\packages\\doubao-agent",
+    "status": "installed",
+    "permissions": [
+      "conversation",
+      "memory.read",
+      "memory.write",
+      "storage.read",
+      "desktop.display"
+    ]
+  }
+}

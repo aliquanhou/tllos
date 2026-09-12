@@ -1,0 +1,14 @@
+{
+  "permissions": [
+    "conversation",
+    "memory.read",
+    "memory.write",
+    "storage.read",
+    "desktop.display"
+  ],
+  "dangerous": [
+    "storage.delete",
+    "process.stop",
+    "network.send"
+  ]
+}
