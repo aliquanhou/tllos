@@ -1,0 +1,29 @@
+{
+  "agent_id": "tll-agent-001",
+  "state": "RUNNING",
+  "vision": {
+    "frame": "frame-7c3d5ca7",
+    "objects": 104,
+    "hash": ""
+  },
+  "reasoning": {
+    "goal": "Open calculator",
+    "decision": "",
+    "confidence": 0.85
+  },
+  "plan": {
+    "steps": [],
+    "current_step": 0
+  },
+  "action": {
+    "current": "MOVE_MOUSE",
+    "result": "SUCCESS",
+    "before_hash": "",
+    "after_hash": ""
+  },
+  "evidence": {
+    "hash": "",
+    "timestamp": ""
+  },
+  "updated_at": "2026-09-12T13:39:14.776750"
+}

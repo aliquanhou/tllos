@@ -1,0 +1,30 @@
+{
+  "agent_id": "",
+  "state": "IDLE",
+  "vision": {
+    "frame": "",
+    "objects": 0,
+    "hash": ""
+  },
+  "reasoning": {
+    "goal": "",
+    "decision": "",
+    "confidence": 0.0
+  },
+  "plan": {
+    "steps": [],
+    "current_step": 0
+  },
+  "action": {
+    "current": "",
+    "result": "",
+    "before_hash": "",
+    "after_hash": ""
+  },
+  "evidence": {
+    "hash": "",
+    "timestamp": ""
+  },
+  "updated_at": "",
+  "schema_version": "1.0"
+}

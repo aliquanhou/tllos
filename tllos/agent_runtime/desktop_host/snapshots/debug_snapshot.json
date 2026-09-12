@@ -1,0 +1,29 @@
+{
+  "agent_id": "tll-agent-001",
+  "state": "RUNNING",
+  "vision": {
+    "frame": "",
+    "objects": 0,
+    "hash": ""
+  },
+  "reasoning": {
+    "goal": "",
+    "decision": "",
+    "confidence": 0.0
+  },
+  "plan": {
+    "steps": [],
+    "current_step": 0
+  },
+  "action": {
+    "current": "",
+    "result": "",
+    "before_hash": "",
+    "after_hash": ""
+  },
+  "evidence": {
+    "hash": "",
+    "timestamp": ""
+  },
+  "updated_at": "2026-09-12T13:42:29.898069"
+}
