@@ -339,7 +339,6 @@ class TLLENativeWindowHost:
 
         self.user32.ShowWindow(self.hwnd, SW_SHOW)
         self.user32.UpdateWindow(self.hwnd)
-        self.user32.SetFocus(self.hwnd)
 
     def run(self):
         """Run the message loop (blocking until window closes)."""
