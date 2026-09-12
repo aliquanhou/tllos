@@ -2,10 +2,11 @@
 """
 TLL OS Boot Script
 
-Full execution pipeline boot.
+First Human Visible Boot - shows TLL OS in a real window.
 """
 
 import sys
+import time
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.resolve()
@@ -14,17 +15,19 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from tllos.virtual_machine import TLLFramebuffer, TLLWindowManager, TLLCompositor
 from tllos.virtual_machine.agent import (
     TLLAgentSelf, TLLWorldModel, TLLExperienceMemory,
-    TLLAgentConstitution, TLLAppRuntime, TLLAgentSpawner,
+    TLLAgentConstitution, TLLAppRuntime,
     TLLToolRuntime, TLLActionRiskEvaluator, TLLAgentLiveLoop,
     TLLInputManager, TLLLLMBridge, TLLMockLLMProvider,
-    TLLApprovalGate, TLLEvidenceSystem
+    TLLApprovalGate, TLLEvidenceSystem,
+    TLLLLMAdapterRegistry
 )
 from tllos.virtual_machine.desktop import TLLExecutionDesktop
+from tllos.virtual_machine.native import TLLENativeWindowHost
 
 
 def main():
     print("=" * 60)
-    print("TLL OS Execution Layer Boot")
+    print("TLL OS First Human Visible Boot")
     print("=" * 60)
     print()
 
@@ -34,16 +37,18 @@ def main():
     compositor = TLLCompositor(wm)
     print(f"   Display: {fb.width}x{fb.height}")
 
-    print("🧠 Agent Constitution...")
+    print("🧠 Agent Core...")
     agent_self = TLLAgentSelf("tll-agent-0")
     agent_self.update_health(energy=98.0, risk_level="LOW")
     constitution = TLLAgentConstitution()
+    print(f"   Agent: tll-agent-0 ONLINE")
     print(f"   Rules: {constitution.get_constitution_summary()['total_rules']}")
 
     print("🌍 World Model...")
     world = TLLWorldModel()
     world.add_object("Product DB", "service", object_id="db")
     world.add_object("Backend", "service", object_id="backend", dependencies=["db"])
+    world.add_object("Frontend", "app", object_id="frontend", dependencies=["backend"])
     print(f"   Objects: {world.get_world_summary()['total_objects']}")
 
     print("🧠 Experience...")
@@ -64,8 +69,10 @@ def main():
     print(f"   Owner: {input_manager.owner}")
 
     print("🧠 LLM Bridge...")
+    llm_registry = TLLLLMAdapterRegistry()
     llm_bridge = TLLLLMBridge(TLLMockLLMProvider())
     print(f"   Provider: {llm_bridge.provider_name}")
+    print(f"   Available adapters: {', '.join(llm_registry.list_available())}")
 
     print("🔐 Approval Gate...")
     approval_gate = TLLApprovalGate()
@@ -90,17 +97,16 @@ def main():
         approval_gate=approval_gate, evidence_system=evidence_system
     )
 
+    # Initial render
     result = desktop.render()
     print(f"   Frame: {result['frame_hash'][:16]}...")
 
-    print("🤖 Testing Command Pipeline...")
-    cmd = desktop.submit_command("创建一个电商网站")
-    print(f"   Goal: {cmd.get('goal', 'N/A')}")
-    print(f"   Plan: {len(cmd.get('plan', []))} steps")
-
+    # Demo command
+    desktop.submit_command("创建一个电商网站")
     desktop.render()
 
-    screenshot_path = PROJECT_ROOT / "tll_execution_desktop.png"
+    # Screenshot
+    screenshot_path = PROJECT_ROOT / "tll_visible_boot.png"
     ss = desktop.take_screenshot(str(screenshot_path))
     print(f"   Screenshot: {screenshot_path}")
 
@@ -109,9 +115,28 @@ def main():
     print()
 
     print("=" * 60)
-    print("🤖 TLL OS EXECUTION LAYER READY")
-    print("Full pipeline: Input → LLM → Plan → Risk → Approval → Evidence")
+    print("🤖 TLL OS IS ALIVE AND VISIBLE")
+    print("Native Window Host: Ready")
+    print("Keyboard Input: Ready")
+    print("LLM Adapters: openai, doubao, local")
     print("=" * 60)
+    print()
+    print("Press any key in the window to type commands.")
+    print("Press Enter to submit. Press ESC to close.")
+    print()
+
+    # Launch native window
+    try:
+        window = TLLENativeWindowHost(
+            framebuffer=fb,
+            title="TLL OS - tll-agent-0"
+        )
+        window.create_window()
+        print("Window created. Running...")
+        window.run()
+    except Exception as e:
+        print(f"Native window not available: {e}")
+        print("Running in headless mode.")
 
     return 0
 

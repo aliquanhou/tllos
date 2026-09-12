@@ -29,6 +29,7 @@ from .input_manager import TLLInputManager, TLLCommand
 from .llm_bridge_v2 import TLLLLMBridge, TLLMockLLMProvider
 from .approval_gate import TLLApprovalGate, TLLApprovalRequest
 from .evidence_system import TLLEvidenceSystem, TLLActionEvidence
+from .llm_adapters import TLLLLMAdapterRegistry, TLLOpenAIAdapter, TLLDoubaoAdapter, TLLLocalLLMAdapter
 
 __all__ = [
     "TLLToolRegistry", "Tool",
