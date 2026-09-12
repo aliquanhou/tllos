@@ -78,7 +78,8 @@ def main():
 
     print("🧠 LLM Bridge...")
     llm_registry = TLLLLMAdapterRegistry()
-    llm_bridge = TLLLLMBridge(TLLMockLLMProvider())
+    from tllos.virtual_machine.agent.real_llm_provider import TLLRealLLMProvider
+    llm_bridge = TLLLLMBridge(TLLRealLLMProvider(str(PROJECT_ROOT / "config" / "llm.json")))
     print(f"   Provider: {llm_bridge.provider_name}")
     print(f"   Available adapters: {', '.join(llm_registry.list_available())}")
 
