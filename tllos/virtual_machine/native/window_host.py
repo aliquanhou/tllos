@@ -270,10 +270,10 @@ class TLLENativeWindowHost:
 
     def _on_mouse_click(self, wparam, lparam):
         """Handle left mouse click."""
-        x = lparam & 0xFFFF
-        y = (lparam >> 16) & 0xFFFF
-        if x >= 32768: x -= 65536
-        if y >= 32768: y -= 65536
+        # Extract x, y from lparam (64-bit safe)
+        lp = lparam if isinstance(lparam, int) else lparam.value
+        x = ctypes.c_short(lp & 0xFFFF).value
+        y = ctypes.c_short((lp >> 16) & 0xFFFF).value
 
         # Check button clicks
         clicked = False
@@ -286,12 +286,9 @@ class TLLENativeWindowHost:
 
         # If not a button click, check if clicked in input area
         if not clicked and hasattr(self, 'desktop') and self.desktop:
-            # Input bar is at bottom: y = height - 60 to height - 16
             fb_h = self.fb.height
             if y > fb_h - 60:
-                # Focus input
                 self.input_focused = True
-                self.user32.SetFocus(self.hwnd)
             else:
                 self.input_focused = False
 
@@ -342,6 +339,7 @@ class TLLENativeWindowHost:
 
         self.user32.ShowWindow(self.hwnd, SW_SHOW)
         self.user32.UpdateWindow(self.hwnd)
+        self.user32.SetFocus(self.hwnd)
 
     def run(self):
         """Run the message loop (blocking until window closes)."""
