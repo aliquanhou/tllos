@@ -13,6 +13,7 @@ from .framebuffer import TLLFramebuffer
 from .desktop_surface import TLLDesktopSurface
 from .text_renderer import TLLTextRenderer
 from .window_system import TLLWindow, TLLWindowManager, TLLCompositor
+from .agent import TLLAgent, TLLToolRegistry, TLLLLMBridge
 from .os import TLLOSVirtualMachine
 
 __version__ = "0.1.0"
@@ -24,5 +25,6 @@ __all__ = [
     "TLLFramebuffer", "TLLDesktopSurface",
     "TLLTextRenderer",
     "TLLWindow", "TLLWindowManager", "TLLCompositor",
+    "TLLAgent", "TLLToolRegistry", "TLLLLMBridge",
     "TLLOSVirtualMachine",
 ]
