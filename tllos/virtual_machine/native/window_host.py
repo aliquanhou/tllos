@@ -265,13 +265,20 @@ class TLLENativeWindowHost:
             if self.input_buffer.strip() and hasattr(self, 'desktop') and self.desktop:
                 cmd = self.input_buffer.strip()
                 self.desktop.add_chat("user", cmd)
-                self.desktop.log_event(f"主人: {cmd[:20]}")
-                # Get real reply from LLM bridge
-                reply = "收到"
-                if hasattr(self.desktop, 'llm_bridge') and self.desktop.llm_bridge:
-                    reply = self.desktop.llm_bridge.chat(cmd)
-                self.desktop.add_chat("agent", reply)
+                self.desktop.add_chat("agent", "思考中...")
                 self.input_buffer = ""
+                # Set stream callback for live updates
+                def on_stream(full):
+                    if self.desktop.chat_history:
+                        self.desktop.chat_history[-1] = ("agent", full)
+                        self.user32.InvalidateRect(self.hwnd, None, False)
+                if hasattr(self.desktop, 'llm_bridge') and self.desktop.llm_bridge:
+                    provider = self.desktop.llm_bridge.provider
+                    if hasattr(provider, 'stream_callback'):
+                        provider.stream_callback = on_stream
+                    reply = self.desktop.llm_bridge.chat(cmd)
+                    if self.desktop.chat_history:
+                        self.desktop.chat_history[-1] = ("agent", reply)
                 self.desktop.render()
                 self.user32.InvalidateRect(self.hwnd, None, False)
         elif vkey == VK_BACK:
@@ -342,12 +349,19 @@ class TLLENativeWindowHost:
             if self.input_buffer.strip():
                 cmd = self.input_buffer.strip()
                 self.desktop.add_chat("user", cmd)
-                self.desktop.log_event(f"发送: {cmd[:20]}")
-                reply = "收到"
-                if hasattr(self.desktop, 'llm_bridge') and self.desktop.llm_bridge:
-                    reply = self.desktop.llm_bridge.chat(cmd)
-                self.desktop.add_chat("agent", reply)
+                self.desktop.add_chat("agent", "思考中...")
                 self.input_buffer = ""
+                def on_stream(full):
+                    if self.desktop.chat_history:
+                        self.desktop.chat_history[-1] = ("agent", full)
+                        self.user32.InvalidateRect(self.hwnd, None, False)
+                if hasattr(self.desktop, 'llm_bridge') and self.desktop.llm_bridge:
+                    provider = self.desktop.llm_bridge.provider
+                    if hasattr(provider, 'stream_callback'):
+                        provider.stream_callback = on_stream
+                    reply = self.desktop.llm_bridge.chat(cmd)
+                    if self.desktop.chat_history:
+                        self.desktop.chat_history[-1] = ("agent", reply)
                 self.desktop.render()
                 self.user32.InvalidateRect(self.hwnd, None, False)
 
