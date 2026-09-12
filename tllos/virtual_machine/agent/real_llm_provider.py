@@ -31,7 +31,7 @@ class TLLRealLLMProvider:
         return {}
 
     def chat(self, message: str, context: Dict = None) -> str:
-        """Send message to real LLM."""
+        """Send message to real LLM (streaming)."""
         if not self.available:
             return self._fallback(message)
 
@@ -42,18 +42,35 @@ class TLLRealLLMProvider:
                 "Content-Type": "application/json"
             }
             payload = {
-                "model": self.config.get("model", "doubao-pro-4k"),
+                "model": self.config.get("model", "deepseek-chat"),
                 "messages": [
                     {"role": "system", "content": "你是 TLL OS 的智能代理助手，用中文简洁回答。"},
                     {"role": "user", "content": message}
                 ],
                 "max_tokens": 500,
-                "temperature": 0.7
+                "temperature": 0.7,
+                "stream": True
             }
-            resp = requests.post(url, headers=headers, json=payload, timeout=10)
+            resp = requests.post(url, headers=headers, json=payload, timeout=30, stream=True)
             if resp.status_code == 200:
-                data = resp.json()
-                return data["choices"][0]["message"]["content"]
+                full_reply = ""
+                for line in resp.iter_lines():
+                    if line:
+                        line_str = line.decode('utf-8')
+                        if line_str.startswith("data: "):
+                            data_str = line_str[6:]
+                            if data_str.strip() == "[DONE]":
+                                break
+                            try:
+                                chunk = json.loads(data_str)
+                                delta = chunk["choices"][0].get("delta", {}).get("content", "")
+                                if delta:
+                                    full_reply += delta
+                                    if hasattr(self, 'stream_callback') and self.stream_callback:
+                                        self.stream_callback(full_reply)
+                            except:
+                                pass
+                return full_reply if full_reply else "（无回复）"
             return f"API错误: {resp.status_code}"
         except Exception as e:
             return f"连接失败: {str(e)[:50]}"

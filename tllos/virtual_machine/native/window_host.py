@@ -194,6 +194,15 @@ class TLLENativeWindowHost:
             elif msg == WM_LBUTTONDOWN:
                 self._on_mouse_click(wparam, lparam)
                 return 0
+            elif msg == 0x020A:  # WM_MOUSEWHEEL
+                delta = ctypes.c_short(wparam >> 16).value
+                if hasattr(self, 'desktop') and self.desktop:
+                    if delta > 0:
+                        self.desktop.scroll_offset = max(0, self.desktop.scroll_offset - 2)
+                    else:
+                        self.desktop.scroll_offset += 2
+                    self.desktop.render()
+                return 0
             elif msg == WM_TIMER:
                 # Timer: update desktop render
                 if hasattr(self, 'desktop') and self.desktop:

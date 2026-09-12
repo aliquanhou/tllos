@@ -61,8 +61,9 @@ class TLLExecutionDesktop:
 
         self.frame_count = 0
         self.start_time = time.time()
-        self.event_log = []  # [(timestamp, message)]
-        self.chat_history = []  # [("user"/"agent", text)]
+        self.event_log = []
+        self.chat_history = []
+        self.scroll_offset = 0  # scroll up/down
 
     def log_event(self, msg: str):
         """Log an event to the visible event stream."""
@@ -140,26 +141,27 @@ class TLLExecutionDesktop:
 
         self.text_renderer.draw_text(rx + 20, ry + 12, "对话", *primary, size='medium')
 
-        # Chat messages - larger font, wrap lines
+        # Chat messages with scroll
+        line_width = 70
         cy = ry + 44
-        line_width = 70  # chars per line
-        if self.chat_history:
-            for role, text in self.chat_history[-6:]:
+        # Apply scroll offset
+        visible_start = max(0, len(self.chat_history) - self.scroll_offset - 6)
+        visible_msgs = self.chat_history[visible_start:]
+        if visible_msgs:
+            for role, text in visible_msgs[-8:]:
                 prefix = "我: " if role == "user" else "TLL: "
                 color = alive if role == "user" else text_pri
-                # Split text into lines
                 full = prefix + text
                 while full:
                     line = full[:line_width]
                     self.text_renderer.draw_text(rx + 20, cy, line, *color, size='medium')
                     cy += 26
                     full = full[line_width:]
-                cy += 6  # gap between messages
+                cy += 6
         else:
             self.text_renderer.draw_text(rx + 20, cy, "你好！我是 TLL OS 智能代理", *text_sec, size='medium')
             cy += 32
             self.text_renderer.draw_text(rx + 20, cy, "在下方输入框和我对话", *text_mute, size='small')
-            cy += 32
 
         # === Bottom: Input bar ===
         iy = self.height - 56
