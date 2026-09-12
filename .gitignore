@@ -96,3 +96,6 @@ verify_sha256.sh
 *.swp
 *.swo
 *~
+.env
+config/llm.json
+config/
