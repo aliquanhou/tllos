@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Optional, Dict
 from .framebuffer import TLLFramebuffer
+from .text_renderer import TLLTextRenderer
 
 
 class TLLDesktopSurface:
@@ -17,6 +18,7 @@ class TLLDesktopSurface:
 
     def __init__(self, framebuffer: TLLFramebuffer):
         self.fb = framebuffer
+        self.text_renderer = TLLTextRenderer(framebuffer)
         self.title = "TLL OS Desktop"
         self.status = "ONLINE"
         self.agent_status = "READY"
@@ -26,6 +28,7 @@ class TLLDesktopSurface:
     def render_desktop(self) -> dict:
         """Render TLL OS desktop to framebuffer."""
         fb = self.fb
+        tr = self.text_renderer
         w, h = fb.width, fb.height
 
         # Background (dark blue-gray)
@@ -34,31 +37,40 @@ class TLLDesktopSurface:
         # Top bar (title bar)
         fb.fill_rect(0, 0, w, 50, 30, 40, 55)
 
-        # Title text area (simplified - draw colored rectangles as "text")
-        fb.fill_rect(20, 15, 200, 20, 100, 200, 255)  # "TLL OS Desktop" title
+        # Title text (real text rendering)
+        tr.draw_text(20, 15, "TLL OS 智能代理", 100, 200, 255, "large")
 
-        # Status indicator (green circle)
+        # Status indicator (green circle as rectangle)
         fb.fill_rect(w - 50, 15, 20, 20, 0, 200, 100)
+        tr.draw_text(w - 80, 18, "ONLINE", 100, 255, 150, "small")
 
         # Left panel (system info)
-        fb.fill_rect(20, 70, 300, 200, 40, 50, 65)
-        fb.draw_rect(20, 70, 300, 200, 80, 100, 120, 1)
+        fb.fill_rect(20, 70, 320, 250, 40, 50, 65)
+        fb.draw_rect(20, 70, 320, 250, 80, 100, 120, 1)
 
-        # System info lines (as colored bars representing text)
-        fb.fill_rect(40, 90, 150, 15, 150, 180, 200)  # "System: ONLINE"
-        fb.fill_rect(40, 120, 150, 15, 100, 150, 200)  # "Agent: READY"
-        fb.fill_rect(40, 150, 150, 15, 200, 150, 100)  # "LLM: NOT_CONNECTED"
+        # System panel title
+        tr.draw_text(40, 80, "系统状态", 180, 200, 220, "medium")
+
+        # System info lines (real text)
+        tr.draw_text(40, 110, "系统状态: ONLINE", 100, 200, 255, "small")
+        tr.draw_text(40, 135, "智能代理: READY", 100, 180, 220, "small")
+        tr.draw_text(40, 160, "LLM: NOT_CONNECTED", 220, 180, 120, "small")
+        tr.draw_text(40, 185, "显示: 1920x1080", 150, 170, 190, "small")
+        tr.draw_text(40, 210, "内存: 2304/4096 MB", 150, 170, 190, "small")
 
         # Center area (desktop canvas)
-        fb.fill_rect(350, 70, w - 370, h - 140, 25, 30, 40)
-        fb.draw_rect(350, 70, w - 370, h - 140, 60, 80, 100, 1)
+        fb.fill_rect(370, 70, w - 390, h - 140, 25, 30, 40)
+        fb.draw_rect(370, 70, w - 390, h - 140, 60, 80, 100, 1)
 
-        # Center "desktop ready" indicator
-        fb.fill_rect(w // 2 - 100, h // 2 - 20, 200, 40, 50, 150, 100)
+        # Center welcome text (real text)
+        tr.draw_text_center(w // 2, h // 2 - 40, "TLL OS Desktop", 100, 200, 255, "large")
+        tr.draw_text_center(w // 2, h // 2, "Agent ONLINE", 100, 255, 150, "medium")
+        tr.draw_text_center(w // 2, h // 2 + 30, "等待任务...", 180, 200, 220, "small")
 
         # Bottom bar (taskbar)
         fb.fill_rect(0, h - 50, w, 50, 30, 40, 55)
-        fb.fill_rect(20, h - 35, 80, 20, 60, 120, 200)  # "Start" button
+        fb.fill_rect(20, h - 35, 80, 20, 60, 120, 200)
+        tr.draw_text(35, h - 32, "开始", 255, 255, 255, "small")
 
         # Commit frame
         result = fb.commit()
