@@ -60,13 +60,151 @@ class TLLExecutionDesktop:
         self.start_time = time.time()
 
     def render(self) -> Dict:
-        """Render ChatGPT-style desktop."""
-        self.fb.clear(17, 17, 17)  # #171717
+        """Render TLL Agent Reality Console."""
+        # TLL Flat Theme colors
+        bg = (5, 8, 18)       # #050812
+        panel = (16, 24, 39)   # #101827
+        primary = (0, 229, 255)  # #00E5FF
+        alive = (0, 255, 136)    # #00FF88
+        warn = (255, 204, 0)     # #FFCC00
+        danger = (255, 51, 68)   # #FF3344
+        creation = (255, 209, 102)  # #FFD166
+        text_pri = (230, 230, 230)
+        text_sec = (140, 140, 140)
+        text_mute = (80, 80, 80)
+
+        self.fb.clear(*bg)
         self.frame_count += 1
 
-        self._render_sidebar()
-        self._render_chat_area()
-        self._render_input_bar()
+        # === Top bar ===
+        self.fb.fill_rect(0, 0, self.width, 44, *panel)
+        self.fb.draw_rect(0, 43, self.width, 1, *primary)
+        self.text_renderer.draw_text(20, 12, "TLL OS", *primary, size='large')
+        self.text_renderer.draw_text(120, 14, "Agent Reality Console", *text_sec, size='small')
+
+        # === Left sidebar (260px) ===
+        sw = 260
+        sx = 0
+        sy = 44
+
+        # Agent State panel
+        ay = sy + 12
+        self.fb.fill_rect(sx + 12, ay, sw - 24, 110, *panel)
+        self.fb.draw_rect(sx + 12, ay, sw - 24, 110, *alive)
+        self.text_renderer.draw_text(sx + 24, ay + 8, "AGENT STATE", *alive, size='small')
+
+        if self.agent_self:
+            health = self.agent_self.get_health_summary()
+            self.text_renderer.draw_text(sx + 24, ay + 30, f"ID: tll-agent-0", *text_pri, size='small')
+            self.text_renderer.draw_text(sx + 24, ay + 48, f"状态: {health.get('survival', 'UNKNOWN')}", *alive, size='small')
+            self.text_renderer.draw_text(sx + 24, ay + 66, f"能量: {health.get('energy', 0)}%", *text_pri, size='small')
+            self.text_renderer.draw_text(sx + 24, ay + 84, f"风险: {health.get('risk_level', 'LOW')}", *warn, size='small')
+
+        # Capability panel
+        cy = ay + 120
+        self.fb.fill_rect(sx + 12, cy, sw - 24, 80, *panel)
+        self.fb.draw_rect(sx + 12, cy, sw - 24, 80, *primary)
+        self.text_renderer.draw_text(sx + 24, cy + 8, "CAPABILITIES", *primary, size='small')
+        if self.tool_runtime:
+            n = len(self.tool_runtime.tool_handlers)
+            self.text_renderer.draw_text(sx + 24, cy + 30, f"工具: {n} 个", *text_pri, size='small')
+            self.text_renderer.draw_text(sx + 24, cy + 48, "✓ 文件 ✓ 进程 ✓ 代码", *text_sec, size='small')
+            self.text_renderer.draw_text(sx + 24, cy + 66, "✓ 应用 ✓ 存储 ✓ 网络", *text_sec, size='small')
+
+        # World Model panel
+        wy = cy + 100
+        self.fb.fill_rect(sx + 12, wy, sw - 24, 90, *panel)
+        self.fb.draw_rect(sx + 12, wy, sw - 24, 90, *creation)
+        self.text_renderer.draw_text(sx + 24, wy + 8, "WORLD MODEL", *creation, size='small')
+        if self.world_model:
+            ws = self.world_model.get_world_summary()
+            self.text_renderer.draw_text(sx + 24, wy + 30, f"对象: {ws.get('total_objects', 0)}", *text_pri, size='small')
+            self.text_renderer.draw_text(sx + 24, wy + 48, f"依赖关系: {ws.get('total_dependencies', 0)}", *text_pri, size='small')
+            self.text_renderer.draw_text(sx + 24, wy + 66, "DB → Backend → App", *text_sec, size='small')
+
+        # === Right: Cognitive Stream ===
+        rx = sw + 16
+        rw = self.width - sw - 32
+        ry = 56
+
+        # Panel background
+        self.fb.fill_rect(rx, ry, rw, self.height - ry - 70, *panel)
+        self.fb.draw_rect(rx, ry, rw, self.height - ry - 70, *primary)
+
+        self.text_renderer.draw_text(rx + 16, ry + 10, "COGNITIVE STREAM", *primary, size='medium')
+
+        # Cognitive steps
+        cy = ry + 40
+        if self.live_loop:
+            status = self.live_loop.get_status()
+            goal = status.get('goal') or '等待指令'
+            thinking = status.get('thinking') or '空闲'
+
+            # Step 1: Goal
+            self.text_renderer.draw_text(rx + 16, cy, "● 目标", *alive, size='small')
+            self.text_renderer.draw_text(rx + 120, cy, goal, *text_pri, size='small')
+            cy += 24
+
+            # Step 2: Understanding
+            self.text_renderer.draw_text(rx + 16, cy, "● 思考", *primary, size='small')
+            self.text_renderer.draw_text(rx + 120, cy, thinking, *text_sec, size='small')
+            cy += 24
+
+            # Step 3: Plan
+            self.text_renderer.draw_text(rx + 16, cy, "● 计划", *creation, size='small')
+            cy += 20
+            if self.live_loop.current_plan:
+                for i, step in enumerate(self.live_loop.current_plan[:5]):
+                    done = i < self.live_loop.current_step
+                    mark = "✓" if done else "○"
+                    c = alive if done else text_mute
+                    self.text_renderer.draw_text(rx + 130, cy, f"{mark} {step}", *c, size='small')
+                    cy += 18
+            else:
+                self.text_renderer.draw_text(rx + 130, cy, "（暂无计划）", *text_mute, size='small')
+                cy += 18
+            cy += 6
+
+            # Step 4: Risk
+            self.text_renderer.draw_text(rx + 16, cy, "● 风险", *warn, size='small')
+            risk_level = "LOW"
+            if self.approval_gate and self.approval_gate.has_pending():
+                req = self.approval_gate.get_pending()[0]
+                risk_level = req.risk_level
+                self.text_renderer.draw_text(rx + 120, cy, f"等待批准: {req.action[:20]}", *warn, size='small')
+            else:
+                self.text_renderer.draw_text(rx + 120, cy, "无待处理", *text_sec, size='small')
+            cy += 24
+
+            # Step 5: Evidence
+            self.text_renderer.draw_text(rx + 16, cy, "● 证据", *alive, size='small')
+            if self.evidence_system:
+                stats = self.evidence_system.get_stats()
+                self.text_renderer.draw_text(rx + 120, cy,
+                    f"记录: {stats['total_records']} | 已批准: {stats['approved_count']}",
+                    *text_sec, size='small')
+
+        # === Bottom: Input bar ===
+        iy = self.height - 56
+        ih = 40
+        self.fb.fill_rect(rx, iy, rw, ih, *panel)
+        self.fb.draw_rect(rx, iy, rw, ih, *primary)
+
+        input_text = ""
+        if hasattr(self, '_window_input') and self._window_input:
+            input_text = self._window_input
+
+        if input_text:
+            self.text_renderer.draw_text(rx + 16, iy + 12, input_text, *text_pri, size='small')
+        else:
+            self.text_renderer.draw_text(rx + 16, iy + 12, "输入指令，按 Enter 发送...", *text_mute, size='small')
+
+        # Send button
+        btn_x = rx + rw - 44
+        self.fb.fill_rect(btn_x, iy + 4, 36, 32, *alive)
+        self.text_renderer.draw_text(btn_x + 10, iy + 12, "↑", *panel, size='small')
+
+        self.buttons = [("send", btn_x, iy + 4, 36, 32)]
 
         self.fb.commit()
         frame_hash = self.fb.buffer_hash
@@ -75,7 +213,7 @@ class TLLExecutionDesktop:
             "frame_hash": frame_hash,
             "frame_count": self.frame_count,
             "uptime": time.time() - self.start_time,
-            "panels_rendered": 3
+            "panels_rendered": 4
         }
 
     def _render_sidebar(self):
