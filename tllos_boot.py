@@ -16,9 +16,10 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from tllos.virtual_machine import TLLFramebuffer, TLLWindowManager, TLLCompositor
 from tllos.virtual_machine.agent import (
     TLLAgentSelf, TLLWorldModel, TLLExperienceMemory,
-    TLLAgentConstitution, TLLAppRuntime, TLLAgentSpawner
+    TLLAgentConstitution, TLLAppRuntime, TLLAgentSpawner,
+    TLLToolRuntime
 )
-from tllos.virtual_machine.desktop import TLLDesktopSurface
+from tllos.virtual_machine.desktop import TLLFlatDesktop
 
 
 def main():
@@ -28,7 +29,7 @@ def main():
     print()
 
     # Step 1: Virtual Hardware
-    print("[1/6] Initializing Virtual Hardware...")
+    print("[1/8] Initializing Virtual Hardware...")
     fb = TLLFramebuffer(1280, 800)
     wm = TLLWindowManager(fb)
     compositor = TLLCompositor(wm)
@@ -36,7 +37,7 @@ def main():
     print()
 
     # Step 2: Agent Core
-    print("[2/6] Initializing Agent Core...")
+    print("[2/8] Initializing Agent Core...")
     agent_self = TLLAgentSelf("tll-agent-0")
     agent_self.update_health(energy=95.0, risk_level="LOW")
     print(f"  Agent: {agent_self.get_self_state()['identity']}")
@@ -44,7 +45,7 @@ def main():
     print()
 
     # Step 3: World Model
-    print("[3/6] Initializing World Model...")
+    print("[3/8] Initializing World Model...")
     world = TLLWorldModel()
     world.add_object("Product Database", "service", object_id="svc-db")
     world.add_object("Backend API", "service", object_id="svc-backend", dependencies=["svc-db"])
@@ -54,7 +55,7 @@ def main():
     print()
 
     # Step 4: Experience & Constitution
-    print("[4/6] Initializing Experience & Constitution...")
+    print("[4/8] Initializing Experience & Constitution...")
     experience = TLLExperienceMemory()
     experience.record_experience(
         action="system_boot", evidence="boot_complete",
@@ -67,43 +68,49 @@ def main():
     print(f"  Rules: {constitution.get_constitution_summary()['total_rules']}")
     print()
 
-    # Step 5: App Runtime
-    print("[5/6] Initializing App Runtime...")
-    app_runtime = TLLAppRuntime(wm, None)
+    # Step 5: Tool Runtime
+    print("[5/8] Initializing Tool Runtime...")
+    tool_runtime = TLLToolRuntime(wm, compositor)
+    print(f"  Tools: {len(tool_runtime.tool_handlers)} active")
+    print()
+
+    # Step 6: App Runtime
+    print("[6/8] Initializing App Runtime...")
+    app_runtime = TLLAppRuntime(wm, tool_runtime.process_mgr)
     spawner = TLLAgentSpawner()
     print(f"  Apps: {app_runtime.get_stats()['total_apps']}")
     print()
 
-    # Step 6: Desktop
-    print("[6/6] Initializing Desktop Surface...")
-    desktop = TLLDesktopSurface(
+    # Step 7: Desktop Theme
+    print("[7/8] Initializing Desktop Theme...")
+    desktop = TLLFlatDesktop(
         framebuffer=fb,
         agent_self=agent_self,
         world_model=world,
         experience=experience,
-        constitution=constitution,
         app_runtime=app_runtime,
-        spawner=spawner
+        tool_runtime=tool_runtime
     )
     result = desktop.render()
     print(f"  Frame: {result['frame_hash'][:16]}...")
     print(f"  Resolution: {result['width']}x{result['height']}")
     print()
 
-    # Screenshot
+    # Step 8: Screenshot & Status
+    print("[8/8] Generating Screenshot & Status...")
     screenshot_path = PROJECT_ROOT / "tll_desktop_snapshot.png"
     desktop.take_screenshot(str(screenshot_path))
-    print(f"Desktop Screenshot: {screenshot_path}")
-    print()
+    print(f"  Screenshot: {screenshot_path}")
 
-    # Status text
     status_text = desktop.get_status_text()
+    print()
     print(status_text)
     print()
 
     print("=" * 60)
     print("TLL OS is ONLINE")
-    print("Awaiting user commands...")
+    print("Flat Intelligence Desktop v1.0")
+    print("Awaiting owner commands...")
     print("=" * 60)
 
     return 0
