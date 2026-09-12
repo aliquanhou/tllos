@@ -30,7 +30,7 @@ class TLLRealLLMProvider:
                 return json.load(f)
         return {}
 
-    def chat(self, message: str) -> str:
+    def chat(self, message: str, context: Dict = None) -> str:
         """Send message to real LLM."""
         if not self.available:
             return self._fallback(message)
