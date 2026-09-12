@@ -286,10 +286,10 @@ class TLLENativeWindowHost:
 
         # If not a button click, check if clicked in input area
         if not clicked and hasattr(self, 'desktop') and self.desktop:
-            # Input bar is at bottom: y = height - 56 to height - 16
-            if y > self.height - 60:
+            # Input bar is at bottom: y = height - 60 to height - 16
+            fb_h = self.fb.height
+            if y > fb_h - 60:
                 # Focus input
-                print(f"Input focused at ({x}, {y})")
                 self.input_focused = True
                 self.user32.SetFocus(self.hwnd)
             else:
