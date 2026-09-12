@@ -1,0 +1,19 @@
+[
+  {
+    "action_id": "act-20260912-130550-339150",
+    "action_type": "MOVE_MOUSE",
+    "success": true,
+    "before_frame_hash": "5ff6f288d7a1fa3099c5a47ce8c3c1e3e7e28bf10d60bb4081e2f4d58ad27051",
+    "after_frame_hash": "0bc33e94b30c9408cbcfb03f3286f129c67d2d4ed8d9aef6adfd2db7680a926c",
+    "result": {
+      "success": true,
+      "action": "MOVE_MOUSE",
+      "x": 100,
+      "y": 100
+    },
+    "timestamp": "2026-09-12T13:05:52.169751",
+    "evidence": "ev-act-20260912-130550-339150",
+    "audit_event": "audit-act-20260912-130550-339150",
+    "schema_version": "1.0"
+  }
+]

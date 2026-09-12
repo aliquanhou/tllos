@@ -1,0 +1,12 @@
+{
+  "action_id": "",
+  "target": "",
+  "type": "",
+  "confidence": 0.0,
+  "reason": "",
+  "evidence_id": "",
+  "permission_state": "",
+  "risk_level": "LOW",
+  "approval_required": false,
+  "schema_version": "1.0"
+}
