@@ -189,11 +189,14 @@ class TLLENativeWindowHost:
         bmi.biCompression = BI_RGB
         bmi.biSizeImage = 0
 
-        # Use SetDIBitsToDevice
+        # Get pixel bytes and pointer
         pixel_bytes = pixels.tobytes()
-        self.gdi32.SetDIBitsToDevice(
+        pixel_ptr = ctypes.c_char_p(pixel_bytes)
+
+        # Use SetDIBitsToDevice
+        result = self.gdi32.SetDIBitsToDevice(
             hdc, 0, 0, w, h, 0, 0, 0, h,
-            pixel_bytes, ctypes.byref(bmi), DIB_RGB_COLORS
+            pixel_ptr, ctypes.byref(bmi), DIB_RGB_COLORS
         )
 
         self.user32.EndPaint(hwnd, ctypes.byref(ps))
@@ -247,24 +250,30 @@ class TLLENativeWindowHost:
         self.user32.UpdateWindow(self.hwnd)
 
     def run(self):
-        """Run the message loop."""
+        """Run the message loop (blocking until window closes)."""
         self.running = True
         msg = wintypes.MSG()
 
+        print("TLL OS Window Loop: Started")
+
         while self.running:
-            # Render frame
-            self.user32.InvalidateRect(self.hwnd, None, True)
-            self.user32.UpdateWindow(self.hwnd)
+            # Blocking GetMessage (waits for next message)
+            ret = self.user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
 
-            # Process messages (non-blocking for one frame)
-            while self.user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 1):
-                if msg.message == 0x0012:  # WM_QUIT
-                    self.running = False
-                    break
-                self.user32.TranslateMessage(ctypes.byref(msg))
-                self.user32.DispatchMessageW(ctypes.byref(msg))
+            if ret <= 0:
+                # WM_QUIT or error
+                self.running = False
+                break
 
-            time.sleep(0.1)  # 10 FPS
+            self.user32.TranslateMessage(ctypes.byref(msg))
+            self.user32.DispatchMessageW(ctypes.byref(msg))
+
+            # Repaint after processing messages
+            if self.hwnd:
+                self.user32.InvalidateRect(self.hwnd, None, False)
+                self.user32.UpdateWindow(self.hwnd)
+
+        print("TLL OS Window Loop: Ended")
 
     def close(self):
         """Close the window."""

@@ -48,7 +48,7 @@ class TLLAgentLiveLoop:
 
     def observe(self) -> Dict:
         """Observe the current world state."""
-        self.current_thinking = "观察世界..."
+        self.current_thinking = "Observing world..."
         world_summary = self.world_model.get_world_summary()
         health = self.agent_self.get_health_summary()
         return {
@@ -59,7 +59,7 @@ class TLLAgentLiveLoop:
 
     def understand(self, goal: str) -> Dict:
         """Understand the goal."""
-        self.current_thinking = f"理解目标: {goal[:30]}"
+        self.current_thinking = f"Understanding: {goal[:30]}"
         self.current_goal = goal
 
         # Analyze what's needed
@@ -75,13 +75,13 @@ class TLLAgentLiveLoop:
 
     def decide(self, understanding: Dict) -> Dict:
         """Decide on a plan."""
-        self.current_thinking = "制定计划..."
+        self.current_thinking = "Planning..."
         needs = understanding.get("needs", [])
 
         plan = []
         for need in needs:
-            plan.append(f"创建 {need}")
-        plan.append("验证结果")
+            plan.append(f"Create {need}")
+        plan.append("Verify result")
 
         self.current_plan = plan
         self.current_step = 0
@@ -101,7 +101,7 @@ class TLLAgentLiveLoop:
     def execute(self, step: str) -> Dict:
         """Execute a step."""
         self.current_action = step
-        self.current_thinking = f"执行: {step[:30]}"
+        self.current_thinking = f"Executing: {step[:30]}"
         self.waiting_approval = False
 
         # Risk check
@@ -117,7 +117,7 @@ class TLLAgentLiveLoop:
         # Actually "execute" (mock but structured)
         time.sleep(0.1)
         self.current_step += 1
-        self.last_result = f"完成: {step[:30]}"
+        self.last_result = f"Done: {step[:30]}"
 
         return {
             "step": step,
@@ -164,7 +164,7 @@ class TLLAgentLiveLoop:
                 risk=result.get("risk", "LOW")
             )
 
-        self.current_thinking = "循环完成，等待下一个目标"
+        self.current_thinking = "Cycle complete, awaiting next goal"
         return {
             "loop": self.loop_count,
             "goal": self.current_goal,

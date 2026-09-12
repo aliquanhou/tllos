@@ -125,7 +125,7 @@ def main():
     print("Press Enter to submit. Press ESC to close.")
     print()
 
-    # Launch native window
+    # Launch native window (blocking)
     try:
         window = TLLENativeWindowHost(
             framebuffer=fb,
@@ -135,8 +135,13 @@ def main():
         print("Window created. Running...")
         window.run()
     except Exception as e:
-        print(f"Native window not available: {e}")
-        print("Running in headless mode.")
+        print(f"Native window error: {e}")
+        print("Running in headless mode (press Ctrl+C to exit)...")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print("Shutting down.")
 
     return 0
 

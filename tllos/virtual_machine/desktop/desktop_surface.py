@@ -103,7 +103,7 @@ class TLLExecutionDesktop:
         if self.live_loop:
             status = self.live_loop.get_status()
             self.text_renderer.draw_text(x + 16, y + 32,
-                              f"Goal: {status['goal'] or '等待指令'}",
+                              f"Goal: {status['goal'] or 'Waiting for command'}",
                               *TLLFlatTheme.TLL_TEXT_PRIMARY, size='small')
             self.text_renderer.draw_text(x + 16, y + 50,
                               f"Thinking: {status['thinking']}",
@@ -185,7 +185,7 @@ class TLLExecutionDesktop:
                               *TLLFlatTheme.TLL_TEXT_SECONDARY, size='small')
         else:
             self.text_renderer.draw_text(x + 16, y + 32,
-                              "> 等待主人指令...",
+                              "> Waiting for owner command...",
                               *TLLFlatTheme.TLL_TEXT_MUTED, size='small')
 
     def submit_command(self, command: str) -> Dict:
