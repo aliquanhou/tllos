@@ -39,10 +39,10 @@ DIB_RGB_COLORS = 0
 BI_RGB = 0
 
 
-# Window procedure type
+# Window procedure type (LRESULT = LRESULT_PTR = c_void_p on 64-bit)
 WNDPROC = ctypes.WINFUNCTYPE(
-    ctypes.c_long, wintypes.HWND, wintypes.UINT,
-    wintypes.WPARAM, wintypes.LPARAM
+    ctypes.c_ssize_t, wintypes.HWND, wintypes.UINT,
+    ctypes.c_size_t, ctypes.c_ssize_t
 )
 
 
@@ -106,6 +106,13 @@ class TLLENativeWindowHost:
         self.input_buffer = ""
         self.input_callback = on_command_callback
 
+        # Persistent WNDPROC callback (prevent GC from freeing it)
+        self._wnd_proc_ref = WNDPROC(self._wnd_proc)
+
+        # Persistent pixel buffer (prevent GC from freeing it during paint)
+        self._pixel_buffer = None
+        self._pixel_ptr = None
+
         # Win32
         self.user32 = ctypes.windll.user32
         self.gdi32 = ctypes.windll.gdi32
@@ -124,10 +131,10 @@ class TLLENativeWindowHost:
             wintypes.HMENU, wintypes.HINSTANCE, wintypes.LPVOID
         ]
 
-        self.user32.DefWindowProcW.restype = ctypes.c_long
+        self.user32.DefWindowProcW.restype = ctypes.c_ssize_t
         self.user32.DefWindowProcW.argtypes = [
             wintypes.HWND, wintypes.UINT,
-            wintypes.WPARAM, wintypes.LPARAM
+            ctypes.c_size_t, ctypes.c_ssize_t
         ]
 
         self.user32.BeginPaint.restype = wintypes.HDC
@@ -141,6 +148,9 @@ class TLLENativeWindowHost:
             wintypes.UINT, wintypes.UINT
         ]
 
+        # Note: Do NOT override DispatchMessageW argtypes
+        # (let ctypes auto-detect, custom override causes 64-bit crashes)
+
         # gdi32 signatures
         self.gdi32.SetDIBitsToDevice.restype = ctypes.c_int
         self.gdi32.SetDIBitsToDevice.argtypes = [
@@ -150,23 +160,34 @@ class TLLENativeWindowHost:
             ctypes.c_void_p, wintypes.UINT
         ]
 
+        # Win32 functions that need argtypes to prevent 64-bit overflow
+        self.user32.PostQuitMessage.argtypes = [ctypes.c_int]
+        self.user32.DestroyWindow.argtypes = [wintypes.HWND]
+        self.user32.InvalidateRect.argtypes = [wintypes.HWND, ctypes.c_void_p, wintypes.BOOL]
+        self.user32.UpdateWindow.argtypes = [wintypes.HWND]
+        self.user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+
     def _wnd_proc(self, hwnd, msg, wparam, lparam):
         """Window procedure."""
-        if msg == WM_PAINT:
-            self._on_paint(hwnd)
-            return 0
-        elif msg == WM_KEYDOWN:
-            self._on_keydown(wparam)
-            return 0
-        elif msg == WM_CHAR:
-            self._on_char(wparam)
-            return 0
-        elif msg == WM_DESTROY:
-            self.running = False
-            self.user32.PostQuitMessage(0)
-            return 0
-        elif msg == WM_CLOSE:
-            self.user32.DestroyWindow(hwnd)
+        try:
+            if msg == WM_PAINT:
+                self._on_paint(hwnd)
+                return 0
+            elif msg == WM_KEYDOWN:
+                self._on_keydown(wparam)
+                return 0
+            elif msg == WM_CHAR:
+                self._on_char(wparam)
+                return 0
+            elif msg == WM_DESTROY:
+                self.running = False
+                self.user32.PostQuitMessage(0)
+                return 0
+            elif msg == WM_CLOSE:
+                self.user32.DestroyWindow(hwnd)
+                return 0
+        except Exception as e:
+            print(f"WndProc error: {e}")
             return 0
 
         return self.user32.DefWindowProcW(hwnd, msg, wparam, lparam)
@@ -176,30 +197,36 @@ class TLLENativeWindowHost:
         ps = PAINTSTRUCT()
         hdc = self.user32.BeginPaint(hwnd, ctypes.byref(ps))
 
-        # Get pixel data from framebuffer
-        pixels = self.fb.get_pixel_data()
-        h, w = pixels.shape[:2]
+        try:
+            # Get pixel data from framebuffer
+            pixels = self.fb.get_pixel_data()
+            h, w = pixels.shape[:2]
 
-        bmi = BITMAPINFOHEADER()
-        bmi.biSize = ctypes.sizeof(BITMAPINFOHEADER)
-        bmi.biWidth = w
-        bmi.biHeight = -h  # Top-down
-        bmi.biPlanes = 1
-        bmi.biBitCount = 24
-        bmi.biCompression = BI_RGB
-        bmi.biSizeImage = 0
+            bmi = BITMAPINFOHEADER()
+            bmi.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+            bmi.biWidth = w
+            bmi.biHeight = -h  # Top-down
+            bmi.biPlanes = 1
+            bmi.biBitCount = 24
+            bmi.biCompression = BI_RGB
+            bmi.biSizeImage = 0
 
-        # Get pixel bytes and pointer
-        pixel_bytes = pixels.tobytes()
-        pixel_ptr = ctypes.c_char_p(pixel_bytes)
+            # Update persistent pixel buffer (keep reference, prevent GC)
+            self._pixel_buffer = pixels.tobytes()
+            # Get pointer to buffer data
+            self._pixel_ptr = ctypes.cast(
+                ctypes.c_char_p(self._pixel_buffer), ctypes.c_void_p
+            )
 
-        # Use SetDIBitsToDevice
-        result = self.gdi32.SetDIBitsToDevice(
-            hdc, 0, 0, w, h, 0, 0, 0, h,
-            pixel_ptr, ctypes.byref(bmi), DIB_RGB_COLORS
-        )
-
-        self.user32.EndPaint(hwnd, ctypes.byref(ps))
+            # Use SetDIBitsToDevice
+            self.gdi32.SetDIBitsToDevice(
+                hdc, 0, 0, w, h, 0, 0, 0, h,
+                self._pixel_ptr, ctypes.byref(bmi), DIB_RGB_COLORS
+            )
+        except Exception as e:
+            print(f"Paint error: {e}")
+        finally:
+            self.user32.EndPaint(hwnd, ctypes.byref(ps))
 
     def _on_keydown(self, vkey):
         """Handle key down."""
@@ -226,7 +253,7 @@ class TLLENativeWindowHost:
         # Register window class
         wc = WNDCLASSW()
         wc.style = CS_HREDRAW | CS_VREDRAW
-        wc.lpfnWndProc = WNDPROC(self._wnd_proc)
+        wc.lpfnWndProc = self._wnd_proc_ref  # Keep reference!
         wc.hInstance = self.kernel32.GetModuleHandleW(None)
         wc.lpszClassName = "TLLOSWindow"
 
@@ -257,21 +284,20 @@ class TLLENativeWindowHost:
         print("TLL OS Window Loop: Started")
 
         while self.running:
-            # Blocking GetMessage (waits for next message)
-            ret = self.user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
+            # Use PeekMessageW with no argtypes override (safest)
+            bRet = self.user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, 1)
 
-            if ret <= 0:
-                # WM_QUIT or error
+            if bRet == 0:
+                # No message - sleep briefly
+                time.sleep(0.03)
+                continue
+
+            if msg.message == 0x0012:  # WM_QUIT
                 self.running = False
                 break
 
             self.user32.TranslateMessage(ctypes.byref(msg))
             self.user32.DispatchMessageW(ctypes.byref(msg))
-
-            # Repaint after processing messages
-            if self.hwnd:
-                self.user32.InvalidateRect(self.hwnd, None, False)
-                self.user32.UpdateWindow(self.hwnd)
 
         print("TLL OS Window Loop: Ended")
 
