@@ -1,0 +1,12 @@
+{
+  "frame_id": "frame-7c3d5ca7d8d5",
+  "timestamp": "2026-09-12T12:21:51.439949",
+  "width": 2560,
+  "height": 1440,
+  "format": "PNG",
+  "source": "PIL_IMAGECRAP",
+  "hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+  "file_path": "tllos/agent_runtime/desktop_vision_runtime/frames\\frame-7c3d5ca7d8d5.png",
+  "evidence_ref": "ev-frame-7c3d5ca7d8d5",
+  "audit_ref": "audit-frame-7c3d5ca7d8d5"
+}

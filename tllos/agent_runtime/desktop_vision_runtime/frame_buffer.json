@@ -1,0 +1,81 @@
+{
+  "frame_buffer_name": "Frame Buffer Model",
+  "frame_buffer_version": "1.0.0",
+  "frame_buffer_date": "2026-09-12",
+  "description": "真实屏幕帧缓冲区模型。",
+
+  "required_fields": [
+    "frame_id",
+    "timestamp",
+    "width",
+    "height",
+    "format",
+    "source",
+    "hash",
+    "evidence_ref"
+  ],
+
+  "frame_fields": {
+    "frame_id": {
+      "type": "string",
+      "description": "唯一帧 ID",
+      "required": true
+    },
+    "timestamp": {
+      "type": "string",
+      "description": "采集时间戳 (ISO 8601)",
+      "required": true
+    },
+    "width": {
+      "type": "integer",
+      "description": "帧宽度 (像素)",
+      "required": true,
+      "range": [1, 7680]
+    },
+    "height": {
+      "type": "integer",
+      "description": "帧高度 (像素)",
+      "required": true,
+      "range": [1, 4320]
+    },
+    "format": {
+      "type": "enum",
+      "description": "帧格式",
+      "required": true,
+      "values": ["PNG", "JPEG", "RAW_BGRA", "RAW_RGB"]
+    },
+    "source": {
+      "type": "enum",
+      "description": "采集来源",
+      "required": true,
+      "values": ["WINDOWS_GDI", "MSS", "PIL_IMAGECRAP", "MOCK"]
+    },
+    "region": {
+      "type": "object",
+      "description": "采集区域 (可选)",
+      "required": false,
+      "fields": ["x", "y", "width", "height"]
+    },
+    "hash": {
+      "type": "string",
+      "description": "帧内容 SHA256 Hash",
+      "required": true,
+      "format": "sha256"
+    },
+    "file_path": {
+      "type": "string",
+      "description": "帧文件存储路径 (可选)",
+      "required": false
+    },
+    "evidence_ref": {
+      "type": "string",
+      "description": "证据引用",
+      "required": true
+    },
+    "audit_ref": {
+      "type": "string",
+      "description": "审计引用",
+      "required": true
+    }
+  }
+}

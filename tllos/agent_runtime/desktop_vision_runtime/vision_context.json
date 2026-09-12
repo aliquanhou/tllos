@@ -1,0 +1,54 @@
+{
+  "vision_context_name": "Vision Runtime Context",
+  "vision_context_version": "1.0.0",
+  "vision_context_date": "2026-09-12",
+  "description": "Vision Runtime 执行上下文。",
+
+  "required_fields": [
+    "session_id",
+    "agent_id",
+    "permission",
+    "policy",
+    "execution_id"
+  ],
+
+  "context_fields": {
+    "session_id": {
+      "type": "string",
+      "description": "会话 ID",
+      "required": true
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Agent ID",
+      "required": true
+    },
+    "permission": {
+      "type": "string",
+      "description": "当前权限",
+      "required": true
+    },
+    "policy": {
+      "type": "object",
+      "description": "Vision 策略",
+      "required": true,
+      "fields": ["confidence_threshold", "max_frame_size", "ocr_enabled", "object_detection_enabled"]
+    },
+    "execution_id": {
+      "type": "string",
+      "description": "执行 ID",
+      "required": true
+    },
+    "created_at": {
+      "type": "string",
+      "description": "创建时间 (ISO 8601)",
+      "required": true
+    },
+    "status": {
+      "type": "enum",
+      "description": "上下文状态",
+      "required": true,
+      "values": ["CREATED", "INITIALIZED", "RUNNING", "COMPLETED", "FAILED"]
+    }
+  }
+}
