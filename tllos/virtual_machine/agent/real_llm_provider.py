@@ -25,21 +25,10 @@ class TLLRealLLMProvider:
         self.available = bool(self.api_key)
 
     def _load_config(self, path: str) -> Dict:
-        # Priority: environment variable > config file
-        import os
-        env_key = os.environ.get("TLL_LLM_API_KEY", "")
-        config = {}
         if os.path.exists(path):
             with open(path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-        # Override with env var if present
-        if env_key:
-            config["api_key"] = env_key
-        # Strip key from logging
-        if "api_key" in config:
-            config["_has_key"] = bool(config["api_key"])
-            config["api_key"] = "***REDACTED***"
-        return config
+                return json.load(f)
+        return {}
 
     def chat(self, message: str) -> str:
         """Send message to real LLM."""
