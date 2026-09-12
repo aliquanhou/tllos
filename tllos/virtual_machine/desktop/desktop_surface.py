@@ -179,7 +179,16 @@ class TLLExecutionDesktop:
         self.text_renderer.draw_text(x + 16, y + 6, "主人指令",
                                      *TLLFlatTheme.TLL_CREATION, size='medium')
 
-        if self.input_manager and self.input_manager.command_history:
+        # Show live input buffer from window host
+        input_text = ""
+        if hasattr(self, '_window_input') and self._window_input:
+            input_text = self._window_input
+
+        if input_text:
+            self.text_renderer.draw_text(x + 16, y + 32,
+                              f"> {input_text}",
+                              *TLLFlatTheme.TLL_TEXT_PRIMARY, size='small')
+        elif self.input_manager and self.input_manager.command_history:
             last = self.input_manager.command_history[-1]
             self.text_renderer.draw_text(x + 16, y + 32,
                               f"> {last.text[:40]}",

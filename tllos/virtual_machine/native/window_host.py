@@ -193,6 +193,8 @@ class TLLENativeWindowHost:
             elif msg == WM_TIMER:
                 # Timer: update desktop render
                 if hasattr(self, 'desktop') and self.desktop:
+                    # Pass input buffer to desktop for display
+                    self.desktop._window_input = self.input_buffer
                     self.desktop.render()
                     self.user32.InvalidateRect(self.hwnd, None, False)
                 return 0
@@ -238,25 +240,27 @@ class TLLENativeWindowHost:
         finally:
             self.user32.EndPaint(hwnd, ctypes.byref(ps))
 
-    def _on_keydown(self, vkey):
-        """Handle key down."""
-        if vkey == VK_RETURN:
-            if self.input_callback and self.input_buffer:
-                self.input_callback(self.input_buffer)
-                self.input_buffer = ""
-        elif vkey == VK_BACK:
-            self.input_buffer = self.input_buffer[:-1]
-        elif vkey == VK_ESCAPE:
-            self.running = False
-
-        # Trigger repaint
-        self.user32.InvalidateRect(self.hwnd, None, True)
-
     def _on_char(self, char_code):
         """Handle char input."""
         if 32 <= char_code <= 126:  # Printable ASCII
             self.input_buffer += chr(char_code)
-            self.user32.InvalidateRect(self.hwnd, None, True)
+            self.user32.InvalidateRect(self.hwnd, None, False)
+
+    def _on_keydown(self, vkey):
+        """Handle key down."""
+        if vkey == VK_RETURN:
+            # Submit command
+            if self.input_buffer.strip() and hasattr(self, 'desktop') and self.desktop:
+                cmd = self.input_buffer.strip()
+                print(f"Command: {cmd}")
+                self.desktop.submit_command(cmd)
+                self.input_buffer = ""
+                self.user32.InvalidateRect(self.hwnd, None, False)
+        elif vkey == VK_BACK:
+            self.input_buffer = self.input_buffer[:-1]
+            self.user32.InvalidateRect(self.hwnd, None, False)
+        elif vkey == VK_ESCAPE:
+            self.running = False
 
     def _on_mouse_click(self, wparam, lparam):
         """Handle left mouse click."""
@@ -284,16 +288,25 @@ class TLLENativeWindowHost:
             self.user32.PostQuitMessage(0)
             return
 
-        if self.desktop:
-            if label == "启动":
-                self.desktop.submit_command("启动代理")
-            elif label == "批准":
-                self.desktop.submit_command("批准执行")
-            elif label == "暂停":
-                print("暂停")
-            # Re-render immediately
-            self.desktop.render()
-            self.user32.InvalidateRect(self.hwnd, None, False)
+        if not hasattr(self, 'desktop') or not self.desktop:
+            return
+
+        if label == "启动":
+            # Submit a real command to start agent
+            self.desktop.submit_command("创建一个商城系统")
+        elif label == "批准":
+            # Approve pending action
+            if self.desktop.approval_gate and self.desktop.approval_gate.has_pending():
+                self.desktop.approval_gate.approve(self.desktop.approval_gate.get_pending()[0].action_id)
+                print("Approved pending action")
+            else:
+                print("No pending approval")
+        elif label == "暂停":
+            print("Pause - not implemented yet")
+
+        # Re-render immediately
+        self.desktop.render()
+        self.user32.InvalidateRect(self.hwnd, None, False)
 
     def create_window(self):
         """Create the native window."""
