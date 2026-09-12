@@ -1,0 +1,21 @@
+{
+  "sequence_id": "",
+  "created_at": "",
+  "frame_count": 0,
+  "frames": [
+    {
+      "frame_id": "",
+      "timestamp": "",
+      "hash": "",
+      "width": 0,
+      "height": 0,
+      "source": ""
+    }
+  ],
+  "hash_chain": {
+    "type": "sequential",
+    "previous_hash_field": "prev_hash",
+    "description": "Each frame's hash is chained to previous frame"
+  },
+  "schema_version": "1.0"
+}

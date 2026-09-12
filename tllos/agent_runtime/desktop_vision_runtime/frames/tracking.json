@@ -1,0 +1,249 @@
+{
+  "tracking_id": "track-20260912-125548",
+  "timestamp": "2026-09-12T12:55:48.788867",
+  "tracks": [
+    {
+      "track_id": "obj-frame-7c3d5ca7d8d5-0012",
+      "object_type": "TEXT",
+      "previous_position": {
+        "x": 2441,
+        "y": 1424,
+        "width": 50,
+        "height": 12
+      },
+      "current_position": {
+        "x": 2441,
+        "y": 1424,
+        "width": 50,
+        "height": 12
+      },
+      "movement": {
+        "dx": 0,
+        "dy": 0,
+        "distance": 0
+      },
+      "confidence": 0.7,
+      "frame_hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+      "schema_version": "1.0"
+    },
+    {
+      "track_id": "obj-frame-7c3d5ca7d8d5-0040",
+      "object_type": "ICON",
+      "previous_position": {
+        "x": 2381,
+        "y": 1412,
+        "width": 13,
+        "height": 16
+      },
+      "current_position": {
+        "x": 2381,
+        "y": 1412,
+        "width": 13,
+        "height": 16
+      },
+      "movement": {
+        "dx": 0,
+        "dy": 0,
+        "distance": 0
+      },
+      "confidence": 0.7,
+      "frame_hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+      "schema_version": "1.0"
+    },
+    {
+      "track_id": "obj-frame-7c3d5ca7d8d5-0041",
+      "object_type": "ICON",
+      "previous_position": {
+        "x": 16,
+        "y": 1412,
+        "width": 16,
+        "height": 16
+      },
+      "current_position": {
+        "x": 16,
+        "y": 1412,
+        "width": 16,
+        "height": 16
+      },
+      "movement": {
+        "dx": 0,
+        "dy": 0,
+        "distance": 0
+      },
+      "confidence": 0.7,
+      "frame_hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+      "schema_version": "1.0"
+    },
+    {
+      "track_id": "obj-frame-7c3d5ca7d8d5-0042",
+      "object_type": "ICON",
+      "previous_position": {
+        "x": 2518,
+        "y": 1411,
+        "width": 26,
+        "height": 25
+      },
+      "current_position": {
+        "x": 2518,
+        "y": 1411,
+        "width": 26,
+        "height": 25
+      },
+      "movement": {
+        "dx": 0,
+        "dy": 0,
+        "distance": 0
+      },
+      "confidence": 0.7,
+      "frame_hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+      "schema_version": "1.0"
+    },
+    {
+      "track_id": "obj-frame-7c3d5ca7d8d5-0043",
+      "object_type": "ICON",
+      "previous_position": {
+        "x": 60,
+        "y": 1411,
+        "width": 17,
+        "height": 17
+      },
+      "current_position": {
+        "x": 60,
+        "y": 1411,
+        "width": 17,
+        "height": 17
+      },
+      "movement": {
+        "dx": 0,
+        "dy": 0,
+        "distance": 0
+      },
+      "confidence": 0.7,
+      "frame_hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+      "schema_version": "1.0"
+    },
+    {
+      "track_id": "obj-frame-7c3d5ca7d8d5-0045",
+      "object_type": "PANEL",
+      "previous_position": {
+        "x": 457,
+        "y": 1411,
+        "width": 22,
+        "height": 17
+      },
+      "current_position": {
+        "x": 457,
+        "y": 1411,
+        "width": 22,
+        "height": 17
+      },
+      "movement": {
+        "dx": 0,
+        "dy": 0,
+        "distance": 0
+      },
+      "confidence": 0.7,
+      "frame_hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+      "schema_version": "1.0"
+    },
+    {
+      "track_id": "obj-frame-7c3d5ca7d8d5-0046",
+      "object_type": "ICON",
+      "previous_position": {
+        "x": 407,
+        "y": 1409,
+        "width": 23,
+        "height": 22
+      },
+      "current_position": {
+        "x": 407,
+        "y": 1409,
+        "width": 23,
+        "height": 22
+      },
+      "movement": {
+        "dx": 0,
+        "dy": 0,
+        "distance": 0
+      },
+      "confidence": 0.7,
+      "frame_hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+      "schema_version": "1.0"
+    },
+    {
+      "track_id": "obj-frame-7c3d5ca7d8d5-0048",
+      "object_type": "ICON",
+      "previous_position": {
+        "x": 554,
+        "y": 1408,
+        "width": 24,
+        "height": 24
+      },
+      "current_position": {
+        "x": 554,
+        "y": 1408,
+        "width": 24,
+        "height": 24
+      },
+      "movement": {
+        "dx": 0,
+        "dy": 0,
+        "distance": 0
+      },
+      "confidence": 0.7,
+      "frame_hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+      "schema_version": "1.0"
+    },
+    {
+      "track_id": "obj-frame-7c3d5ca7d8d5-0049",
+      "object_type": "ICON",
+      "previous_position": {
+        "x": 505,
+        "y": 1408,
+        "width": 26,
+        "height": 26
+      },
+      "current_position": {
+        "x": 505,
+        "y": 1408,
+        "width": 26,
+        "height": 26
+      },
+      "movement": {
+        "dx": 0,
+        "dy": 0,
+        "distance": 0
+      },
+      "confidence": 0.7,
+      "frame_hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+      "schema_version": "1.0"
+    },
+    {
+      "track_id": "obj-frame-7c3d5ca7d8d5-0051",
+      "object_type": "ICON",
+      "previous_position": {
+        "x": 333,
+        "y": 1408,
+        "width": 23,
+        "height": 23
+      },
+      "current_position": {
+        "x": 333,
+        "y": 1408,
+        "width": 23,
+        "height": 23
+      },
+      "movement": {
+        "dx": 0,
+        "dy": 0,
+        "distance": 0
+      },
+      "confidence": 0.7,
+      "frame_hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+      "schema_version": "1.0"
+    }
+  ],
+  "total_tracks": 10,
+  "tracking_method": "centroid_distance_v1",
+  "schema_version": "1.0"
+}

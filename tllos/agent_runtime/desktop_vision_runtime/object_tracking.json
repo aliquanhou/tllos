@@ -1,0 +1,30 @@
+{
+  "track_id": "",
+  "object_type": "",
+  "previous_position": {
+    "x": 0,
+    "y": 0,
+    "width": 0,
+    "height": 0
+  },
+  "current_position": {
+    "x": 0,
+    "y": 0,
+    "width": 0,
+    "height": 0
+  },
+  "centroid": {
+    "x": 0,
+    "y": 0
+  },
+  "movement": {
+    "dx": 0,
+    "dy": 0,
+    "distance": 0
+  },
+  "confidence": 0.0,
+  "first_seen": "",
+  "last_seen": "",
+  "frame_hash": "",
+  "schema_version": "1.0"
+}

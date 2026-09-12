@@ -38,6 +38,24 @@ Ensures only trusted observations enter Decision Layer.
 - No fake OCR claims
 - OCR results must have confidence scores
 
+### Rule 6: Temporal Consistency (P2-08.2)
+
+- Frame sequence must have continuous timestamps
+- Missing frames → sequence invalid
+- Hash chain must be sequential
+
+### Rule 7: Memory Integrity (P2-08.2)
+
+- Memory can observe history only
+- Memory cannot make action decisions
+- Memory boundary: observe only
+
+### Rule 8: Replay Verification (P2-08.2)
+
+- Same frame → same hash → same objects
+- Modified frame → different hash → REJECT
+- Replay must be deterministic
+
 ---
 
 ## Rejection Rules
@@ -50,7 +68,10 @@ Ensures only trusted observations enter Decision Layer.
 | objects.json tampered | REJECT |
 | missing evidence_ref | REJECT |
 | OCR NOT_AVAILABLE | SKIP OCR, continue vision |
+| missing frame in sequence | REJECT sequence |
+| memory action decision | REJECT |
+| replay hash mismatch | REJECT |
 
 ---
 
-*P2-08.1 Vision Safety Gate v1.0*
+*P2-08.2 Vision Safety Gate v1.1*

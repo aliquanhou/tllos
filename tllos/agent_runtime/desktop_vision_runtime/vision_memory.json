@@ -1,0 +1,46 @@
+{
+  "memory_id": "mem-20260912-125639",
+  "created_at": "2026-09-12T12:56:39.496312",
+  "frames": [
+    {
+      "frame_id": "frame-7c3d5ca7d8d5",
+      "hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+      "timestamp": "2026-09-12T12:21:51.439949",
+      "type": "frame_metadata"
+    },
+    {
+      "frame_id": "frame-7c3d5ca7d8d5",
+      "hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+      "timestamp": "2026-09-12T12:38:43.169837",
+      "type": "frame_metadata"
+    },
+    {
+      "frame_id": "frame-7c3d5ca7d8d5",
+      "hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+      "timestamp": "2026-09-12T12:41:24.954728",
+      "type": "frame_metadata"
+    }
+  ],
+  "objects": [
+    {
+      "frame_id": "frame-7c3d5ca7d8d5",
+      "frame_hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+      "total_objects": 104,
+      "detector": "rule_based_v1"
+    }
+  ],
+  "replay_verification": [
+    {
+      "frame_id": "frame-7c3d5ca7d8d5",
+      "expected_hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+      "actual_hash": "1dd522dd10ca50738f48a4278c9bbb1b2a00715b4da7952c689bf6593c1d5543",
+      "match": true
+    }
+  ],
+  "memory_boundary": {
+    "can_observe_history": true,
+    "can_make_action_decision": false,
+    "description": "Memory stores perception history only. No action decisions."
+  },
+  "schema_version": "1.0"
+}

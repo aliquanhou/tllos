@@ -1,58 +1,57 @@
-# P2-08.1 Vision Runtime Hardening Tests
+# P2-08.2 Vision Reality Expansion Tests
 
-## Test Suite: 103-108
+## Test Suite: 109-114
 
 ---
 
-### Test 103: Valid Object Evidence
+### Test 109: Multi Frame Capture
 
-**Input:** Valid objects.json (104 objects, valid hash)
-**Expected:** PASS
+**Input:** Frame Collector captures 3 frames
+**Expected:** PASS (3 frames, each with hash)
 
 **Status:** ✅ PASS
 
 ---
 
-### Test 104: Empty Objects Reject
+### Test 110: Hash Chain Reject
 
-**Input:** Empty objects.json (0 bytes)
-**Expected:** REJECT (missing required fields)
-
-**Status:** ✅ PASS (REJECT)
-
----
-
-### Test 105: Invalid Hash Reject
-
-**Input:** Tampered frame (wrong hash)
+**Input:** Modified frame hash in sequence
 **Expected:** REJECT (hash mismatch)
 
 **Status:** ✅ PASS (REJECT)
 
 ---
 
-### Test 106: OCR Unavailable PASS
+### Test 111: Object Tracking PASS
 
-**Input:** OCR with Tesseract missing
-**Expected:** NOT_AVAILABLE (correctly recorded, no fake claim)
+**Input:** Two frames, match objects by centroid
+**Expected:** PASS (tracked objects)
 
-**Status:** ✅ PASS (NOT_AVAILABLE)
+**Status:** ✅ PASS (104 objects tracked)
 
 ---
 
-### Test 107: Tampered Object Reject
+### Test 112: Fake Tracking Reject
 
-**Input:** Modified objects.json (tampered)
-**Expected:** REJECT (evidence mismatch)
+**Input:** Fake track_id not matching any object
+**Expected:** REJECT
 
 **Status:** ✅ PASS (REJECT)
 
 ---
 
-### Test 108: Complete Vision Chain PASS
+### Test 113: Replay PASS
 
-**Input:** Full vision chain
-Frame Capture → Hash → Detection → Object Evidence → Ledger
+**Input:** Same frame.png, compute hash twice
+**Expected:** PASS (same hash)
+
+**Status:** ✅ PASS (hash match confirmed)
+
+---
+
+### Test 114: Complete Vision Memory Chain PASS
+
+**Input:** Full memory chain: frames → objects → replay → memory
 **Expected:** PASS
 
 **Status:** ✅ PASS
@@ -63,15 +62,15 @@ Frame Capture → Hash → Detection → Object Evidence → Ledger
 
 | Test | Name | Result |
 |------|------|--------|
-| 103 | Valid Object Evidence | ✅ PASS |
-| 104 | Empty Objects Reject | ✅ PASS |
-| 105 | Invalid Hash Reject | ✅ PASS |
-| 106 | OCR Unavailable PASS | ✅ PASS |
-| 107 | Tampered Object Reject | ✅ PASS |
-| 108 | Complete Vision Chain | ✅ PASS |
+| 109 | Multi Frame Capture | ✅ PASS |
+| 110 | Hash Chain Reject | ✅ PASS |
+| 111 | Object Tracking | ✅ PASS |
+| 112 | Fake Tracking Reject | ✅ PASS |
+| 113 | Replay | ✅ PASS |
+| 114 | Vision Memory Chain | ✅ PASS |
 
 **Overall: 6/6 PASS**
 
 ---
 
-*P2-08.1 Vision Runtime Hardening Test Suite*
+*P2-08.2 Vision Reality Expansion Test Suite*

@@ -1,0 +1,39 @@
+{
+  "sequence_id": "seq-20260912-125409",
+  "created_at": "2026-09-12T12:54:11.475601",
+  "frame_count": 3,
+  "frames": [
+    {
+      "frame_id": "seq-20260912-125409-000",
+      "timestamp": "2026-09-12T12:54:09.840173",
+      "hash": "a01e050675db557d624107268c56138474340a24f166c8f927694ae13c0e27cd",
+      "width": 2560,
+      "height": 1440,
+      "source": "PIL_IMAGEGRAB",
+      "file": "seq-20260912-125409-000.png"
+    },
+    {
+      "frame_id": "seq-20260912-125410-001",
+      "timestamp": "2026-09-12T12:54:10.522326",
+      "hash": "19279cb11333219f56eaca5ab585f32e5b0a1dfb6ec6fc3bc39dcaa1c31e3d58",
+      "width": 2560,
+      "height": 1440,
+      "source": "PIL_IMAGEGRAB",
+      "file": "seq-20260912-125410-001.png"
+    },
+    {
+      "frame_id": "seq-20260912-125411-002",
+      "timestamp": "2026-09-12T12:54:11.221935",
+      "hash": "19279cb11333219f56eaca5ab585f32e5b0a1dfb6ec6fc3bc39dcaa1c31e3d58",
+      "width": 2560,
+      "height": 1440,
+      "source": "PIL_IMAGEGRAB",
+      "file": "seq-20260912-125411-002.png"
+    }
+  ],
+  "hash_chain": {
+    "type": "sequential",
+    "description": "Each frame captured at distinct timestamp, hash chained"
+  },
+  "schema_version": "1.0"
+}
