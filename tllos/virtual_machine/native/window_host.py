@@ -267,7 +267,8 @@ class TLLENativeWindowHost:
                 self.desktop.add_chat("user", cmd)
                 self.desktop.add_chat("agent", "思考中...")
                 self.input_buffer = ""
-                # Set stream callback for live updates
+                import time as _time
+                _t0 = _time.time()
                 def on_stream(full):
                     if self.desktop.chat_history:
                         self.desktop.chat_history[-1] = ("agent", full)
@@ -279,6 +280,8 @@ class TLLENativeWindowHost:
                     reply = self.desktop.llm_bridge.chat(cmd)
                     if self.desktop.chat_history:
                         self.desktop.chat_history[-1] = ("agent", reply)
+                _dt = _time.time() - _t0
+                self.desktop.log_event(f"LLM回复 {len(reply)}字 {_dt:.1f}s")
                 self.desktop.render()
                 self.user32.InvalidateRect(self.hwnd, None, False)
         elif vkey == VK_BACK:
