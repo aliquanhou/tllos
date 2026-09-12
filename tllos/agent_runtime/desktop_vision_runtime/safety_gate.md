@@ -1,57 +1,56 @@
-# Vision Safety Gate
+# TLL OS Vision Safety Gate
 
-## 定位
+## Purpose
 
-Vision Safety Gate 确保所有视觉输出都经过安全检查。
+Safety rules for Vision Runtime.
+Ensures only trusted observations enter Decision Layer.
 
 ---
 
 ## Safety Rules
 
-### Rule 1: Evidence Required
-- 所有 Frame 必须有 SHA256 hash
-- 所有 Result 必须绑定 Evidence
-- 无 Evidence 的输出必须 REJECT
+### Rule 1: Confidence Threshold
 
-### Rule 2: Confidence Gate
-- confidence < 0.5 必须 REJECT
-- confidence >= 0.5 进入 Decision Layer
+- Minimum confidence: 0.5
+- Objects below threshold are REJECTED
+- Fake objects (confidence > 1.0) are REJECTED
 
-### Rule 3: No Direct Action
-- Vision Output 不能直接触发 Action
-- 必须经过 Decision → Permission → Governance → Execution
+### Rule 2: Frame Replay Defense
 
-### Rule 4: Size Limits
-- 帧宽度: 1 - 7680 pixels
-- 帧高度: 1 - 4320 pixels
-- 超出范围必须 REJECT
+- Every frame must have valid SHA256 hash
+- Modified frame → hash mismatch → REJECT
+- Replay with correct hash only
 
-### Rule 5: Audit Required
-- 所有视觉行为必须记录 Audit Ledger
-- 无 Audit 的输出无效
+### Rule 3: Object Tamper Defense
 
----
+- objects.json must match frame_hash
+- Tampered objects → hash mismatch → REJECT
 
-## Safety Flow
+### Rule 4: Evidence Binding
 
-```
-Vision Output
-  ↓
-Evidence Validation
-  ↓
-Confidence Check
-  ↓
-Size Check
-  ↓
-Decision Layer
-  ↓
-Permission
-  ↓
-Governance
-  ↓
-Execution
-```
+- Every object must have evidence_ref
+- Every detection must be recorded in Audit Ledger
+- No silent observations
+
+### Rule 5: OCR Boundary
+
+- If Tesseract engine missing → NOT_AVAILABLE
+- No fake OCR claims
+- OCR results must have confidence scores
 
 ---
 
-*Vision Safety Gate — P2-08*
+## Rejection Rules
+
+| Condition | Action |
+|-----------|--------|
+| confidence < 0.5 | REJECT |
+| confidence > 1.0 | REJECT (fake) |
+| frame hash mismatch | REJECT |
+| objects.json tampered | REJECT |
+| missing evidence_ref | REJECT |
+| OCR NOT_AVAILABLE | SKIP OCR, continue vision |
+
+---
+
+*P2-08.1 Vision Safety Gate v1.0*

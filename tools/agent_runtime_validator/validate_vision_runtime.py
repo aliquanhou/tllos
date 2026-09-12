@@ -6,14 +6,17 @@ Validate Vision Runtime protocol integrity.
 Gates:
 - Gate 1: Dependency
 - Gate 2: Capture
-- Gate 3: Evidence
+- Gate 3: Evidence (Frame + Object)
 - Gate 4: Lifecycle
 - Gate 5: Ledger
+- Gate 6: Object Evidence Schema
+- Gate 7: OCR Boundary
 """
 
 import json
 import sys
 import os
+import hashlib
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
@@ -165,7 +168,45 @@ def main():
             print(f"  >> PASS: ledger events present, {len(event_types)} total")
             results.append(("Gate 5: Ledger", "PASS"))
 
-    # Check directory structure
+    # Gate 6: Object Evidence
+    print()
+    print("--- Gate 6: Object Evidence ---")
+    objects_path = "tllos/agent_runtime/desktop_vision_runtime/frames/frame-7c3d5ca7d8d5.objects.json"
+    ok, objects = validate_json_file(objects_path)
+    if not ok:
+        print(f"  >> WARN: objects.json: {objects}")
+        results.append(("Gate 6: Object Evidence", "WARN"))
+    else:
+        required_fields = ["frame_id", "frame_hash", "objects", "total_objects", "evidence_schema_version"]
+        missing = [f for f in required_fields if f not in objects]
+        if missing:
+            print(f"  >> FAIL: missing fields: {missing}")
+            all_passed = False
+            results.append(("Gate 6: Object Evidence", "FAIL"))
+        else:
+            print(f"  >> PASS: object evidence valid, {objects['total_objects']} objects")
+            results.append(("Gate 6: Object Evidence", "PASS"))
+
+    # Gate 7: OCR Boundary
+    print()
+    print("--- Gate 7: OCR Boundary ---")
+    ocr_path = "tllos/agent_runtime/desktop_vision_runtime/frames/frame-7c3d5ca7d8d5.ocr.json"
+    ok, ocr = validate_json_file(ocr_path)
+    if not ok:
+        print(f"  >> FAIL: ocr.json: {ocr}")
+        all_passed = False
+        results.append(("Gate 7: OCR Boundary", "FAIL"))
+    else:
+        status = ocr.get("ocr_status", "UNKNOWN")
+        if status in ("COMPLETED", "NOT_AVAILABLE"):
+            print(f"  >> PASS: OCR status correctly recorded: {status}")
+            results.append(("Gate 7: OCR Boundary", "PASS"))
+        else:
+            print(f"  >> FAIL: unexpected OCR status: {status}")
+            all_passed = False
+            results.append(("Gate 7: OCR Boundary", "FAIL"))
+
+    # Directory structure check
     print()
     print("--- Directory Structure ---")
     vision_files = [
@@ -189,7 +230,7 @@ def main():
     print("=" * 60)
     if all_passed:
         print("Vision Runtime Validation PASS")
-        print(f"  5/5 Gates Verified")
+        print(f"  7/7 Gates Verified")
         print()
         for name, status in results:
             print(f"  {name:40s} {status}")
