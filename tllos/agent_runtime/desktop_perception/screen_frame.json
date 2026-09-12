@@ -1,0 +1,73 @@
+{
+  "frame_model_name": "Screen Frame Model",
+  "frame_model_version": "1.0.0",
+  "frame_model_date": "2026-09-12",
+  "description": "屏幕帧模型定义。",
+
+  "required_fields": [
+    "frame_id",
+    "timestamp",
+    "source",
+    "resolution",
+    "evidence_ref"
+  ],
+
+  "frame_fields": {
+    "frame_id": {
+      "type": "string",
+      "description": "唯一帧 ID",
+      "required": true
+    },
+    "timestamp": {
+      "type": "string",
+      "description": "采集时间戳",
+      "required": true
+    },
+    "source": {
+      "type": "string",
+      "description": "采集来源 (screen/window/region)",
+      "required": true
+    },
+    "resolution": {
+      "type": "object",
+      "description": "分辨率 (width x height)",
+      "required": true,
+      "fields": ["width", "height"]
+    },
+    "region": {
+      "type": "object",
+      "description": "采集区域",
+      "required": false,
+      "fields": ["x", "y", "width", "height"]
+    },
+    "evidence_ref": {
+      "type": "string",
+      "description": "证据引用",
+      "required": true
+    },
+    "audit_ref": {
+      "type": "string",
+      "description": "审计引用",
+      "required": true
+    }
+  },
+
+  "lifecycle": {
+    "states": [
+      "REQUESTED",
+      "CAPTURED",
+      "ANALYZING",
+      "MATCHED",
+      "USED",
+      "ARCHIVED"
+    ],
+    "transitions": {
+      "REQUESTED": ["CAPTURED"],
+      "CAPTURED": ["ANALYZING", "ARCHIVED"],
+      "ANALYZING": ["MATCHED", "ARCHIVED"],
+      "MATCHED": ["USED", "ARCHIVED"],
+      "USED": ["ARCHIVED"],
+      "ARCHIVED": []
+    }
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "object_model_name": "Vision Object Model",
+  "object_model_version": "1.0.0",
+  "object_model_date": "2026-09-12",
+  "description": "视觉目标模型定义。",
+
+  "required_fields": [
+    "object_id",
+    "type",
+    "position",
+    "confidence",
+    "evidence_ref"
+  ],
+
+  "object_fields": {
+    "object_id": {
+      "type": "string",
+      "description": "唯一目标 ID",
+      "required": true
+    },
+    "type": {
+      "type": "enum",
+      "description": "目标类型",
+      "required": true,
+      "values": ["BUTTON", "WINDOW", "ICON", "TEXT", "CONTROL", "IMAGE", "PANEL"]
+    },
+    "position": {
+      "type": "object",
+      "description": "位置 (x, y, width, height)",
+      "required": true,
+      "fields": ["x", "y", "width", "height"]
+    },
+    "confidence": {
+      "type": "float",
+      "description": "置信度 (0.0 - 1.0)",
+      "required": true,
+      "range": [0.0, 1.0]
+    },
+    "text": {
+      "type": "string",
+      "description": "OCR 识别文本（可选）",
+      "required": false
+    },
+    "evidence_ref": {
+      "type": "string",
+      "description": "证据引用",
+      "required": true
+    },
+    "audit_ref": {
+      "type": "string",
+      "description": "审计引用",
+      "required": true
+    }
+  },
+
+  "object_types": {
+    "BUTTON": {
+      "description": "按钮控件",
+      "examples": ["OK", "Cancel", "Submit"]
+    },
+    "WINDOW": {
+      "description": "窗口",
+      "examples": ["Notepad", "Chrome"]
+    },
+    "ICON": {
+      "description": "图标",
+      "examples": ["File Explorer", "Recycle Bin"]
+    },
+    "TEXT": {
+      "description": "文本区域",
+      "examples": ["Title bar", "Menu item"]
+    },
+    "CONTROL": {
+      "description": "通用控件",
+      "examples": ["Checkbox", "Radio", "Dropdown"]
+    },
+    "IMAGE": {
+      "description": "图片",
+      "examples": ["Screenshot", "Logo"]
+    },
+    "PANEL": {
+      "description": "面板",
+      "examples": ["Sidebar", "Toolbar"]
+    }
+  }
+}
