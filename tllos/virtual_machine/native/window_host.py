@@ -253,7 +253,7 @@ class TLLENativeWindowHost:
             # Submit command
             if self.input_buffer.strip() and hasattr(self, 'desktop') and self.desktop:
                 cmd = self.input_buffer.strip()
-                print(f"Command: {cmd}")
+                self.desktop.log_event(f"回车发送: {cmd[:30]}")
                 self.desktop.submit_command(cmd)
                 self.input_buffer = ""
                 self.user32.InvalidateRect(self.hwnd, None, False)
@@ -301,7 +301,7 @@ class TLLENativeWindowHost:
             # Submit input buffer
             if self.input_buffer.strip():
                 cmd = self.input_buffer.strip()
-                print(f"Command: {cmd}")
+                self.desktop.log_event(f"发送: {cmd[:30]}")
                 self.desktop.submit_command(cmd)
                 self.input_buffer = ""
                 self.desktop.render()
@@ -344,6 +344,7 @@ class TLLENativeWindowHost:
 
         # Initial render
         if hasattr(self, 'desktop') and self.desktop:
+            self.desktop.log_event("TLL OS 启动完成")
             self.desktop.render()
 
         # Set timer for periodic UI update (500ms)

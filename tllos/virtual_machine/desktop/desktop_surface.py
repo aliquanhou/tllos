@@ -58,6 +58,14 @@ class TLLExecutionDesktop:
 
         self.frame_count = 0
         self.start_time = time.time()
+        self.event_log = []  # [(timestamp, message)]
+
+    def log_event(self, msg: str):
+        """Log an event to the visible event stream."""
+        ts = time.strftime("%H:%M:%S")
+        self.event_log.append((ts, msg))
+        if len(self.event_log) > 8:
+            self.event_log = self.event_log[-8:]
 
     def render(self) -> Dict:
         """Render TLL Agent Reality Console."""
@@ -183,6 +191,14 @@ class TLLExecutionDesktop:
                 self.text_renderer.draw_text(rx + 120, cy,
                     f"记录: {stats['total_records']} | 已批准: {stats['approved_count']}",
                     *text_sec, size='small')
+
+        # === Event Stream ===
+        ey = ry + rw - 180
+        if self.event_log:
+            self.text_renderer.draw_text(rx + 16, ey, "EVENT STREAM", *creation, size='small')
+            for i, (ts, msg) in enumerate(self.event_log[-6:]):
+                self.text_renderer.draw_text(rx + 16, ey + 18 + i * 16,
+                    f"{ts} {msg[:50]}", *text_sec, size='small')
 
         # === Bottom: Input bar ===
         iy = self.height - 60
