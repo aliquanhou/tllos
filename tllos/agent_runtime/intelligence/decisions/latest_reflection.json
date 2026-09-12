@@ -1,0 +1,13 @@
+{
+  "reflection_id": "reflect-20260912-132343-490863",
+  "action_result": {
+    "action": "OPEN_APP",
+    "target": "calculator"
+  },
+  "success": true,
+  "analysis": "Action succeeded as expected",
+  "learned": "No adjustment needed",
+  "next_decision": "CONTINUE",
+  "timestamp": "2026-09-12T13:23:43.490875",
+  "schema_version": "1.0"
+}

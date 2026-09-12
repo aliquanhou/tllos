@@ -1,0 +1,31 @@
+{
+  "reasoning_id": "reason-20260912-132343-490651",
+  "goal": "Open calculator",
+  "context": {
+    "screen": "desktop"
+  },
+  "constraints": [
+    "no_admin"
+  ],
+  "options": [
+    {
+      "action": "OPEN_APP",
+      "target": "calculator",
+      "confidence": 0.85
+    },
+    {
+      "action": "SEARCH",
+      "target": "Open calculator",
+      "confidence": 0.6
+    }
+  ],
+  "decision": {
+    "action": "OPEN_APP",
+    "target": "calculator",
+    "confidence": 0.85
+  },
+  "confidence": 0.85,
+  "timestamp": "2026-09-12T13:23:43.490719",
+  "context_hash": "c66fb46070d12c1cdb057a2065e4397d8457572eebe255add116533dab3cb70f",
+  "schema_version": "1.0"
+}

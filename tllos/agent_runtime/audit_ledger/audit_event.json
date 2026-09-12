@@ -80,7 +80,10 @@
     "ACTION_APPROVED",
     "ACTION_EXECUTED",
     "ACTION_FAILED",
-    "ACTION_VERIFIED"
+    "ACTION_VERIFIED",
+    "AGENT_REASON_START",
+    "AGENT_DECISION",
+    "AGENT_REFLECTION"
   ],
 
   "required_fields": {
