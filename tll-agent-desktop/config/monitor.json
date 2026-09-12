@@ -1,0 +1,24 @@
+{
+  "version": "1.0",
+  "monitor": {
+    "target_monitor": 2,
+    "fallback_monitor": 1,
+    "auto_move": true
+  },
+  "cockpit": {
+    "title": "TLL OS Agent",
+    "width": 800,
+    "height": 600,
+    "theme": "dark"
+  },
+  "agent": {
+    "auto_start_loop": false,
+    "approval_mode": "manual",
+    "emergency_stop_enabled": true
+  },
+  "evidence": {
+    "save_screenshots": true,
+    "save_session": true,
+    "log_level": "INFO"
+  }
+}
