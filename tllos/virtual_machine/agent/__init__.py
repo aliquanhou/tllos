@@ -24,6 +24,7 @@ from .experience_memory import TLLExperienceMemory, Experience
 from .constitution_learning import TLLConstitutionLearning, RuleProposal
 from .family_protocol import TLLAgentFamilyProtocol, AgentFamilyRelation
 from .agent_boot import TLLAgent
+from .agent_live_loop import TLLAgentLiveLoop
 
 __all__ = [
     "TLLToolRegistry", "Tool",
@@ -45,4 +46,5 @@ __all__ = [
     "TLLConstitutionLearning", "RuleProposal",
     "TLLAgentFamilyProtocol", "AgentFamilyRelation",
     "TLLAgent",
+    "TLLAgentLiveLoop",
 ]

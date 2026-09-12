@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-TLL OS Flat Intelligence Desktop Reality UI
+TLL OS Reality Control Center Desktop
 
-Real-time interactive desktop with live agent state.
+Integrates Agent Live Loop with desktop UI.
 """
 
 import time
@@ -17,17 +17,19 @@ from ..agent.world_model import TLLWorldModel
 from ..agent.experience_memory import TLLExperienceMemory
 from ..agent.app_runtime import TLLAppRuntime
 from ..agent.tool_runtime import TLLToolRuntime
+from ..agent.agent_live_loop import TLLAgentLiveLoop
 
 
-class TLLRealityDesktop:
-    """TLL OS Flat Intelligence Desktop Reality UI."""
+class TLLControlCenterDesktop:
+    """TLL OS Reality Control Center."""
 
     def __init__(self, framebuffer: TLLFramebuffer,
                  agent_self: TLLAgentSelf = None,
                  world_model: TLLWorldModel = None,
                  experience: TLLExperienceMemory = None,
                  app_runtime: TLLAppRuntime = None,
-                 tool_runtime: TLLToolRuntime = None):
+                 tool_runtime: TLLToolRuntime = None,
+                 live_loop: TLLAgentLiveLoop = None):
         self.fb = framebuffer
         self.width = framebuffer.width
         self.height = framebuffer.height
@@ -40,15 +42,10 @@ class TLLRealityDesktop:
         self.experience = experience
         self.app_runtime = app_runtime
         self.tool_runtime = tool_runtime
+        self.live_loop = live_loop
 
-        # Real-time state
-        self.current_goal = ""
-        self.current_thinking = ""
-        self.current_plan: List[str] = []
-        self.current_action = ""
-        self.vision_objects: List[str] = []
+        # State
         self.command_history: List[Dict] = []
-        self.last_result = ""
         self.frame_count = 0
         self.start_time = time.time()
 
@@ -57,18 +54,12 @@ class TLLRealityDesktop:
         self.fb.clear(*TLLFlatTheme.TLL_BACKGROUND)
         self.frame_count += 1
 
-        panels = self._layout_panels()
-
-        # Title bar
         self._render_title_bar()
-
-        # All panels
-        self._render_vision_panel(panels["vision"])
-        self._render_agent_panel(panels["agent"])
-        self._render_memory_panel(panels["memory"])
-        self._render_capability_panel(panels["capability"])
-        self._render_world_panel(panels["world"])
-        self._render_command_panel(panels["command"])
+        self._render_agent_panel()
+        self._render_plan_panel()
+        self._render_capability_panel()
+        self._render_world_panel()
+        self._render_command_panel()
 
         self.fb.commit()
         frame_hash = self.fb.buffer_hash
@@ -77,271 +68,171 @@ class TLLRealityDesktop:
             "frame_hash": frame_hash,
             "frame_count": self.frame_count,
             "uptime": time.time() - self.start_time,
-            "panels_rendered": 6
+            "panels_rendered": 5
         }
-
-    def _layout_panels(self) -> Dict:
-        """Layout all panels."""
-        margin = TLLFlatTheme.MARGIN
-        spacing = TLLFlatTheme.PANEL_SPACING
-        title_h = TLLFlatTheme.TITLE_BAR_HEIGHT
-        col_w = (self.width - 2 * margin - spacing) // 2
-
-        # Vision (left, large)
-        vision = self._panel(margin, title_h + margin, col_w, 200, "VISION")
-
-        # Agent Core (right, large)
-        agent_x = margin + col_w + spacing
-        agent = self._panel(agent_x, title_h + margin, col_w, 200, "AGENT CORE")
-
-        # Memory (left)
-        mem_y = vision.y + vision.height + spacing
-        memory = self._panel(margin, mem_y, col_w, 120, "MEMORY")
-
-        # Capability (right)
-        cap = self._panel(agent_x, mem_y, col_w, 120, "CAPABILITY")
-
-        # World Model (full width)
-        world_y = mem_y + 120 + spacing
-        world = self._panel(margin, world_y, self.width - 2 * margin, 60, "WORLD MODEL")
-
-        # Command (full width)
-        cmd_y = world_y + 60 + spacing
-        command = self._panel(margin, cmd_y, self.width - 2 * margin, 70, "COMMAND")
-
-        return {
-            "vision": vision, "agent": agent,
-            "memory": memory, "capability": cap,
-            "world": world, "command": command
-        }
-
-    def _panel(self, x, y, w, h, title=""):
-        """Helper to create panel rect."""
-        from .layout.layout_manager import PanelRect
-        return PanelRect(x, y, w, h, title)
 
     def _render_title_bar(self):
-        """Render title bar."""
+        """Render title bar with TLL OS identity."""
         self.fb.fill_rect(0, 0, self.width, 48, *TLLFlatTheme.TLL_PANEL)
 
+        # TLL OS Boot identity
         self.text_renderer.draw_text(24, 14, "TLL OS",
-                                     *TLLFlatTheme.TLL_TEXT_PRIMARY, size='large')
+                                     *TLLFlatTheme.TLL_PRIMARY, size='large')
 
-        # Status
-        status = "ONLINE" if self.agent_self else "READY"
-        self.text_renderer.draw_text(120, 16, f"● {status}",
+        # Agent online status
+        status = "🤖 tll-agent-0 ONLINE"
+        self.text_renderer.draw_text(120, 16, status,
                                      *TLLFlatTheme.TLL_ALIVE, size='small')
 
         # Uptime
         uptime = int(time.time() - self.start_time)
-        self.text_renderer.draw_text(self.width - 100, 16, f"{uptime}s",
+        self.text_renderer.draw_text(self.width - 80, 16, f"{uptime}s",
                                      *TLLFlatTheme.TLL_TEXT_SECONDARY, size='small')
 
-    def _render_vision_panel(self, rect):
-        """Render Vision panel."""
-        self._panel_bg(rect)
-        self._panel_title(rect, "👁 VISION")
+    def _render_agent_panel(self):
+        """Render Agent status panel."""
+        x = 24
+        y = 64
+        w = self.width - 48
+        h = 100
 
-        # Current observation
-        y = rect.y + 32
-        self.text_renderer.draw_text(rect.x + 16, y,
-                          "当前观察: Desktop",
-                          *TLLFlatTheme.TLL_TEXT_PRIMARY, size='small')
-        y += 18
+        self.fb.fill_rect(x, y, w, h, *TLLFlatTheme.TLL_PANEL)
+        self.fb.draw_rect(x, y, w, h, *TLLFlatTheme.TLL_PRIMARY)
 
-        # Objects
-        if self.vision_objects:
-            for obj in self.vision_objects[:3]:
-                self.text_renderer.draw_text(rect.x + 24, y,
-                                  f"├─ {obj}",
-                                  *TLLFlatTheme.TLL_TEXT_SECONDARY, size='small')
-                y += 16
-        else:
-            self.text_renderer.draw_text(rect.x + 24, y,
-                              "├─ 等待观察...",
-                              *TLLFlatTheme.TLL_TEXT_MUTED, size='small')
-            y += 16
+        self.text_renderer.draw_text(x + 16, y + 6, "🤖 AGENT",
+                                     *TLLFlatTheme.TLL_PRIMARY, size='medium')
 
-        # Frame hash
-        self.text_renderer.draw_text(rect.x + 16, rect.y + rect.height - 20,
-                          f"Frame: {self.fb.buffer_hash[:12] if self.fb.buffer_hash else '---'}",
-                          *TLLFlatTheme.TLL_TEXT_MUTED, size='small')
-
-    def _render_agent_panel(self, rect):
-        """Render Agent Core panel."""
-        self._panel_bg(rect, border=TLLFlatTheme.TLL_PRIMARY)
-        self._panel_title(rect, "🧠 AGENT CORE")
-
-        y = rect.y + 32
-
-        # Identity
-        if self.agent_self:
-            health = self.agent_self.get_health_summary()
-            self.text_renderer.draw_text(rect.x + 16, y,
-                              f"ID: {health['identity']}",
+        if self.live_loop:
+            status = self.live_loop.get_status()
+            self.text_renderer.draw_text(x + 16, y + 32,
+                              f"Goal: {status['goal'] or '等待指令'}",
                               *TLLFlatTheme.TLL_TEXT_PRIMARY, size='small')
-            y += 18
-            self.text_renderer.draw_text(rect.x + 16, y,
-                              f"State: {health['survival']}  Energy: {health['energy']}%",
-                              *TLLFlatTheme.TLL_ALIVE, size='small')
-        else:
-            self.text_renderer.draw_text(rect.x + 16, y,
-                              "ID: tll-agent-0",
-                              *TLLFlatTheme.TLL_TEXT_PRIMARY, size='small')
-            y += 18
-
-        y += 8
-
-        # Goal
-        self.text_renderer.draw_text(rect.x + 16, y,
-                          f"目标: {self.current_goal or '等待指令'}",
-                          *TLLFlatTheme.TLL_PRIMARY, size='small')
-        y += 18
-
-        # Thinking
-        self.text_renderer.draw_text(rect.x + 16, y,
-                          f"思考: {self.current_thinking or '观察中'}",
-                          *TLLFlatTheme.TLL_TEXT_SECONDARY, size='small')
-        y += 18
-
-        # Plan
-        if self.current_plan:
-            self.text_renderer.draw_text(rect.x + 16, y,
-                              "计划:",
-                              *TLLFlatTheme.TLL_TEXT_PRIMARY, size='small')
-            for i, step in enumerate(self.current_plan[:3]):
-                y += 16
-                self.text_renderer.draw_text(rect.x + 24, y,
-                                  f"{i+1}. {step[:30]}",
-                                  *TLLFlatTheme.TLL_TEXT_SECONDARY, size='small')
-
-    def _render_memory_panel(self, rect):
-        """Render Memory panel."""
-        self._panel_bg(rect)
-        self._panel_title(rect, "🧠 MEMORY")
-
-        y = rect.y + 32
-        if self.experience:
-            stats = self.experience.get_stats()
-            self.text_renderer.draw_text(rect.x + 16, y,
-                              f"经验: {stats['total_experiences']} 条",
-                              *TLLFlatTheme.TLL_TEXT_PRIMARY, size='small')
-            y += 18
-            self.text_renderer.draw_text(rect.x + 16, y,
-                              f"教训: {stats['lessons_learned']} 条",
+            self.text_renderer.draw_text(x + 16, y + 50,
+                              f"Thinking: {status['thinking']}",
                               *TLLFlatTheme.TLL_TEXT_SECONDARY, size='small')
-        else:
-            self.text_renderer.draw_text(rect.x + 16, y,
-                              "经验: 0 条",
-                              *TLLFlatTheme.TLL_TEXT_PRIMARY, size='small')
+            if status["waiting_approval"]:
+                self.text_renderer.draw_text(x + 16, y + 68,
+                                  "⏳ WAITING FOR APPROVAL",
+                                  *TLLFlatTheme.TLL_WARNING, size='small')
 
-    def _render_capability_panel(self, rect):
+    def _render_plan_panel(self):
+        """Render Plan panel."""
+        x = 24
+        y = 180
+        w = self.width - 48
+        h = 120
+
+        self.fb.fill_rect(x, y, w, h, *TLLFlatTheme.TLL_PANEL)
+        self.fb.draw_rect(x, y, w, h, *TLLFlatTheme.TLL_PANEL_BORDER)
+
+        self.text_renderer.draw_text(x + 16, y + 6, "📋 PLAN",
+                                     *TLLFlatTheme.TLL_PRIMARY, size='medium')
+
+        if self.live_loop and self.live_loop.current_plan:
+            for i, step in enumerate(self.live_loop.current_plan):
+                step_y = y + 32 + i * 16
+                done = i < self.live_loop.current_step
+                mark = "✓" if done else "○"
+                color = TLLFlatTheme.TLL_ALIVE if done else TLLFlatTheme.TLL_TEXT_SECONDARY
+                self.text_renderer.draw_text(x + 16, step_y,
+                                  f"{mark} {step}",
+                                  *color, size='small')
+
+    def _render_capability_panel(self):
         """Render Capability panel."""
-        self._panel_bg(rect)
-        self._panel_title(rect, "🛠 CAPABILITY")
+        x = 24
+        y = 316
+        w = (self.width - 48 - 16) // 2
+        h = 80
 
-        y = rect.y + 32
+        self.fb.fill_rect(x, y, w, h, *TLLFlatTheme.TLL_PANEL)
+        self.fb.draw_rect(x, y, w, h, *TLLFlatTheme.TLL_PANEL_BORDER)
+
+        self.text_renderer.draw_text(x + 16, y + 6, "🛠 CAPABILITY",
+                                     *TLLFlatTheme.TLL_PRIMARY, size='medium')
+
         if self.tool_runtime:
             count = len(self.tool_runtime.tool_handlers)
-            self.text_renderer.draw_text(rect.x + 16, y,
-                              f"能力: {count} 个",
+            self.text_renderer.draw_text(x + 16, y + 32,
+                              f"Tools: {count} active",
                               *TLLFlatTheme.TLL_TEXT_PRIMARY, size='small')
-            y += 18
-            self.text_renderer.draw_text(rect.x + 16, y,
-                              "✓ 文件 ✓ 进程 ✓ 代码 ✓ 应用",
+            self.text_renderer.draw_text(x + 16, y + 50,
+                              "File ✓  Code ✓  App ✓",
                               *TLLFlatTheme.TLL_ALIVE, size='small')
-        else:
-            self.text_renderer.draw_text(rect.x + 16, y,
-                              "能力: 15 个",
-                              *TLLFlatTheme.TLL_TEXT_PRIMARY, size='small')
 
-    def _render_world_panel(self, rect):
-        """Render World Model panel."""
-        self._panel_bg(rect)
-        self._panel_title(rect, "🌍 WORLD MODEL")
+    def _render_world_panel(self):
+        """Render World panel."""
+        x = 24 + (self.width - 48 - 16) // 2 + 16
+        y = 316
+        w = (self.width - 48 - 16) // 2
+        h = 80
+
+        self.fb.fill_rect(x, y, w, h, *TLLFlatTheme.TLL_PANEL)
+        self.fb.draw_rect(x, y, w, h, *TLLFlatTheme.TLL_PANEL_BORDER)
+
+        self.text_renderer.draw_text(x + 16, y + 6, "🌍 WORLD",
+                                     *TLLFlatTheme.TLL_PRIMARY, size='medium')
 
         if self.world_model:
             summary = self.world_model.get_world_summary()
-            self.text_renderer.draw_text(rect.x + 16, rect.y + 32,
-                              f"Objects: {summary['total_objects']}  →  DB → Backend → App → User",
-                              *TLLFlatTheme.TLL_TEXT_PRIMARY, size='small')
-        else:
-            self.text_renderer.draw_text(rect.x + 16, rect.y + 32,
-                              "Objects: 0",
+            self.text_renderer.draw_text(x + 16, y + 32,
+                              f"Objects: {summary['total_objects']}",
                               *TLLFlatTheme.TLL_TEXT_PRIMARY, size='small')
 
-    def _render_command_panel(self, rect):
+    def _render_command_panel(self):
         """Render Command panel."""
-        self._panel_bg(rect, border=TLLFlatTheme.TLL_CREATION)
-        self._panel_title(rect, "⌨ COMMAND")
+        x = 24
+        y = 412
+        w = self.width - 48
+        h = 80
 
-        self.text_renderer.draw_text(rect.x + 16, rect.y + 32,
-                          f"> {self.last_result or '等待主人指令...'}",
-                          *TLLFlatTheme.TLL_TEXT_SECONDARY, size='small')
+        self.fb.fill_rect(x, y, w, h, *TLLFlatTheme.TLL_PANEL)
+        self.fb.draw_rect(x, y, w, h, *TLLFlatTheme.TLL_CREATION)
 
-    def _panel_bg(self, rect, border=None):
-        """Draw panel background."""
-        self.fb.fill_rect(rect.x, rect.y, rect.width, rect.height,
-                         *TLLFlatTheme.TLL_PANEL)
-        self.fb.draw_rect(rect.x, rect.y, rect.width, rect.height,
-                         *(border or TLLFlatTheme.TLL_PANEL_BORDER))
+        self.text_renderer.draw_text(x + 16, y + 6, "⌨ COMMAND",
+                                     *TLLFlatTheme.TLL_CREATION, size='medium')
 
-    def _panel_title(self, rect, title):
-        """Draw panel title."""
-        self.text_renderer.draw_text(rect.x + 16, rect.y + 6, title,
-                                     *TLLFlatTheme.TLL_PRIMARY, size='medium')
+        # Last command
+        if self.command_history:
+            last = self.command_history[-1]
+            self.text_renderer.draw_text(x + 16, y + 32,
+                              f"> {last['command'][:40]}",
+                              *TLLFlatTheme.TLL_TEXT_SECONDARY, size='small')
+        else:
+            self.text_renderer.draw_text(x + 16, y + 32,
+                              "> 等待主人指令...",
+                              *TLLFlatTheme.TLL_TEXT_MUTED, size='small')
+
+        # Approval button hint
+        if self.live_loop and self.live_loop.waiting_approval:
+            self.text_renderer.draw_text(x + 16, y + 52,
+                              "[批准执行] [拒绝]",
+                              *TLLFlatTheme.TLL_WARNING, size='small')
 
     def submit_command(self, command: str) -> Dict:
-        """Process owner command through agent reasoning loop."""
+        """Submit command to agent live loop."""
         self.command_history.append({
             "command": command,
             "timestamp": time.time(),
             "result": None
         })
 
-        # Simulate agent reasoning
-        self.current_goal = command
-        self.current_thinking = "分析目标中..."
-        self.render()
+        if self.live_loop:
+            # Run one cycle
+            result = self.live_loop.run_cycle(goal=command)
+            self.render()
+            return result
+        else:
+            self.render()
+            return {"command": command, "status": "RECEIVED"}
 
-        # Reasoning steps (mock, but real structure)
-        time.sleep(0.1)  # Simulate thinking
-        self.current_thinking = "理解需求: 需要创建应用"
-        self.render()
-
-        time.sleep(0.1)
-        self.current_thinking = "规划步骤: 分解为多个子任务"
-        self.current_plan = [
-            "分析目标",
-            "创建基础结构",
-            "生成核心功能",
-            "验证结果"
-        ]
-        self.render()
-
-        time.sleep(0.1)
-        self.last_result = f"已接收: {command[:40]}"
-        self.current_thinking = "等待执行批准"
-        self.render()
-
-        # Record experience
-        if self.experience:
-            self.experience.record_experience(
-                action=f"command_{len(self.command_history)}",
-                evidence="command_received",
-                world_before={},
-                world_after={"goal": command},
-                result="RECEIVED",
-                lesson=f"Received command: {command[:20]}",
-                risk_level="LOW"
-            )
-
-        return {
-            "command": command,
-            "goal": self.current_goal,
-            "plan": self.current_plan,
-            "status": "RECEIVED"
-        }
+    def approve_execution(self) -> Dict:
+        """Approve current execution."""
+        if self.live_loop:
+            self.live_loop.approve()
+            self.render()
+            return {"status": "APPROVED", "action": self.live_loop.current_action}
+        return {"status": "NO_AGENT"}
 
     def take_screenshot(self, path: str) -> Dict:
         """Take screenshot."""
@@ -352,28 +243,32 @@ class TLLRealityDesktop:
             img = Image.fromarray(pixels, 'RGB')
             img.save(path)
             saved = True
-        except Exception as e:
+        except Exception:
             saved = False
 
         return {
-            "screenshot": path if saved else f"[error]",
+            "screenshot": path if saved else "[error]",
             "frame_hash": result["frame_hash"],
-            "resolution": f"{self.width}x{self.height}",
             "saved": saved
         }
 
     def get_status_text(self) -> str:
-        """Get status report for clipboard."""
+        """Get status report."""
         lines = [
             "=" * 50,
-            "TLL OS REAL-TIME STATUS",
+            "TLL OS CONTROL CENTER",
             "=" * 50,
-            f"Agent: {self.agent_self.get_self_state()['identity'] if self.agent_self else 'tll-agent-0'}",
-            f"Goal: {self.current_goal or '等待指令'}",
-            f"Thinking: {self.current_thinking or '观察中'}",
-            f"Plan: {len(self.current_plan)} steps",
-            f"Frame: {self.fb.buffer_hash[:16] if self.fb.buffer_hash else '---'}",
-            f"Uptime: {int(time.time() - self.start_time)}s",
-            "=" * 50
+            f"Agent: tll-agent-0 ONLINE",
         ]
+
+        if self.live_loop:
+            status = self.live_loop.get_status()
+            lines.append(f"Goal: {status['goal'] or '等待指令'}")
+            lines.append(f"Thinking: {status['thinking']}")
+            lines.append(f"Plan: {len(status['plan'])} steps")
+            lines.append(f"Loop: {status['loop_count']}")
+
+        lines.append(f"Frame: {self.fb.buffer_hash[:16] if self.fb.buffer_hash else '---'}")
+        lines.append(f"Uptime: {int(time.time() - self.start_time)}s")
+        lines.append("=" * 50)
         return "\n".join(lines)
