@@ -220,7 +220,7 @@ class StateBus:
         """Read from real state file."""
         try:
             if STATE_FILE.exists():
-                with open(STATE_FILE, 'r', encoding='utf-8') as f:
+                with open(STATE_FILE, 'r', encoding='utf-8-sig') as f:
                     data = json.load(f)
                 self.goal = data.get("goal", "Reading State Bus...")
                 self.confidence = data.get("confidence", "N/A")
