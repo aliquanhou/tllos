@@ -85,9 +85,9 @@ class TLLExecutionDesktop:
     def _render_title_bar(self):
         """Title bar."""
         self.fb.fill_rect(0, 0, self.width, 48, *TLLFlatTheme.TLL_PANEL)
-        self.text_renderer.draw_text(24, 14, "TLL OS",
+        self.text_renderer.draw_text(24, 14, "TLL OS 智能代理",
                                      *TLLFlatTheme.TLL_PRIMARY, size='large')
-        self.text_renderer.draw_text(120, 16, "🤖 tll-agent-0 ONLINE",
+        self.text_renderer.draw_text(200, 16, "系统在线",
                                      *TLLFlatTheme.TLL_ALIVE, size='small')
         uptime = int(time.time() - self.start_time)
         self.text_renderer.draw_text(self.width - 80, 16, f"{uptime}s",
@@ -98,16 +98,16 @@ class TLLExecutionDesktop:
         x, y, w, h = 24, 64, self.width - 48, 90
         self.fb.fill_rect(x, y, w, h, *TLLFlatTheme.TLL_PANEL)
         self.fb.draw_rect(x, y, w, h, *TLLFlatTheme.TLL_PRIMARY)
-        self.text_renderer.draw_text(x + 16, y + 6, "🤖 AGENT",
+        self.text_renderer.draw_text(x + 16, y + 6, "智能核心",
                                      *TLLFlatTheme.TLL_PRIMARY, size='medium')
 
         if self.live_loop:
             status = self.live_loop.get_status()
             self.text_renderer.draw_text(x + 16, y + 32,
-                              f"Goal: {status['goal'] or 'Waiting for command'}",
+                              f"当前目标: {status['goal'] or '等待指令'}",
                               *TLLFlatTheme.TLL_TEXT_PRIMARY, size='small')
             self.text_renderer.draw_text(x + 16, y + 50,
-                              f"Thinking: {status['thinking']}",
+                              f"思考状态: {status['thinking']}",
                               *TLLFlatTheme.TLL_TEXT_SECONDARY, size='small')
 
     def _render_plan_panel(self):
@@ -115,7 +115,7 @@ class TLLExecutionDesktop:
         x, y, w, h = 24, 170, self.width - 48, 110
         self.fb.fill_rect(x, y, w, h, *TLLFlatTheme.TLL_PANEL)
         self.fb.draw_rect(x, y, w, h, *TLLFlatTheme.TLL_PANEL_BORDER)
-        self.text_renderer.draw_text(x + 16, y + 6, "📋 PLAN",
+        self.text_renderer.draw_text(x + 16, y + 6, "任务规划",
                                      *TLLFlatTheme.TLL_PRIMARY, size='medium')
 
         if self.live_loop and self.live_loop.current_plan:
@@ -135,20 +135,20 @@ class TLLExecutionDesktop:
         h = 80
         self.fb.fill_rect(x, y, w, h, *TLLFlatTheme.TLL_PANEL)
         self.fb.draw_rect(x, y, w, h, *TLLFlatTheme.TLL_WARNING)
-        self.text_renderer.draw_text(x + 16, y + 6, "🔐 APPROVAL",
+        self.text_renderer.draw_text(x + 16, y + 6, "执行权限",
                                      *TLLFlatTheme.TLL_WARNING, size='medium')
 
         if self.approval_gate and self.approval_gate.has_pending():
             req = self.approval_gate.get_pending()[0]
             self.text_renderer.draw_text(x + 16, y + 32,
-                              f"Pending: {req.action[:20]}",
+                              f"等待: {req.action[:20]}",
                               *TLLFlatTheme.TLL_TEXT_PRIMARY, size='small')
             self.text_renderer.draw_text(x + 16, y + 50,
-                              f"Risk: {req.risk_level}",
+                              f"风险: {req.risk_level}",
                               *TLLFlatTheme.TLL_WARNING, size='small')
         else:
             self.text_renderer.draw_text(x + 16, y + 32,
-                              "No pending requests",
+                              "无待处理请求",
                               *TLLFlatTheme.TLL_TEXT_SECONDARY, size='small')
 
     def _render_evidence_panel(self):
@@ -159,16 +159,16 @@ class TLLExecutionDesktop:
         h = 80
         self.fb.fill_rect(x, y, w, h, *TLLFlatTheme.TLL_PANEL)
         self.fb.draw_rect(x, y, w, h, *TLLFlatTheme.TLL_PANEL_BORDER)
-        self.text_renderer.draw_text(x + 16, y + 6, "📜 EVIDENCE",
+        self.text_renderer.draw_text(x + 16, y + 6, "证据记录",
                                      *TLLFlatTheme.TLL_PRIMARY, size='medium')
 
         if self.evidence_system:
             stats = self.evidence_system.get_stats()
             self.text_renderer.draw_text(x + 16, y + 32,
-                              f"Records: {stats['total_records']}",
+                              f"记录数: {stats['total_records']}",
                               *TLLFlatTheme.TLL_TEXT_PRIMARY, size='small')
             self.text_renderer.draw_text(x + 16, y + 50,
-                              f"Approved: {stats['approved_count']}",
+                              f"已批准: {stats['approved_count']}",
                               *TLLFlatTheme.TLL_ALIVE, size='small')
 
     def _render_command_panel(self):
@@ -176,7 +176,7 @@ class TLLExecutionDesktop:
         x, y, w, h = 24, 392, self.width - 48, 70
         self.fb.fill_rect(x, y, w, h, *TLLFlatTheme.TLL_PANEL)
         self.fb.draw_rect(x, y, w, h, *TLLFlatTheme.TLL_CREATION)
-        self.text_renderer.draw_text(x + 16, y + 6, "COMMAND",
+        self.text_renderer.draw_text(x + 16, y + 6, "主人指令",
                                      *TLLFlatTheme.TLL_CREATION, size='medium')
 
         if self.input_manager and self.input_manager.command_history:
@@ -186,7 +186,7 @@ class TLLExecutionDesktop:
                               *TLLFlatTheme.TLL_TEXT_SECONDARY, size='small')
         else:
             self.text_renderer.draw_text(x + 16, y + 32,
-                              "> Waiting for owner command...",
+                              "> 等待主人指令...",
                               *TLLFlatTheme.TLL_TEXT_MUTED, size='small')
 
     def _render_buttons(self):
@@ -198,10 +198,10 @@ class TLLExecutionDesktop:
         start_x = 24
 
         buttons = [
-            ("START", TLLFlatTheme.TLL_ALIVE),
-            ("PAUSE", TLLFlatTheme.TLL_WARNING),
-            ("APPROVE", TLLFlatTheme.TLL_PRIMARY),
-            ("STOP", TLLFlatTheme.TLL_DANGER),
+            ("启动", TLLFlatTheme.TLL_ALIVE),
+            ("暂停", TLLFlatTheme.TLL_WARNING),
+            ("批准", TLLFlatTheme.TLL_PRIMARY),
+            ("停止", TLLFlatTheme.TLL_DANGER),
         ]
 
         self.buttons = []  # Store button rects for click detection
@@ -211,7 +211,7 @@ class TLLExecutionDesktop:
             self.fb.fill_rect(bx, btn_y, btn_w, btn_h, *color)
             self.fb.draw_rect(bx, btn_y, btn_w, btn_h, 255, 255, 255)
             # Draw button text centered
-            text_x = bx + btn_w // 2 - len(label) * 4
+            text_x = bx + btn_w // 2 - len(label) * 8
             self.text_renderer.draw_text(text_x, btn_y + 8, label,
                                          5, 8, 18, size='small')
             self.buttons.append((label, bx, btn_y, btn_w, btn_h))

@@ -273,17 +273,17 @@ class TLLENativeWindowHost:
 
     def _handle_button(self, label: str):
         """Handle button click action."""
-        if label == "STOP":
+        if label == "停止":
             self.running = False
             self.user32.PostQuitMessage(0)
-        elif label == "START":
+        elif label == "启动":
             if self.desktop:
-                self.desktop.submit_command("Start agent")
-        elif label == "APPROVE":
+                self.desktop.submit_command("启动代理")
+        elif label == "批准":
             if self.desktop:
-                self.desktop.submit_command("Approve action")
-        elif label == "PAUSE":
-            print("Pause clicked")
+                self.desktop.submit_command("批准执行")
+        elif label == "暂停":
+            print("暂停按钮")
 
     def create_window(self):
         """Create the native window."""
