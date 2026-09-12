@@ -140,15 +140,21 @@ class TLLExecutionDesktop:
 
         self.text_renderer.draw_text(rx + 20, ry + 12, "对话", *primary, size='medium')
 
-        # Chat messages - larger font, more lines
+        # Chat messages - larger font, wrap lines
         cy = ry + 44
+        line_width = 70  # chars per line
         if self.chat_history:
-            for role, text in self.chat_history[-8:]:
-                if role == "user":
-                    self.text_renderer.draw_text(rx + 20, cy, f"我: {text[:55]}", *alive, size='medium')
-                else:
-                    self.text_renderer.draw_text(rx + 20, cy, f"TLL: {text[:55]}", *text_pri, size='medium')
-                cy += 28
+            for role, text in self.chat_history[-6:]:
+                prefix = "我: " if role == "user" else "TLL: "
+                color = alive if role == "user" else text_pri
+                # Split text into lines
+                full = prefix + text
+                while full:
+                    line = full[:line_width]
+                    self.text_renderer.draw_text(rx + 20, cy, line, *color, size='medium')
+                    cy += 26
+                    full = full[line_width:]
+                cy += 6  # gap between messages
         else:
             self.text_renderer.draw_text(rx + 20, cy, "你好！我是 TLL OS 智能代理", *text_sec, size='medium')
             cy += 32

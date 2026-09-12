@@ -47,7 +47,7 @@ class TLLRealLLMProvider:
                     {"role": "system", "content": "你是 TLL OS 的智能代理助手，用中文简洁回答。"},
                     {"role": "user", "content": message}
                 ],
-                "max_tokens": 200,
+                "max_tokens": 500,
                 "temperature": 0.7
             }
             resp = requests.post(url, headers=headers, json=payload, timeout=10)
