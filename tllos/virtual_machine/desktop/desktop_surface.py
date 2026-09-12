@@ -60,17 +60,13 @@ class TLLExecutionDesktop:
         self.start_time = time.time()
 
     def render(self) -> Dict:
-        """Render one frame."""
-        self.fb.clear(*TLLFlatTheme.TLL_BACKGROUND)
+        """Render ChatGPT-style desktop."""
+        self.fb.clear(17, 17, 17)  # #171717
         self.frame_count += 1
 
-        self._render_title_bar()
-        self._render_agent_panel()
-        self._render_plan_panel()
-        self._render_approval_panel()
-        self._render_evidence_panel()
-        self._render_command_panel()
-        self._render_buttons()
+        self._render_sidebar()
+        self._render_chat_area()
+        self._render_input_bar()
 
         self.fb.commit()
         frame_hash = self.fb.buffer_hash
@@ -79,8 +75,128 @@ class TLLExecutionDesktop:
             "frame_hash": frame_hash,
             "frame_count": self.frame_count,
             "uptime": time.time() - self.start_time,
-            "panels_rendered": 5
+            "panels_rendered": 3
         }
+
+    def _render_sidebar(self):
+        """Left sidebar like ChatGPT."""
+        sw = 240  # sidebar width
+        # Sidebar background
+        self.fb.fill_rect(0, 0, sw, self.height, 13, 13, 13)  # #0D0D0D
+
+        # New chat button
+        self.fb.fill_rect(12, 12, sw - 24, 36, 32, 33, 35)
+        self.fb.draw_rect(12, 12, sw - 24, 36, 64, 65, 70)
+        self.text_renderer.draw_text(24, 22, "+ 新对话", 255, 255, 255, size='small')
+
+        # Section: 今天
+        self.text_renderer.draw_text(16, 64, "今天", 100, 100, 100, size='small')
+
+        # Chat history items
+        items = [
+            "TLL OS 初始化",
+            "创建商城系统",
+            "Agent 配置",
+        ]
+        for i, item in enumerate(items):
+            y = 84 + i * 28
+            self.fb.fill_rect(8, y, sw - 16, 24, 32, 33, 35)
+            self.text_renderer.draw_text(20, y + 5, item, 200, 200, 200, size='small')
+
+        # Section: 之前
+        self.text_renderer.draw_text(16, 180, "之前", 100, 100, 100, size='small')
+
+        prev_items = ["系统配置", "工具链"]
+        for i, item in enumerate(prev_items):
+            y = 200 + i * 28
+            self.text_renderer.draw_text(20, y + 5, item, 150, 150, 150, size='small')
+
+        # Bottom: user info
+        self.fb.fill_rect(0, self.height - 48, sw, 48, 25, 25, 25)
+        self.text_renderer.draw_text(16, self.height - 36, "tll-agent-0", 255, 255, 255, size='small')
+        self.text_renderer.draw_text(16, self.height - 18, "在线", 0, 200, 136, size='small')
+
+    def _render_chat_area(self):
+        """Main chat area."""
+        ox = 240  # offset x (sidebar width)
+        cw = self.width - ox  # content width
+
+        # Top bar
+        self.fb.fill_rect(ox, 0, cw, 48, 25, 25, 25)
+        self.text_renderer.draw_text(ox + 20, 16, "TLL OS 智能代理", 255, 255, 255, size='medium')
+
+        # Chat messages area
+        msg_y = 70
+
+        # Get agent status
+        goal_text = "等待指令"
+        thinking_text = "空闲"
+        if self.live_loop:
+            status = self.live_loop.get_status()
+            goal_text = status.get('goal') or "等待指令"
+            thinking_text = status.get('thinking') or "空闲"
+
+        # User message (goal)
+        user_msg = f"目标: {goal_text}"
+        uw = len(user_msg) * 8 + 32
+        self.fb.fill_rect(ox + 400, msg_y, uw, 32, 42, 43, 50)  # user bubble
+        self.text_renderer.draw_text(ox + 416, msg_y + 8, user_msg, 255, 255, 255, size='small')
+
+        # Agent response
+        msg_y2 = msg_y + 50
+        agent_msg1 = f"思考: {thinking_text}"
+        aw1 = len(agent_msg1) * 8 + 32
+        self.fb.fill_rect(ox + 20, msg_y2, aw1, 32, 33, 33, 33)  # agent bubble
+        self.text_renderer.draw_text(ox + 36, msg_y2 + 8, agent_msg1, 220, 220, 220, size='small')
+
+        # Plan status
+        if self.live_loop and self.live_loop.current_plan:
+            msg_y3 = msg_y2 + 50
+            self.text_renderer.draw_text(ox + 20, msg_y3, "任务计划:", 150, 200, 255, size='small')
+            for i, step in enumerate(self.live_loop.current_plan[:4]):
+                sy = msg_y3 + 20 + i * 18
+                done = i < self.live_loop.current_step
+                mark = "✓" if done else "○"
+                color = (0, 200, 136) if done else (150, 150, 150)
+                self.text_renderer.draw_text(ox + 36, sy, f"{mark} {step}", *color, size='small')
+
+        # Evidence status
+        if self.evidence_system:
+            stats = self.evidence_system.get_stats()
+            ey = self.height - 120
+            self.text_renderer.draw_text(ox + 20, ey,
+                f"证据记录: {stats['total_records']} | 已批准: {stats['approved_count']}",
+                100, 100, 100, size='small')
+
+    def _render_input_bar(self):
+        """Bottom input bar like ChatGPT."""
+        ox = 240
+        bar_y = self.height - 60
+        bar_h = 40
+        bar_w = self.width - ox - 40
+
+        # Input box
+        self.fb.fill_rect(ox + 20, bar_y, bar_w, bar_h, 47, 47, 47)
+        self.fb.draw_rect(ox + 20, bar_y, bar_w, bar_h, 64, 65, 70)
+
+        # Input text
+        input_text = ""
+        if hasattr(self, '_window_input') and self._window_input:
+            input_text = self._window_input
+
+        if input_text:
+            self.text_renderer.draw_text(ox + 36, bar_y + 12, input_text, 255, 255, 255, size='small')
+        else:
+            self.text_renderer.draw_text(ox + 36, bar_y + 12, "输入你的指令...", 120, 120, 120, size='small')
+
+        # Send button (right side)
+        btn_x = ox + 20 + bar_w - 40
+        self.fb.fill_rect(btn_x, bar_y + 4, 32, 32, 16, 163, 127)  # ChatGPT green
+        self.text_renderer.draw_text(btn_x + 8, bar_y + 12, "↑", 255, 255, 255, size='small')
+
+        # Store clickable areas
+        self.buttons = []
+        self.buttons.append(("send", btn_x, bar_y + 4, 32, 32))
 
     def _render_title_bar(self):
         """Title bar."""

@@ -283,30 +283,18 @@ class TLLENativeWindowHost:
 
     def _handle_button(self, label: str):
         """Handle button click action."""
-        if label == "停止":
-            self.running = False
-            self.user32.PostQuitMessage(0)
-            return
-
         if not hasattr(self, 'desktop') or not self.desktop:
             return
 
-        if label == "启动":
-            # Submit a real command to start agent
-            self.desktop.submit_command("创建一个商城系统")
-        elif label == "批准":
-            # Approve pending action
-            if self.desktop.approval_gate and self.desktop.approval_gate.has_pending():
-                self.desktop.approval_gate.approve(self.desktop.approval_gate.get_pending()[0].action_id)
-                print("Approved pending action")
-            else:
-                print("No pending approval")
-        elif label == "暂停":
-            print("Pause - not implemented yet")
-
-        # Re-render immediately
-        self.desktop.render()
-        self.user32.InvalidateRect(self.hwnd, None, False)
+        if label == "send":
+            # Submit input buffer
+            if self.input_buffer.strip():
+                cmd = self.input_buffer.strip()
+                print(f"Command: {cmd}")
+                self.desktop.submit_command(cmd)
+                self.input_buffer = ""
+                self.desktop.render()
+                self.user32.InvalidateRect(self.hwnd, None, False)
 
     def create_window(self):
         """Create the native window."""
