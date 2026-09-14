@@ -17,6 +17,9 @@ static int prealloc_table_is_on(void) { return getenv("D3_TEST_PREALLOC_TABLE") 
 static int disable_frame_pool_is_on(void) { return getenv("D3_TEST_DISABLE_FRAME_POOL") != NULL; }
 #include <stdint.h>
 #include <errno.h>
+#ifndef _WIN32
+#include <pthread.h>
+#endif
 
 
 /* === P2-01-C-D2: True Multi-Worker Runtime === */

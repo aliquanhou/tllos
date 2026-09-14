@@ -215,6 +215,20 @@
       "functions": [
         {"name": "randomBytes", "index": 145, "params": ["int"], "return": "string"}
       ]
+    },
+    "runtime": {
+      "category": "host_abi",
+      "status": "p2_01_multi_worker_extension",
+      "note": "P2-01-C true multi-worker runtime primitives. Not part of Genesis frozen ABI.",
+      "functions": [
+        {"name": "startWorkers", "index": 223, "params": ["int"], "return": "int"},
+        {"name": "submitCoroutine", "index": 224, "params": ["int"], "return": "int"},
+        {"name": "shutdownWorkers", "index": 225, "params": [], "return": "int"},
+        {"name": "currentWorkerId", "index": 226, "params": [], "return": "int"},
+        {"name": "workerCount", "index": 227, "params": [], "return": "int"},
+        {"name": "workerTasksCompleted", "index": 228, "params": ["int"], "return": "int"},
+        {"name": "cpuCount", "index": 229, "params": [], "return": "int"}
+      ]
     }
   },
   "reserved": {
