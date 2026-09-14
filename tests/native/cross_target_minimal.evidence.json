@@ -1,0 +1,59 @@
+{
+  "schema": "tllos/native-target-evidence/v1",
+  "subject": "P2-21.1 Native Target missing-capability fill-in (TLL -> C lowering + dual-target conformance)",
+  "evidence_generated": "2026-09-14",
+  "toolchain": {
+    "tllvm": "host/c/tllvm.exe",
+    "tllc_bytecode": "tools/TLLC/tllc.tllbc (181 functions, tracked baseline)",
+    "tllc_native": "tools/TLLC/tllc_native.tllbc (196 functions, rebuilt, git-ignored build artifact)",
+    "native_lower": "compiler/native_lower.tll (with P2-21.1 prefix/test-only fixes)",
+    "msvc": "VS2022 BuildTools vcvars64.bat"
+  },
+  "fixes_applied": [
+    {
+      "id": "P2-21.1-a",
+      "desc": "User-defined function names are prefixed tll_fn_ in generated C (forward decl, definition, call site) to avoid C stdlib/macro collisions (e.g. max). main maps to tll_main.",
+      "files": ["compiler/native_lower.tll"],
+      "verified_by": "batch1_basic: generated C shows tll_fn_add/tll_fn_max/tll_fn_isEven; cl.exe 0 errors; EXE output identical to bytecode (42/true/false/20/30/42/4)"
+    },
+    {
+      "id": "P2-21.1-b",
+      "desc": "Test-only verification APIs (tll_debug_refcount, tll_debug_print_refcount) are excluded from the prefix rule and from caller-retains-arguments incref protection, matching their builtin-like C ABI.",
+      "files": ["compiler/native_lower.tll"],
+      "verified_by": "19_refcount_machine_evidence: cl.exe links clean; native rc transitions match expected semantics (1/1/2/2/1/1/2/2/2/2/3/3/3)"
+    }
+  ],
+  "dual_target_matrix": {
+    "total": 25,
+    "pass": 25,
+    "fail": 0,
+    "method": "tests/native 07-20 compared per-target against committed *_bytecode.out / *_native.out baselines; 01-06, cross_target_minimal and native/conformance 4 cases compared bytecode-vs-native output after CRLF normalization",
+    "cases": [
+      "01_basic PASS", "02_function PASS", "03_io PASS", "04_control_flow PASS",
+      "05_array PASS", "06_map PASS", "07_ownership_local PASS", "08_ownership_assignment PASS",
+      "09_ownership_return PASS", "10_ownership_container PASS", "11_ownership_function_argument PASS",
+      "12_ownership_argument_return PASS", "13_ownership_assignment_closure PASS",
+      "14_nested_assignment_ownership PASS", "15_assignment_ownership_ident_rhs PASS",
+      "16_assignment_ownership_evidence PASS", "17_rhs_exactly_once_counter PASS",
+      "18_assignment_ownership_refcount_evidence PASS", "19_refcount_machine_evidence PASS",
+      "20_assignment_return_consumer PASS", "cross_target_minimal PASS",
+      "batch1_basic PASS", "conformance_minimal PASS", "regression_test PASS", "simple_return PASS"
+    ]
+  },
+  "refcount_semantics_probe": {
+    "test": "19_refcount_machine_evidence",
+    "note": "tll_debug_print_refcount is a native-runtime probe; native EXE prints real object refcounts. Expected transitions all verified.",
+    "checkpoints": {
+      "cp1_create": 1, "cp10_assign_before": 1, "cp11_assign_after": 2, "cp12_assign_rhs": 2,
+      "cp20_self_assign_before": 1, "cp21_self_assign_after": 1,
+      "cp30_nested_temp_x": 2, "cp31_nested_temp_y": 2,
+      "cp40_let_nested_x": 2, "cp41_let_nested_z": 2,
+      "cp50_ident_x": 3, "cp51_ident_y": 3, "cp52_ident_z": 3
+    }
+  },
+  "known_gap": {
+    "id": "P2-21.1-gap-1",
+    "desc": "bytecode VM does not implement the tll_debug_print_refcount probe (no output; not registered in host/c builtin dispatch). The probe exists only in the native runtime (runtime/value.c). 19_refcount_machine_evidence is therefore a native-only probe test; its bytecode baseline intentionally contains no [REFCOUNT] lines.",
+    "decision": "Documented as identified gap; VM probe implementation deferred (touches self-hosting chain, requires user adjudication)."
+  }
+}

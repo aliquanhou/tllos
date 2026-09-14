@@ -9,12 +9,15 @@ fn printHelp() -> void {
     io.println("  tllc compile <file> -o <out.tllbc>  Compile with custom output")
     io.println("  tllc check <file.tll>     Type-check and compile, no output")
     io.println("  tllc info <file.tllbc>    Show bytecode program information")
+    io.println("  tllc native <file.tll>    Compile TLL to C (Native Target)")
+    io.println("  tllc native <file> -o <out.c>  Native compile with custom output")
     io.println("")
     io.println("Commands:")
     io.println("  help      Show help")
     io.println("  compile   Compile .tll to .tllbc")
     io.println("  check     Compile check (no output file)")
     io.println("  info      Inspect .tllbc bytecode")
+    io.println("  native    Compile .tll to .c (Native Target)")
 }
 
 fn printError(msg: string) -> void {
@@ -67,8 +70,18 @@ fn printInfo(path: string, program: map) -> void {
     io.println("")
 }
 
+fn printNativeSuccess(input: string, output: string, cLength: int) -> void {
+    io.println("")
+    io.println("=== Native Compilation Successful ===")
+    io.println("Input:     " + input)
+    io.println("Output:    " + output)
+    io.println("C length:  " + convert.toString(cLength))
+    io.println("")
+}
+
 export printHelp
 export printError
 export printCompileSuccess
 export printCheckSuccess
 export printInfo
+export printNativeSuccess

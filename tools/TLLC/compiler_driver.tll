@@ -2,6 +2,7 @@
 // Wraps the TLL compiler (linkAndCompile) with file I/O and error handling
 
 from "../../compiler/linker" import linkAndCompile
+from "../../compiler/compiler" import compileNative
 
 // Compile a .tll file to .tllbc
 // Returns map: {ok, error, functions, constants, mainFunctionIndex, outputPath}
@@ -86,6 +87,29 @@ fn infoFile(bytecodePath: string) -> map {
     return result
 }
 
+// Compile a .tll file to C source (Native Target)
+// Returns map: {ok, error, cLength, outputPath}
+fn compileNativeFile(inputPath: string, outputPath: string) -> map {
+    let result = json.parse("{}")
+    result["ok"] = false
+
+    if !fs.exists(inputPath) {
+        result["error"] = "Input file not found: " + inputPath
+        return result
+    }
+
+    let source = fs.readFile(inputPath)
+    let cSource = compileNative(source)
+
+    fs.writeFile(outputPath, cSource)
+
+    result["ok"] = true
+    result["cLength"] = strings.length(cSource)
+    result["outputPath"] = outputPath
+    return result
+}
+
 export compileFile
 export checkFile
 export infoFile
+export compileNativeFile

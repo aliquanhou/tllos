@@ -2,8 +2,8 @@
 // TLL Compiler CLI - compile any .tll file to .tllbc
 
 from "./cli" import parseArgs
-from "./compiler_driver" import compileFile, checkFile, infoFile
-from "./formatter" import printHelp, printError, printCompileSuccess, printCheckSuccess, printInfo
+from "./compiler_driver" import compileFile, checkFile, infoFile, compileNativeFile
+from "./formatter" import printHelp, printError, printCompileSuccess, printCheckSuccess, printInfo, printNativeSuccess
 
 fn main() -> void {
     // Get command-line arguments
@@ -74,6 +74,18 @@ fn main() -> void {
             return
         }
         printInfo(input, result["program"])
+        return
+    }
+
+    if cmd == "native" {
+        let input = convert.toString(parsed["input"])
+        let output = convert.toString(parsed["output"])
+        let result = compileNativeFile(input, output)
+        if result["ok"] == false {
+            printError(convert.toString(result["error"]))
+            process.exit(1)
+        }
+        printNativeSuccess(input, output, result["cLength"])
         return
     }
 

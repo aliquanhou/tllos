@@ -127,6 +127,18 @@ fn nl_isBuiltinFunction(name: string) -> bool {
     return false
 }
 
+// P2-21.1: Test-only verification APIs (runtime instrumentation, NOT user functions)
+fn nl_isTestOnlyFunction(name: string) -> bool {
+    let i = 0
+    while i < arrays.length(nl_testOnlyFunctions) {
+        if arrays.get(nl_testOnlyFunctions, i) == name {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
 // ============ Helpers ============
 fn nl_emit(line: string) -> void {
     let prefix = ""
@@ -280,6 +292,11 @@ fn nl_lowerExpression(expr: map) -> string {
     // 函数调用
     if kind == "Call" {
         let callee = nl_lowerExpression(expr.callee)
+        // P2-21.1: Prefix user-defined function names to avoid C stdlib/macro collisions (e.g. max)
+        let calleeLen = strings.length(callee)
+        if nl_isBuiltinFunction(callee) == false && nl_isTestOnlyFunction(callee) == false && (calleeLen < 7 || strings.substring(callee, 0, 7) != "tll_fn_") {
+            callee = "tll_fn_" + callee
+        }
         let args: list = []
         let i = 0
         // B7-01 FIX: AST Call 节点参数字段名是 args，不是 arguments
@@ -290,7 +307,7 @@ fn nl_lowerExpression(expr: map) -> string {
         // B.11: Ownership - caller retains arguments for user-defined functions
         // Built-in functions (tll_ prefix) are C functions, do not follow TLL refcount rules
         // B.11-R1-R2-R3: Use extensible builtin registry instead of hardcoded || chain
-        let isBuiltin = nl_isBuiltinFunction(callee)
+        let isBuiltin = nl_isBuiltinFunction(callee) || nl_isTestOnlyFunction(callee)
         if isBuiltin == false && arrays.length(args) > 0 {
             let increfExprs: list = []
             let ai = 0
@@ -546,7 +563,7 @@ fn nl_lowerStatement(stmt: map) -> void {
 // ============ Function Lowering ============
 fn nl_lowerFunction(fnDecl: map) -> void {
     let fnName = fnDecl.name
-    if fnName == "main" { fnName = "tll_main" }
+    if fnName == "main" { fnName = "tll_main" } else { fnName = "tll_fn_" + fnName }
 
     // 返回类型（TypeRef 节点，取 .name）
     let returnType = "TLLValue"
@@ -648,7 +665,7 @@ export fn lowerToC(ast: map) -> string {
         let stmt = arrays.get(stmts, i)
         if stmt.kind == "Fn" {
             let fnName = stmt.name
-            if fnName == "main" { fnName = "tll_main" }
+            if fnName == "main" { fnName = "tll_main" } else { fnName = "tll_fn_" + fnName }
             let returnType = "TLLValue"
             if stmt.returnType != null && stmt.returnType.name != null {
                 returnType = nl_convertType(stmt.returnType.name)
