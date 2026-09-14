@@ -145,6 +145,7 @@ typedef struct {
 #else
     TLL_MUTEX lock;
     TLL_SEM sem;
+    TLL_MUTEX cond;
 #endif
 } TLLRunnableQueue;
 

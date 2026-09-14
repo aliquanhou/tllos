@@ -16,6 +16,7 @@ static int queue_is_off(void) { return getenv("D3_TEST_QUEUE_OFF") != NULL; }
 static int prealloc_table_is_on(void) { return getenv("D3_TEST_PREALLOC_TABLE") != NULL; }
 static int disable_frame_pool_is_on(void) { return getenv("D3_TEST_DISABLE_FRAME_POOL") != NULL; }
 #include <stdint.h>
+#include <errno.h>
 
 
 /* === P2-01-C-D2: True Multi-Worker Runtime === */
@@ -1983,7 +1984,7 @@ static void tll_runnable_queue_init(TLLRunnableQueue *q) {
     q->sem = CreateSemaphore(NULL, 0, 1000000, NULL);
 #else
     q->lock = malloc(sizeof(pthread_mutex_t)); pthread_mutex_init((pthread_mutex_t*)q->lock, NULL);
-    pthread_cond_init(&q->cond, NULL);
+    q->cond = malloc(sizeof(pthread_cond_t)); pthread_cond_init((pthread_cond_t*)q->cond, NULL);
 #endif
 }
 
@@ -2009,7 +2010,7 @@ static void tll_runnable_queue_enqueue(TLLRunnableQueue *q, int coroutine_idx) {
     ReleaseSemaphore(q->sem, 1, NULL);
 #else
     pthread_mutex_unlock((pthread_mutex_t*)q->lock);
-    pthread_cond_signal(&q->cond);
+    pthread_cond_signal((pthread_cond_t*)q->cond);
 #endif
 }
 
@@ -2050,7 +2051,7 @@ static int tll_runnable_queue_dequeue(TLLRunnableQueue *q) {
 #else
     pthread_mutex_lock((pthread_mutex_t*)q->lock);
     while (!q->head) {
-        pthread_cond_wait(&q->cond, &q->lock);
+        pthread_cond_wait((pthread_cond_t*)q->cond, (pthread_mutex_t*)q->lock);
     }
 #endif
     TLLRunnableNode *node = q->head;
