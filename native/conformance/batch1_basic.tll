@@ -1,0 +1,80 @@
+// Cross-Target Conformance Test - Batch 1
+// 覆盖: int / bool / string / arithmetic / comparison / function call / return / io
+// 此程序在 Bytecode Target (VM) 和 Native Target (CPU) 上必须产生完全一致的输出
+
+fn add(a: int, b: int) -> int {
+    return a + b
+}
+
+fn multiply(a: int, b: int) -> int {
+    return a * b
+}
+
+fn isEven(n: int) -> bool {
+    return n % 2 == 0
+}
+
+fn greet(name: string) -> string {
+    return "Hello, " + name + "!"
+}
+
+fn max(a: int, b: int) -> int {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+fn main() -> int {
+    io.println("=== TLL Cross-Target Conformance Test Batch 1 ===")
+
+    // 1. int arithmetic
+    io.println("--- Int Arithmetic ---")
+    io.println(2 + 3)
+    io.println(10 - 4)
+    io.println(6 * 7)
+    io.println(20 / 4)
+    io.println(17 % 5)
+
+    // 2. bool logic
+    io.println("--- Bool Logic ---")
+    io.println(true)
+    io.println(false)
+    io.println(true && false)
+    io.println(true || false)
+    io.println(!true)
+
+    // 3. string operations
+    io.println("--- String ---")
+    io.println("Hello World")
+    io.println("Hello" + " " + "World")
+    io.println(greet("TLL"))
+
+    // 4. comparison
+    io.println("--- Comparison ---")
+    io.println(5 > 3)
+    io.println(5 < 3)
+    io.println(5 >= 5)
+    io.println(5 <= 4)
+    io.println(5 == 5)
+    io.println(5 != 3)
+
+    // 5. function calls
+    io.println("--- Function Calls ---")
+    io.println(add(40, 2))
+    io.println(multiply(6, 7))
+    io.println(isEven(42))
+    io.println(isEven(43))
+    io.println(max(10, 20))
+    io.println(max(30, 15))
+
+    // 6. nested expressions
+    io.println("--- Nested Expressions ---")
+    io.println(add(multiply(3, 4), multiply(5, 6)))
+    io.println(max(add(1, 2), multiply(2, 2)))
+
+    io.println("=== Conformance Test Batch 1 Complete ===")
+    return 42
+}
+
+main()

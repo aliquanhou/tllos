@@ -1,0 +1,11 @@
+﻿=== ownership_local ===
+10
+local string
+first
+second
+third
+hello from make_string
+42
+true
+mixed
+=== done ===

@@ -1,0 +1,24 @@
+﻿=== assignment_ownership_ident_rhs ===
+=== 1. let z = (x = y) Ident RHS ===
+source_y
+source_y
+source_y
+=== 2. z = (x = y) Ident RHS statement ===
+source_y
+source_y
+source_y
+=== 3. w = (z = (y = x)) Ident RHS two level ===
+source_x
+source_x
+source_x
+source_x
+=== 4. let z = (x = temp) temporary RHS ===
+temp_value
+temp_value
+=== 5. mixed: z = (x = y) then z = (x = temp) ===
+source_y
+source_y
+source_y
+new_temp
+new_temp
+=== done ===

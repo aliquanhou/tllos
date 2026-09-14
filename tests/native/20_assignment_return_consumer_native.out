@@ -1,0 +1,5 @@
+﻿=== Assignment Expression as Return Consumer ===
+PASS: return (x = new_value)
+PASS: return (y = (x = nested_new_value))
+PASS: return (x = y)
+=== ALL 3 ASSERTIONS PASSED ===

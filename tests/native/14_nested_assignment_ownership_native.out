@@ -1,0 +1,23 @@
+﻿=== nested_assignment_ownership ===
+=== 1. let y = nested assignment ===
+nested
+nested
+=== 2. y = nested assignment ===
+nested2
+nested2
+=== 3. x = x ===
+self test
+self test
+=== 4. x = y ===
+x_value
+y_value
+y_value
+y_value
+=== 5. x = get_with_marker() ===
+MARKER_CALL
+42
+=== 6. two level nested assignment ===
+deep
+deep
+deep
+=== done ===

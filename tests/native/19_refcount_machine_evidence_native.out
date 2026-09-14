@@ -1,0 +1,21 @@
+﻿=== Machine-Verifiable Refcount Transition Evidence ===
+=== Test 1: create string refcount=1 ===
+[REFCOUNT checkpoint=1] rc=1
+=== Test 2: assign to another var refcount=2 ===
+[REFCOUNT checkpoint=10] rc=1
+[REFCOUNT checkpoint=11] rc=2
+[REFCOUNT checkpoint=12] rc=2
+=== Test 3: self-assign x=x refcount unchanged ===
+[REFCOUNT checkpoint=20] rc=1
+[REFCOUNT checkpoint=21] rc=1
+=== Test 4: nested assign y=(x=temp) refcount=2 ===
+[REFCOUNT checkpoint=30] rc=2
+[REFCOUNT checkpoint=31] rc=2
+=== Test 5: let z=(x=temp) refcount=2 ===
+[REFCOUNT checkpoint=40] rc=2
+[REFCOUNT checkpoint=41] rc=2
+=== Test 6: nested assign y=(x=z) Ident RHS refcount=3 ===
+[REFCOUNT checkpoint=50] rc=3
+[REFCOUNT checkpoint=51] rc=3
+[REFCOUNT checkpoint=52] rc=3
+=== done ===

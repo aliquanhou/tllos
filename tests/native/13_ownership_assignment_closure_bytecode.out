@@ -1,0 +1,36 @@
+﻿=== ownership_assignment_closure ===
+=== 1. string reassignment ===
+first
+second
+third
+=== 2. x = x self-assignment ===
+self test
+self test
+100
+100
+=== 3. function return assignment ===
+original
+from function
+0
+42
+=== 4. parameter reassignment ===
+caller value
+caller value
+modified inside
+caller value
+modified inside
+=== 5. repeated reassignment ===
+start
+three
+3
+=== 6. alias scenario ===
+alias source
+alias source
+modified a
+alias source
+=== 7. RHS function call evaluated once (observable marker) ===
+MARKER_CALL
+42
+MARKER_CALL
+42
+=== done ===

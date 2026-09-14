@@ -1,0 +1,22 @@
+﻿=== assignment_ownership_evidence_closure ===
+=== A. let z = (x = y) ===
+source_y
+source_y
+source_y
+=== B. let z = (x = x) ===
+self_value
+self_value
+=== C. let z = (x = get_with_marker()) ===
+MARKER_CALL
+42
+42
+=== D. y = (x = z) ===
+source_z
+source_z
+source_z
+=== E. z = (y = (x = y2)) ===
+source_y2
+source_y2
+source_y2
+source_y2
+=== done ===

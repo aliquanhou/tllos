@@ -1,0 +1,7 @@
+// Minimal TLL program for Native Execution PoC
+// Target: return 42 from native executable
+fn main() -> int {
+    let x = 40;
+    let y = 2;
+    return x + y;
+}

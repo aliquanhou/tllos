@@ -1,0 +1,40 @@
+﻿=== RHS Exactly Once Observable Counter Test ===
+--- Test 1: simple assignment ---
+x1=
+42
+count1=
+1
+expected_count=1
+--- Test 2: nested assignment y = (x = fn()) ---
+x2=
+42
+y2=
+42
+count2=
+1
+expected_count=1
+--- Test 3: let z = (x = fn()) ---
+x3=
+42
+z3=
+42
+count3=
+1
+expected_count=1
+--- Test 4: self-assignment x = x ---
+x4=
+99
+count4=
+0
+expected_count=0
+--- Test 5: two-level nested z = (y = (x = fn())) ---
+x5=
+42
+y5=
+42
+z5=
+42
+count5=
+1
+expected_count=1
+=== done ===

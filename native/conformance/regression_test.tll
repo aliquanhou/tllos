@@ -1,0 +1,7 @@
+fn main() -> int {
+    let x = 40
+    let y = 2
+    return x + y
+}
+
+main()

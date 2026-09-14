@@ -1,0 +1,31 @@
+// Cross-Target Conformance Test - Minimal
+// 用 io.println 输出结果，验证 Bytecode VM 和 Native Shared Runtime 语义一致
+// 覆盖: int arithmetic, comparison, bool, function call
+
+fn add(a: int, b: int) -> int {
+    return a + b
+}
+
+fn main() -> void {
+    io.println("=== Cross-Target Conformance Test ===")
+    // int arithmetic
+    io.println(2 + 3)
+    io.println(10 - 4)
+    io.println(6 * 7)
+    io.println(20 / 4)
+    io.println(17 % 5)
+    // comparison
+    io.println(5 > 3)
+    io.println(5 < 3)
+    io.println(5 == 5)
+    io.println(5 != 3)
+    // bool logic
+    io.println(true && false)
+    io.println(true || false)
+    io.println(!true)
+    // function call
+    io.println(add(40, 2))
+    io.println("=== Test Complete ===")
+}
+
+main()

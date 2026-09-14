@@ -1,0 +1,18 @@
+// More complex TLL program for Native Execution PoC
+// Tests: io.println, if, arithmetic, multiple functions
+fn add(a: int, b: int) -> int {
+    return a + b;
+}
+
+fn main() -> int {
+    io.println("TLL Native Execution PoC");
+    let result = add(40, 2);
+    io.println("Result:");
+    io.println(result);
+    if result == 42 {
+        io.println("SUCCESS: return 42");
+        return 42;
+    }
+    io.println("FAILED");
+    return 1;
+}

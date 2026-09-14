@@ -1,0 +1,40 @@
+// Cross-Target Conformance Test - Simple
+// 通过 return 值验证 Bytecode/Native 双 Target 一致性
+// 覆盖: int / arithmetic / function call / return
+
+fn add(a: int, b: int) -> int {
+    return a + b
+}
+
+fn multiply(a: int, b: int) -> int {
+    return a * b
+}
+
+fn compute() -> int {
+    let x = add(40, 2)
+    let y = multiply(6, 7)
+    return x + y
+}
+
+fn main() -> int {
+    // 测试 1: 基本算术
+    let r1 = 2 + 3
+    // 测试 2: 函数调用
+    let r2 = add(10, 20)
+    // 测试 3: 嵌套函数调用
+    let r3 = compute()
+    // 测试 4: 比较运算（true=1, false=0）
+    let r4 = 5 > 3
+    let r5 = 5 == 5
+    // 汇总结果（每个测试占一位）
+    let result = 0
+    if r1 == 5 { result = result + 1 }
+    if r2 == 30 { result = result + 2 }
+    if r3 == 84 { result = result + 4 }
+    if r4 == 1 { result = result + 8 }
+    if r5 == 1 { result = result + 16 }
+    // 全部通过则返回 31
+    return result
+}
+
+main()

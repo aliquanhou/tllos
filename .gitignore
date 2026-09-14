@@ -99,3 +99,24 @@ verify_sha256.sh
 .env
 config/llm.json
 config/
+
+# Agent runtime runtime-state (regenerated on each run)
+*agent_state.json
+__pycache__/
+*.pyc
+
+# Build output dirs and native intermediate artifacts
+build/
+*.pdb
+screenshots/
+
+# Root-level test-run logs (avoid polluting repo root)
+/*.out
+/*.err
+/*_out.txt
+/*_err.txt
+
+# User/local screenshots kept out of version control
+_user_screenshot*.png
+tll_desktop_*.png
+tll_multi_window.png

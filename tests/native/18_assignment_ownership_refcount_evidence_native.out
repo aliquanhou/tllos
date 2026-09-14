@@ -1,0 +1,21 @@
+﻿=== Assignment Expression Ownership Refcount Evidence ===
+=== A: x = temp_string ===
+new_value
+=== B: x = y (Ident RHS) ===
+source_y
+source_y
+=== C: y = (x = temp_string) ===
+nested_value
+nested_value
+=== D: let y = (x = temp_string) ===
+let_nested_value
+let_nested_value
+=== E: y = (x = z) (Ident RHS) ===
+source_z
+source_z
+source_z
+=== F: let y = (x = z) (Ident RHS) ===
+source_z
+source_z
+source_z
+=== done ===
