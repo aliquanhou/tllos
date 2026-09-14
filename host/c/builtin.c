@@ -11,6 +11,11 @@
 #include <fcntl.h>  /* F_GETFL/F_SETFL/O_NONBLOCK for non-blocking connect */
 #endif
 
+/* P2-01-C-D2: True Multi-Worker Runtime API (implemented in vm.c) */
+int tll_runtime_start_workers(TLLVM *vm, int count);
+int tll_runtime_submit_coroutine(TLLVM *vm, int coroutine_idx);
+void tll_runtime_shutdown_workers(TLLVM *vm);
+
 #ifndef S_ISREG
 #define S_ISREG(m) (((m) & 0170000) == 0100000)
 #endif
